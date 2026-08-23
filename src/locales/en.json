@@ -1,0 +1,46 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "search": "Search",
+    "refresh": "Refresh",
+    "loading": "Loading",
+    "notAvailable": "Not available"
+  },
+  "auth": {
+    "login": "Sign in",
+    "usernameOrEmail": "Username or email",
+    "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "signOut": "Sign out",
+    "secureLogin": "Secure encrypted sign-in"
+  },
+  "users": {
+    "title": "User management",
+    "newUser": "New user",
+    "name": "Name",
+    "username": "Username",
+    "email": "Email",
+    "phone": "Phone number",
+    "status": "Status",
+    "lastActivity": "Last activity",
+    "createdAt": "Created at",
+    "actions": "Actions",
+    "manage": "Manage user",
+    "active": "Active",
+    "locked": "Locked",
+    "suspended": "Suspended",
+    "archived": "Archived",
+    "pendingPassword": "Password change required"
+  },
+  "authorization": {
+    "title": "Authorization",
+    "view": "View authorization",
+    "roles": "Assigned roles",
+    "directPermissions": "Direct permissions",
+    "noRoles": "No assigned roles.",
+    "noDirectPermissions": "No direct permissions; access comes from assigned roles only."
+  }
+}

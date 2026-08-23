@@ -1,0 +1,46 @@
+{
+  "common": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "close": "إغلاق",
+    "search": "بحث",
+    "refresh": "تحديث",
+    "loading": "جارٍ التحميل",
+    "notAvailable": "غير متاح"
+  },
+  "auth": {
+    "login": "تسجيل الدخول",
+    "usernameOrEmail": "اسم المستخدم أو البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "showPassword": "إظهار كلمة المرور",
+    "hidePassword": "إخفاء كلمة المرور",
+    "signOut": "تسجيل الخروج",
+    "secureLogin": "دخول آمن ومشفر"
+  },
+  "users": {
+    "title": "إدارة المستخدمين",
+    "newUser": "مستخدم جديد",
+    "name": "الاسم",
+    "username": "اسم المستخدم",
+    "email": "البريد الإلكتروني",
+    "phone": "رقم الجوال",
+    "status": "الحالة",
+    "lastActivity": "آخر نشاط",
+    "createdAt": "تاريخ الإنشاء",
+    "actions": "الإجراءات",
+    "manage": "إدارة المستخدم",
+    "active": "نشط",
+    "locked": "مقفل",
+    "suspended": "موقوف",
+    "archived": "مؤرشف",
+    "pendingPassword": "بانتظار تغيير كلمة المرور"
+  },
+  "authorization": {
+    "title": "الصلاحيات",
+    "view": "عرض الصلاحيات",
+    "roles": "الأدوار المعيّنة",
+    "directPermissions": "الصلاحيات المباشرة",
+    "noRoles": "لا توجد أدوار معيّنة.",
+    "noDirectPermissions": "لا توجد صلاحيات مباشرة؛ الوصول يأتي من الدور فقط."
+  }
+}

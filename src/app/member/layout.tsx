@@ -1,0 +1,1 @@
+import { DashboardShell } from "../../components/layout/DashboardShell"; export default function MemberLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <DashboardShell role="member">{children}</DashboardShell>; }

@@ -1,0 +1,1 @@
+import type { ReactNode } from "react"; export function Table({ children }: { children: ReactNode }) { return <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-right text-sm">{children}</table></div>; }

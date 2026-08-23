@@ -1,0 +1,1 @@
+import { DashboardShell } from "../../components/layout/DashboardShell"; export default function AccountantLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <DashboardShell role="accountant">{children}</DashboardShell>; }
