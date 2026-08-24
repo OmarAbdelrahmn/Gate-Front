@@ -37,6 +37,7 @@ export function Sidebar({
     "إدارة المستخدمين": path.startsWith("/dashboard/users"),
     "الموارد البشرية": path.startsWith("/dashboard/hr") || path.startsWith("/dashboard/employees"),
     "إدارة السكن": path.startsWith("/dashboard/housing"),
+    "إدارة المنصات": path.startsWith("/dashboard/platforms"),
   });
   const items =
     !authorization || isLoading
