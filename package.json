@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "npm run build:next && npx opennextjs-cloudflare build --skipNextBuild",
-    "build:next": "next build",
+    "build:next": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
