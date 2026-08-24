@@ -27,6 +27,7 @@ import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
 import { EmployeeComplianceTabs } from "../../../../components/employees/EmployeeComplianceTabs";
 import { EmployeeDocumentsInsurance } from "../../../../components/employees/EmployeeDocumentsInsurance";
+import { EmployeePlatformAccounts } from "../../../../components/employees/EmployeePlatformAccounts";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
   SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
@@ -492,6 +493,11 @@ export default function EmployeeDetailsPage({
           <p className="mt-1 text-xs text-[var(--muted)]">{String(operatingCity ?? "")}</p>
         </Card>
       </div>
+
+      <EmployeePlatformAccounts
+        employeeId={employee.id}
+        riderProfileId={rider?.id ?? null}
+      />
 
       <EmployeeComplianceTabs
         employeeId={employee.id}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -192,6 +192,38 @@ export default function PlatformAccountsPage() {
     value: e.riderProfileId || e.id,
     label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
   }));
+
+  // Filter employees for assignment: exclude riders who already have an active platform account ID assigned
+  const assignableEmployeeOptions = useMemo(() => {
+    const assignedRiderIds = new Set<string>();
+
+    accounts.forEach((acc) => {
+      // Riders currently assigned to an active account
+      if (acc.status === "Assigned" && acc.currentAssignment?.actualRiderProfileId) {
+        assignedRiderIds.add(acc.currentAssignment.actualRiderProfileId);
+        if (acc.currentAssignment.actualEmployeeId) {
+          assignedRiderIds.add(acc.currentAssignment.actualEmployeeId);
+        }
+      }
+      // If assigning to a specific platform, also exclude owners/assignees on that platform
+      if (assigningAccount && acc.platformId === assigningAccount.platformId) {
+        if (acc.ownerRiderProfileId) assignedRiderIds.add(acc.ownerRiderProfileId);
+        if (acc.ownerEmployeeId) assignedRiderIds.add(acc.ownerEmployeeId);
+      }
+    });
+
+    return employees
+      .filter((e) => {
+        const rId = e.riderProfileId;
+        const eId = e.id;
+        const isAssigned = (rId && assignedRiderIds.has(rId)) || (eId && assignedRiderIds.has(eId));
+        return !isAssigned;
+      })
+      .map((e) => ({
+        value: e.riderProfileId || e.id,
+        label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
+      }));
+  }, [employees, accounts, assigningAccount]);
 
   const filteredAccounts = accounts.filter((acc) => {
     const term = search.toLowerCase().trim();
@@ -865,7 +897,7 @@ export default function PlatformAccountsPage() {
               {t("platforms.actualRider")} <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
-              options={employeeOptions}
+              options={assignableEmployeeOptions}
               value={assignFormData.actualRiderProfileId}
               onChange={(val) => setAssignFormData({ ...assignFormData, actualRiderProfileId: val })}
               placeholder="اختر المندوب الفعلي..."
