@@ -124,6 +124,18 @@ export type EmployeeDetails = {
   operationalAssignmentHistory?: OperationalAssignment[];
   sponsoredDetails?: unknown;
   outsideRiderDetails?: unknown;
+  housing?: {
+    id: string;
+    code?: string | null;
+    nameAr?: string | null;
+    nameEn?: string | null;
+    cityId?: string | null;
+    cityAr?: string | null;
+    totalCapacity?: number;
+    currentResidents?: number;
+    availableCapacity?: number;
+    status?: string | null;
+  } | null;
 };
 export type RiderInput = {
   tShirtSize?: string | null;

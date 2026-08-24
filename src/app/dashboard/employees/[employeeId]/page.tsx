@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BriefcaseBusiness,
+  Building,
   CalendarDays,
   ContactRound,
   Pencil,
@@ -339,6 +340,11 @@ export default function EmployeeDetailsPage({
         employee.jobTitleAr ??
         "لا يوجد تكليف حالي";
 
+  const housing = details.housing;
+  const housingName = housing
+    ? (locale === "en" ? housing.nameEn || housing.nameAr : housing.nameAr || housing.nameEn)
+    : (locale === "en" ? "Not Housed" : "غير مسكن");
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -390,12 +396,13 @@ export default function EmployeeDetailsPage({
             {stText}
           </span>
         </div>
-        <dl className="grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-5">
           {([
             { label: locale === "en" ? "Phone Number" : "رقم الجوال", value: String(phoneNumber ?? "—") },
             { label: locale === "en" ? "Nationality" : "الجنسية", value: String(nationality ?? "—") },
             { label: locale === "en" ? "Hire Date" : "تاريخ التعيين", value: formatDate(rawHireDate, locale) },
             { label: locale === "en" ? "Operating City" : "المدينة", value: String(operatingCity ?? "—") },
+            { label: locale === "en" ? "Housing" : "السكن", value: String(housingName) },
           ] as const).map(({ label, value }) => (
             <div key={label} className="bg-[var(--surface)] p-4">
               <dt className="text-xs font-bold text-[var(--muted)]">{label}</dt>
@@ -430,6 +437,33 @@ export default function EmployeeDetailsPage({
           />
         </div>
         <div className="space-y-6">
+          <Card className="p-5">
+            <h2 className="flex items-center gap-2 font-black">
+              <Building size={18} />
+              {locale === "en" ? "Housing Residence" : "السكن الحالي"}
+            </h2>
+            {housing ? (
+              <div className="mt-4 space-y-1.5">
+                <Link
+                  href={`/dashboard/housing/${housing.id}`}
+                  className="block text-sm font-extrabold text-[#1167c9] hover:underline"
+                >
+                  {locale === "en" ? housing.nameEn || housing.nameAr : housing.nameAr || housing.nameEn}
+                </Link>
+                {(housing.code || housing.cityAr) && (
+                  <p className="text-xs font-mono font-medium text-[var(--muted)]">
+                    {[housing.code, housing.cityAr].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-[var(--muted)]">
+                {locale === "en"
+                  ? "Not currently housed in any housing unit."
+                  : "غير مسكن حالياً في أي وحدة سكنية."}
+              </p>
+            )}
+          </Card>
           <Card className="p-5">
             <h2 className="flex items-center gap-2 font-black">
               <ContactRound size={18} />

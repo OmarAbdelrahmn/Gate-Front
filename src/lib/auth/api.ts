@@ -69,10 +69,21 @@ async function parseResponse<T>(
   const body = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const rawMsg =
-      body?.message ||
-      body?.error ||
-      (typeof body === "string" ? body : null);
+    let rawMsg: string | null = null;
+    if (body?.errors && typeof body.errors === "object" && !Array.isArray(body.errors)) {
+      const errMsgs = Object.entries(body.errors)
+        .map(([field, errs]) => `${field}: ${Array.isArray(errs) ? errs.join(", ") : errs}`)
+        .join(" | ");
+      if (errMsgs) rawMsg = errMsgs;
+    }
+    if (!rawMsg) {
+      rawMsg =
+        body?.detail ||
+        body?.message ||
+        body?.error ||
+        body?.title ||
+        (typeof body === "string" ? body : null);
+    }
 
     const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg);
 
