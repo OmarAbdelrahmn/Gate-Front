@@ -188,12 +188,174 @@ export function archiveEmployeeDocument(employeeId: string, documentId: string, 
   return authFetch<void>(`/api/employees/${encodeURIComponent(employeeId)}/documents/${encodeURIComponent(documentId)}/archive`, { method: "PATCH", body: JSON.stringify({ reason, rowVersion }) });
 }
 
-export type InsuranceCompany = { id:string; code:string; nameAr:string; nameEn:string|null; status:string; rowVersion:string };
-export type InsurancePlan = { id:string; insuranceCompanyId:string; code:string; nameAr:string; nameEn:string|null; status:string; rowVersion:string };
-export type InsurancePolicy = ExpiringRecord & { insuranceCompanyId:string; insuranceCompanyAr:string; insurancePlanLevelId:string; insurancePlanAr:string; policyNumberMasked:string|null; memberNumberMasked:string|null; startDate:string; endDate:string; isCurrent:boolean; employeeDocumentId:string|null };
-export const getInsuranceCompanies = () => authFetch<InsuranceCompany[]>("/api/insurance/companies");
-export const getInsurancePlans = (companyId:string) => authFetch<InsurancePlan[]>(`/api/insurance/companies/${encodeURIComponent(companyId)}/plans`);
-export const getInsurancePolicies = (employeeId:string) => authFetch<InsurancePolicy[]>(`/api/insurance/policies?employeeId=${encodeURIComponent(employeeId)}`);
-export const createInsurancePolicy = (employeeId:string,payload:Record<string,unknown>) => authFetch<InsurancePolicy>(`/api/insurance/employees/${encodeURIComponent(employeeId)}/policies`,{method:"POST",body:JSON.stringify(payload)});
-export const updateInsurancePolicy = (employeeId:string,id:string,payload:Record<string,unknown>) => authFetch<InsurancePolicy>(`/api/insurance/employees/${encodeURIComponent(employeeId)}/policies/${encodeURIComponent(id)}`,{method:"PUT",body:JSON.stringify(payload)});
-export const archiveInsurancePolicy = (id:string,reason:string,rowVersion:string) => authFetch<void>(`/api/insurance/policies/${encodeURIComponent(id)}/archive`,{method:"PATCH",body:JSON.stringify({reason,rowVersion})});
+export type InsuranceCompany = {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string | null;
+  providerRegistrationNumber: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  status: string;
+  notes: string | null;
+  rowVersion: string;
+};
+
+export type InsuranceCompanyInput = {
+  code: string;
+  nameAr: string;
+  nameEn?: string | null;
+  providerRegistrationNumber?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  status: string;
+  notes?: string | null;
+  rowVersion: string | null;
+};
+
+export type InsurancePlan = {
+  id: string;
+  insuranceCompanyId: string;
+  code: string;
+  nameAr: string;
+  nameEn: string | null;
+  rank: number;
+  networkName: string | null;
+  coverageClass: string | null;
+  annualCoverageLimit: number | null;
+  deductiblePercentage: number | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  status: string;
+  rowVersion: string;
+};
+
+export type InsurancePlanInput = {
+  code: string;
+  nameAr: string;
+  nameEn?: string | null;
+  rank: number;
+  networkName?: string | null;
+  coverageClass?: string | null;
+  annualCoverageLimit?: number | null;
+  deductiblePercentage?: number | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  status: string;
+  rowVersion: string | null;
+};
+
+export type InsurancePolicy = ExpiringRecord & {
+  employeeId?: string;
+  insuranceCompanyId: string;
+  insuranceCompanyAr: string;
+  insuranceCompanyEn?: string | null;
+  insurancePlanLevelId: string;
+  insurancePlanAr: string;
+  insurancePlanEn?: string | null;
+  policyNumberMasked?: string | null;
+  memberNumberMasked?: string | null;
+  startDate: string;
+  endDate: string;
+  status: string;
+  isCurrent: boolean;
+  previousPolicyId?: string | null;
+  employeeDocumentId?: string | null;
+  notes?: string | null;
+  rowVersion: string;
+};
+
+export type InsurancePolicyInput = {
+  insuranceCompanyId: string;
+  insurancePlanLevelId: string;
+  policyNumber: string;
+  memberNumber: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  isCurrent: boolean;
+  previousPolicyId?: string | null;
+  employeeDocumentId?: string | null;
+  notes?: string | null;
+  rowVersion: string | null;
+};
+
+// 1. List insurance companies
+export const getInsuranceCompanies = () =>
+  authFetch<InsuranceCompany[]>("/api/insurance/companies");
+
+// 2. Create insurance company
+export const createInsuranceCompany = (payload: InsuranceCompanyInput) =>
+  authFetch<InsuranceCompany>("/api/insurance/companies", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+// 3. Update insurance company
+export const updateInsuranceCompany = (id: string, payload: InsuranceCompanyInput) =>
+  authFetch<InsuranceCompany>(`/api/insurance/companies/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+// 10. Archive insurance company
+export const archiveInsuranceCompany = (id: string, reason: string, rowVersion: string) =>
+  authFetch<void>(`/api/insurance/companies/${encodeURIComponent(id)}/archive`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason, rowVersion }),
+  });
+
+// 4. List company plans
+export const getInsurancePlans = (companyId: string) =>
+  authFetch<InsurancePlan[]>(`/api/insurance/companies/${encodeURIComponent(companyId)}/plans`);
+
+// 5. Create insurance plan
+export const createInsurancePlan = (companyId: string, payload: InsurancePlanInput) =>
+  authFetch<InsurancePlan>(`/api/insurance/companies/${encodeURIComponent(companyId)}/plans`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+// 6. Update insurance plan
+export const updateInsurancePlan = (companyId: string, id: string, payload: InsurancePlanInput) =>
+  authFetch<InsurancePlan>(`/api/insurance/companies/${encodeURIComponent(companyId)}/plans/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+// 11. Archive insurance plan
+export const archiveInsurancePlan = (id: string, reason: string, rowVersion: string) =>
+  authFetch<void>(`/api/insurance/plans/${encodeURIComponent(id)}/archive`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason, rowVersion }),
+  });
+
+// 7. List medical insurance policies
+export const getInsurancePolicies = (employeeId?: string) =>
+  authFetch<InsurancePolicy[]>(
+    `/api/insurance/policies${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`
+  );
+
+// 8. Create employee insurance policy
+export const createInsurancePolicy = (employeeId: string, payload: InsurancePolicyInput | Record<string, unknown>) =>
+  authFetch<InsurancePolicy>(`/api/insurance/employees/${encodeURIComponent(employeeId)}/policies`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+// 9. Update employee insurance policy
+export const updateInsurancePolicy = (employeeId: string, id: string, payload: InsurancePolicyInput | Record<string, unknown>) =>
+  authFetch<InsurancePolicy>(`/api/insurance/employees/${encodeURIComponent(employeeId)}/policies/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+// 12. Archive insurance policy
+export const archiveInsurancePolicy = (id: string, reason: string, rowVersion: string) =>
+  authFetch<void>(`/api/insurance/policies/${encodeURIComponent(id)}/archive`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason, rowVersion }),
+  });
+

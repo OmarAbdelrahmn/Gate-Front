@@ -67,6 +67,14 @@ export const navigation: NavItem[] = [
         permissionsAny: ["employees.read", "residency.read", "licenses.read"],
       },
       {
+        label: "التأمين الطبي",
+        labelKey: "nav.insurance",
+        href: "/dashboard/hr/insurance",
+        icon: ShieldCheck,
+        roles: ["admin", "member"],
+        permission: "insurance.read",
+      },
+      {
         label: "حالات الغياب",
         labelKey: "nav.absenceCases",
         href: "/dashboard/hr/absence-cases",
