@@ -43,6 +43,26 @@ export function Sidebar({
             (!item.children ||
               item.children.some((child) => permitted(child, role, can))),
         );
+
+  const allHrefs = navigation
+    .flatMap((item) => [
+      item.href,
+      ...(item.children?.map((child) => child.href) || []),
+    ])
+    .filter((h): h is string => Boolean(h));
+
+  const isChildActive = (href?: string) => {
+    if (!href) return false;
+    if (path === href) return true;
+    if (!path.startsWith(`${href}/`)) return false;
+    return !allHrefs.some(
+      (otherHref) =>
+        otherHref !== href &&
+        otherHref.length > href.length &&
+        (path === otherHref || path.startsWith(`${otherHref}/`))
+    );
+  };
+
   return (
     <>
       <div
@@ -81,10 +101,9 @@ export function Sidebar({
                 item.children?.filter((child) => permitted(child, role, can)) ??
                 [];
               const active =
-                item.href === path ||
-                (item.href === "/dashboard/profile" &&
-                  path.startsWith("/dashboard/profile/")) ||
-                children.some((child) => child.href === path || (child.href && path.startsWith(`${child.href}/`)));
+                isChildActive(item.href) ||
+                children.some((child) => isChildActive(child.href));
+
               if (!children.length && item.href)
                 return (
                   <Link
@@ -132,7 +151,7 @@ export function Sidebar({
                     >
                       {children.map((child) => {
                         const ChildIcon = child.icon;
-                        const childActive = child.href === path || (child.href && path.startsWith(`${child.href}/`));
+                        const childActive = isChildActive(child.href);
                         return (
                           <Link
                             key={child.href}
