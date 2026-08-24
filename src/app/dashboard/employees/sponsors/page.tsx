@@ -214,7 +214,7 @@ export default function SponsorsPage() {
               <tbody className="divide-y divide-[var(--border)]">
                 {results.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50">
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 text-start">
                       <span className="flex items-center gap-2 font-bold">
                         <Building2 size={17} className="text-[#1167c9] shrink-0" />
                         {locale === "en"
@@ -233,7 +233,7 @@ export default function SponsorsPage() {
                         )
                       )}
                     </td>
-                    <td className="px-5 py-4 text-sm font-mono">
+                    <td className="px-5 py-4 text-sm font-mono text-start">
                       <div>{item.employerIdentityNumber}</div>
                       {item.commercialRegistrationNumber && (
                         <div className="text-xs text-[var(--muted)]">
@@ -241,7 +241,7 @@ export default function SponsorsPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-sm">
+                    <td className="px-5 py-4 text-sm text-start">
                       <span className="inline-block rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#1167c9]">
                         {item.sponsorType === "Establishment"
                           ? locale === "en"
@@ -258,13 +258,13 @@ export default function SponsorsPage() {
                               : item.sponsorType}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-sm">
+                    <td className="px-5 py-4 text-sm text-start">
                       {item.contactName ? (
                         <div>
                           <div className="font-bold">{item.contactName}</div>
                           {item.contactPhone && (
-                            <div className="text-xs text-[var(--muted)]" dir="ltr">
-                              {item.contactPhone}
+                            <div className="text-xs text-[var(--muted)] text-start">
+                              <span dir="ltr">{item.contactPhone}</span>
                             </div>
                           )}
                         </div>
@@ -272,7 +272,7 @@ export default function SponsorsPage() {
                         <span className="text-[var(--muted)]">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 text-start">
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-bold ${
                           item.status === "Active"
@@ -287,7 +287,7 @@ export default function SponsorsPage() {
                             : "غير نشط"}
                       </span>
                     </td>
-                    <td className="px-5 py-4 whitespace-nowrap">
+                    <td className="px-5 py-4 text-start whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setViewingSponsor(item)}
@@ -372,7 +372,7 @@ export default function SponsorsPage() {
               </button>
             </div>
 
-            <div className="mt-6 space-y-6 text-sm">
+            <div className="mt-6 space-y-6 text-sm text-start">
               {/* Core Details */}
               <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4">
                 <div>
@@ -414,11 +414,11 @@ export default function SponsorsPage() {
                   </div>
                   <div>
                     <p className="text-xs text-[var(--muted)]">{locale === "en" ? "Phone" : "الجوال"}</p>
-                    <p className="font-bold" dir="ltr">{viewingSponsor.contactPhone ?? "—"}</p>
+                    <p className="font-bold text-start"><span dir="ltr">{viewingSponsor.contactPhone ?? "—"}</span></p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-xs text-[var(--muted)]">{locale === "en" ? "Email" : "البريد الإلكتروني"}</p>
-                    <p className="font-bold" dir="ltr">{viewingSponsor.contactEmail ?? "—"}</p>
+                    <p className="font-bold text-start"><span dir="ltr">{viewingSponsor.contactEmail ?? "—"}</span></p>
                   </div>
                 </div>
               </div>

@@ -158,7 +158,7 @@ export function SearchableSelect({
                 key={opt.value}
                 type="button"
                 onClick={() => handleSelect(opt.value)}
-                className={`w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-right text-xs font-bold transition-all ${
+                className={`w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-start text-xs font-bold transition-all ${
                   isSelected
                     ? "bg-blue-50 text-[#1167c9]"
                     : "text-[var(--foreground)] hover:bg-slate-100"
@@ -192,7 +192,7 @@ export function SearchableSelect({
           type="button"
           disabled={disabled}
           onClick={() => setIsOpen(true)}
-          className={`flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-right text-sm font-bold shadow-sm transition-all outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${
+          className={`flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-start text-sm font-bold shadow-sm transition-all outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${
             disabled ? "opacity-60 cursor-not-allowed bg-slate-50" : "cursor-pointer hover:border-slate-400"
           }`}
         >
@@ -229,7 +229,7 @@ export function SearchableSelect({
       ) : (
         /* Search Bar Input Container (Open) */
         <div
-          className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[#1167c9] bg-[var(--surface)] px-3 text-right text-sm font-bold shadow-sm ring-4 ring-blue-100 transition-all"
+          className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[#1167c9] bg-[var(--surface)] px-3 text-start text-sm font-bold shadow-sm ring-4 ring-blue-100 transition-all"
         >
           <div className="flex-1 flex items-center gap-2 min-w-0">
             <Search size={16} className="text-[var(--muted)] shrink-0" />
@@ -247,7 +247,7 @@ export function SearchableSelect({
                   handleSelect(filteredOptions[0].value);
                 }
               }}
-              className="w-full bg-transparent text-sm font-bold text-[var(--foreground)] placeholder:text-[var(--muted)] placeholder:font-normal border-0 outline-none focus:outline-none focus:ring-0 focus:border-0 shadow-none text-right"
+              className="w-full bg-transparent text-sm font-bold text-[var(--foreground)] placeholder:text-[var(--muted)] placeholder:font-normal border-0 outline-none focus:outline-none focus:ring-0 focus:border-0 shadow-none text-start"
               style={{ outline: "none", boxShadow: "none" }}
             />
             {query && (

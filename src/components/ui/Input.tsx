@@ -11,7 +11,7 @@ export function Input({ label, className = "", required = false, ...props }: Inp
           </span>
         </span>
       )}
-      <input required={required} aria-required={required || undefined} className={`h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 font-normal text-[var(--foreground)] outline-none placeholder:text-slate-400 focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${className}`} {...props}/>
+      <input required={required} aria-required={required || undefined} className={`h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 font-normal text-[var(--foreground)] outline-none placeholder:text-slate-400 focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 text-start ${className}`} {...props}/>
     </label>
   );
 }
