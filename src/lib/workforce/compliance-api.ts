@@ -71,7 +71,7 @@ export type EmployeeDocumentVersion = {
   uploadedByUserId: string;
   uploadedAtUtc: string;
 };
-export type RiderDocumentKind = "residency-permit" | "driver-license" | "rider-card" | "health-card" | "promissory-note" | "medical-insurance";
+export type RiderDocumentKind = "residency-permit" | "driver-license" | "rider-card" | "health-card" | "promissory-note" | "medical-insurance" | "ajeer-contract";
 
 export function getResidencyPermits(employeeId: string) {
   return authFetch<ResidencyPermit[]>(

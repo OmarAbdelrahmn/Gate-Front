@@ -2,9 +2,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Archive,
+  ChevronDown,
+  ChevronUp,
   Download,
   Eye,
   FilePlus,
+  Plus,
   RefreshCw,
   ShieldCheck,
   X,
@@ -54,6 +57,7 @@ export function EmployeeDocumentsInsurance({
   const [plans, setPlans] = useState<InsurancePlan[]>([]);
   const [policies, setPolicies] = useState<InsurancePolicy[]>([]);
   const [companyId, setCompanyId] = useState("");
+  const [planId, setPlanId] = useState("");
   const [editingPolicy, setEditingPolicy] = useState<InsurancePolicy | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,6 +67,10 @@ export function EmployeeDocumentsInsurance({
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [selectedDocTypeId, setSelectedDocTypeId] = useState("");
   const [selectedRiderKind, setSelectedRiderKind] = useState("");
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [showPolicyForm, setShowPolicyForm] = useState(false);
+  const [openPolicyId, setOpenPolicyId] = useState<string | null>(null);
   const versionInput = useRef<HTMLInputElement>(null);
 
   const [previewModalData, setPreviewModalData] = useState<{
@@ -274,16 +282,29 @@ export function EmployeeDocumentsInsurance({
 
   async function savePolicy(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = new FormData(e.currentTarget);
+    const formElement = e.currentTarget;
+    const f = new FormData(formElement);
     const v = (k: string) => String(f.get(k) || "");
+    const compId = v("insuranceCompanyId") || companyId;
+    const plnId = v("insurancePlanLevelId") || planId;
+
+    if (!compId || !plnId) {
+      setError(
+        locale === "en"
+          ? "Insurance Company and Plan are required."
+          : "شركة التأمين والخطة حقول مطلوبة.",
+      );
+      return;
+    }
+
     const payload = {
-      insuranceCompanyId: v("insuranceCompanyId"),
-      insurancePlanLevelId: v("insurancePlanLevelId"),
+      insuranceCompanyId: compId,
+      insurancePlanLevelId: plnId,
       policyNumber: v("policyNumber") || null,
       memberNumber: v("memberNumber") || null,
       startDate: v("startDate"),
       endDate: v("endDate"),
-      status: v("status"),
+      status: v("status") || "Active",
       isCurrent: true,
       previousPolicyId: null,
       employeeDocumentId: null,
@@ -296,7 +317,9 @@ export function EmployeeDocumentsInsurance({
         : createInsurancePolicy(employeeId, payload),
     );
     setEditingPolicy(null);
-    e.currentTarget.reset();
+    setCompanyId("");
+    setPlanId("");
+    formElement?.reset();
   }
 
   function version(doc: EmployeeDocument) {
@@ -311,6 +334,7 @@ export function EmployeeDocumentsInsurance({
     "health-card": "HEALTH_CARD",
     "promissory-note": "PROMISSORY_NOTE",
     "medical-insurance": "MEDICAL_INSURANCE",
+    "ajeer-contract": "AJEER_CONTRACT",
   };
 
   const riderKinds: { value: RiderDocumentKind; labelAr: string; labelEn: string }[] = [
@@ -320,6 +344,7 @@ export function EmployeeDocumentsInsurance({
     { value: "health-card", labelAr: "البطاقة الصحية", labelEn: "Health Card" },
     { value: "promissory-note", labelAr: "سند الأمر", labelEn: "Promissory Note" },
     { value: "medical-insurance", labelAr: "التأمين الطبي", labelEn: "Medical Insurance" },
+    { value: "ajeer-contract", labelAr: "عقود اجير", labelEn: "Ajeer Contract" },
   ];
 
   async function download(doc: EmployeeDocument) {
@@ -402,11 +427,29 @@ export function EmployeeDocumentsInsurance({
         </p>
       )}
       <Card className="p-5">
-        <h2 className="flex items-center gap-2 text-xl font-black">
-          <FilePlus size={20} />
-          {locale === "en" ? "Documents" : "الوثائق"}
-        </h2>
-        {can("documents.upload") && (
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-xl font-black">
+            <FilePlus size={20} />
+            {locale === "en" ? "Documents" : "الوثائق"}
+          </h2>
+          {can("documents.upload") && (
+            <button
+              type="button"
+              onClick={() => setShowUploadForm((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#1167c9] hover:bg-blue-100 transition-colors"
+            >
+              {showUploadForm ? <ChevronUp size={16} /> : <Plus size={16} />}
+              {locale === "en"
+                ? showUploadForm
+                  ? "Hide Upload Form"
+                  : "Upload New Document"
+                : showUploadForm
+                  ? "إخفاء نموذج الرفع"
+                  : "رفع وثيقة جديدة"}
+            </button>
+          )}
+        </div>
+        {can("documents.upload") && showUploadForm && (
           <form onSubmit={upload} className="mt-4 grid gap-3 sm:grid-cols-2">
             {riderProfileId ? (
               <label className="grid gap-2 text-sm font-bold">
@@ -566,12 +609,21 @@ export function EmployeeDocumentsInsurance({
               locale === "en"
                 ? (docRec.documentTypeNameEn as string | undefined) || doc.documentTypeNameAr
                 : doc.documentTypeNameAr;
+            const isOpen = openDocId === doc.id;
             return (
-              <article key={doc.id} className="rounded-xl border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-black">{docTypeName}</p>
-                    <p className="text-xs text-[var(--muted)]">
+              <article
+                key={doc.id}
+                className={`rounded-xl border transition-all ${
+                  isOpen ? "border-[#1167c9] bg-blue-50/20 ring-1 ring-[#1167c9]/30" : "border-[var(--border)] hover:border-blue-300"
+                }`}
+              >
+                <div
+                  onClick={() => setOpenDocId(isOpen ? null : doc.id)}
+                  className="flex cursor-pointer items-center justify-between gap-3 p-3.5"
+                >
+                  <div className="flex-1">
+                    <p className="font-black text-sm text-[var(--foreground)]">{docTypeName}</p>
+                    <p className="text-xs text-[var(--muted)] mt-0.5">
                       {doc.currentFileName ??
                         (locale === "en" ? "No file" : "بدون ملف")}{" "}
                       ·{" "}
@@ -579,126 +631,156 @@ export function EmployeeDocumentsInsurance({
                         (locale === "en" ? "No expiry" : "بلا انتهاء")}
                     </p>
                   </div>
-                  <div className="flex gap-1.5 items-center">
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => void previewDoc(doc)}
-                      className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                      aria-label={locale === "en" ? "Preview" : "معاينة"}
-                      title={locale === "en" ? "Preview" : "معاينة"}
+                      type="button"
+                      className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                      aria-label={isOpen ? "Collapse" : "Expand"}
                     >
-                      <Eye size={16} />
+                      {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
-                    <button
-                      onClick={() => void download(doc)}
-                      className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                      aria-label={locale === "en" ? "Download" : "تنزيل"}
-                      title={locale === "en" ? "Download" : "تنزيل"}
-                    >
-                      <Download size={16} />
-                    </button>
-                    {can("documents.upload") && (
-                      <button
-                        onClick={() => version(doc)}
-                        className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                        aria-label={
-                          locale === "en" ? "New Version" : "نسخة جديدة"
-                        }
-                        title={locale === "en" ? "New Version" : "نسخة جديدة"}
-                      >
-                        <RefreshCw size={16} />
-                      </button>
-                    )}
-                    {can("documents.catalog.manage") && (
-                      <button
-                        onClick={() => setEditingDocument(doc)}
-                        className="h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
-                      >
-                        {locale === "en" ? "Edit" : "تعديل"}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => void toggleHistory(doc)}
-                      className="h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
-                    >
-                      {expandedHistory === doc.id
-                        ? locale === "en"
-                          ? "Hide Versions"
-                          : "إخفاء النسخ"
-                        : locale === "en"
-                          ? "Version History"
-                          : "سجل الوثائق"}
-                    </button>
-                    {can("documents.catalog.manage") && (
-                      <button
-                        onClick={async () => {
-                          const reason = await systemPrompt(
-                            locale === "en"
-                              ? "Reason for archiving"
-                              : "سبب الأرشفة",
-                          );
-                          if (reason)
-                            void run(() =>
-                              archiveEmployeeDocument(
-                                employeeId,
-                                doc.id,
-                                reason,
-                                doc.rowVersion,
-                              ),
-                            );
-                        }}
-                        className="grid h-9 w-9 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                        aria-label={locale === "en" ? "Archive" : "أرشفة"}
-                        title={locale === "en" ? "Archive" : "أرشفة"}
-                      >
-                        <Archive size={16} />
-                      </button>
-                    )}
                   </div>
                 </div>
-                {expandedHistory === doc.id && (
-                  <div className="mt-3 border-t pt-3">
-                    <h4 className="mb-2 text-sm font-black">
-                      {locale === "en" ? "Saved Versions" : "النسخ المحفوظة"}
-                    </h4>
-                    <div className="space-y-2">
-                      {(versions[doc.id] ?? []).map((version) => (
-                        <div
-                          key={version.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-xs"
+
+                {isOpen && (
+                  <div className="border-t border-[var(--border)] p-3.5 bg-[var(--surface)] rounded-b-xl space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void previewDoc(doc);
+                        }}
+                        className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                        aria-label={locale === "en" ? "Preview" : "معاينة"}
+                        title={locale === "en" ? "Preview" : "معاينة"}
+                      >
+                        <Eye size={16} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void download(doc);
+                        }}
+                        className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                        aria-label={locale === "en" ? "Download" : "تنزيل"}
+                        title={locale === "en" ? "Download" : "تنزيل"}
+                      >
+                        <Download size={16} />
+                      </button>
+                      {can("documents.upload") && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            version(doc);
+                          }}
+                          className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                          aria-label={
+                            locale === "en" ? "New Version" : "نسخة جديدة"
+                          }
+                          title={locale === "en" ? "New Version" : "نسخة جديدة"}
                         >
-                          <span>
-                            {locale === "en" ? "Version" : "الإصدار"}{" "}
-                            {version.versionNumber} · {version.originalFileName}{" "}
-                            · {(version.fileSizeBytes / 1024).toFixed(1)} KB
-                          </span>
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              onClick={() => void previewDoc(doc, version.id)}
-                            >
-                              {locale === "en" ? "Preview" : "معاينة"}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              onClick={() => void downloadVersion(doc, version)}
-                            >
-                              {locale === "en"
-                                ? "Download Version"
-                                : "تنزيل النسخة"}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                      {versions[doc.id]?.length === 0 && (
-                        <p className="text-xs text-[var(--muted)]">
-                          {locale === "en"
-                            ? "No saved versions."
-                            : "لا توجد نسخ محفوظة."}
-                        </p>
+                          <RefreshCw size={16} />
+                        </button>
+                      )}
+                      {can("documents.catalog.manage") && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingDocument(doc);
+                          }}
+                          className="h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
+                        >
+                          {locale === "en" ? "Edit" : "تعديل"}
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void toggleHistory(doc);
+                        }}
+                        className="h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
+                      >
+                        {expandedHistory === doc.id
+                          ? locale === "en"
+                            ? "Hide Versions"
+                            : "إخفاء النسخ"
+                          : locale === "en"
+                            ? "Version History"
+                            : "سجل الوثائق"}
+                      </button>
+                      {can("documents.catalog.manage") && (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const reason = await systemPrompt(
+                              locale === "en"
+                                ? "Reason for archiving"
+                                : "سبب الأرشفة",
+                            );
+                            if (reason)
+                              void run(() =>
+                                archiveEmployeeDocument(
+                                  employeeId,
+                                  doc.id,
+                                  reason,
+                                  doc.rowVersion,
+                                ),
+                              );
+                          }}
+                          className="grid h-9 w-9 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                          aria-label={locale === "en" ? "Archive" : "أرشفة"}
+                          title={locale === "en" ? "Archive" : "أرشفة"}
+                        >
+                          <Archive size={16} />
+                        </button>
                       )}
                     </div>
+                    {expandedHistory === doc.id && (
+                      <div className="border-t pt-3">
+                        <h4 className="mb-2 text-sm font-black">
+                          {locale === "en" ? "Saved Versions" : "النسخ المحفوظة"}
+                        </h4>
+                        <div className="space-y-2">
+                          {(versions[doc.id] ?? []).map((version) => (
+                            <div
+                              key={version.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-xs"
+                            >
+                              <span>
+                                {locale === "en" ? "Version" : "الإصدار"}{" "}
+                                {version.versionNumber} · {version.originalFileName}{" "}
+                                · {(version.fileSizeBytes / 1024).toFixed(1)} KB
+                              </span>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={() => void previewDoc(doc, version.id)}
+                                >
+                                  {locale === "en" ? "Preview" : "معاينة"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={() => void downloadVersion(doc, version)}
+                                >
+                                  {locale === "en"
+                                    ? "Download Version"
+                                    : "تنزيل النسخة"}
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                          {versions[doc.id]?.length === 0 && (
+                            <p className="text-xs text-[var(--muted)]">
+                              {locale === "en"
+                                ? "No saved versions."
+                                : "لا توجد نسخ محفوظة."}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </article>
@@ -707,11 +789,34 @@ export function EmployeeDocumentsInsurance({
         </div>
       </Card>
       <Card className="p-5">
-        <h2 className="flex items-center gap-2 text-xl font-black">
-          <ShieldCheck size={20} />
-          {locale === "en" ? "Medical Insurance" : "التأمين الطبي"}
-        </h2>
-        {can("insurance.manage") && (
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-xl font-black">
+            <ShieldCheck size={20} />
+            {locale === "en" ? "Medical Insurance" : "التأمين الطبي"}
+          </h2>
+          {can("insurance.manage") && (
+            <button
+              type="button"
+              onClick={() => {
+                if (showPolicyForm && editingPolicy) {
+                  setEditingPolicy(null);
+                }
+                setShowPolicyForm((prev) => !prev);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#1167c9] hover:bg-blue-100 transition-colors"
+            >
+              {showPolicyForm ? <ChevronUp size={16} /> : <Plus size={16} />}
+              {locale === "en"
+                ? showPolicyForm
+                  ? "Hide Form"
+                  : "Add Policy"
+                : showPolicyForm
+                  ? "إخفاء النموذج"
+                  : "إضافة وثيقة تأمين"}
+            </button>
+          )}
+        </div>
+        {can("insurance.manage") && showPolicyForm && (
           <form
             key={editingPolicy?.id ?? "new"}
             onSubmit={savePolicy}
@@ -738,8 +843,8 @@ export function EmployeeDocumentsInsurance({
               <SearchableSelect
                 name="insurancePlanLevelId"
                 required
-                value={editingPolicy?.insurancePlanLevelId ?? ""}
-                onChange={() => {}}
+                value={planId || editingPolicy?.insurancePlanLevelId || ""}
+                onChange={(val) => setPlanId(val)}
                 options={plans.map((p) => ({
                   value: p.id,
                   label: locale === "en" ? p.nameEn || p.nameAr : p.nameAr,
@@ -810,47 +915,88 @@ export function EmployeeDocumentsInsurance({
               locale === "en"
                 ? (pRec.insurancePlanEn as string | undefined) || p.insurancePlanAr
                 : p.insurancePlanAr;
+            const isOpen = openPolicyId === p.id;
             return (
               <article
                 key={p.id}
-                className="flex items-center justify-between rounded-xl border p-3"
+                className={`rounded-xl border transition-all ${
+                  isOpen ? "border-[#1167c9] bg-blue-50/20 ring-1 ring-[#1167c9]/30" : "border-[var(--border)] hover:border-blue-300"
+                }`}
               >
-                <div>
-                  <p className="font-black">
-                    {companyName} — {planName}
-                  </p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {p.startDate} {locale === "en" ? "to" : "إلى"} {p.endDate}
-                  </p>
-                </div>
-                {can("insurance.manage") && (
-                  <div className="flex gap-1">
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setEditingPolicy(p);
-                        setCompanyId(p.insuranceCompanyId);
-                      }}
-                    >
-                      {locale === "en" ? "Edit" : "تعديل"}
-                    </Button>
+                <div
+                  onClick={() => setOpenPolicyId(isOpen ? null : p.id)}
+                  className="flex cursor-pointer items-center justify-between gap-3 p-3.5"
+                >
+                  <div className="flex-1">
+                    <p className="font-black text-sm text-[var(--foreground)]">
+                      {companyName} — {planName}
+                    </p>
+                    <p className="text-xs text-[var(--muted)] mt-0.5">
+                      {p.startDate} {locale === "en" ? "to" : "إلى"} {p.endDate}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={async () => {
-                        const reason = await systemPrompt(
-                          locale === "en"
-                            ? "Reason for archiving"
-                            : "سبب الأرشفة",
-                        );
-                        if (reason)
-                          void run(() =>
-                            archiveInsurancePolicy(p.id, reason, p.rowVersion),
-                          );
-                      }}
-                      className="grid h-11 w-11 place-items-center rounded-xl border text-red-600"
-                      aria-label={locale === "en" ? "Archive" : "أرشفة"}
+                      type="button"
+                      className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                      aria-label={isOpen ? "Collapse" : "Expand"}
                     >
-                      <Archive size={16} />
+                      {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
+                  </div>
+                </div>
+
+                {isOpen && (
+                  <div className="border-t border-[var(--border)] p-3.5 bg-[var(--surface)] rounded-b-xl space-y-3">
+                    <div className="grid gap-2 text-xs text-[var(--muted)] sm:grid-cols-2">
+                      <div>
+                        <span className="font-bold text-[var(--foreground)]">
+                          {locale === "en" ? "Policy Number: " : "رقم الوثيقة: "}
+                        </span>
+                        {p.policyNumberMasked ?? (pRec.policyNumber as string | undefined) ?? "—"}
+                      </div>
+                      <div>
+                        <span className="font-bold text-[var(--foreground)]">
+                          {locale === "en" ? "Member Number: " : "رقم العضوية: "}
+                        </span>
+                        {p.memberNumberMasked ?? (pRec.memberNumber as string | undefined) ?? "—"}
+                      </div>
+                    </div>
+                    {can("insurance.manage") && (
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingPolicy(p);
+                            setCompanyId(p.insuranceCompanyId);
+                            setPlanId(p.insurancePlanLevelId);
+                            setShowPolicyForm(true);
+                          }}
+                        >
+                          {locale === "en" ? "Edit" : "تعديل"}
+                        </Button>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const reason = await systemPrompt(
+                              locale === "en"
+                                ? "Reason for archiving"
+                                : "سبب الأرشفة",
+                            );
+                            if (reason)
+                              void run(() =>
+                                archiveInsurancePolicy(p.id, reason, p.rowVersion),
+                              );
+                          }}
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                          aria-label={locale === "en" ? "Archive" : "أرشفة"}
+                          title={locale === "en" ? "Archive" : "أرشفة"}
+                        >
+                          <Archive size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </article>

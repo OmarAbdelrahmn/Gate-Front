@@ -9,8 +9,10 @@ import {
   Building,
   CalendarDays,
   ContactRound,
+  FileText,
   Pencil,
   UserRound,
+  X,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
@@ -109,6 +111,7 @@ export default function EmployeeDetailsPage({
   const [details, setDetails] = useState<EmployeeDetails>();
   const [cities, setCities] = useState<HrRow[]>([]);
   const [error, setError] = useState("");
+  const [showDocsModal, setShowDocsModal] = useState(false);
 
   useEffect(() => {
     void params.then(({ employeeId: id }) => setEmployeeId(id));
@@ -373,6 +376,10 @@ export default function EmployeeDetailsPage({
               {locale === "en" ? "Edit Data" : "تعديل البيانات"}
             </Button>
           </Link>
+          <Button variant="secondary" onClick={() => setShowDocsModal(true)}>
+            <FileText size={17} />
+            {locale === "en" ? "Documents & Insurance" : "الوثائق والتأمين"}
+          </Button>
           <Link href={`/dashboard/employees/${employee.id}/actions`}>
             <Button>{locale === "en" ? "Employee Actions" : "إجراءات الموظف"}</Button>
           </Link>
@@ -412,107 +419,139 @@ export default function EmployeeDetailsPage({
         </dl>
       </Card>
 
+      <div className="grid gap-6 sm:grid-cols-3">
+        <Card className="p-5">
+          <h2 className="flex items-center gap-2 font-black">
+            <Building size={18} />
+            {locale === "en" ? "Housing Residence" : "السكن الحالي"}
+          </h2>
+          {housing ? (
+            <div className="mt-4 space-y-1.5">
+              <Link
+                href={`/dashboard/housing/${housing.id}`}
+                className="block text-sm font-extrabold text-[#1167c9] hover:underline"
+              >
+                {locale === "en" ? housing.nameEn || housing.nameAr : housing.nameAr || housing.nameEn}
+              </Link>
+              {(housing.code || housing.cityAr) && (
+                <p className="text-xs font-mono font-medium text-[var(--muted)]">
+                  {[housing.code, housing.cityAr].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-[var(--muted)]">
+              {locale === "en"
+                ? "Not currently housed in any housing unit."
+                : "غير مسكن حالياً في أي وحدة سكنية."}
+            </p>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="flex items-center gap-2 font-black">
+            <ContactRound size={18} />
+            {locale === "en" ? "Rider Profile" : "ملف المندوب"}
+          </h2>
+          {rider ? (
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-xs text-[var(--muted)]">{t("common.status")}</dt>
+                <dd className="font-bold">{riderStText}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-xs text-[var(--muted)]">
+                  {locale === "en" ? "Preferred City" : "مدينة التفضيل"}
+                </dt>
+                <dd className="font-bold">{preferredCity}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-xs text-[var(--muted)]">
+                  {locale === "en" ? "Start Date" : "بداية الملف"}
+                </dt>
+                <dd className="font-bold">
+                  {formatDate(rider.riderStartDate, locale)}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="mt-4 text-sm text-[var(--muted)]">
+              {locale === "en"
+                ? "No rider profile associated with this employee."
+                : "لا يوجد ملف رايدر مرتبط بهذا الموظف."}
+            </p>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="flex items-center gap-2 font-black">
+            <BriefcaseBusiness size={18} />
+            {locale === "en" ? "Operational Work" : "العمل التشغيلي"}
+          </h2>
+          <p className="mt-4 text-sm font-bold">{workAssignment}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{String(operatingCity ?? "")}</p>
+        </Card>
+      </div>
+
       <EmployeeComplianceTabs
         employeeId={employee.id}
         riderProfileId={rider?.id ?? null}
       />
-      <EmployeeDocumentsInsurance employeeId={employee.id} riderProfileId={rider?.id ?? null} />
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
-          <Timeline
-            title={locale === "en" ? "Status History" : "سجل الحالة"}
-            entries={statusEntries}
-            locale={locale}
-          />
-          <Timeline
-            title={locale === "en" ? "Role History" : "سجل الأدوار الوظيفية"}
-            entries={roleEntries}
-            locale={locale}
-          />
-          <Timeline
-            title={locale === "en" ? "Operational Assignment History" : "سجل التكليفات التشغيلية"}
-            entries={assignmentEntries}
-            locale={locale}
-          />
-        </div>
-        <div className="space-y-6">
-          <Card className="p-5">
-            <h2 className="flex items-center gap-2 font-black">
-              <Building size={18} />
-              {locale === "en" ? "Housing Residence" : "السكن الحالي"}
-            </h2>
-            {housing ? (
-              <div className="mt-4 space-y-1.5">
-                <Link
-                  href={`/dashboard/housing/${housing.id}`}
-                  className="block text-sm font-extrabold text-[#1167c9] hover:underline"
-                >
-                  {locale === "en" ? housing.nameEn || housing.nameAr : housing.nameAr || housing.nameEn}
-                </Link>
-                {(housing.code || housing.cityAr) && (
-                  <p className="text-xs font-mono font-medium text-[var(--muted)]">
-                    {[housing.code, housing.cityAr].filter(Boolean).join(" · ")}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-[var(--muted)]">
-                {locale === "en"
-                  ? "Not currently housed in any housing unit."
-                  : "غير مسكن حالياً في أي وحدة سكنية."}
-              </p>
-            )}
-          </Card>
-          <Card className="p-5">
-            <h2 className="flex items-center gap-2 font-black">
-              <ContactRound size={18} />
-              {locale === "en" ? "Rider Profile" : "ملف المندوب"}
-            </h2>
-            {rider ? (
-              <dl className="mt-4 space-y-3 text-sm">
-                <div>
-                  <dt className="text-xs text-[var(--muted)]">{t("common.status")}</dt>
-                  <dd className="mt-1 font-bold">{riderStText}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-[var(--muted)]">
-                    {locale === "en" ? "Preferred City" : "مدينة التفضيل"}
-                  </dt>
-                  <dd className="mt-1 font-bold">{preferredCity}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-[var(--muted)]">
-                    {locale === "en" ? "Profile Start Date" : "بداية الملف"}
-                  </dt>
-                  <dd className="mt-1 font-bold">
-                    {formatDate(rider.riderStartDate, locale)}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="mt-4 text-sm text-[var(--muted)]">
-                {locale === "en"
-                  ? "No rider profile associated with this employee."
-                  : "لا يوجد ملف رايدر مرتبط بهذا الموظف."}
-              </p>
-            )}
-          </Card>
-          <Card className="p-5">
-            <h2 className="flex items-center gap-2 font-black">
-              <BriefcaseBusiness size={18} />
-              {locale === "en" ? "Operational Work" : "العمل التشغيلي"}
-            </h2>
-            <p className="mt-4 text-sm font-bold">{workAssignment}</p>
-            <p className="mt-1 text-xs text-[var(--muted)]">{String(operatingCity ?? "")}</p>
-          </Card>
-          <Timeline
-            title={locale === "en" ? "Relationship History" : "سجل العلاقة"}
-            entries={relationshipEntries}
-            locale={locale}
-          />
-        </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Timeline
+          title={locale === "en" ? "Status History" : "سجل الحالة"}
+          entries={statusEntries}
+          locale={locale}
+        />
+        <Timeline
+          title={locale === "en" ? "Role History" : "سجل الأدوار الوظيفية"}
+          entries={roleEntries}
+          locale={locale}
+        />
+        <Timeline
+          title={locale === "en" ? "Operational Assignment History" : "سجل التكليفات التشغيلية"}
+          entries={assignmentEntries}
+          locale={locale}
+        />
+        <Timeline
+          title={locale === "en" ? "Relationship History" : "سجل العلاقة"}
+          entries={relationshipEntries}
+          locale={locale}
+        />
       </div>
+
+      {showDocsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowDocsModal(false)}
+        >
+          <div
+            className="relative flex flex-col max-h-[90vh] w-full max-w-5xl rounded-2xl bg-[var(--surface)] p-6 shadow-2xl overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between border-b pb-3">
+              <h2 className="text-xl font-black flex items-center gap-2">
+                <FileText size={22} />
+                {locale === "en" ? "Employee Documents & Insurance" : "وثائق وتأمين الموظف"}
+              </h2>
+              <button
+                onClick={() => setShowDocsModal(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-slate-100 transition-colors"
+                aria-label={locale === "en" ? "Close" : "إغلاق"}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1">
+              <EmployeeDocumentsInsurance
+                employeeId={employee.id}
+                riderProfileId={rider?.id ?? null}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

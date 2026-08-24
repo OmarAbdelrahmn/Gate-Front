@@ -33,6 +33,7 @@ type Tab =
   | "licenses"
   | "riderCards"
   | "healthCards"
+  | "ajeerContracts"
   | "documents";
 
 type DisplayRecord = {
@@ -64,6 +65,13 @@ const tabs: {
       labelAr: "البطاقات الصحية",
       labelEn: "Health Cards",
       icon: HeartPulse,
+      riderOnly: true,
+    },
+    {
+      key: "ajeerContracts",
+      labelAr: "عقود اجير",
+      labelEn: "Ajeer Contracts",
+      icon: FileText,
       riderOnly: true,
     },
     { key: "documents", labelAr: "الوثائق", labelEn: "Documents", icon: FileText },
@@ -376,6 +384,37 @@ export function EmployeeComplianceTabs({
             (locale === "en" ? "Uploaded Document" : "وثيقة مرفوعة"),
           expiryDate: item.expiryDate,
         }));
+      }
+      return [];
+    }
+
+    if (active === "ajeerContracts") {
+      const matched = documents.filter(
+        (d) =>
+          d.documentTypeCode === "AJEER_CONTRACT" ||
+          d.documentTypeCode?.toLowerCase() === "ajeer_contract" ||
+          (d.documentTypeNameAr || "").includes("اجير") ||
+          (d.documentTypeNameAr || "").includes("أجير"),
+      );
+      if (matched.length > 0) {
+        return matched.map((item) => {
+          const rec = item as Record<string, unknown>;
+          const docNameEn = rec.documentTypeNameEn as string | undefined;
+          return {
+            id: item.id,
+            documentId: item.id,
+            title:
+              (locale === "en"
+                ? docNameEn || item.documentTypeNameAr
+                : item.documentTypeNameAr) ||
+              (locale === "en" ? "Ajeer Contract" : "عقد اجير"),
+            subtitle:
+              item.currentFileName ??
+              item.documentNumber ??
+              (locale === "en" ? "Uploaded Document" : "وثيقة مرفوعة"),
+            expiryDate: item.expiryDate,
+          };
+        });
       }
       return [];
     }
