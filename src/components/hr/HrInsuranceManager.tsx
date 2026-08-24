@@ -44,6 +44,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { systemPrompt } from "../ui/SystemDialog";
 import { toast } from "../ui/Toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 
 type ActiveTab = "companies" | "plans" | "policies";
 
@@ -72,8 +73,10 @@ export function HrInsuranceManager() {
   const [planModal, setPlanModal] = useState<{ open: boolean; data?: InsurancePlan | null }>({ open: false });
   const [policyModal, setPolicyModal] = useState<{ open: boolean; data?: InsurancePolicy | null }>({ open: false });
 
-  // Secondary plan dropdown state inside policy modal
+  // Secondary selection states inside policy modal
+  const [policyModalEmployeeId, setPolicyModalEmployeeId] = useState<string>("");
   const [policyModalCompanyId, setPolicyModalCompanyId] = useState<string>("");
+  const [policyModalPlanId, setPolicyModalPlanId] = useState<string>("");
   const [policyModalPlans, setPolicyModalPlans] = useState<InsurancePlan[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -488,7 +491,9 @@ export function HrInsuranceManager() {
               <Button
                 type="button"
                 onClick={() => {
+                  setPolicyModalEmployeeId(selectedEmployeeId || "");
                   setPolicyModalCompanyId(companies[0]?.id || "");
+                  setPolicyModalPlanId("");
                   setPolicyModal({ open: true, data: null });
                 }}
                 className="gap-2 font-bold shadow-md hover:shadow-lg transition-shadow"
@@ -749,18 +754,19 @@ export function HrInsuranceManager() {
                 <label className="text-sm font-bold whitespace-nowrap">
                   {locale === "en" ? "Select Insurance Company:" : "اختر شركة التأمين:"}
                 </label>
-                <select
+                <SearchableSelect
                   value={selectedCompanyId}
-                  onChange={(e) => setSelectedCompanyId(e.target.value)}
-                  className="h-11 max-w-xs flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-bold text-[#1167c9] outline-none focus:border-[#1167c9]"
-                >
-                  <option value="">{locale === "en" ? "Select a company..." : "اختر شركة..."}</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nameAr} ({c.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedCompanyId}
+                  options={companies.map((c) => ({
+                    value: c.id,
+                    label: c.nameAr,
+                    sublabel: c.code,
+                    keywords: `${c.nameEn || ""} ${c.code}`,
+                  }))}
+                  placeholder={locale === "en" ? "Select Company..." : "اختر شركة التأمين..."}
+                  searchPlaceholder={locale === "en" ? "Search company..." : "ابحث بالاسم أو الرمز..."}
+                  className="max-w-xs flex-1"
+                />
               </div>
 
               <div className="relative min-w-[200px]">
@@ -895,18 +901,22 @@ export function HrInsuranceManager() {
                   <Users size={16} className="inline ml-1 text-[#1167c9]" />
                   {locale === "en" ? "Filter Employee:" : "تصفية حسب الموظف:"}
                 </label>
-                <select
+                <SearchableSelect
                   value={selectedEmployeeId}
-                  onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                  className="h-11 max-w-xs flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-bold outline-none focus:border-[#1167c9]"
-                >
-                  <option value="">{locale === "en" ? "All Employees" : "جميع الموظفين والمناديب"}</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullNameAr} ({emp.iqamaNo})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedEmployeeId}
+                  options={[
+                    { value: "", label: locale === "en" ? "All Employees" : "جميع الموظفين والمناديب" },
+                    ...employees.map((emp) => ({
+                      value: emp.id,
+                      label: emp.fullNameAr,
+                      sublabel: `إقامة/هوية: ${emp.iqamaNo}`,
+                      keywords: `${emp.fullNameEn || ""} ${emp.primaryPhone || ""} ${emp.iqamaNo}`,
+                    })),
+                  ]}
+                  placeholder={locale === "en" ? "All Employees" : "جميع الموظفين"}
+                  searchPlaceholder={locale === "en" ? "Search employee by name or ID..." : "ابحث باسم الموظف أو الهوية..."}
+                  className="max-w-xs flex-1"
+                />
               </div>
 
               <div className="relative min-w-[200px]">
@@ -1365,54 +1375,56 @@ export function HrInsuranceManager() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-sm font-bold col-span-full">
                   {locale === "en" ? "Employee *" : "الموظف / المندوب *"}
-                  <select
+                  <SearchableSelect
                     name="employeeId"
+                    value={policyModalEmployeeId}
+                    onChange={setPolicyModalEmployeeId}
                     required
-                    defaultValue={policyModal.data?.employeeId || selectedEmployeeId}
-                    className={inputCls}
-                  >
-                    <option value="">{locale === "en" ? "Select Employee..." : "اختر الموظف..."}</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullNameAr} - {emp.iqamaNo}
-                      </option>
-                    ))}
-                  </select>
+                    options={employees.map((emp) => ({
+                      value: emp.id,
+                      label: emp.fullNameAr,
+                      sublabel: `إقامة/هوية: ${emp.iqamaNo}`,
+                      keywords: `${emp.fullNameEn || ""} ${emp.primaryPhone || ""} ${emp.iqamaNo}`,
+                    }))}
+                    placeholder={locale === "en" ? "Select Employee..." : "اختر الموظف..."}
+                    searchPlaceholder={locale === "en" ? "Search by name, ID, or phone..." : "ابحث بالاسم، الإقامة، أو رقم الهاتف..."}
+                  />
                 </label>
 
                 <label className="grid gap-1.5 text-sm font-bold">
                   {locale === "en" ? "Insurance Company *" : "شركة التأمين *"}
-                  <select
+                  <SearchableSelect
                     name="insuranceCompanyId"
-                    required
                     value={policyModalCompanyId}
-                    onChange={(e) => setPolicyModalCompanyId(e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">{locale === "en" ? "Select Company..." : "اختر الشركة..."}</option>
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nameAr} ({c.code})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setPolicyModalCompanyId}
+                    required
+                    options={companies.map((c) => ({
+                      value: c.id,
+                      label: c.nameAr,
+                      sublabel: c.code,
+                      keywords: `${c.nameEn || ""} ${c.code}`,
+                    }))}
+                    placeholder={locale === "en" ? "Select Company..." : "اختر الشركة..."}
+                    searchPlaceholder={locale === "en" ? "Search company..." : "ابحث بالاسم أو الرمز..."}
+                  />
                 </label>
 
                 <label className="grid gap-1.5 text-sm font-bold">
                   {locale === "en" ? "Plan Level *" : "فئة الخطة *"}
-                  <select
+                  <SearchableSelect
                     name="insurancePlanLevelId"
+                    value={policyModalPlanId}
+                    onChange={setPolicyModalPlanId}
                     required
-                    defaultValue={policyModal.data?.insurancePlanLevelId || ""}
-                    className={inputCls}
-                  >
-                    <option value="">{locale === "en" ? "Select Plan..." : "اختر الفئة..."}</option>
-                    {policyModalPlans.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nameAr} ({p.code})
-                      </option>
-                    ))}
-                  </select>
+                    options={policyModalPlans.map((p) => ({
+                      value: p.id,
+                      label: p.nameAr,
+                      sublabel: p.code,
+                      keywords: `${p.nameEn || ""} ${p.code} ${p.networkName || ""}`,
+                    }))}
+                    placeholder={locale === "en" ? "Select Plan..." : "اختر الفئة..."}
+                    searchPlaceholder={locale === "en" ? "Search plan..." : "ابحث الخطة..."}
+                  />
                 </label>
 
                 <label className="grid gap-1.5 text-sm font-bold">

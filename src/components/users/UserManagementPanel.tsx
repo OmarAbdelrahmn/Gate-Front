@@ -25,6 +25,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { toast } from "../ui/Toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 
 type Props = { user: ManagedUser; onChanged: (user: ManagedUser) => void };
 type Role = {
@@ -286,18 +287,16 @@ export function UserManagementPanel({ user, onChanged }: Props) {
             {locale === "en" ? "Account Status & Security" : "حالة وأمان الحساب"}
           </h2>
           <div className="mt-4 grid gap-3">
-            <select
-              aria-label={locale === "en" ? "Account status" : "حالة الحساب"}
+            <SearchableSelect
               value={status}
-              onChange={(e) =>
-                setStatus(e.target.value as ManagedUser["status"])
-              }
-              className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
-            >
-              <option value="Active">{locale === "en" ? "Active" : "نشط"}</option>
-              <option value="Locked">{locale === "en" ? "Locked" : "مقفل"}</option>
-              <option value="Suspended">{locale === "en" ? "Suspended" : "موقوف"}</option>
-            </select>
+              onChange={(val) => setStatus(val as ManagedUser["status"])}
+              options={[
+                { value: "Active", label: locale === "en" ? "Active" : "نشط" },
+                { value: "Locked", label: locale === "en" ? "Locked" : "مقفل" },
+                { value: "Suspended", label: locale === "en" ? "Suspended" : "موقوف" },
+              ]}
+              placeholder={locale === "en" ? "Account Status" : "حالة الحساب"}
+            />
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}

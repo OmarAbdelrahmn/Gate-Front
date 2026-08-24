@@ -38,6 +38,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { systemPrompt } from "../ui/SystemDialog";
 import { toast } from "../ui/Toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 
 export function EmployeeDocumentsInsurance({
   employeeId,
@@ -718,40 +719,35 @@ export function EmployeeDocumentsInsurance({
           >
             <label className="grid gap-2 text-sm font-bold">
               {locale === "en" ? "Insurance Company" : "شركة التأمين"}
-              <select
+              <SearchableSelect
                 name="insuranceCompanyId"
                 required
                 value={companyId || editingPolicy?.insuranceCompanyId || ""}
-                onChange={(e) => setCompanyId(e.target.value)}
-                className={cls}
-              >
-                <option value="">
-                  {locale === "en" ? "Select Company" : "اختر الشركة"}
-                </option>
-                {companies.map((c) => (
-                  <option value={c.id} key={c.id}>
-                    {locale === "en" ? c.nameEn || c.nameAr : c.nameAr}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setCompanyId(val)}
+                options={companies.map((c) => ({
+                  value: c.id,
+                  label: locale === "en" ? c.nameEn || c.nameAr : c.nameAr,
+                  sublabel: c.code,
+                }))}
+                placeholder={locale === "en" ? "Select Company" : "اختر الشركة"}
+                searchPlaceholder={locale === "en" ? "Search company..." : "ابحث عن شركة..."}
+              />
             </label>
             <label className="grid gap-2 text-sm font-bold">
               {locale === "en" ? "Plan" : "الخطة"}
-              <select
+              <SearchableSelect
                 name="insurancePlanLevelId"
                 required
-                defaultValue={editingPolicy?.insurancePlanLevelId ?? ""}
-                className={cls}
-              >
-                <option value="">
-                  {locale === "en" ? "Select Plan" : "اختر الخطة"}
-                </option>
-                {plans.map((p) => (
-                  <option value={p.id} key={p.id}>
-                    {locale === "en" ? p.nameEn || p.nameAr : p.nameAr}
-                  </option>
-                ))}
-              </select>
+                value={editingPolicy?.insurancePlanLevelId ?? ""}
+                onChange={() => {}}
+                options={plans.map((p) => ({
+                  value: p.id,
+                  label: locale === "en" ? p.nameEn || p.nameAr : p.nameAr,
+                  sublabel: p.code,
+                }))}
+                placeholder={locale === "en" ? "Select Plan" : "اختر الخطة"}
+                searchPlaceholder={locale === "en" ? "Search plan..." : "ابحث عن خطة..."}
+              />
             </label>
             {[
               [

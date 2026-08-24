@@ -24,6 +24,7 @@ import type {
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { toast } from "../ui/Toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 
 type ExistingRole = ManagedRoleAssignmentRequest & { roleId: string };
 type ExistingPermission = ManagedDirectPermissionAssignmentRequest;
@@ -323,28 +324,25 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                             <span className="text-xs text-[var(--muted)]">
                               {locale === "en" ? "Rule" : "القاعدة"}
                             </span>
-                            <select
-                              aria-label={locale === "en" ? "Permission effect" : "تأثير الصلاحية"}
+                            <SearchableSelect
                               value={item.effect}
-                              onChange={(e) =>
+                              onChange={(val) =>
                                 setAssignPermissions((current) =>
                                   current.map((row) =>
                                     row.permissionKey === item.permissionKey
                                       ? {
                                           ...row,
-                                          effect: e.target.value as
-                                            | "Grant"
-                                            | "Deny",
+                                          effect: val as "Grant" | "Deny",
                                         }
                                       : row,
                                   ),
                                 )
                               }
-                              className={`h-8 rounded-lg border px-2 text-xs font-bold ${item.effect === "Deny" ? "border-red-200 bg-red-100 text-red-700" : "border-emerald-200 bg-emerald-100 text-emerald-700"}`}
-                            >
-                              <option value="Grant">{locale === "en" ? "Grant" : "مسموح"}</option>
-                              <option value="Deny">{locale === "en" ? "Deny" : "منع"}</option>
-                            </select>
+                              options={[
+                                { value: "Grant", label: locale === "en" ? "Grant" : "مسموح" },
+                                { value: "Deny", label: locale === "en" ? "Deny" : "منع" },
+                              ]}
+                            />
                           </div>
                         </div>
                       ))}

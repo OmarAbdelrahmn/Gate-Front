@@ -8,6 +8,7 @@ import { Button } from "../../../../../components/ui/Button";
 import { Input } from "../../../../../components/ui/Input";
 import { Card } from "../../../../../components/ui/Card";
 import { useAuth } from "../../../../../lib/auth/AuthProvider";
+import { SearchableSelect } from "../../../../../components/ui/SearchableSelect";
 
 export default function NewSponsorPage() {
   const router = useRouter();

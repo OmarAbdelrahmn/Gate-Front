@@ -10,6 +10,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { toast } from "../ui/Toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 
 const allFields = [
   ["iqamaNo", "رقم الإقامة", "Iqama / National ID", "text"],
@@ -506,32 +507,31 @@ function CatalogSelect({
   loading: boolean;
   locale?: "ar" | "en";
 }) {
-  const valStr = String(value ?? "");
+  const [selectedVal, setSelectedVal] = useState<string>(String(value ?? ""));
+  useEffect(() => {
+    setSelectedVal(String(value ?? ""));
+  }, [value]);
+
   return (
     <label className="grid gap-2 text-sm font-bold">
       {label}
-      <select
-        key={name + "-" + valStr + "-" + options.length}
+      <SearchableSelect
         name={name}
-        defaultValue={valStr}
+        value={selectedVal}
+        onChange={setSelectedVal}
         disabled={loading}
-        className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 font-normal outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 disabled:cursor-wait disabled:opacity-60"
-      >
-        <option value="">
-          {loading
+        options={options}
+        placeholder={
+          loading
             ? locale === "en"
               ? "Loading options..."
               : "جارٍ تحميل الخيارات…"
             : locale === "en"
               ? `Select ${label}`
-              : `اختر ${label}`}
-        </option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+              : `اختر ${label}`
+        }
+        searchPlaceholder={locale === "en" ? `Search ${label}...` : `ابحث في ${label}...`}
+      />
     </label>
   );
 }
@@ -541,7 +541,6 @@ function Select({
   name,
   value,
   options,
-  className,
   required,
   onChange,
 }: {
@@ -549,29 +548,32 @@ function Select({
   name?: string;
   value: unknown;
   options: { value: string; label: string }[];
-  className: string;
+  className?: string;
   required?: boolean;
   onChange?: (value: string) => void;
 }) {
-  const valStr = String(value ?? "");
+  const [selectedVal, setSelectedVal] = useState<string>(String(value ?? ""));
+  useEffect(() => {
+    setSelectedVal(String(value ?? ""));
+  }, [value]);
+
+  function handleChange(val: string) {
+    setSelectedVal(val);
+    onChange?.(val);
+  }
+
   return (
     <label className="grid gap-2 text-sm font-bold">
       {label}
-      <select
-        key={name ? name + "-" + valStr : undefined}
+      <SearchableSelect
         name={name}
-        value={onChange ? valStr : undefined}
-        defaultValue={onChange ? undefined : valStr}
+        value={onChange ? String(value ?? "") : selectedVal}
+        onChange={handleChange}
         required={required}
-        onChange={(event) => onChange?.(event.target.value)}
-        className={className}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        options={options}
+        placeholder={label}
+        searchPlaceholder="ابحث..."
+      />
     </label>
   );
 }

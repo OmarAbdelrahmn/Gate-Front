@@ -7,6 +7,7 @@ import { createSponsor, updateSponsor, type Sponsor } from "../../lib/workforce/
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { toast } from "../ui/Toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 
 type SponsorModalProps = {
   isOpen: boolean;
@@ -228,17 +229,18 @@ export function SponsorModal({
                   <span>{locale === "en" ? "Sponsor Type" : "نوع الكفيل"}</span>
                   <span className="field-required">{locale === "en" ? "Required" : "مطلوب"}</span>
                 </span>
-                <select
+                <SearchableSelect
                   value={sponsorType}
-                  onChange={(e) => setSponsorType(e.target.value)}
+                  onChange={setSponsorType}
                   required
-                  className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal focus:border-[#1167c9] focus:outline-none"
-                >
-                  <option value="Establishment">{locale === "en" ? "Establishment" : "مؤسسة"}</option>
-                  <option value="Company">{locale === "en" ? "Company" : "شركة"}</option>
-                  <option value="Individual">{locale === "en" ? "Individual" : "فرد"}</option>
-                  <option value="Government">{locale === "en" ? "Government" : "جهة حكومية"}</option>
-                </select>
+                  options={[
+                    { value: "Establishment", label: locale === "en" ? "Establishment" : "مؤسسة" },
+                    { value: "Company", label: locale === "en" ? "Company" : "شركة" },
+                    { value: "Individual", label: locale === "en" ? "Individual" : "فرد" },
+                    { value: "Government", label: locale === "en" ? "Government" : "جهة حكومية" },
+                  ]}
+                  placeholder={locale === "en" ? "Select Sponsor Type" : "اختر نوع الكفيل"}
+                />
               </label>
 
               <Input
@@ -276,15 +278,16 @@ export function SponsorModal({
                   <span>{locale === "en" ? "Status" : "الحالة"}</span>
                   <span className="field-required">{locale === "en" ? "Required" : "مطلوب"}</span>
                 </span>
-                <select
+                <SearchableSelect
                   value={status}
-                  onChange={(e) => setStatus(e.target.value)}
+                  onChange={setStatus}
                   required
-                  className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal focus:border-[#1167c9] focus:outline-none"
-                >
-                  <option value="Active">{locale === "en" ? "Active" : "نشط"}</option>
-                  <option value="Inactive">{locale === "en" ? "Inactive" : "غير نشط"}</option>
-                </select>
+                  options={[
+                    { value: "Active", label: locale === "en" ? "Active" : "نشط" },
+                    { value: "Inactive", label: locale === "en" ? "Inactive" : "غير نشط" },
+                  ]}
+                  placeholder={locale === "en" ? "Select Status" : "اختر الحالة"}
+                />
               </label>
 
               <div className="grid grid-cols-2 gap-2">

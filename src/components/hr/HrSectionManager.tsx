@@ -29,6 +29,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { systemPrompt } from "../ui/SystemDialog";
 import { toast } from "../ui/Toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 
 import { translate } from "../../lib/i18n";
 
@@ -130,25 +131,25 @@ function Field({
         {label}
       </label>
     );
-  if (field.kind === "select" || inferredSource(field))
+  if (field.kind === "select" || inferredSource(field)) {
+    const selectOptions = (options ?? field.options ?? []).map((opt) => ({
+      value: opt.value,
+      label: locale === "en" ? (opt.labelEn || opt.label) : opt.label,
+    }));
     return (
       <label className="grid gap-2 text-sm font-bold">
         <span>{label.replace("معرّف ", "").replace(" ID", "")}</span>
-        <select
-          required={field.required}
+        <SearchableSelect
           value={String(value)}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 font-normal"
-        >
-          <option value="">{locale === "en" ? "Select" : "اختر"}</option>
-          {(options ?? field.options)?.map((option) => (
-            <option key={option.value} value={option.value}>
-              {locale === "en" ? (option.labelEn || option.label) : option.label}
-            </option>
-          ))}
-        </select>
+          onChange={(val) => onChange(val)}
+          options={selectOptions}
+          required={field.required}
+          placeholder={locale === "en" ? "Select..." : "اختر..."}
+          searchPlaceholder={locale === "en" ? "Search..." : "ابحث..."}
+        />
       </label>
     );
+  }
   if (field.kind === "json")
     return (
       <label className="col-span-full grid gap-2 text-sm font-bold">

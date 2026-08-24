@@ -25,6 +25,7 @@ import { systemPrompt } from "../../../../components/ui/SystemDialog";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { SponsorModal } from "../../../../components/employees/SponsorModal";
+import { SearchableSelect } from "../../../../components/ui/SearchableSelect";
 
 export default function SponsorsPage() {
   const { can, locale } = useAuth();
@@ -158,27 +159,33 @@ export default function SponsorsPage() {
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-bold outline-none"
-            >
-              <option value="all">{locale === "en" ? "All Types" : "جميع الأنواع"}</option>
-              <option value="Establishment">{locale === "en" ? "Establishment" : "مؤسسة"}</option>
-              <option value="Company">{locale === "en" ? "Company" : "شركة"}</option>
-              <option value="Individual">{locale === "en" ? "Individual" : "فرد"}</option>
-              <option value="Government">{locale === "en" ? "Government" : "جهة حكومية"}</option>
-            </select>
+            <div className="w-44">
+              <SearchableSelect
+                value={typeFilter}
+                onChange={setTypeFilter}
+                options={[
+                  { value: "all", label: locale === "en" ? "All Types" : "جميع الأنواع" },
+                  { value: "Establishment", label: locale === "en" ? "Establishment" : "مؤسسة" },
+                  { value: "Company", label: locale === "en" ? "Company" : "شركة" },
+                  { value: "Individual", label: locale === "en" ? "Individual" : "فرد" },
+                  { value: "Government", label: locale === "en" ? "Government" : "جهة حكومية" },
+                ]}
+                placeholder={locale === "en" ? "All Types" : "جميع الأنواع"}
+              />
+            </div>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-bold outline-none"
-            >
-              <option value="all">{locale === "en" ? "All Statuses" : "جميع الحالات"}</option>
-              <option value="Active">{locale === "en" ? "Active" : "نشط"}</option>
-              <option value="Inactive">{locale === "en" ? "Inactive" : "غير نشط"}</option>
-            </select>
+            <div className="w-44">
+              <SearchableSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { value: "all", label: locale === "en" ? "All Statuses" : "جميع الحالات" },
+                  { value: "Active", label: locale === "en" ? "Active" : "نشط" },
+                  { value: "Inactive", label: locale === "en" ? "Inactive" : "غير نشط" },
+                ]}
+                placeholder={locale === "en" ? "All Statuses" : "جميع الحالات"}
+              />
+            </div>
           </div>
         </div>
 
