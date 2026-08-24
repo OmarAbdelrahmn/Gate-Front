@@ -9,6 +9,7 @@ import { listSponsors, type Sponsor } from "../../lib/workforce/api";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
+import { toast } from "../ui/Toast";
 
 const allFields = [
   ["iqamaNo", "رقم الإقامة", "Iqama / National ID", "text"],
@@ -140,41 +141,41 @@ export function EmployeeForm({
 
     // Validation Rules matching API Spec
     if (!payload.fullNameAr || !payload.engagementType || !payload.status) {
-      setError(
-        locale === "en"
-          ? "Arabic Full Name, Engagement Type, and Status are required."
-          : "الاسم بالعربية ونوع الارتباط وحالة الموظف حقول مطلوبة.",
-      );
+      const msg = locale === "en"
+        ? "Arabic Full Name, Engagement Type, and Status are required."
+        : "الاسم بالعربية ونوع الارتباط وحالة الموظف حقول مطلوبة.";
+      setError(msg);
+      toast.error(locale === "en" ? "Validation Error" : "خطأ في التحقق من البيانات", msg);
       return;
     }
 
     const iqama = String(payload.iqamaNo ?? "");
     if (!iqama || !/^\d{10}$/.test(iqama)) {
-      setError(
-        locale === "en"
-          ? "A valid 10-digit Iqama / National ID number is required."
-          : "رقم الإقامة / الهوية الوطنية مكوّن من 10 أرقام مطلوب.",
-      );
+      const msg = locale === "en"
+        ? "A valid 10-digit Iqama / National ID number is required."
+        : "رقم الإقامة / الهوية الوطنية مكوّن من 10 أرقام مطلوب.";
+      setError(msg);
+      toast.error(locale === "en" ? "Validation Error" : "خطأ في رقم الإقامة", msg);
       return;
     }
 
     if (engagement === "SponsoredInternal" && !payload.sponsorId) {
-      setError(
-        locale === "en"
-          ? "Sponsored internal employees require selecting a sponsor."
-          : "الموظف على كفالة الشركة يتطلب اختيار كفيل.",
-      );
+      const msg = locale === "en"
+        ? "Sponsored internal employees require selecting a sponsor."
+        : "الموظف على كفالة الشركة يتطلب اختيار كفيل.";
+      setError(msg);
+      toast.error(locale === "en" ? "Validation Error" : "خطأ في التحديد", msg);
       return;
     }
 
     const startDate = String(payload.contractStartDate ?? "");
     const endDate = String(payload.contractEndDate ?? "");
     if (startDate && endDate && startDate > endDate) {
-      setError(
-        locale === "en"
-          ? "Contract end date cannot be earlier than contract start date."
-          : "تاريخ نهاية العقد لا يمكن أن يكون قبل تاريخ بداية العقد.",
-      );
+      const msg = locale === "en"
+        ? "Contract end date cannot be earlier than contract start date."
+        : "تاريخ نهاية العقد لا يمكن أن يكون قبل تاريخ بداية العقد.";
+      setError(msg);
+      toast.error(locale === "en" ? "Validation Error" : "خطأ في التواريخ", msg);
       return;
     }
 
@@ -182,12 +183,17 @@ export function EmployeeForm({
     setError("");
     try {
       await onSave(payload);
-    } catch {
-      setError(
-        locale === "en"
-          ? "Failed to save data. Check required fields and values."
-          : "تعذر حفظ البيانات. راجع الحقول المطلوبة والقيم المختارة.",
+      toast.success(
+        locale === "en" ? "Saved Successfully" : "تم الحفظ بنجاح",
+        locale === "en" ? "Employee details updated successfully." : "تم التحديث بنجاح"
       );
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        (locale === "en"
+          ? "Failed to save data. Check required fields and values."
+          : "تعذر حفظ البيانات. راجع الحقول المطلوبة والقيم المختارة.");
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -359,7 +365,7 @@ export function EmployeeForm({
               onChange={setEngagement}
               required
               options={[
-                { value: "SponsoredInternal", label: locale === "en" ? "Company Sponsored" : "على كفالة الشركة" },
+                { value: "SponsoredInternal", label: locale === "en" ? "Company Sponsored" : "على الكفالة" },
                 { value: "OutsideRider", label: locale === "en" ? "External Delegate" : "مندوب خارجي" },
               ]}
               className={selectClass}

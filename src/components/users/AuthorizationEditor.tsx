@@ -23,6 +23,7 @@ import type {
 } from "../../lib/users/types";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
+import { toast } from "../ui/Toast";
 
 type ExistingRole = ManagedRoleAssignmentRequest & { roleId: string };
 type ExistingPermission = ManagedDirectPermissionAssignmentRequest;
@@ -124,9 +125,13 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     setMessage("");
     try {
       await replaceUserRoles(userId, assignRoles);
-      setMessage(locale === "en" ? "Roles saved and user authorization updated." : "تم حفظ الأدوار وتحديث صلاحيات المستخدم.");
-    } catch {
-      setMessage(locale === "en" ? "Failed to save roles." : "تعذر حفظ الأدوار.");
+      const msg = locale === "en" ? "Roles saved and user authorization updated." : "تم حفظ الأدوار وتحديث صلاحيات المستخدم.";
+      setMessage(msg);
+      toast.success(locale === "en" ? "Roles Updated" : "تم تحديث الأدوار", msg);
+    } catch (err: any) {
+      const msg = err?.message || (locale === "en" ? "Failed to save roles." : "تعذر حفظ الأدوار.");
+      setMessage(msg);
+      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
     } finally {
       setSaving(false);
     }
@@ -137,9 +142,13 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     setMessage("");
     try {
       await replaceUserPermissions(userId, assignPermissions);
-      setMessage(locale === "en" ? "Direct permissions saved and user authorization updated." : "تم حفظ الصلاحيات المباشرة وتحديث صلاحيات المستخدم.");
-    } catch {
-      setMessage(locale === "en" ? "Failed to save direct permissions." : "تعذر حفظ الصلاحيات المباشرة.");
+      const msg = locale === "en" ? "Direct permissions saved and user authorization updated." : "تم حفظ الصلاحيات المباشرة وتحديث صلاحيات المستخدم.";
+      setMessage(msg);
+      toast.success(locale === "en" ? "Permissions Updated" : "تم تحديث الصلاحيات", msg);
+    } catch (err: any) {
+      const msg = err?.message || (locale === "en" ? "Failed to save direct permissions." : "تعذر حفظ الصلاحيات المباشرة.");
+      setMessage(msg);
+      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
     } finally {
       setSaving(false);
     }

@@ -28,6 +28,7 @@ import { hrSections, type HrField, type HrSection } from "../../lib/hr/config";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { systemPrompt } from "../ui/SystemDialog";
+import { toast } from "../ui/Toast";
 
 import { translate } from "../../lib/i18n";
 
@@ -285,6 +286,7 @@ export function HrSectionManager({
     setError("");
     setNotice("");
   };
+
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -301,10 +303,14 @@ export function HrSectionManager({
           : hrCatalogApi.create(section.resource, payload));
       setCreating(false);
       setEditing(null);
-      setNotice(locale === "en" ? "Data saved successfully." : "تم حفظ البيانات بنجاح.");
+      const msg = locale === "en" ? "Data saved successfully." : "تم حفظ البيانات بنجاح.";
+      setNotice(msg);
+      toast.success(locale === "en" ? "Saved Successfully" : "تم الحفظ بنجاح", msg);
       await load();
     } catch (err) {
-      setError(errorMessage(err, locale));
+      const msg = errorMessage(err, locale);
+      setError(msg);
+      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
     } finally {
       setBusy(false);
     }
@@ -316,9 +322,12 @@ export function HrSectionManager({
     try {
       await operation();
       setNotice(success);
+      toast.success(locale === "en" ? "Action Completed" : "تمت العملية بنجاح", success);
       await load();
     } catch (err) {
-      setError(errorMessage(err, locale));
+      const msg = errorMessage(err, locale);
+      setError(msg);
+      toast.error(locale === "en" ? "Operation Failed" : "فشلت العملية", msg);
     } finally {
       setBusy(false);
     }

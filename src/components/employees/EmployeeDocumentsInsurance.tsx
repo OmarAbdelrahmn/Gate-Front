@@ -37,6 +37,7 @@ import {
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { systemPrompt } from "../ui/SystemDialog";
+import { toast } from "../ui/Toast";
 
 export function EmployeeDocumentsInsurance({
   employeeId,
@@ -85,19 +86,18 @@ export function EmployeeDocumentsInsurance({
         contentType: res.contentType,
       });
     } catch (e) {
-      setError(
+      const msg =
         e instanceof Error
           ? e.message
           : locale === "en"
             ? "Unable to preview document"
-            : "تعذر عرض الوثيقة",
-      );
+            : "تعذر عرض الوثيقة";
+      setError(msg);
+      toast.error(locale === "en" ? "Preview Error" : "خطأ في المعاينة", msg);
     } finally {
       setBusy(false);
     }
   }
-
-
 
   async function load() {
     try {
@@ -131,20 +131,25 @@ export function EmployeeDocumentsInsurance({
     else setPlans([]);
   }, [companyId]);
 
-  async function run(task: () => Promise<unknown>) {
+  async function run(task: () => Promise<unknown>, successMsg?: string) {
     setBusy(true);
     setError("");
     try {
       await task();
       await load();
+      toast.success(
+        locale === "en" ? "Action Successful" : "تمت العملية بنجاح",
+        successMsg || (locale === "en" ? "Updated successfully." : "تم تحديث البيانات بنجاح")
+      );
     } catch (e) {
-      setError(
+      const msg =
         e instanceof Error
           ? e.message
           : locale === "en"
             ? "Action failed"
-            : "تعذر تنفيذ العملية",
-      );
+            : "تعذر تنفيذ العملية";
+      setError(msg);
+      toast.error(locale === "en" ? "Action Failed" : "فشل الإجراء", msg);
     } finally {
       setBusy(false);
     }

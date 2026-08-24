@@ -1,4 +1,5 @@
 import { clearAuth, readAuth, writeAuth } from "./token-store";
+import { toast } from "../../components/ui/Toast";
 import type {
   AuthApiError,
   AuthSession,
@@ -11,22 +12,101 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 const AUTH_ROUTE = `${API_BASE_URL}/api/auth`;
 let refreshPromise: Promise<AuthenticationTokenResponse> | null = null;
-async function parseResponse<T>(response: Response): Promise<T> {
-  if (response.status === 204) return undefined as T;
+
+export type CustomRequestInit = RequestInit & {
+  notifySuccess?: boolean | string;
+  suppressErrorToast?: boolean;
+};
+
+export function getFriendlyErrorMessage(status: number, rawMessage?: string | null): string {
+  if (
+    rawMessage &&
+    typeof rawMessage === "string" &&
+    !rawMessage.toLowerCase().includes("http") &&
+    !rawMessage.match(/^[0-9]{3}$/) &&
+    !rawMessage.includes("401") &&
+    !rawMessage.includes("403") &&
+    !rawMessage.includes("500")
+  ) {
+    return rawMessage;
+  }
+
+  switch (status) {
+    case 400:
+      return "البيانات المدخلة غير صحيحة، يرجى التأكد من صحة المدخلات وإعادة المحاولة.";
+    case 401:
+      return "انتهت جلسة العمل الخاصة بك، يرجى إعادة تسجيل الدخول للاستمرار.";
+    case 403:
+      return "عفواً، لا تملك الصلاحيات المطلوبة لتنفيذ هذا الإجراء.";
+    case 404:
+      return "المعلومات المطلوبة غير موجودة في النظام.";
+    case 409:
+      return "يوجد تعارض في البيانات، أو السجل موجود مسبقاً.";
+    case 422:
+      return "البيانات غير مكتملة أو لا تستوفي شروط النظام.";
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return "حدث خطأ في خوادم النظام، يرجى المحاولة مرة أخرى لاحقاً.";
+    default:
+      return rawMessage || "تعذر إكمال الطلب، يرجى إعادة المحاولة.";
+  }
+}
+
+async function parseResponse<T>(
+  response: Response,
+  options?: { notifySuccess?: boolean | string; suppressErrorToast?: boolean; method?: string }
+): Promise<T> {
+  if (response.status === 204) {
+    if (typeof window !== "undefined" && options?.notifySuccess) {
+      const msg = typeof options.notifySuccess === "string" ? options.notifySuccess : "تمت العملية بنجاح";
+      toast.success("تم بنجاح", msg);
+    }
+    return undefined as T;
+  }
+
   const body = await response.json().catch(() => null);
+
   if (!response.ok) {
-    const error = new Error(
-      body?.message ?? "حدث خطأ في المصادقة",
-    ) as AuthApiError;
+    const rawMsg =
+      body?.message ||
+      body?.error ||
+      (typeof body === "string" ? body : null);
+
+    const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg);
+
+    const error = new Error(friendlyMsg) as AuthApiError;
     error.status = response.status;
     error.details = body;
+
+    const isGet = options?.method === "GET";
+    const shouldShowToast = !options?.suppressErrorToast && response.status !== 404 && !isGet;
+
+    if (typeof window !== "undefined" && shouldShowToast) {
+      toast.error("تنبيه من النظام", friendlyMsg, {
+        status: response.status,
+        details: body,
+      });
+    }
+
     throw error;
   }
+
+  if (typeof window !== "undefined" && options?.notifySuccess) {
+    const msg =
+      typeof options.notifySuccess === "string"
+        ? options.notifySuccess
+        : body?.message || "تمت العملية بنجاح";
+    toast.success("تم بنجاح", msg, { status: response.status, details: body });
+  }
+
   return body as T;
 }
+
 async function request<T>(
   path: string,
-  init: RequestInit = {},
+  init: CustomRequestInit = {},
   includeAccessToken = false,
   retry = true,
 ): Promise<T> {
@@ -52,7 +132,11 @@ async function request<T>(
     return request<T>(path, init, true, false);
   }
   if (response.status === 401 && includeAccessToken) clearAuth();
-  return parseResponse<T>(response);
+  return parseResponse<T>(response, {
+    notifySuccess: init.notifySuccess,
+    suppressErrorToast: init.suppressErrorToast,
+    method: init.method || "GET",
+  });
 }
 export async function login(payload: LoginRequest) {
   const auth = await request<AuthenticationTokenResponse>("/login", {
@@ -110,7 +194,7 @@ export async function revokeSession(sessionId: string) {
     true,
   );
 }
-export async function authFetch<T>(path: string, init: RequestInit = {}) {
+export async function authFetch<T>(path: string, init: CustomRequestInit = {}) {
   return request<T>(path, init, true);
 }
 export async function authDownload(path: string) {

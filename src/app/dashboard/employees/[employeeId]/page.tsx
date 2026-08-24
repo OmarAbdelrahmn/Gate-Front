@@ -26,7 +26,7 @@ import { EmployeeComplianceTabs } from "../../../../components/employees/Employe
 import { EmployeeDocumentsInsurance } from "../../../../components/employees/EmployeeDocumentsInsurance";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
-  SponsoredInternal: { ar: "موظف مكفول داخليًا", en: "Internal Sponsored Employee" },
+  SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
   OutsideRider: { ar: "رايدر خارجي", en: "External Rider" },
 };
 
@@ -261,8 +261,9 @@ export default function EmployeeDetailsPage({
       ? employee.fullNameEn ? employee.fullNameAr : null
       : employee.fullNameAr ? employee.fullNameEn : null;
 
-  const relObj = relationshipLabels[employee.relationshipType ?? ""];
-  const relText = relObj ? (locale === "en" ? relObj.en : relObj.ar) : "—";
+  const relKey = employee.engagementType || employee.relationshipType;
+  const relObj = relationshipLabels[relKey ?? ""];
+  const relText = relObj ? (locale === "en" ? relObj.en : relObj.ar) : (relKey ?? "—");
 
   const stObj = statusLabels[employee.status];
   const stText = stObj ? (locale === "en" ? stObj.en : stObj.ar) : employee.status;
@@ -274,19 +275,26 @@ export default function EmployeeDetailsPage({
   const riderRec = rider as Record<string, unknown> | null;
 
   const cityFromCatalog = cities.find(
-    (c) => c.id === empRec.operatingCityId || c.id === empRec.cityId,
+    (c) =>
+      c.id === empRec.operatingCityId ||
+      c.id === empRec.cityId ||
+      c.globalCityId === empRec.operatingCityId,
   );
 
   const operatingCity =
     locale === "en"
       ? (empRec.operatingCityEn as string | undefined) ??
+        (cityFromCatalog?.globalCityEn as string | undefined) ??
+        (cityFromCatalog?.cityNameEn as string | undefined) ??
         cityFromCatalog?.nameEn ??
         employee.operatingCityAr ??
-        cityFromCatalog?.nameAr ??
+        (cityFromCatalog?.globalCityAr as string | undefined) ??
         "Unspecified"
       : employee.operatingCityAr ??
+        (cityFromCatalog?.globalCityAr as string | undefined) ??
+        (cityFromCatalog?.cityNameAr as string | undefined) ??
         cityFromCatalog?.nameAr ??
-        (empRec.operatingCityEn as string) ??
+        (empRec.operatingCityEn as string | undefined) ??
         "غير محددة";
 
   const preferredCity = rider

@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth/AuthProvider";
 import { createSponsor, updateSponsor, type Sponsor } from "../../lib/workforce/api";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { toast } from "../ui/Toast";
 
 type SponsorModalProps = {
   isOpen: boolean;
@@ -137,18 +138,30 @@ export function SponsorModal({
     try {
       if (isEdit && sponsor) {
         await updateSponsor(sponsor.id, payload);
+        toast.success(
+          locale === "en" ? "Sponsor Updated" : "تم تحديث الكفيل",
+          locale === "en" ? "Sponsor details saved successfully." : "تم حفظ بيانات الكفيل بنجاح"
+        );
       } else {
         await createSponsor(payload);
+        toast.success(
+          locale === "en" ? "Sponsor Created" : "تمت إضافة الكفيل",
+          locale === "en" ? "New sponsor registered successfully." : "تم تسجيل الكفيل الجديد بنجاح"
+        );
       }
       onSuccess();
       onClose();
     } catch (err) {
-      setError(
+      const msg =
         err instanceof Error
           ? err.message
           : locale === "en"
             ? "Failed to save sponsor details."
-            : "تعذر حفظ بيانات الكفيل.",
+            : "تعذر حفظ بيانات الكفيل.";
+      setError(msg);
+      toast.error(
+        locale === "en" ? "Save Failed" : "فشل الحفظ",
+        msg
       );
     } finally {
       setLoading(false);

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../lib/auth/AuthProvider";
 import { SystemDialogProvider } from "../components/ui/SystemDialog";
+import { ToastProvider } from "../components/ui/Toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,7 +24,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       dir="rtl"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col"><SystemDialogProvider><AuthProvider>{children}</AuthProvider></SystemDialogProvider></body>
+      <body className="min-h-full flex flex-col">
+        <ToastProvider>
+          <SystemDialogProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </SystemDialogProvider>
+        </ToastProvider>
+      </body>
     </html>
   );
 }

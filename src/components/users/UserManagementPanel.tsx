@@ -24,6 +24,7 @@ import type { ManagedUser, TemporaryCredential } from "../../lib/users/types";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
+import { toast } from "../ui/Toast";
 
 type Props = { user: ManagedUser; onChanged: (user: ManagedUser) => void };
 type Role = {
@@ -197,8 +198,21 @@ export function UserManagementPanel({ user, onChanged }: Props) {
     try {
       await action();
       setMessage(success);
-    } catch {
-      setMessage(locale === "en" ? "Operation failed. Check inputs and permissions." : "تعذر إتمام العملية. راجع البيانات والصلاحيات.");
+      toast.success(
+        locale === "en" ? "Action Successful" : "تمت العملية بنجاح",
+        success
+      );
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        (locale === "en"
+          ? "Operation failed. Check inputs and permissions."
+          : "تعذر إتمام العملية. راجع البيانات والصلاحيات.");
+      setMessage(msg);
+      toast.error(
+        locale === "en" ? "Operation Failed" : "فشلت العملية",
+        msg
+      );
     } finally {
       setBusy(false);
     }
