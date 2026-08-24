@@ -93,12 +93,13 @@ export function EmployeeDocumentsInsurance({
   }
   async function upload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const f = new FormData(form);
     const file=f.get("file") as File;
     if(!validateFile(file,f)) return;
     const kind=String(f.get("riderDocumentKind")||"") as RiderDocumentKind;
     await run(() => riderProfileId ? uploadRiderDocument(riderProfileId,kind,f) : uploadEmployeeDocument(employeeId, f));
-    e.currentTarget.reset();
+    form.reset();
   }
   function validateFile(file:File,form?:FormData){
     if(!["application/pdf","image/jpeg","image/png"].includes(file.type)){setError("نوع الملف غير مسموح. استخدم PDF أو JPEG أو PNG.");return false}
