@@ -48,6 +48,8 @@ export type Employee = {
   operatingCityAr?: string | null;
   operationalWorkTypeAr?: string | null;
   jobTitleAr?: string | null;
+  housingNameAr?: string | null;
+  housingNameEn?: string | null;
 };
 export type Period = {
   id: string;

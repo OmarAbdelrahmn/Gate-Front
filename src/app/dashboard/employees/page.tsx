@@ -135,9 +135,10 @@ export default function EmployeesPage() {
                 const sponsor = item.sponsor?.nameAr || item.sponsor?.nameEn || (empRecord.sponsorNameAr as string) || "";
                 const workTypeStr = getWorkTypeDisplay(item, workTypes, locale);
                 const cityStr = getCityDisplay(item, cities, locale);
+                const housingStr = (item.housingNameAr || item.housingNameEn || (empRecord.housingNameAr as string) || (empRecord.housingNameEn as string) || (empRecord.housingName as string) || "") as string;
                 const nat = item.nationality || "";
 
-                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${nat}`
+                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${housingStr} ${nat}`
                     .toLowerCase()
                     .includes(search.toLowerCase());
             }),
@@ -267,6 +268,9 @@ export default function EmployeesPage() {
                                         : (empRecord.residencyProfession as string) || null;
 
                                     const city = getCityDisplay(employee, cities, locale);
+                                    const housingName = (locale === "en"
+                                        ? employee.housingNameEn || employee.housingNameAr || (empRecord.housingNameEn as string) || (empRecord.housingNameAr as string) || (empRecord.housingName as string)
+                                        : employee.housingNameAr || employee.housingNameEn || (empRecord.housingNameAr as string) || (empRecord.housingNameEn as string) || (empRecord.housingName as string)) || null;
 
                                     const stObj = statusLabel[employee.status];
                                     const stText = stObj
@@ -317,8 +321,13 @@ export default function EmployeesPage() {
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="px-5 py-4 font-bold text-slate-700">
-                                                {city}
+                                            <td className="px-5 py-4">
+                                                <div className="font-bold text-slate-700">{city}</div>
+                                                {housingName && (
+                                                    <div className="mt-0.5 text-xs font-semibold text-[var(--muted)]">
+                                                        {housingName}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-5 py-4">
                                                 <span

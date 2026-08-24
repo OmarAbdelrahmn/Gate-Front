@@ -528,26 +528,26 @@ export function HrSectionManager({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[760px] text-sm text-start">
               <thead className="bg-slate-50 text-[var(--muted)]">
                 <tr>
                   {section.columns.map((column) => (
-                    <th key={column.key} className="px-4 py-3">
+                    <th key={column.key} className="px-4 py-3 text-start">
                       {locale === "en" ? (column.labelEn || column.label) : column.label}
                     </th>
                   ))}
-                  <th className="px-4 py-3">{t("common.actions")}</th>
+                  <th className="px-4 py-3 text-start">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((row) => (
                   <tr key={row.id} className="border-t border-[var(--border)]">
                     {section.columns.map((column) => (
-                      <td key={column.key} className="px-4 py-3 font-medium">
+                      <td key={column.key} className="px-4 py-3 font-medium text-start">
                         {display(row[column.key], locale)}
                       </td>
                     ))}
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-start">
                       <div className="flex flex-wrap gap-2">
                         {manageable && section.workflow !== "status" && (
                           <button

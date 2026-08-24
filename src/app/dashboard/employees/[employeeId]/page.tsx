@@ -285,18 +285,18 @@ export default function EmployeeDetailsPage({
   const operatingCity =
     locale === "en"
       ? (empRec.operatingCityEn as string | undefined) ??
-        (cityFromCatalog?.globalCityEn as string | undefined) ??
-        (cityFromCatalog?.cityNameEn as string | undefined) ??
-        cityFromCatalog?.nameEn ??
-        employee.operatingCityAr ??
-        (cityFromCatalog?.globalCityAr as string | undefined) ??
-        "Unspecified"
+      (cityFromCatalog?.globalCityEn as string | undefined) ??
+      (cityFromCatalog?.cityNameEn as string | undefined) ??
+      cityFromCatalog?.nameEn ??
+      employee.operatingCityAr ??
+      (cityFromCatalog?.globalCityAr as string | undefined) ??
+      "Unspecified"
       : employee.operatingCityAr ??
-        (cityFromCatalog?.globalCityAr as string | undefined) ??
-        (cityFromCatalog?.cityNameAr as string | undefined) ??
-        cityFromCatalog?.nameAr ??
-        (empRec.operatingCityEn as string | undefined) ??
-        "غير محددة";
+      (cityFromCatalog?.globalCityAr as string | undefined) ??
+      (cityFromCatalog?.cityNameAr as string | undefined) ??
+      cityFromCatalog?.nameAr ??
+      (empRec.operatingCityEn as string | undefined) ??
+      "غير محددة";
 
   const preferredCity = rider
     ? locale === "en"
@@ -332,13 +332,13 @@ export default function EmployeeDetailsPage({
   const workAssignment =
     locale === "en"
       ? (empRec.operationalWorkTypeEn as string | undefined) ??
-        (empRec.jobTitleEn as string | undefined) ??
-        employee.operationalWorkTypeAr ??
-        employee.jobTitleAr ??
-        "No current assignment"
+      (empRec.jobTitleEn as string | undefined) ??
+      employee.operationalWorkTypeAr ??
+      employee.jobTitleAr ??
+      "No current assignment"
       : employee.operationalWorkTypeAr ??
-        employee.jobTitleAr ??
-        "لا يوجد تكليف حالي";
+      employee.jobTitleAr ??
+      "لا يوجد تكليف حالي";
 
   const housing = details.housing;
   const housingName = housing
@@ -467,7 +467,7 @@ export default function EmployeeDetailsPage({
           <Card className="p-5">
             <h2 className="flex items-center gap-2 font-black">
               <ContactRound size={18} />
-              {locale === "en" ? "Rider Profile" : "ملف الرايدر"}
+              {locale === "en" ? "Rider Profile" : "ملف المندوب"}
             </h2>
             {rider ? (
               <dl className="mt-4 space-y-3 text-sm">

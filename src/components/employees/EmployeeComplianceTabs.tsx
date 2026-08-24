@@ -50,24 +50,24 @@ const tabs: {
   icon: typeof IdCard;
   riderOnly?: boolean;
 }[] = [
-  { key: "residency", labelAr: "الإقامة", labelEn: "Residency", icon: IdCard },
-  { key: "licenses", labelAr: "رخص القيادة", labelEn: "Driver Licenses", icon: WalletCards },
-  {
-    key: "riderCards",
-    labelAr: "بطاقات الرايدر",
-    labelEn: "Rider Cards",
-    icon: ShieldCheck,
-    riderOnly: true,
-  },
-  {
-    key: "healthCards",
-    labelAr: "البطاقات الصحية",
-    labelEn: "Health Cards",
-    icon: HeartPulse,
-    riderOnly: true,
-  },
-  { key: "documents", labelAr: "الوثائق", labelEn: "Documents", icon: FileText },
-];
+    { key: "residency", labelAr: "الإقامة", labelEn: "Residency", icon: IdCard },
+    { key: "licenses", labelAr: "رخص القيادة", labelEn: "Driver Licenses", icon: WalletCards },
+    {
+      key: "riderCards",
+      labelAr: "بطاقات المندوب",
+      labelEn: "Rider Cards",
+      icon: ShieldCheck,
+      riderOnly: true,
+    },
+    {
+      key: "healthCards",
+      labelAr: "البطاقات الصحية",
+      labelEn: "Health Cards",
+      icon: HeartPulse,
+      riderOnly: true,
+    },
+    { key: "documents", labelAr: "الوثائق", labelEn: "Documents", icon: FileText },
+  ];
 
 function expiryState(date: string | null, locale: "ar" | "en" = "ar") {
   if (!date)
@@ -95,8 +95,8 @@ function expiryState(date: string | null, locale: "ar" | "en" = "ar") {
 function formatDate(value: string | null, locale: "ar" | "en" = "ar") {
   return value
     ? new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-arab" : "en-US", {
-        dateStyle: "medium",
-      }).format(new Date(value))
+      dateStyle: "medium",
+    }).format(new Date(value))
     : "—";
 }
 
@@ -165,7 +165,7 @@ export function EmployeeComplianceTabs({
           // ignore sensitive permission failure
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [can, employeeId, riderProfileId, locale]);
 
@@ -472,11 +472,10 @@ export function EmployeeComplianceTabs({
                 return (
                   <article
                     key={record.id}
-                    className={`rounded-xl border p-4 transition-all ${
-                      isSelectedForPreview
+                    className={`rounded-xl border p-4 transition-all ${isSelectedForPreview
                         ? "border-[#1167c9] bg-blue-50/40 ring-2 ring-[#1167c9]/20"
                         : "border-[var(--border)]"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>

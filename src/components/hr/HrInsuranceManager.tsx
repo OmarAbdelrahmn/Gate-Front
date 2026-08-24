@@ -647,15 +647,15 @@ export function HrInsuranceManager() {
           {/* Companies Table */}
           <Card className="overflow-hidden p-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
+              <table className="w-full text-start text-sm">
                 <thead className="bg-slate-50 border-b border-[var(--border)] text-xs font-bold text-[var(--muted)] uppercase">
                   <tr>
-                    <th className="p-4">{locale === "en" ? "Code" : "الرمز"}</th>
-                    <th className="p-4">{locale === "en" ? "Company Name" : "اسم الشركة"}</th>
-                    <th className="p-4">{locale === "en" ? "Reg. #" : "رقم التسجيل"}</th>
-                    <th className="p-4">{locale === "en" ? "Contact Person" : "المسؤول"}</th>
-                    <th className="p-4">{locale === "en" ? "Contact Phone / Email" : "التواصل"}</th>
-                    <th className="p-4">{locale === "en" ? "Status" : "الحالة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Code" : "الرمز"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Company Name" : "اسم الشركة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Reg. #" : "رقم التسجيل"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Contact Person" : "المسؤول"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Contact Phone / Email" : "التواصل"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Status" : "الحالة"}</th>
                     <th className="p-4 text-center">{locale === "en" ? "Actions" : "الإجراءات"}</th>
                   </tr>
                 </thead>
@@ -795,18 +795,18 @@ export function HrInsuranceManager() {
           {/* Plans Table */}
           <Card className="overflow-hidden p-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
+              <table className="w-full text-start text-sm">
                 <thead className="bg-slate-50 border-b border-[var(--border)] text-xs font-bold text-[var(--muted)] uppercase">
                   <tr>
-                    <th className="p-4">{locale === "en" ? "Rank" : "المرتبة"}</th>
-                    <th className="p-4">{locale === "en" ? "Plan Code" : "رمز الفئة"}</th>
-                    <th className="p-4">{locale === "en" ? "Plan Name" : "اسم الفئة"}</th>
-                    <th className="p-4">{locale === "en" ? "Network" : "الشبكة"}</th>
-                    <th className="p-4">{locale === "en" ? "Class" : "الدرجة"}</th>
-                    <th className="p-4">{locale === "en" ? "Annual Limit" : "الحد السنوي"}</th>
-                    <th className="p-4">{locale === "en" ? "Deductible %" : "التحمل %"}</th>
-                    <th className="p-4">{locale === "en" ? "Validity Period" : "الصلاحية"}</th>
-                    <th className="p-4">{locale === "en" ? "Status" : "الحالة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Rank" : "المرتبة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Plan Code" : "رمز الفئة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Plan Name" : "اسم الفئة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Network" : "الشبكة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Class" : "الدرجة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Annual Limit" : "الحد السنوي"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Deductible %" : "التحمل %"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Validity Period" : "الصلاحية"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Status" : "الحالة"}</th>
                     <th className="p-4 text-center">{locale === "en" ? "Actions" : "الإجراءات"}</th>
                   </tr>
                 </thead>
@@ -945,16 +945,16 @@ export function HrInsuranceManager() {
           {/* Policies Table */}
           <Card className="overflow-hidden p-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
+              <table className="w-full text-start text-sm">
                 <thead className="bg-slate-50 border-b border-[var(--border)] text-xs font-bold text-[var(--muted)] uppercase">
                   <tr>
-                    <th className="p-4">{locale === "en" ? "Insurance Company" : "شركة التأمين"}</th>
-                    <th className="p-4">{locale === "en" ? "Plan Level" : "فئة الخطة"}</th>
-                    <th className="p-4">{locale === "en" ? "Masked Policy #" : "رقم الوثيقة"}</th>
-                    <th className="p-4">{locale === "en" ? "Masked Member #" : "رقم العضوية"}</th>
-                    <th className="p-4">{locale === "en" ? "Coverage Period" : "فترة التغطية"}</th>
-                    <th className="p-4">{locale === "en" ? "Current" : "سارية"}</th>
-                    <th className="p-4">{locale === "en" ? "Status" : "الحالة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Insurance Company" : "شركة التأمين"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Plan Level" : "فئة الخطة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Masked Policy #" : "رقم الوثيقة"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Masked Member #" : "رقم العضوية"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Coverage Period" : "فترة التغطية"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Current" : "سارية"}</th>
+                    <th className="p-4 text-start">{locale === "en" ? "Status" : "الحالة"}</th>
                     <th className="p-4 text-center">{locale === "en" ? "Actions" : "الإجراءات"}</th>
                   </tr>
                 </thead>

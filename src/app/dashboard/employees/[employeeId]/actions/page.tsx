@@ -42,7 +42,7 @@ export default function EmployeeActionsPage({
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState("");
   const [sponsorships, setSponsorships] = useState<unknown[]>([]);
-  const [jobTitles,setJobTitles]=useState<HrRow[]>([]),[workTypes,setWorkTypes]=useState<HrRow[]>([]),[cities,setCities]=useState<HrRow[]>([]),[sponsors,setSponsors]=useState<HrRow[]>([]);
+  const [jobTitles, setJobTitles] = useState<HrRow[]>([]), [workTypes, setWorkTypes] = useState<HrRow[]>([]), [cities, setCities] = useState<HrRow[]>([]), [sponsors, setSponsors] = useState<HrRow[]>([]);
   useEffect(() => {
     void params.then(({ employeeId: id }) => setEmployeeId(id));
   }, [params]);
@@ -55,7 +55,7 @@ export default function EmployeeActionsPage({
       })
       .catch(() => setMessage("تعذر تحميل إجراءات الموظف."));
   }, [employeeId]);
-  useEffect(()=>{void Promise.all([hrCatalogApi.list("job-titles"),hrCatalogApi.list("operational-work-types"),hrCatalogApi.list("operating-cities"),listSponsors()]).then(([j,w,c,s])=>{setJobTitles(j);setWorkTypes(w);setCities(c);setSponsors(s as unknown as HrRow[])})},[]);
+  useEffect(() => { void Promise.all([hrCatalogApi.list("job-titles"), hrCatalogApi.list("operational-work-types"), hrCatalogApi.list("operating-cities"), listSponsors()]).then(([j, w, c, s]) => { setJobTitles(j); setWorkTypes(w); setCities(c); setSponsors(s as unknown as HrRow[]) }) }, []);
   async function run(key: string, task: () => Promise<unknown>) {
     setSaving(key);
     setMessage("");
@@ -168,9 +168,9 @@ export default function EmployeeActionsPage({
               );
             }}
           >
-            <Lookup name="jobTitleId" label="المسمى الوظيفي" rows={jobTitles}/>
-            <Lookup name="workTypeId" label="نوع العمل التشغيلي" rows={workTypes}/>
-            <Lookup name="cityId" label="مدينة التشغيل" rows={cities}/>
+            <Lookup name="jobTitleId" label="المسمى الوظيفي" rows={jobTitles} />
+            <Lookup name="workTypeId" label="نوع العمل التشغيلي" rows={workTypes} />
+            <Lookup name="cityId" label="مدينة التشغيل" rows={cities} />
             <Input
               name="effectiveFrom"
               label="تاريخ السريان"
@@ -206,7 +206,7 @@ export default function EmployeeActionsPage({
               );
             }}
           >
-            <Lookup name="sponsorId" label="الكفيل" rows={sponsors}/>
+            <Lookup name="sponsorId" label="الكفيل" rows={sponsors} />
             <Input
               name="effectiveFrom"
               label="تاريخ السريان"
@@ -254,7 +254,7 @@ export default function EmployeeActionsPage({
       <Card className="p-5">
         <h2 className="font-black">بيانات العلاقة المتقدمة</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          تُرسل الحقول كاملة إلى مسار بيانات الموظف المكفول أو الرايدر الخارجي،
+          تُرسل الحقول كاملة إلى مسار بيانات الموظف المكفول أو المندوب الخارجي،
           بما في ذلك rowVersion.
         </p>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -301,12 +301,12 @@ export default function EmployeeActionsPage({
                   ),
                 );
               } catch {
-                setMessage("صيغة JSON لبيانات الرايدر الخارجي غير صحيحة.");
+                setMessage("صيغة JSON لبيانات المندوب الخارجي غير صحيحة.");
               }
             }}
           >
             <label className="grid gap-2 text-sm font-bold">
-              بيانات الرايدر الخارجي
+              بيانات المندوب الخارجي
               <textarea
                 name="payload"
                 required
@@ -320,7 +320,7 @@ export default function EmployeeActionsPage({
               />
             </label>
             <Button className="mt-3" loading={saving === "outside"}>
-              حفظ بيانات الرايدر
+              حفظ بيانات المندوب
             </Button>
           </form>
         </div>
@@ -328,4 +328,4 @@ export default function EmployeeActionsPage({
     </div>
   );
 }
-function Lookup({name,label,rows}:{name:string;label:string;rows:HrRow[]}){return <label className="grid gap-2 text-sm font-bold">{label}<select name={name} required className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3"><option value="">اختر {label}</option>{rows.map(row=><option key={row.id} value={row.id}>{String(row.nameAr??row.registryNameAr??row.globalCityAr??row.code??row.id)}</option>)}</select></label>}
+function Lookup({ name, label, rows }: { name: string; label: string; rows: HrRow[] }) { return <label className="grid gap-2 text-sm font-bold">{label}<select name={name} required className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3"><option value="">اختر {label}</option>{rows.map(row => <option key={row.id} value={row.id}>{String(row.nameAr ?? row.registryNameAr ?? row.globalCityAr ?? row.code ?? row.id)}</option>)}</select></label> }
