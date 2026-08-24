@@ -23,8 +23,82 @@ const statusLabel: Record<string, { ar: string; en: string }> = {
 
 const relationshipLabel: Record<string, { ar: string; en: string }> = {
     SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
-    OutsideRider: { ar: "رايدر خارجي", en: "External Rider" },
+    OutsideRider: { ar: "مندوب خارجي", en: "External Delegate" },
 };
+
+function getCityDisplay(employee: Employee, cities: HrRow[], locale: string): string {
+    const empRecord = employee as Record<string, unknown>;
+
+    if (employee.operatingCity && typeof employee.operatingCity === "object") {
+        const cObj = employee.operatingCity as Record<string, unknown>;
+        const val = locale === "en"
+            ? (cObj.nameEn || cObj.cityNameEn || cObj.globalCityEn || cObj.nameAr || cObj.cityNameAr || cObj.globalCityAr)
+            : (cObj.nameAr || cObj.cityNameAr || cObj.globalCityAr || cObj.nameEn || cObj.cityNameEn || cObj.globalCityEn);
+        if (typeof val === "string" && val.trim()) return val.trim();
+    }
+
+    const rawRef = typeof employee.operatingCity === "string"
+        ? employee.operatingCity
+        : (empRecord.operatingCityId as string) || (empRecord.cityId as string) || (empRecord.operatingCity as string);
+
+    if (rawRef && typeof rawRef === "string") {
+        const found = cities.find((c) => c.id === rawRef || c.globalCityId === rawRef || c.code === rawRef);
+        if (found) {
+            const val = locale === "en"
+                ? (found.globalCityEn as string) || (found.cityNameEn as string) || (found.nameEn as string) || (found.globalCityAr as string) || (found.nameAr as string)
+                : (found.globalCityAr as string) || (found.cityNameAr as string) || (found.nameAr as string) || (found.globalCityEn as string) || (found.nameEn as string);
+            if (val) return val;
+        }
+        if (rawRef.length < 32 && !rawRef.includes("-")) {
+            return rawRef;
+        }
+    }
+
+    const flatVal = locale === "en"
+        ? (empRecord.operatingCityEn as string) || (empRecord.cityNameEn as string) || employee.operatingCityAr
+        : employee.operatingCityAr || (empRecord.cityNameAr as string) || (empRecord.operatingCityEn as string);
+
+    if (typeof flatVal === "string" && flatVal.trim()) return flatVal.trim();
+
+    return "—";
+}
+
+function getWorkTypeDisplay(employee: Employee, workTypes: HrRow[], locale: string): string {
+    const empRecord = employee as Record<string, unknown>;
+
+    if (employee.operationalWorkType && typeof employee.operationalWorkType === "object") {
+        const wtObj = employee.operationalWorkType as Record<string, unknown>;
+        const val = locale === "en"
+            ? (wtObj.nameEn || wtObj.nameAr || wtObj.code)
+            : (wtObj.nameAr || wtObj.nameEn || wtObj.code);
+        if (typeof val === "string" && val.trim()) return val.trim();
+    }
+
+    const rawRef = typeof employee.operationalWorkType === "string"
+        ? employee.operationalWorkType
+        : (empRecord.operationalWorkTypeId as string) || (empRecord.workTypeId as string) || (empRecord.operationalWorkType as string);
+
+    if (rawRef && typeof rawRef === "string") {
+        const found = workTypes.find((w) => w.id === rawRef || w.code === rawRef);
+        if (found) {
+            const val = locale === "en"
+                ? (found.nameEn as string) || (found.nameAr as string) || (found.code as string)
+                : (found.nameAr as string) || (found.nameEn as string) || (found.code as string);
+            if (val) return val;
+        }
+        if (rawRef.length < 32 && !rawRef.includes("-")) {
+            return rawRef;
+        }
+    }
+
+    const flatVal = locale === "en"
+        ? (empRecord.operationalWorkTypeEn as string) || employee.operationalWorkTypeAr || employee.jobTitleAr
+        : employee.operationalWorkTypeAr || employee.jobTitleAr || (empRecord.operationalWorkTypeEn as string);
+
+    if (typeof flatVal === "string" && flatVal.trim()) return flatVal.trim();
+
+    return locale === "en" ? "Unspecified" : "غير محدد";
+}
 
 export default function EmployeesPage() {
     const { locale } = useAuth();
@@ -57,14 +131,17 @@ export default function EmployeesPage() {
     const results = useMemo(
         () =>
             employees.filter((item) => {
-                const rec = item as Record<string, unknown>;
-                const sponsor = (rec.sponsorNameAr as string) ?? "";
-                const nat = (rec.nationality as string) ?? "";
-                return `${item.employeeNumber ?? ""} ${item.iqamaNo ?? ""} ${item.fullNameAr} ${item.fullNameEn ?? ""} ${item.primaryPhone ?? ""} ${sponsor} ${nat}`
+                const empRecord = item as Record<string, unknown>;
+                const sponsor = item.sponsor?.nameAr || item.sponsor?.nameEn || (empRecord.sponsorNameAr as string) || "";
+                const workTypeStr = getWorkTypeDisplay(item, workTypes, locale);
+                const cityStr = getCityDisplay(item, cities, locale);
+                const nat = item.nationality || "";
+
+                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${nat}`
                     .toLowerCase()
                     .includes(search.toLowerCase());
             }),
-        [employees, search],
+        [employees, search, cities, workTypes, locale],
     );
 
     return (
@@ -118,9 +195,9 @@ export default function EmployeesPage() {
                         {error}
                     </p>
                 ) : loading ? (
-                    <p className="p-8 text-center text-sm text-[var(--muted)]">
-                        {t("common.loading")}
-                    </p>
+                    <div className="p-10 text-center text-sm text-[var(--muted)]">
+                        {locale === "en" ? "Loading employee directory..." : "جاري تحميل دليل الموظفين..."}
+                    </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className={`min-w-[1050px] w-full ${locale === "en" ? "text-left" : "text-right"}`}>
@@ -158,71 +235,38 @@ export default function EmployeesPage() {
                                             : employee.fullNameAr || employee.fullNameEn;
 
                                     const secondaryInfo =
-                                        employee.primaryPhone ??
-                                        (empRecord.secondaryPhone as string) ??
-                                        (employee.employeeNumber ? `${locale === "en" ? "Emp #" : "رقم"}: ${employee.employeeNumber}` : null) ??
+                                        employee.primaryPhone ||
+                                        employee.secondaryPhone ||
+                                        employee.email ||
+                                        (employee.employeeNumber ? `${locale === "en" ? "Emp #" : "رقم"}: ${employee.employeeNumber}` : null) ||
                                         (locale === "en" ? "No phone" : "بدون جوال");
 
                                     const nationalityText =
-                                        (empRecord.nationality as string) ??
-                                        (empRecord.nationalityAr as string) ??
+                                        employee.nationality ||
+                                        (empRecord.nationalityAr as string) ||
                                         "—";
 
-                                    const sponsorName = (empRecord.sponsorNameAr as string) ?? null;
+                                    const sponsorName =
+                                        (locale === "en"
+                                            ? employee.sponsor?.nameEn || employee.sponsor?.nameAr
+                                            : employee.sponsor?.nameAr || employee.sponsor?.nameEn) ||
+                                        (empRecord.sponsorNameAr as string) ||
+                                        null;
 
                                     const engKey = employee.engagementType || employee.relationshipType;
                                     const relText = engKey && relationshipLabel[engKey]
                                         ? locale === "en"
                                             ? relationshipLabel[engKey].en
                                             : relationshipLabel[engKey].ar
-                                        : engKey ?? "—";
+                                        : engKey || "—";
 
-                                    const wtRow = workTypes.find(
-                                        (w) =>
-                                            w.id === (empRecord.operationalWorkTypeId as string) ||
-                                            w.code === (empRecord.operationalWorkTypeId as string),
-                                    );
-                                    const workType = String(
-                                        locale === "en"
-                                            ? (empRecord.operationalWorkTypeEn as string | undefined) ??
-                                            (wtRow?.nameEn as string | undefined) ??
-                                            (wtRow?.nameAr as string | undefined) ??
-                                            employee.operationalWorkTypeAr ??
-                                            employee.jobTitleAr ??
-                                            "Unspecified"
-                                            : employee.operationalWorkTypeAr ??
-                                            employee.jobTitleAr ??
-                                            (wtRow?.nameAr as string | undefined) ??
-                                            (wtRow?.nameEn as string | undefined) ??
-                                            (wtRow?.code as string | undefined) ??
-                                            (empRecord.operationalWorkTypeEn as string | undefined) ??
-                                            "غير محدد",
-                                    );
+                                    const workType = getWorkTypeDisplay(employee, workTypes, locale);
 
-                                    const profession = (empRecord.residencyProfession as string) ?? null;
+                                    const subDetail = employee.rider?.tShirtSize
+                                        ? `${locale === "en" ? "Size: " : "المقاس: "}${employee.rider.tShirtSize}`
+                                        : (empRecord.residencyProfession as string) || null;
 
-                                    const cityRow = cities.find(
-                                        (c) =>
-                                            c.id === (empRecord.operatingCityId as string) ||
-                                            c.id === (empRecord.cityId as string) ||
-                                            c.globalCityId === (empRecord.operatingCityId as string),
-                                    );
-                                    const city = String(
-                                        locale === "en"
-                                            ? (empRecord.operatingCityEn as string | undefined) ??
-                                            (cityRow?.globalCityEn as string | undefined) ??
-                                            (cityRow?.cityNameEn as string | undefined) ??
-                                            (cityRow?.nameEn as string | undefined) ??
-                                            employee.operatingCityAr ??
-                                            (cityRow?.globalCityAr as string | undefined) ??
-                                            "—"
-                                            : employee.operatingCityAr ??
-                                            (cityRow?.globalCityAr as string | undefined) ??
-                                            (cityRow?.cityNameAr as string | undefined) ??
-                                            (cityRow?.nameAr as string | undefined) ??
-                                            (empRecord.operatingCityEn as string | undefined) ??
-                                            "—",
-                                    );
+                                    const city = getCityDisplay(employee, cities, locale);
 
                                     const stObj = statusLabel[employee.status];
                                     const stText = stObj
@@ -234,7 +278,19 @@ export default function EmployeesPage() {
                                     return (
                                         <tr key={employee.id} className="hover:bg-blue-500/5 transition-colors">
                                             <td className="px-5 py-4">
-                                                <div className="font-black text-slate-900">{displayName}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-black text-slate-900">{displayName}</span>
+                                                    <span
+                                                        className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold ${employee.isEmployee
+                                                            ? "bg-purple-100 text-purple-700"
+                                                            : "bg-blue-100 text-blue-700"
+                                                            }`}
+                                                    >
+                                                        {employee.isEmployee
+                                                            ? (locale === "en" ? "Staff" : "إداري")
+                                                            : (locale === "en" ? "Delegate" : "مندوب")}
+                                                    </span>
+                                                </div>
                                                 <div className="mt-0.5 text-xs font-semibold text-[var(--muted)]" dir="auto">
                                                     {secondaryInfo}
                                                 </div>
@@ -255,9 +311,9 @@ export default function EmployeesPage() {
                                             </td>
                                             <td className="px-5 py-4">
                                                 <div className="font-bold text-slate-700">{workType}</div>
-                                                {profession && (
+                                                {subDetail && (
                                                     <div className="mt-0.5 text-xs font-semibold text-[var(--muted)]">
-                                                        {profession}
+                                                        {subDetail}
                                                     </div>
                                                 )}
                                             </td>
@@ -267,8 +323,8 @@ export default function EmployeesPage() {
                                             <td className="px-5 py-4">
                                                 <span
                                                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${employee.status === "Active"
-                                                            ? "bg-emerald-500/10 text-emerald-700"
-                                                            : "bg-slate-500/10 text-slate-600"
+                                                        ? "bg-emerald-500/10 text-emerald-700"
+                                                        : "bg-slate-500/10 text-slate-600"
                                                         }`}
                                                 >
                                                     {stText}

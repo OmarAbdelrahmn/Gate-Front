@@ -4,15 +4,43 @@ export type Employee = {
   fullNameAr: string;
   fullNameEn: string | null;
   nationality: string | null;
+  birthDate?: string | null;
+  gender?: string | null;
   primaryPhone: string | null;
+  secondaryPhone?: string | null;
+  email?: string | null;
   isEmployee: boolean;
-  engagementType: "SponsoredInternal" | "OutsideRider";
+  engagementType: "SponsoredInternal" | "OutsideRider" | string;
   status: string;
-  workingForMeAs: string | null;
-  residencyProfession: string | null;
-  sponsorId: string | null;
-  sponsorNameAr: string | null;
-  riderProfileId: string | null;
+  hireDate?: string | null;
+  workingForMeAs?: string | null;
+  residencyProfession?: string | null;
+  sponsorId?: string | null;
+  sponsorNameAr?: string | null;
+  sponsor?: {
+    id: string;
+    nameAr?: string | null;
+    nameEn?: string | null;
+  } | null;
+  operationalWorkType?: {
+    id: string;
+    code?: string | null;
+    nameAr?: string | null;
+    nameEn?: string | null;
+  } | null;
+  operatingCity?: {
+    id: string;
+    nameAr?: string | null;
+    nameEn?: string | null;
+  } | null;
+  rider?: {
+    id: string;
+    employeeId?: string | null;
+    tShirtSize?: string | null;
+    operationalNotes?: string | null;
+    rowVersion?: string | null;
+  } | null;
+  riderProfileId?: string | null;
   rowVersion: string;
   employeeNumber?: string;
   relationshipType?: string | null;
@@ -20,7 +48,6 @@ export type Employee = {
   operatingCityAr?: string | null;
   operationalWorkTypeAr?: string | null;
   jobTitleAr?: string | null;
-  hireDate?: string | null;
 };
 export type Period = {
   id: string;
