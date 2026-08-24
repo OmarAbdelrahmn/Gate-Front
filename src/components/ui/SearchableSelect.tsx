@@ -142,34 +142,10 @@ export function SearchableSelect({
         bottom: coords.placeAbove ? `${window.innerHeight - coords.top}px` : undefined,
         zIndex: 99999,
       }}
-      className="max-h-72 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl animate-in fade-in zoom-in-95 duration-100 flex flex-col"
+      className="max-h-60 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl animate-in fade-in zoom-in-95 duration-100 flex flex-col"
     >
-      {/* Search Box Header */}
-      <div className="p-2 border-b border-[var(--border)] bg-slate-50/80">
-        <div className="relative flex items-center">
-          <Search size={16} className="absolute right-3 text-[var(--muted)] pointer-events-none" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] pr-9 pl-3 text-xs outline-none focus:border-[#1167c9] focus:ring-2 focus:ring-blue-100 font-medium"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="absolute left-2.5 text-[var(--muted)] hover:text-slate-700"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Options List */}
-      <div className="overflow-y-auto p-1 max-h-52 divide-y divide-slate-100">
+      <div className="overflow-y-auto p-1 max-h-60 divide-y divide-slate-100">
         {filteredOptions.length === 0 ? (
           <div className="p-4 text-center text-xs text-[var(--muted)] font-medium">
             {noOptionsText}
@@ -210,47 +186,94 @@ export function SearchableSelect({
       {/* Hidden input for standard HTML forms */}
       {name && <input type="hidden" name={name} value={value} required={required} />}
 
-      {/* Main Trigger Button */}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen((prev) => !prev)}
-        className={`flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-right text-sm font-bold shadow-sm transition-all outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${
-          disabled ? "opacity-60 cursor-not-allowed bg-slate-50" : "cursor-pointer hover:border-slate-400"
-        } ${isOpen ? "border-[#1167c9] ring-4 ring-blue-100" : ""}`}
-      >
-        <span className="truncate">
-          {selectedOption ? (
-            <span className="flex items-center gap-2">
-              <span className="text-[var(--foreground)]">{selectedOption.label}</span>
-              {selectedOption.sublabel && (
-                <span className="text-xs text-[var(--muted)] font-mono">({selectedOption.sublabel})</span>
-              )}
-            </span>
-          ) : (
-            <span className="text-[var(--muted)] font-normal">{placeholder}</span>
-          )}
-        </span>
-        <div className="flex items-center gap-1 shrink-0 text-[var(--muted)]">
-          {value && !required && (
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange("");
+      {!isOpen ? (
+        /* Main Trigger Button (Closed) */
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setIsOpen(true)}
+          className={`flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-right text-sm font-bold shadow-sm transition-all outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${
+            disabled ? "opacity-60 cursor-not-allowed bg-slate-50" : "cursor-pointer hover:border-slate-400"
+          }`}
+        >
+          <span className="truncate">
+            {selectedOption ? (
+              <span className="flex items-center gap-2">
+                <span className="text-[var(--foreground)]">{selectedOption.label}</span>
+                {selectedOption.sublabel && (
+                  <span className="text-xs text-[var(--muted)] font-mono">({selectedOption.sublabel})</span>
+                )}
+              </span>
+            ) : (
+              <span className="text-[var(--muted)] font-normal">{placeholder}</span>
+            )}
+          </span>
+          <div className="flex items-center gap-1 shrink-0 text-[var(--muted)]">
+            {value && !required && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange("");
+                }}
+                className="p-1 rounded-md hover:bg-slate-200 hover:text-slate-700"
+                title="تفريغ"
+              >
+                <X size={14} />
+              </span>
+            )}
+            <ChevronDown size={18} />
+          </div>
+        </button>
+      ) : (
+        /* Search Bar Input Container (Open) */
+        <div
+          className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[#1167c9] bg-[var(--surface)] px-3 text-right text-sm font-bold shadow-sm ring-4 ring-blue-100 transition-all"
+        >
+          <div className="flex-1 flex items-center gap-2 min-w-0">
+            <Search size={16} className="text-[var(--muted)] shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={searchPlaceholder || (selectedOption ? selectedOption.label : placeholder)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setIsOpen(false);
+                } else if (e.key === "Enter" && filteredOptions.length > 0) {
+                  e.preventDefault();
+                  handleSelect(filteredOptions[0].value);
+                }
               }}
-              className="p-1 rounded-md hover:bg-slate-200 hover:text-slate-700"
-              title="تفريغ"
-            >
-              <X size={14} />
-            </span>
-          )}
-          <ChevronDown size={18} className={`transition-transform duration-200 ${isOpen ? "rotate-180 text-[#1167c9]" : ""}`} />
+              className="w-full bg-transparent text-sm font-bold text-[var(--foreground)] placeholder:text-[var(--muted)] placeholder:font-normal border-0 outline-none focus:outline-none focus:ring-0 focus:border-0 shadow-none text-right"
+              style={{ outline: "none", boxShadow: "none" }}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  searchInputRef.current?.focus();
+                }}
+                className="text-[var(--muted)] hover:text-slate-700 shrink-0 p-1"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="flex items-center justify-center shrink-0 text-[#1167c9] p-1 rounded-md hover:bg-slate-100"
+          >
+            <ChevronDown size={18} className="rotate-180" />
+          </button>
         </div>
-      </button>
+      )}
 
-      {/* Floating Searchable Dropdown rendered in Portal */}
+      {/* Floating Dropdown Options List rendered in Portal */}
       {isOpen && mounted && createPortal(dropdownMenu, document.body)}
     </div>
   );
