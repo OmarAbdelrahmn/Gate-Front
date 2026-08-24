@@ -21,18 +21,20 @@ import type { CurrentUserProfile } from "../../../lib/users/types";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 
+import { translate } from "../../../lib/i18n";
+
 type Preferences = {
   locale: "ar" | "en";
   theme: "light" | "dark";
   density: "comfortable" | "compact";
 };
-const roleNames: Record<string, string> = {
-  SYSTEM_ADMIN: "مسؤول النظام",
-  MANAGER: "مدير",
-  USER: "مستخدم عادي",
-  Admin: "مسؤول",
-  Member: "عضو",
-  Accountant: "محاسب",
+const roleNames: Record<string, { ar: string; en: string }> = {
+  SYSTEM_ADMIN: { ar: "مسؤول النظام", en: "System Admin" },
+  MANAGER: { ar: "مدير", en: "Manager" },
+  USER: { ar: "مستخدم عادي", en: "User" },
+  Admin: { ar: "مسؤول", en: "Admin" },
+  Member: { ar: "عضو", en: "Member" },
+  Accountant: { ar: "محاسب", en: "Accountant" },
 };
 const roleCode = (item: unknown) =>
   typeof item === "string"
@@ -45,6 +47,7 @@ const roleCode = (item: unknown) =>
 
 export default function ProfilePage() {
   const { locale, theme, density, setPreferences, user } = useAuth();
+  const t = (key: string) => translate(locale, key);
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [authorization, setAuthorization] = useState<{
     roles?: unknown[];
@@ -68,13 +71,13 @@ export default function ProfilePage() {
       ([profileResult, authorizationResult]) => {
         if (profileResult.status === "fulfilled")
           setProfile(profileResult.value);
-        else setError("تعذر تحميل ملفك الشخصي.");
+        else setError(locale === "en" ? "Failed to load your profile." : "تعذر تحميل ملفك الشخصي.");
         if (authorizationResult.status === "fulfilled")
           setAuthorization(authorizationResult.value);
         setLoading(false);
       },
     );
-  }, []);
+  }, [locale]);
   const permissions = useMemo(
     () => authorization?.effectivePermissionKeys ?? [],
     [authorization],
@@ -89,9 +92,9 @@ export default function ProfilePage() {
     setMessage("");
     try {
       await setPreferences(preferences);
-      setMessage("تم حفظ تفضيلاتك.");
+      setMessage(locale === "en" ? "Preferences saved successfully." : "تم حفظ تفضيلاتك.");
     } catch {
-      setMessage("تعذر حفظ التفضيلات.");
+      setMessage(locale === "en" ? "Failed to save preferences." : "تعذر حفظ التفضيلات.");
     } finally {
       setSaving(false);
     }
@@ -99,24 +102,24 @@ export default function ProfilePage() {
   if (loading)
     return (
       <p className="py-16 text-center text-sm text-[var(--muted)]">
-        جارٍ تحميل ملفك الشخصي…
+        {locale === "en" ? "Loading profile..." : "جارٍ تحميل ملفك الشخصي…"}
       </p>
     );
   if (error || !profile)
     return (
       <Card className="p-6">
         <p role="alert" className="text-red-700">
-          {error || "تعذر تحميل ملفك الشخصي."}
+          {error || (locale === "en" ? "Failed to load profile." : "تعذر تحميل ملفك الشخصي.")}
         </p>
       </Card>
     );
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-bold text-[#1167c9]">الحساب</p>
-        <h1 className="mt-1 text-3xl font-black">ملفي الشخصي</h1>
+        <p className="text-sm font-bold text-[#1167c9]">{t("header.myAccount")}</p>
+        <h1 className="mt-1 text-3xl font-black">{t("header.profile")}</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          بيانات حسابك وتفضيلات العرض والصلاحيات المتاحة لك.
+          {locale === "en" ? "Your account information, display preferences, and active permissions." : "بيانات حسابك وتفضيلات العرض والصلاحيات المتاحة لك."}
         </p>
       </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -128,43 +131,43 @@ export default function ProfilePage() {
               </div>
               <div>
                 <h2 className="text-xl font-black">
-                  {profile.displayNameAr || profile.displayNameEn}
+                  {locale === "en" ? profile.displayNameEn || profile.displayNameAr : profile.displayNameAr || profile.displayNameEn}
                 </h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   @{profile.userName}
                 </p>
                 <span className="mt-3 inline-flex rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700">
-                  {profile.status === "Active" ? "حساب نشط" : profile.status}
+                  {profile.status === "Active" ? t("common.active") : profile.status}
                 </span>
               </div>
             </div>
             <dl className="mt-6 grid gap-4 border-t border-[var(--border)] pt-5 sm:grid-cols-2">
-              <Info label="البريد الإلكتروني" value={profile.email} dir="ltr" />
+              <Info label={locale === "en" ? "Email" : "البريد الإلكتروني"} value={profile.email} dir="ltr" />
               <Info
-                label="رقم الجوال"
-                value={profile.phoneNumber || "غير مسجل"}
+                label={t("users.phone")}
+                value={profile.phoneNumber || (locale === "en" ? "Not registered" : "غير مسجل")}
                 dir="ltr"
               />
               <Info
-                label="آخر دخول"
+                label={locale === "en" ? "Last Login" : "آخر دخول"}
                 value={
                   profile.lastLoginAtUtc
-                    ? new Intl.DateTimeFormat("ar-SA", {
+                    ? new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ar-SA", {
                         dateStyle: "medium",
                         timeStyle: "short",
                       }).format(new Date(profile.lastLoginAtUtc))
-                    : "غير متاح"
+                    : (locale === "en" ? "N/A" : "غير متاح")
                 }
               />
               <Info
-                label="آخر نشاط"
+                label={locale === "en" ? "Last Activity" : "آخر نشاط"}
                 value={
                   profile.lastActivityAtUtc
-                    ? new Intl.DateTimeFormat("ar-SA", {
+                    ? new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ar-SA", {
                         dateStyle: "medium",
                         timeStyle: "short",
                       }).format(new Date(profile.lastActivityAtUtc))
-                    : "غير متاح"
+                    : (locale === "en" ? "N/A" : "غير متاح")
                 }
               />
             </dl>
@@ -173,26 +176,26 @@ export default function ProfilePage() {
             <Card className="p-5 sm:p-7">
               <h2 className="flex items-center gap-2 text-lg font-black">
                 <BriefcaseBusiness size={19} />
-                بيانات العمل
+                {locale === "en" ? "Work Details" : "بيانات العمل"}
               </h2>
               <dl className="mt-5 grid gap-4 sm:grid-cols-2">
-                <Info label="اسم الموظف" value={profile.employee.fullNameAr} />
+                <Info label={locale === "en" ? "Employee Name" : "اسم الموظف"} value={profile.employee.fullNameAr} />
                 <Info
-                  label="رقم الموظف"
+                  label={t("employees.employeeNumber")}
                   value={profile.employee.employeeNumber}
                   dir="ltr"
                 />
                 <Info
-                  label="نوع العلاقة"
+                  label={locale === "en" ? "Relationship Type" : "نوع العلاقة"}
                   value={profile.employee.relationshipType}
                 />
-                <Info label="حالة الموظف" value={profile.employee.status} />
+                <Info label={t("common.status")} value={profile.employee.status} />
                 <Info
-                  label="تكليف حالي"
+                  label={locale === "en" ? "Assignment Status" : "تكليف حالي"}
                   value={
                     profile.employee.currentAssignment
-                      ? "يوجد تكليف حالي"
-                      : "لا يوجد تكليف حالي"
+                      ? (locale === "en" ? "Active assignment" : "يوجد تكليف حالي")
+                      : (locale === "en" ? "No active assignment" : "لا يوجد تكليف حالي")
                   }
                 />
               </dl>
@@ -201,29 +204,34 @@ export default function ProfilePage() {
           <Card className="p-5 sm:p-7">
             <h2 className="flex items-center gap-2 text-lg font-black">
               <ShieldCheck size={19} />
-              التفويض والصلاحيات
+              {t("nav.rolesAndPermissions")}
             </h2>
             <div className="mt-5">
-              <h3 className="text-sm font-black">الأدوار</h3>
+              <h3 className="text-sm font-black">{t("roles.title")}</h3>
               <div className="mt-2 flex flex-wrap gap-2">
-                {roles.map((role, index) => (
-                  <span
-                    key={`${roleCode(role)}-${index}`}
-                    className="rounded-full bg-blue-500/10 px-3 py-1 text-sm font-bold text-[#1167c9]"
-                  >
-                    {roleNames[roleCode(role)] ?? roleCode(role)}
-                  </span>
-                ))}
+                {roles.map((role, index) => {
+                  const code = roleCode(role);
+                  const nameObj = roleNames[code];
+                  const label = nameObj ? (locale === "en" ? nameObj.en : nameObj.ar) : code;
+                  return (
+                    <span
+                      key={`${code}-${index}`}
+                      className="rounded-full bg-blue-500/10 px-3 py-1 text-sm font-bold text-[#1167c9]"
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
                 {!roles.length && (
                   <span className="text-sm text-[var(--muted)]">
-                    لا توجد أدوار ظاهرة.
+                    {locale === "en" ? "No roles assigned." : "لا توجد أدوار ظاهرة."}
                   </span>
                 )}
               </div>
             </div>
             <div className="mt-6">
               <h3 className="text-sm font-black">
-                الصلاحيات الفعّالة ({permissions.length})
+                {locale === "en" ? `Effective Permissions (${permissions.length})` : `الصلاحيات الفعّالة (${permissions.length})`}
               </h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {permissions.slice(0, 12).map((permission) => (
@@ -232,14 +240,14 @@ export default function ProfilePage() {
                     className="flex min-h-12 items-center gap-2 rounded-xl bg-emerald-500/10 p-3 text-sm font-bold text-emerald-800"
                   >
                     <BadgeCheck size={16} className="shrink-0" />
-                    {permissionLabel(permission)}
+                    {permissionLabel(permission, locale)}
                   </div>
                 ))}
               </div>
               {permissions.length > 12 && (
                 <details className="mt-3">
                   <summary className="cursor-pointer text-sm font-bold text-[#1167c9]">
-                    عرض {permissions.length - 12} صلاحيات أخرى
+                    {locale === "en" ? `Show ${permissions.length - 12} more permissions` : `عرض ${permissions.length - 12} صلاحيات أخرى`}
                   </summary>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {permissions.slice(12).map((permission) => (
@@ -247,7 +255,7 @@ export default function ProfilePage() {
                         key={permission}
                         className="rounded-xl border border-[var(--border)] p-3 text-sm font-bold"
                       >
-                        {permissionLabel(permission)}
+                        {permissionLabel(permission, locale)}
                       </div>
                     ))}
                   </div>
@@ -258,13 +266,13 @@ export default function ProfilePage() {
         </div>
         <div className="space-y-6">
           <Card className="h-fit p-5 sm:p-7">
-            <h2 className="text-lg font-black">تفضيلات العرض</h2>
+            <h2 className="text-lg font-black">{locale === "en" ? "Display Preferences" : "تفضيلات العرض"}</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              اختر اللغة والمظهر وكثافة البيانات المناسبة لك.
+              {locale === "en" ? "Choose language, theme, and data density." : "اختر اللغة والمظهر وكثافة البيانات المناسبة لك."}
             </p>
             <form onSubmit={save} className="mt-6 space-y-5">
               <fieldset>
-                <legend className="mb-2 text-sm font-bold">اللغة</legend>
+                <legend className="mb-2 text-sm font-bold">{locale === "en" ? "Language" : "اللغة"}</legend>
                 <div className="grid grid-cols-2 gap-2">
                   <Option
                     label="العربية"
@@ -285,11 +293,11 @@ export default function ProfilePage() {
               <fieldset>
                 <legend className="mb-2 flex items-center gap-2 text-sm font-bold">
                   <Globe2 size={16} />
-                  كثافة العرض
+                  {locale === "en" ? "Display Density" : "كثافة العرض"}
                 </legend>
                 <div className="grid grid-cols-2 gap-2">
                   <Option
-                    label="مريح"
+                    label={locale === "en" ? "Comfortable" : "مريح"}
                     active={preferences.density === "comfortable"}
                     onClick={() =>
                       setLocalPreferences({
@@ -299,7 +307,7 @@ export default function ProfilePage() {
                     }
                   />
                   <Option
-                    label="مضغوط"
+                    label={locale === "en" ? "Compact" : "مضغوط"}
                     active={preferences.density === "compact"}
                     onClick={() =>
                       setLocalPreferences({
@@ -317,18 +325,18 @@ export default function ProfilePage() {
                   ) : (
                     <Sun size={16} />
                   )}
-                  المظهر
+                  {locale === "en" ? "Theme" : "المظهر"}
                 </legend>
                 <div className="grid grid-cols-2 gap-2">
                   <Option
-                    label="فاتح"
+                    label={locale === "en" ? "Light" : "فاتح"}
                     active={preferences.theme === "light"}
                     onClick={() =>
                       setLocalPreferences({ ...preferences, theme: "light" })
                     }
                   />
                   <Option
-                    label="داكن"
+                    label={locale === "en" ? "Dark" : "داكن"}
                     active={preferences.theme === "dark"}
                     onClick={() =>
                       setLocalPreferences({ ...preferences, theme: "dark" })
@@ -345,7 +353,7 @@ export default function ProfilePage() {
                 </p>
               )}
               <Button type="submit" className="w-full" loading={saving}>
-                حفظ التفضيلات
+                {t("common.save")}
               </Button>
             </form>
           </Card>
@@ -365,9 +373,9 @@ function Info({
   dir?: "ltr" | "rtl";
 }) {
   return (
-    <div className="text-right" dir="rtl">
+    <div>
       <dt className="text-xs font-bold text-[var(--muted)]">{label}</dt>
-      <dd className="mt-1 break-words text-right text-sm font-bold" dir={dir}>
+      <dd className="mt-1 break-words text-sm font-bold" dir={dir}>
         {value}
       </dd>
     </div>
@@ -394,7 +402,8 @@ function Option({
   );
 }
 function ChangePasswordCard() {
-  const { changePassword } = useAuth();
+  const { changePassword, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
   const [form, setForm] = useState({ current: "", next: "", confirm: "" });
   const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -403,7 +412,7 @@ function ChangePasswordCard() {
     event.preventDefault();
     setMessage("");
     if (form.next !== form.confirm) {
-      setMessage("كلمتا المرور الجديدتان غير متطابقتين.");
+      setMessage(locale === "en" ? "New passwords do not match." : "كلمتا المرور الجديدتان غير متطابقتين.");
       return;
     }
     if (
@@ -412,7 +421,9 @@ function ChangePasswordCard() {
       )
     ) {
       setMessage(
-        "يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل، وتتضمن حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا.",
+        locale === "en"
+          ? "Password must be at least 12 characters, include uppercase, lowercase, digit, and symbol."
+          : "يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل، وتتضمن حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا.",
       );
       return;
     }
@@ -420,9 +431,9 @@ function ChangePasswordCard() {
     try {
       await changePassword(form.current, form.next);
       setForm({ current: "", next: "", confirm: "" });
-      setMessage("تم تغيير كلمة المرور بنجاح.");
+      setMessage(locale === "en" ? "Password changed successfully." : "تم تغيير كلمة المرور بنجاح.");
     } catch {
-      setMessage("تعذر تغيير كلمة المرور. تحقق من كلمة المرور الحالية.");
+      setMessage(locale === "en" ? "Failed to change password. Please check your current password." : "تعذر تغيير كلمة المرور. تحقق من كلمة المرور الحالية.");
     } finally {
       setSaving(false);
     }
@@ -432,46 +443,49 @@ function ChangePasswordCard() {
       <Card className="p-5 sm:p-7">
         <h2 className="flex items-center gap-2 text-lg font-black">
           <KeyRound size={19} />
-          تغيير كلمة المرور
+          {t("header.changePassword")}
         </h2>
         <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          استخدم كلمة مرور قوية من 12 حرفًا على الأقل.
+          {locale === "en" ? "Use a strong password of at least 12 characters." : "استخدم كلمة مرور قوية من 12 حرفًا على الأقل."}
         </p>
         <form onSubmit={submit} className="mt-5 space-y-4">
           <PasswordInput
-            label="كلمة المرور الحالية"
+            label={locale === "en" ? "Current Password" : "كلمة المرور الحالية"}
             value={form.current}
             onChange={(value) => setForm({ ...form, current: value })}
             show={show}
             onToggle={() => setShow(!show)}
             autoComplete="current-password"
+            locale={locale}
           />
           <PasswordInput
-            label="كلمة المرور الجديدة"
+            label={locale === "en" ? "New Password" : "كلمة المرور الجديدة"}
             value={form.next}
             onChange={(value) => setForm({ ...form, next: value })}
             show={show}
             onToggle={() => setShow(!show)}
             autoComplete="new-password"
+            locale={locale}
           />
           <PasswordInput
-            label="تأكيد كلمة المرور الجديدة"
+            label={locale === "en" ? "Confirm New Password" : "تأكيد كلمة المرور الجديدة"}
             value={form.confirm}
             onChange={(value) => setForm({ ...form, confirm: value })}
             show={show}
             onToggle={() => setShow(!show)}
             autoComplete="new-password"
+            locale={locale}
           />
           {message && (
             <p
               role="status"
-              className={`rounded-xl p-3 text-sm font-bold ${message.startsWith("تم") ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-700"}`}
+              className={`rounded-xl p-3 text-sm font-bold ${message.includes("نجاح") || message.includes("success") ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-700"}`}
             >
               {message}
             </p>
           )}
           <Button type="submit" className="w-full" loading={saving}>
-            حفظ كلمة المرور
+            {t("common.save")}
           </Button>
         </form>
       </Card>
@@ -485,6 +499,7 @@ function PasswordInput({
   show,
   onToggle,
   autoComplete,
+  locale,
 }: {
   label: string;
   value: string;
@@ -492,10 +507,11 @@ function PasswordInput({
   show: boolean;
   onToggle: () => void;
   autoComplete: string;
+  locale: "ar" | "en";
 }) {
   return (
     <label className="grid gap-2 text-sm font-bold">
-      <span className="flex items-center justify-between gap-3"><span>{label}</span><span className="field-required" aria-hidden="true">مطلوب</span></span>
+      <span className="flex items-center justify-between gap-3"><span>{label}</span><span className="field-required" aria-hidden="true">{locale === "en" ? "Required" : "مطلوب"}</span></span>
       <span className="relative">
         <input
           required
@@ -503,13 +519,13 @@ function PasswordInput({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
-          className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-11 pr-3 outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100"
+          className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-11 outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${locale === "en" ? "pl-3 pr-11" : "pr-3 pl-11"}`}
         />
         <button
           type="button"
           onClick={onToggle}
-          aria-label={show ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
-          className="absolute inset-y-0 left-0 grid w-11 place-items-center text-[var(--muted)] hover:text-[#1167c9]"
+          aria-label={show ? (locale === "en" ? "Hide password" : "إخفاء كلمة المرور") : (locale === "en" ? "Show password" : "إظهار كلمة المرور")}
+          className={`absolute inset-y-0 grid w-11 place-items-center text-[var(--muted)] hover:text-[#1167c9] ${locale === "en" ? "right-0" : "left-0"}`}
         >
           {show ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>

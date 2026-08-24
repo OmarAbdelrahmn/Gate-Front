@@ -58,8 +58,11 @@ const requestFrom = (role: Role): RoleRequest => ({
   rowVersion: role.rowVersion,
 });
 
+import { translate } from "../../../../lib/i18n";
+
 export default function RolesPage() {
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
   const [roles, setRoles] = useState<Role[]>([]);
   const [catalogue, setCatalogue] = useState<PermissionCatalogItem[]>([]);
   const [selected, setSelected] = useState<Role | null>(null);
@@ -81,14 +84,14 @@ export default function RolesPage() {
       getPermissionCatalogue(),
     ]);
     if (rolesResult.status === "fulfilled") setRoles(rolesResult.value);
-    else setError("تعذر تحميل الأدوار أو لا تملك صلاحية عرضها.");
+    else setError(locale === "en" ? "Failed to load roles or permission denied." : "تعذر تحميل الأدوار أو لا تملك صلاحية عرضها.");
     if (permissionsResult.status === "fulfilled")
       setCatalogue(permissionsResult.value);
     setLoading(false);
   }
   useEffect(() => {
     void load();
-  }, []);
+  }, [locale]);
   const permissions = useMemo(
     () =>
       catalogue.filter((item) =>
@@ -140,9 +143,9 @@ export default function RolesPage() {
           : [saved, ...current],
       );
       choose(saved);
-      setMessage("تم حفظ بيانات الدور.");
+      setMessage(locale === "en" ? "Role details saved successfully." : "تم حفظ بيانات الدور.");
     } catch {
-      setMessage("تعذر حفظ الدور. راجع الحقول وصلاحياتك.");
+      setMessage(locale === "en" ? "Failed to save role. Please check inputs and permissions." : "تعذر حفظ الدور. راجع الحقول وصلاحياتك.");
     } finally {
       setSaving(false);
     }
@@ -150,7 +153,9 @@ export default function RolesPage() {
   async function savePermissions() {
     if (!selected?.rowVersion) {
       setMessage(
-        "تعذر حفظ الصلاحيات لأن إصدار الدور غير متاح. حدّث الخدمة الخلفية ثم أعد تحميل الصفحة.",
+        locale === "en"
+          ? "Cannot save permissions because role version is unavailable. Refresh the page."
+          : "تعذر حفظ الصلاحيات لأن إصدار الدور غير متاح. حدّث الخدمة الخلفية ثم أعد تحميل الصفحة.",
       );
       return;
     }
@@ -166,9 +171,9 @@ export default function RolesPage() {
         current.map((role) => (role.id === saved.id ? saved : role)),
       );
       choose(saved);
-      setMessage("تم استبدال صلاحيات الدور.");
+      setMessage(locale === "en" ? "Role permissions updated." : "تم استبدال صلاحيات الدور.");
     } catch {
-      setMessage("تعذر حفظ الصلاحيات. ربما تم تعديل الدور من مستخدم آخر.");
+      setMessage(locale === "en" ? "Failed to save permissions. Role may have been modified by another user." : "تعذر حفظ الصلاحيات. ربما تم تعديل الدور من مستخدم آخر.");
     } finally {
       setSaving(false);
     }
@@ -176,7 +181,7 @@ export default function RolesPage() {
   async function removeRole() {
     if (
       !selected?.rowVersion ||
-      !(await systemConfirm(`هل تريد أرشفة دور «${selected.nameAr}»؟`, "أرشفة الدور", true))
+      !(await systemConfirm(locale === "en" ? `Do you want to archive role "${selected.nameEn || selected.nameAr}"?` : `هل تريد أرشفة دور «${selected.nameAr}»؟`, locale === "en" ? "Archive Role" : "أرشفة الدور", true))
     )
       return;
     setSaving(true);
@@ -185,9 +190,9 @@ export default function RolesPage() {
       await archiveRole(selected.id, archiveReason, selected.rowVersion);
       setRoles((current) => current.filter((role) => role.id !== selected.id));
       startCreate();
-      setMessage("تمت أرشفة الدور.");
+      setMessage(locale === "en" ? "Role archived successfully." : "تمت أرشفة الدور.");
     } catch {
-      setMessage("تعذر أرشفة الدور.");
+      setMessage(locale === "en" ? "Failed to archive role." : "تعذر أرشفة الدور.");
     } finally {
       setSaving(false);
     }
@@ -200,16 +205,16 @@ export default function RolesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-bold text-[#1167c9]">إدارة المستخدمين</p>
-          <h1 className="mt-1 text-3xl font-black">الأدوار والصلاحيات</h1>
+          <p className="text-sm font-bold text-[#1167c9]">{t("nav.userManagement")}</p>
+          <h1 className="mt-1 text-3xl font-black">{t("nav.rolesAndPermissions")}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            أنشئ الأدوار المخصصة وحدد الصلاحيات التي تمنحها.
+            {locale === "en" ? "Create custom roles and assign associated permissions." : "أنشئ الأدوار المخصصة وحدد الصلاحيات التي تمنحها."}
           </p>
         </div>
         {canManage && (
           <Button onClick={startCreate}>
             <Plus size={17} />
-            دور مخصص جديد
+            {t("roles.addRole")}
           </Button>
         )}
       </div>
@@ -230,10 +235,10 @@ export default function RolesPage() {
       ) : (
         <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
           <Card className="h-fit p-3">
-            <h2 className="px-2 pb-3 font-black">قائمة الأدوار</h2>
+            <h2 className="px-2 pb-3 font-black">{locale === "en" ? "Role List" : "قائمة الأدوار"}</h2>
             {loading ? (
               <p className="px-2 py-5 text-sm text-[var(--muted)]">
-                جارٍ تحميل الأدوار…
+                {t("common.loading")}
               </p>
             ) : (
               <div className="space-y-1">
@@ -245,7 +250,7 @@ export default function RolesPage() {
                     className={`w-full rounded-xl p-3 text-right transition-colors ${selected?.id === role.id ? "bg-blue-50 text-[#1167c9]" : "hover:bg-slate-50"}`}
                   >
                     <span className="flex items-center justify-between gap-2 font-bold">
-                      <span>{role.nameAr}</span>
+                      <span>{locale === "en" ? role.nameEn || role.nameAr : role.nameAr}</span>
                       {selected?.id === role.id && <Check size={16} />}
                     </span>
                     <span
@@ -258,7 +263,7 @@ export default function RolesPage() {
                 ))}
                 {!roles.length && (
                   <p className="px-2 py-5 text-sm text-[var(--muted)]">
-                    لا توجد أدوار.
+                    {locale === "en" ? "No roles found." : "لا توجد أدوار."}
                   </p>
                 )}
               </div>
@@ -269,18 +274,17 @@ export default function RolesPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="flex items-center gap-2 text-lg font-black">
                   {selected ? <Edit3 size={19} /> : <Plus size={19} />}
-                  {selected ? "تعديل الدور" : "إنشاء دور مخصص"}
+                  {selected ? (locale === "en" ? "Edit Role" : "تعديل الدور") : t("roles.addRole")}
                 </h2>
                 {protectedRole && (
                   <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800">
-                    دور محمي
+                    {locale === "en" ? "Protected Role" : "دور محمي"}
                   </span>
                 )}
               </div>
               {protectedRole ? (
                 <p className="mt-4 rounded-xl bg-orange-50 p-3 text-sm text-orange-900">
-                  لا يمكن تعديل أو أرشفة الأدوار المحمية. يمكنك مراجعة صلاحياتها
-                  أدناه.
+                  {locale === "en" ? "Protected roles cannot be modified or archived. You may inspect permissions below." : "لا يمكن تعديل أو أرشفة الأدوار المحمية. يمكنك مراجعة صلاحياتها أدناه."}
                 </p>
               ) : (
                 <form
@@ -288,7 +292,7 @@ export default function RolesPage() {
                   className="mt-5 grid gap-4 sm:grid-cols-2"
                 >
                   <Input
-                    label="رمز الدور"
+                    label={t("roles.code")}
                     required
                     value={form.code}
                     onChange={(event) =>
@@ -298,7 +302,7 @@ export default function RolesPage() {
                     dir="ltr"
                   />
                   <Input
-                    label="اسم الدور بالعربية"
+                    label={locale === "en" ? "Arabic Role Name" : "اسم الدور بالعربية"}
                     required
                     value={form.nameAr}
                     onChange={(event) =>
@@ -306,7 +310,7 @@ export default function RolesPage() {
                     }
                   />
                   <Input
-                    label="اسم الدور بالإنجليزية"
+                    label={locale === "en" ? "English Role Name" : "اسم الدور بالإنجليزية"}
                     required
                     value={form.nameEn}
                     onChange={(event) =>
@@ -315,7 +319,7 @@ export default function RolesPage() {
                     dir="ltr"
                   />
                   <label className="grid gap-2 text-sm font-bold">
-                    الحالة
+                    {t("common.status")}
                     <select
                       required
                       value={form.status}
@@ -324,12 +328,12 @@ export default function RolesPage() {
                       }
                       className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 font-normal"
                     >
-                      <option value="Active">نشط</option>
-                      <option value="Inactive">غير نشط</option>
+                      <option value="Active">{t("common.active")}</option>
+                      <option value="Inactive">{t("common.inactive")}</option>
                     </select>
                   </label>
                   <label className="grid gap-2 text-sm font-bold sm:col-span-2">
-                    الوصف بالعربية
+                    {locale === "en" ? "Arabic Description" : "الوصف بالعربية"}
                     <textarea
                       value={form.descriptionAr}
                       onChange={(event) =>
@@ -339,7 +343,7 @@ export default function RolesPage() {
                     />
                   </label>
                   <label className="grid gap-2 text-sm font-bold sm:col-span-2">
-                    الوصف بالإنجليزية
+                    {locale === "en" ? "English Description" : "الوصف بالإنجليزية"}
                     <textarea
                       value={form.descriptionEn}
                       onChange={(event) =>
@@ -352,7 +356,7 @@ export default function RolesPage() {
                   <div className="sm:col-span-2">
                     <Button type="submit" loading={saving}>
                       <Save size={16} />
-                      حفظ الدور
+                      {t("common.save")}
                     </Button>
                   </div>
                 </form>
@@ -364,11 +368,12 @@ export default function RolesPage() {
                   <div>
                     <h2 className="flex items-center gap-2 text-lg font-black">
                       <ShieldCheck size={19} />
-                      صلاحيات الدور
+                      {locale === "en" ? "Role Permissions" : "صلاحيات الدور"}
                     </h2>
                     <p className="mt-1 text-sm text-[var(--muted)]">
-                      الحفظ يستبدل جميع صلاحيات هذا الدور ({selectedKeys.length}{" "}
-                      محددة).
+                      {locale === "en"
+                        ? `Saving replaces all permissions for this role (${selectedKeys.length} selected).`
+                        : `الحفظ يستبدل جميع صلاحيات هذا الدور (${selectedKeys.length} محددة).`}
                     </p>
                   </div>
                   {canManage && !protectedRole && (
@@ -377,21 +382,22 @@ export default function RolesPage() {
                       onClick={() => void savePermissions()}
                     >
                       <Save size={16} />
-                      حفظ الصلاحيات
+                      {locale === "en" ? "Save Permissions" : "حفظ الصلاحيات"}
                     </Button>
                   )}
                 </div>
                 {!catalogue.length ? (
                   <p className="mt-5 rounded-xl bg-slate-500/10 p-3 text-sm text-[var(--muted)]">
-                    تعذر تحميل دليل الصلاحيات. تحتاج إلى صلاحية عرض الصلاحيات
-                    لتعديلها.
+                    {locale === "en"
+                      ? "Unable to load permission catalog. Requires permission to view permissions."
+                      : "تعذر تحميل دليل الصلاحيات. تحتاج إلى صلاحية عرض الصلاحيات لتعديلها."}
                   </p>
                 ) : (
                   <>
                     <label className="relative mt-5 block">
-                      <span className="sr-only">البحث في الصلاحيات</span>
+                      <span className="sr-only">{locale === "en" ? "Search permissions" : "البحث في الصلاحيات"}</span>
                       <Search
-                        className="pointer-events-none absolute right-3 top-3 text-[var(--muted)]"
+                        className={`pointer-events-none absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"}`}
                         size={18}
                       />
                       <input
@@ -399,15 +405,15 @@ export default function RolesPage() {
                         onChange={(event) =>
                           setPermissionSearch(event.target.value)
                         }
-                        placeholder="ابحث باسم صلاحية"
-                        className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pr-10 pl-3 text-sm"
+                        placeholder={locale === "en" ? "Search by permission name" : "ابحث باسم صلاحية"}
+                        className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
                       />
                     </label>
                     <div className="mt-4 max-h-[520px] space-y-5 overflow-y-auto pr-1">
                       {groupedPermissions.map(([group, items]) => (
                         <section key={group}>
-                          <h3 className="mb-2 border-r-2 border-[#1167c9] pr-2 text-sm font-black text-[#1167c9]">
-                            {permissionGroupLabel(group)}
+                          <h3 className={`mb-2 pr-2 text-sm font-black text-[#1167c9] ${locale === "en" ? "border-l-2 pl-2" : "border-r-2 pr-2"}`}>
+                            {permissionGroupLabel(group, locale)}
                           </h3>
                           <div className="grid gap-2 sm:grid-cols-2">
                             {items.map((item) => {
@@ -434,10 +440,10 @@ export default function RolesPage() {
                                   />
                                   <span>
                                     <b className="text-sm">
-                                      {item.nameAr || permissionLabel(item.key)}
+                                      {locale === "en" ? item.nameEn || permissionLabel(item.key, locale) : item.nameAr || permissionLabel(item.key, locale)}
                                     </b>
                                     <small className="mt-1 block text-xs text-[var(--muted)]">
-                                      {item.descriptionAr}
+                                      {locale === "en" ? item.descriptionEn || item.descriptionAr : item.descriptionAr}
                                     </small>
                                   </span>
                                 </label>
@@ -455,16 +461,16 @@ export default function RolesPage() {
               <Card className="border-red-200 p-5">
                 <h2 className="flex items-center gap-2 font-black text-red-700">
                   <Archive size={18} />
-                  أرشفة الدور
+                  {locale === "en" ? "Archive Role" : "أرشفة الدور"}
                 </h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  لا يمكن استرجاع الأرشفة من هذه الصفحة.
+                  {locale === "en" ? "Archival cannot be undone from this page." : "لا يمكن استرجاع الأرشفة من هذه الصفحة."}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <input
                     value={archiveReason}
                     onChange={(event) => setArchiveReason(event.target.value)}
-                    placeholder="سبب الأرشفة"
+                    placeholder={locale === "en" ? "Archival reason" : "سبب الأرشفة"}
                     className="h-11 min-w-56 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
                   />
                   <Button
@@ -473,7 +479,7 @@ export default function RolesPage() {
                     onClick={() => void removeRole()}
                   >
                     <Archive size={16} />
-                    أرشفة الدور
+                    {locale === "en" ? "Archive Role" : "أرشفة الدور"}
                   </Button>
                 </div>
               </Card>

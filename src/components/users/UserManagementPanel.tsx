@@ -11,6 +11,7 @@ import {
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { getUserAuthorization } from "../../lib/auth/authorization-api";
 import { permissionLabel } from "../../lib/permission-labels";
+import { translate } from "../../lib/i18n";
 import {
   archiveUser,
   createTemporaryCredentials,
@@ -23,6 +24,7 @@ import type { ManagedUser, TemporaryCredential } from "../../lib/users/types";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
+
 type Props = { user: ManagedUser; onChanged: (user: ManagedUser) => void };
 type Role = {
   assignmentId: string;
@@ -44,55 +46,66 @@ type Authorization = {
   roles?: Role[];
   directPermissions?: Direct[];
 };
-const roleNames: Record<string, string> = {
-  SYSTEM_ADMIN: "مسؤول النظام",
-  MANAGER: "مدير",
-  USER: "مستخدم عادي",
+const roleNames: Record<string, { ar: string; en: string }> = {
+  SYSTEM_ADMIN: { ar: "مسؤول النظام", en: "System Administrator" },
+  MANAGER: { ar: "مدير", en: "Manager" },
+  USER: { ar: "مستخدم عادي", en: "Standard User" },
 };
-const date = (value: string | null) =>
+const formatDateVal = (value: string | null, locale: "ar" | "en" = "ar") =>
   value
-    ? new Intl.DateTimeFormat("ar-SA-u-nu-arab", {
+    ? new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-arab" : "en-US", {
         dateStyle: "medium",
       }).format(new Date(value))
-    : "غير محدد";
-function AuthorizationView({ data }: { data: Authorization }) {
+    : locale === "en"
+      ? "Not specified"
+      : "غير محدد";
+
+function AuthorizationView({ data, locale = "ar" }: { data: Authorization; locale?: "ar" | "en" }) {
   const roles = data.roles ?? [];
   const permissions = data.directPermissions ?? [];
   return (
     <div className="mt-5 space-y-5">
       <section>
-        <h3 className="mb-2 font-black">الأدوار المعيّنة</h3>
+        <h3 className="mb-2 font-black">
+          {locale === "en" ? "Assigned Roles" : "الأدوار المعيّنة"}
+        </h3>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {roles.map((role) => (
             <div
               key={role.assignmentId}
               className="min-h-28 rounded-xl border border-[var(--border)] p-3"
             >
-              <b>{roleNames[role.roleCode] ?? role.roleCode}</b>
-              <span className="mr-2 text-xs text-[var(--muted)]" dir="ltr">
+              <b>
+                {roleNames[role.roleCode]
+                  ? locale === "en"
+                    ? roleNames[role.roleCode].en
+                    : roleNames[role.roleCode].ar
+                  : role.roleCode}
+              </b>
+              <span className="mx-2 text-xs text-[var(--muted)]" dir="ltr">
                 {role.roleCode}
               </span>
               <p className="mt-1 text-xs text-[var(--muted)]">
-                يبدأ: {date(role.startsAtUtc)} · ينتهي:{" "}
-                {date(role.expiresAtUtc)}
+                {locale === "en" ? "Starts" : "يبدأ"}: {formatDateVal(role.startsAtUtc, locale)} · {locale === "en" ? "Expires" : "ينتهي"}:{" "}
+                {formatDateVal(role.expiresAtUtc, locale)}
               </p>
               {role.reason && (
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  السبب: {role.reason}
+                  {locale === "en" ? "Reason" : "السبب"}: {role.reason}
                 </p>
               )}
             </div>
           ))}
           {!roles.length && (
             <p className="rounded-xl bg-slate-500/10 p-3 text-sm text-[var(--muted)]">
-              لا توجد أدوار معيّنة.
+              {locale === "en" ? "No roles assigned." : "لا توجد أدوار معيّنة."}
             </p>
           )}
         </div>
       </section>
       <section>
         <h3 className="mb-2 font-black">
-          الصلاحيات المباشرة ({permissions.length})
+          {locale === "en" ? "Direct Permissions" : "الصلاحيات المباشرة"} ({permissions.length})
         </h3>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {permissions.slice(0, 5).map((item) => (
@@ -101,16 +114,16 @@ function AuthorizationView({ data }: { data: Authorization }) {
               className={`min-h-28 rounded-xl border p-3 ${item.effect === "Deny" ? "border-red-200 bg-red-50/60" : "border-emerald-200 bg-emerald-50/60"}`}
             >
               <div className="flex items-start justify-between gap-3">
-                <b>{permissionLabel(item.permissionKey)}</b>
+                <b>{permissionLabel(item.permissionKey, locale)}</b>
                 <span
                   className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${item.effect === "Deny" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
                 >
-                  {item.effect === "Deny" ? "منع" : "مسموح"}
+                  {item.effect === "Deny" ? (locale === "en" ? "Deny" : "منع") : (locale === "en" ? "Grant" : "مسموح")}
                 </span>
               </div>
               <p className="mt-2 text-xs text-[var(--muted)]">
-                يبدأ: {date(item.startsAtUtc)} · ينتهي:{" "}
-                {date(item.expiresAtUtc)}
+                {locale === "en" ? "Starts" : "يبدأ"}: {formatDateVal(item.startsAtUtc, locale)} · {locale === "en" ? "Expires" : "ينتهي"}:{" "}
+                {formatDateVal(item.expiresAtUtc, locale)}
               </p>
             </div>
           ))}
@@ -118,7 +131,7 @@ function AuthorizationView({ data }: { data: Authorization }) {
         {permissions.length > 5 && (
           <details className="mt-3">
             <summary className="cursor-pointer font-bold text-[#1167c9]">
-              عرض {permissions.length - 5} صلاحيات أخرى
+              {locale === "en" ? `Show ${permissions.length - 5} more permissions` : `عرض ${permissions.length - 5} صلاحيات أخرى`}
             </summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {permissions.slice(5).map((item) => (
@@ -126,9 +139,9 @@ function AuthorizationView({ data }: { data: Authorization }) {
                   key={item.assignmentId}
                   className="min-h-20 rounded-xl border border-[var(--border)] p-3"
                 >
-                  <b>{permissionLabel(item.permissionKey)}</b>
-                  <span className="mr-2 text-xs text-[var(--muted)]">
-                    {item.effect === "Deny" ? "منع" : "مسموح"}
+                  <b>{permissionLabel(item.permissionKey, locale)}</b>
+                  <span className="mx-2 text-xs text-[var(--muted)]">
+                    {item.effect === "Deny" ? (locale === "en" ? "Deny" : "منع") : (locale === "en" ? "Grant" : "مسموح")}
                   </span>
                 </div>
               ))}
@@ -137,15 +150,19 @@ function AuthorizationView({ data }: { data: Authorization }) {
         )}
         {!permissions.length && (
           <p className="rounded-xl bg-slate-500/10 p-3 text-sm text-[var(--muted)]">
-            لا توجد صلاحيات مباشرة؛ الوصول يأتي من الدور فقط.
+            {locale === "en"
+              ? "No direct permissions; access is derived from role assignments only."
+              : "لا توجد صلاحيات مباشرة؛ الوصول يأتي من الدور فقط."}
           </p>
         )}
       </section>
     </div>
   );
 }
+
 export function UserManagementPanel({ user, onChanged }: Props) {
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [password, setPassword] = useState("");
@@ -171,8 +188,9 @@ export function UserManagementPanel({ user, onChanged }: Props) {
     if (!canReadAuthorization) return;
     void getUserAuthorization(user.id)
       .then((data) => setAuthorization(data as Authorization))
-      .catch(() => setAuthorizationError("تعذر تحميل الصلاحيات."));
-  }, [canReadAuthorization, user.id]);
+      .catch(() => setAuthorizationError(locale === "en" ? "Unable to load permissions." : "تعذر تحميل الصلاحيات."));
+  }, [canReadAuthorization, user.id, locale]);
+
   async function run(action: () => Promise<void>, success: string) {
     setBusy(true);
     setMessage("");
@@ -180,11 +198,12 @@ export function UserManagementPanel({ user, onChanged }: Props) {
       await action();
       setMessage(success);
     } catch {
-      setMessage("تعذر إتمام العملية. راجع البيانات والصلاحيات.");
+      setMessage(locale === "en" ? "Operation failed. Check inputs and permissions." : "تعذر إتمام العملية. راجع البيانات والصلاحيات.");
     } finally {
       setBusy(false);
     }
   }
+
   async function save(event: FormEvent) {
     event.preventDefault();
     await run(
@@ -192,9 +211,10 @@ export function UserManagementPanel({ user, onChanged }: Props) {
         onChanged(
           await updateUser(user.id, { ...edit, rowVersion: user.rowVersion }),
         ),
-      "تم تحديث بيانات المستخدم.",
+      locale === "en" ? "User details updated successfully." : "تم تحديث بيانات المستخدم.",
     );
   }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
       <Card className="p-5 sm:p-7">
@@ -202,23 +222,23 @@ export function UserManagementPanel({ user, onChanged }: Props) {
           <div className="sm:col-span-2">
             <h2 className="flex items-center gap-2 text-lg font-black">
               <Save size={19} />
-              بيانات الحساب
+              {locale === "en" ? "Account Details" : "بيانات الحساب"}
             </h2>
           </div>
           <Input
-            label="اسم المستخدم"
+            label={locale === "en" ? "Username" : "اسم المستخدم"}
             required
             value={edit.userName}
             onChange={(e) => setEdit({ ...edit, userName: e.target.value })}
           />
           <Input
-            label="البريد الإلكتروني"
+            label={locale === "en" ? "Email Address" : "البريد الإلكتروني"}
             type="email"
             value={edit.email}
             onChange={(e) => setEdit({ ...edit, email: e.target.value })}
           />
           <Input
-            label="الاسم بالعربية"
+            label={locale === "en" ? "Arabic Display Name" : "الاسم بالعربية"}
             required
             value={edit.displayNameAr}
             onChange={(e) =>
@@ -226,21 +246,21 @@ export function UserManagementPanel({ user, onChanged }: Props) {
             }
           />
           <Input
-            label="الاسم بالإنجليزية"
+            label={locale === "en" ? "English Display Name" : "الاسم بالإنجليزية"}
             value={edit.displayNameEn}
             onChange={(e) =>
               setEdit({ ...edit, displayNameEn: e.target.value })
             }
           />
           <Input
-            label="رقم الجوال"
+            label={locale === "en" ? "Phone Number" : "رقم الجوال"}
             value={edit.phoneNumber}
             onChange={(e) => setEdit({ ...edit, phoneNumber: e.target.value })}
           />
           <div className="flex items-end">
             {can("users.update") && (
               <Button loading={busy} type="submit">
-                حفظ التعديلات
+                {t("common.save")}
               </Button>
             )}
           </div>
@@ -248,23 +268,26 @@ export function UserManagementPanel({ user, onChanged }: Props) {
       </Card>
       <div className="space-y-6">
         <Card className="p-5">
-          <h2 className="font-black">حالة وأمان الحساب</h2>
+          <h2 className="font-black">
+            {locale === "en" ? "Account Status & Security" : "حالة وأمان الحساب"}
+          </h2>
           <div className="mt-4 grid gap-3">
             <select
+              aria-label={locale === "en" ? "Account status" : "حالة الحساب"}
               value={status}
               onChange={(e) =>
                 setStatus(e.target.value as ManagedUser["status"])
               }
               className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
             >
-              <option value="Active">نشط</option>
-              <option value="Locked">مقفل</option>
-              <option value="Suspended">موقوف</option>
+              <option value="Active">{locale === "en" ? "Active" : "نشط"}</option>
+              <option value="Locked">{locale === "en" ? "Locked" : "مقفل"}</option>
+              <option value="Suspended">{locale === "en" ? "Suspended" : "موقوف"}</option>
             </select>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="سبب الإجراء"
+              placeholder={locale === "en" ? "Reason for action" : "سبب الإجراء"}
               className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
             />
             {can("users.update") && (
@@ -281,18 +304,18 @@ export function UserManagementPanel({ user, onChanged }: Props) {
                           user.rowVersion,
                         ),
                       ),
-                    "تم تحديث حالة الحساب.",
+                    locale === "en" ? "Account status updated." : "تم تحديث حالة الحساب.",
                   )
                 }
               >
-                تحديث الحالة
+                {locale === "en" ? "Update Status" : "تحديث الحالة"}
               </Button>
             )}
             <input
               value={password}
               type="password"
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="كلمة مرور جديدة قوية"
+              placeholder={locale === "en" ? "New strong password" : "كلمة مرور جديدة قوية"}
               className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
             />
             {can("users.update") && (
@@ -303,12 +326,12 @@ export function UserManagementPanel({ user, onChanged }: Props) {
                   onClick={() =>
                     void run(
                       () => resetUserPassword(user.id, password),
-                      "تمت إعادة تعيين كلمة المرور.",
+                      locale === "en" ? "Password reset successfully." : "تمت إعادة تعيين كلمة المرور.",
                     )
                   }
                 >
                   <KeyRound size={16} />
-                  إعادة تعيين
+                  {locale === "en" ? "Reset Password" : "إعادة تعيين"}
                 </Button>
                 <Button
                   variant="secondary"
@@ -323,12 +346,12 @@ export function UserManagementPanel({ user, onChanged }: Props) {
                             30,
                           ),
                         ),
-                      "تم إنشاء بيانات دخول مؤقتة.",
+                      locale === "en" ? "Temporary credentials generated." : "تم إنشاء بيانات دخول مؤقتة.",
                     )
                   }
                 >
                   <LockKeyhole size={16} />
-                  بيانات مؤقتة
+                  {locale === "en" ? "Temp Credentials" : "بيانات مؤقتة"}
                 </Button>
                 <Button
                   variant="secondary"
@@ -336,18 +359,18 @@ export function UserManagementPanel({ user, onChanged }: Props) {
                   onClick={() =>
                     void run(
                       () => revokeUserSessions(user.id, reason),
-                      "تم إلغاء الجلسات.",
+                      locale === "en" ? "Sessions revoked successfully." : "تم إلغاء الجلسات.",
                     )
                   }
                 >
                   <RotateCcw size={16} />
-                  إلغاء الجلسات
+                  {locale === "en" ? "Revoke Sessions" : "إلغاء الجلسات"}
                 </Button>
               </div>
             )}
             {credential && (
               <div className="rounded-xl bg-orange-50 p-3 text-sm text-orange-900">
-                <b>القيمة السرية — تظهر مرة واحدة:</b>
+                <b>{locale === "en" ? "Secret Credential — shown once:" : "القيمة السرية — تظهر مرة واحدة:"}</b>
                 <code
                   className="mt-2 block break-all rounded bg-white p-2"
                   dir="ltr"
@@ -360,7 +383,9 @@ export function UserManagementPanel({ user, onChanged }: Props) {
         </Card>
         {can("users.archive") && (
           <Card className="border-red-200 p-5">
-            <h2 className="font-black text-red-700">إجراء نهائي</h2>
+            <h2 className="font-black text-red-700">
+              {locale === "en" ? "Final Action" : "إجراء نهائي"}
+            </h2>
             <Button
               variant="danger"
               className="mt-3"
@@ -368,12 +393,12 @@ export function UserManagementPanel({ user, onChanged }: Props) {
               onClick={() =>
                 void run(
                   () => archiveUser(user.id, reason, user.rowVersion),
-                  "تمت أرشفة المستخدم.",
+                  locale === "en" ? "User archived successfully." : "تمت أرشفة المستخدم.",
                 )
               }
             >
               <Archive size={16} />
-              أرشفة المستخدم
+              {locale === "en" ? "Archive User" : "أرشفة المستخدم"}
             </Button>
           </Card>
         )}
@@ -383,7 +408,7 @@ export function UserManagementPanel({ user, onChanged }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-black">
               <ShieldCheck size={19} />
-              الأدوار والصلاحيات
+              {locale === "en" ? "Roles & Permissions" : "الأدوار والصلاحيات"}
             </h2>
           </div>
           {message && (
@@ -399,10 +424,10 @@ export function UserManagementPanel({ user, onChanged }: Props) {
               {authorizationError}
             </p>
           ) : authorization ? (
-            <AuthorizationView data={authorization} />
+            <AuthorizationView data={authorization} locale={locale} />
           ) : (
             <p className="mt-4 text-sm text-[var(--muted)]">
-              جارٍ تحميل الأدوار والصلاحيات…
+              {locale === "en" ? "Loading roles and permissions..." : "جارٍ تحميل الأدوار والصلاحيات…"}
             </p>
           )}
         </Card>

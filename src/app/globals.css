@@ -24,10 +24,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 ::selection { background:#cfe4ff; color:#092c59; }
 
 .field-required,.field-optional,form label:not(.field-shell):has(> select)::after,form label:not(.field-shell):has(> textarea)::after,form label:not(.field-shell):has(> input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]))::after { display:inline-flex; align-items:center; min-height:1.25rem; border-radius:999px; padding:.1rem .45rem; font-size:.68rem; font-weight:700; line-height:1; white-space:nowrap; }
-.field-required,form label:not(.field-shell):has(> :is(input,select,textarea)[required])::after { color:#b42318; background:#fee4e2; }
-.field-optional,form label:not(.field-shell):has(> :is(input,select,textarea):not([required]))::after { color:var(--muted); background:color-mix(in srgb,var(--border) 55%,transparent); }
+.field-required,form label:not(.field-shell):has(> :is(input,select,textarea)[required])::after { color:#b42318!important; background:#fee4e2!important; }
+.field-optional,form label:not(.field-shell):has(> :is(input,select,textarea):not([required]))::after { color:var(--muted)!important; background:color-mix(in srgb,var(--border) 55%,transparent)!important; }
 form label:not(.field-shell):has(> select),form label:not(.field-shell):has(> textarea),form label:not(.field-shell):has(> input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])) { grid-template-columns:minmax(0,1fr) auto; align-items:center; }
-form label:not(.field-shell):has(> select)::after,form label:not(.field-shell):has(> textarea)::after,form label:not(.field-shell):has(> input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]))::after { content:"اختياري"; grid-column:2; grid-row:1; }
-form label:not(.field-shell):has(> :is(input,select,textarea)[required])::after { content:"مطلوب"; }
+form label:not(.field-shell):has(> :is(input,select,textarea):not([required]))::after { content:"اختياري"!important; grid-column:2; grid-row:1; }
+form label:not(.field-shell):has(> :is(input,select,textarea)[required])::after { content:"مطلوب"!important; grid-column:2; grid-row:1; }
 form label:not(.field-shell) > :is(input,select,textarea) { grid-column:1 / -1; }
-html[data-theme="dark"] .field-required,html[data-theme="dark"] form label:not(.field-shell):has(> :is(input,select,textarea)[required])::after { color:#fecaca; background:#7f1d1d; }
+html[data-theme="dark"] .field-required,html[data-theme="dark"] form label:not(.field-shell):has(> :is(input,select,textarea)[required])::after { color:#fecaca!important; background:#7f1d1d!important; }

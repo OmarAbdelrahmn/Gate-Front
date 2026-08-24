@@ -12,6 +12,7 @@ import {
 export type Role = "admin" | "member" | "accountant";
 export type NavItem = {
   label: string;
+  labelKey?: string;
   href?: string;
   icon: LucideIcon;
   roles: Role[];
@@ -22,17 +23,20 @@ export type NavItem = {
 export const navigation: NavItem[] = [
   {
     label: "الرئيسية",
+    labelKey: "nav.dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
     roles: ["admin", "member", "accountant"],
   },
   {
     label: "الموارد البشرية",
+    labelKey: "nav.hr",
     icon: BriefcaseBusiness,
     roles: ["admin", "member"],
     children: [
       {
         label: "جميع الإداريين والمناديب",
+        labelKey: "nav.employees",
         href: "/dashboard/employees",
         icon: Users,
         roles: ["admin", "member"],
@@ -40,6 +44,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "الكفلاء",
+        labelKey: "nav.sponsors",
         href: "/dashboard/employees/sponsors",
         icon: Building2,
         roles: ["admin", "member"],
@@ -47,6 +52,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "إعدادات المدن",
+        labelKey: "nav.cities",
         href: "/dashboard/employees/cities",
         icon: Building2,
         roles: ["admin", "member"],
@@ -54,20 +60,15 @@ export const navigation: NavItem[] = [
       },
       {
         label: "كتالوجات الموظفين",
+        labelKey: "nav.catalogs",
         href: "/dashboard/hr/catalogs",
         icon: BriefcaseBusiness,
         roles: ["admin", "member"],
         permissionsAny: ["employees.read", "residency.read", "licenses.read"],
       },
-      // { label: "أنواع الوثائق", href: "/dashboard/hr/document-types", icon: ClipboardList, roles: ["admin", "member"], permission: "documents.read" },
-      // Hidden from the sidebar until the document-requirements workflow is ready.
-      // { label: "متطلبات الوثائق", href: "/dashboard/hr/document-requirements", icon: ClipboardList, roles: ["admin", "member"], permission: "documents.read" },
-      // Hidden from the sidebar until the leave workflows are ready.
-      // { label: "أنواع الإجازات", href: "/dashboard/hr/leave-types", icon: CalendarDays, roles: ["admin", "member"], permission: "leave_requests.read" },
-      // { label: "مسارات اعتماد الإجازات", href: "/dashboard/hr/leave-approval-workflows", icon: CalendarDays, roles: ["admin", "member"], permission: "leave_requests.read" },
-      // { label: "طلبات الإجازات", href: "/dashboard/hr/leave-requests", icon: CalendarDays, roles: ["admin", "member"], permission: "leave_requests.read" },
       {
         label: "حالات الغياب",
+        labelKey: "nav.absenceCases",
         href: "/dashboard/hr/absence-cases",
         icon: ClipboardList,
         roles: ["admin", "member"],
@@ -75,6 +76,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "طلبات تغيير الحالة",
+        labelKey: "nav.statusChangeRequests",
         href: "/dashboard/hr/employee-status-change-requests",
         icon: ClipboardList,
         roles: ["admin", "member"],
@@ -84,11 +86,13 @@ export const navigation: NavItem[] = [
   },
   {
     label: "إدارة السكن",
+    labelKey: "nav.housing",
     icon: House,
     roles: ["admin", "member"],
     children: [
       {
         label: "السكن",
+        labelKey: "nav.housing",
         href: "/dashboard/housing",
         icon: House,
         roles: ["admin", "member"],
@@ -98,11 +102,13 @@ export const navigation: NavItem[] = [
   },
   {
     label: "إدارة المستخدمين",
+    labelKey: "nav.userManagement",
     icon: ShieldCheck,
     roles: ["admin"],
     children: [
       {
         label: "المستخدمون",
+        labelKey: "nav.users",
         href: "/dashboard/users",
         icon: Users,
         roles: ["admin"],
@@ -110,6 +116,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "الأدوار",
+        labelKey: "nav.roles",
         href: "/dashboard/users/roles",
         icon: ShieldCheck,
         roles: ["admin"],
@@ -119,6 +126,7 @@ export const navigation: NavItem[] = [
   },
   {
     label: "ملفي الشخصي",
+    labelKey: "nav.profile",
     href: "/dashboard/profile",
     icon: CircleUserRound,
     roles: ["admin", "member", "accountant"],

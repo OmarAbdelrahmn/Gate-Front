@@ -11,6 +11,8 @@ import { Card } from "../../../components/ui/Card";
 import { Input } from "../../../components/ui/Input";
 import { Table } from "../../../components/ui/Table";
 
+import { translate } from "../../../lib/i18n";
+
 const emptyForm = {
     userName: "",
     initialPassword: "",
@@ -21,20 +23,22 @@ const emptyForm = {
     employeeId: null as string | null
 };
 
-const statusLabels: Record<string, string> = {
-    Active: "نشط",
-    PendingTemporaryPassword: "بانتظار تغيير كلمة المرور",
-    Locked: "مقفل",
-    Suspended: "موقوف",
-    Archived: "مؤرشف"
+const statusLabels: Record<string, { ar: string; en: string }> = {
+    Active: { ar: "نشط", en: "Active" },
+    PendingTemporaryPassword: { ar: "بانتظار تغيير كلمة المرور", en: "Pending Temp Password" },
+    Locked: { ar: "مقفل", en: "Locked" },
+    Suspended: { ar: "موقوف", en: "Suspended" },
+    Archived: { ar: "مؤرشف", en: "Archived" }
 };
 
-function formatArabicDate(value: string | null) {
-    return value ? new Intl.DateTimeFormat("ar-SA-u-nu-arab", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "—";
+function formatDate(value: string | null, locale: "ar" | "en") {
+    if (!value) return "—";
+    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ar-SA-u-nu-arab", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 export default function UsersPage() {
-    const { can, isLoading } = useAuth();
+    const { can, isLoading, locale } = useAuth();
+    const t = (key: string) => translate(locale, key);
     const [users, setUsers] = useState<ManagedUser[]>([]);
     const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(true);
@@ -50,11 +54,11 @@ export default function UsersPage() {
         try {
             setUsers(await listUsers(search));
         } catch {
-            setError("تعذر تحميل المستخدمين. تأكد من اتصال واجهة API وصلاحياتك.");
+            setError(locale === "en" ? "Failed to load users. Verify API connection and permissions." : "تعذر تحميل المستخدمين. تأكد من اتصال واجهة API وصلاحياتك.");
         } finally {
             setLoading(false);
         }
-    }, [search]);
+    }, [search, locale]);
 
     useEffect(() => {
         if (isLoading || !canRead) return;
@@ -70,36 +74,36 @@ export default function UsersPage() {
             setForm(emptyForm);
             setShowForm(false);
         } catch {
-            setError("تعذر إنشاء المستخدم. راجع البيانات والصلاحيات.");
+            setError(locale === "en" ? "Failed to create user. Review input and permissions." : "تعذر إنشاء المستخدم. راجع البيانات والصلاحيات.");
         }
     }
 
     if (!isLoading && !canRead) return <Card className="p-8">
-        <h1 className="text-xl font-black">غير مصرح لك</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">تحتاج إلى صلاحية users.read لعرض إدارة المستخدمين.</p>
+        <h1 className="text-xl font-black">{t("authorization.notAuthorized")}</h1>
+        <p className="mt-2 text-sm text-[var(--muted)]">{locale === "en" ? "You need users.read permission to view user management." : "تحتاج إلى صلاحية users.read لعرض إدارة المستخدمين."}</p>
     </Card>;
 
     return <div className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <p className="text-sm font-bold text-[#1167c9]">الأمان والوصول</p>
-                <h1 className="mt-1 text-3xl font-black">إدارة المستخدمين</h1>
-                <p className="mt-2 text-sm text-[var(--muted)]">إنشاء الحسابات وإدارة حالة الوصول.</p>
+                <p className="text-sm font-bold text-[#1167c9]">{t("nav.userManagement")}</p>
+                <h1 className="mt-1 text-3xl font-black">{t("users.title")}</h1>
+                <p className="mt-2 text-sm text-[var(--muted)]">{locale === "en" ? "Create accounts and manage user access status." : "إنشاء الحسابات وإدارة حالة الوصول."}</p>
             </div>
-            {can("users.create") && <Button onClick={() => setShowForm(!showForm)}><Plus size={17} />مستخدم جديد</Button>}
+            {can("users.create") && <Button onClick={() => setShowForm(!showForm)}><Plus size={17} />{t("users.newUser")}</Button>}
         </div>
 
         {showForm && <Card className="p-5">
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Input label="اسم المستخدم" required value={form.userName} onChange={e => setForm({ ...form, userName: e.target.value })} />
-                <Input label="كلمة المرور الأولية" type="password" minLength={12} required value={form.initialPassword} onChange={e => setForm({ ...form, initialPassword: e.target.value })} />
-                <Input label="الاسم بالعربية" required value={form.displayNameAr} onChange={e => setForm({ ...form, displayNameAr: e.target.value })} />
-                <Input label="الاسم بالإنجليزية" value={form.displayNameEn} onChange={e => setForm({ ...form, displayNameEn: e.target.value })} />
-                <Input label="البريد الإلكتروني" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-                <Input label="رقم الجوال" value={form.phoneNumber} onChange={e => setForm({ ...form, phoneNumber: e.target.value })} />
+                <Input label={t("users.username")} required value={form.userName} onChange={e => setForm({ ...form, userName: e.target.value })} />
+                <Input label={locale === "en" ? "Initial Password" : "كلمة المرور الأولية"} type="password" minLength={12} required value={form.initialPassword} onChange={e => setForm({ ...form, initialPassword: e.target.value })} />
+                <Input label={locale === "en" ? "Arabic Name" : "الاسم بالعربية"} required value={form.displayNameAr} onChange={e => setForm({ ...form, displayNameAr: e.target.value })} />
+                <Input label={locale === "en" ? "English Name" : "الاسم بالإنجليزية"} value={form.displayNameEn} onChange={e => setForm({ ...form, displayNameEn: e.target.value })} />
+                <Input label={locale === "en" ? "Email" : "البريد الإلكتروني"} type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                <Input label={t("users.phone")} value={form.phoneNumber} onChange={e => setForm({ ...form, phoneNumber: e.target.value })} />
                 <div className="sm:col-span-2 lg:col-span-3 flex gap-3">
-                    <Button type="submit">حفظ المستخدم</Button>
-                    <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>إلغاء</Button>
+                    <Button type="submit">{t("common.save")}</Button>
+                    <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>{t("common.cancel")}</Button>
                 </div>
             </form>
         </Card>}
@@ -111,16 +115,16 @@ export default function UsersPage() {
                         <UsersRound size={20} />
                     </div>
                     <div>
-                        <h2 className="font-black">المستخدمون</h2>
-                        <p className="text-xs text-[var(--muted)]">{users.length} حساب</p>
+                        <h2 className="font-black">{t("users.title")}</h2>
+                        <p className="text-xs text-[var(--muted)]">{users.length} {locale === "en" ? "accounts" : "حساب"}</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
                     <label className="flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 text-[var(--muted)]">
                         <Search size={17} />
-                        <input aria-label="بحث عن مستخدم" value={search} onChange={e => setSearch(e.target.value)} placeholder="ابحث بالاسم أو اسم المستخدم أو البريد الإلكتروني" className="w-56 bg-transparent text-sm text-[var(--foreground)] outline-none sm:w-80" />
+                        <input aria-label={t("users.searchPlaceholder")} value={search} onChange={e => setSearch(e.target.value)} placeholder={t("users.searchPlaceholder")} className="w-56 bg-transparent text-sm text-[var(--foreground)] outline-none sm:w-80" />
                     </label>
-                    <Button variant="secondary" onClick={() => void load()} aria-label="تحديث القائمة">
+                    <Button variant="secondary" onClick={() => void load()} aria-label={t("common.loading")}>
                         <RefreshCw size={17} />
                     </Button>
                 </div>
@@ -128,17 +132,17 @@ export default function UsersPage() {
 
             {error && <p role="alert" className="m-5 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
 
-            {loading ? <div className="p-8 text-center text-sm text-[var(--muted)]">جاري تحميل المستخدمين…</div> : <Table>
+            {loading ? <div className="p-8 text-center text-sm text-[var(--muted)]">{t("common.loading")}</div> : <Table>
                 <thead className="border-b border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted)]">
                     <tr>
-                        <th className="px-5 py-4">الاسم</th>
-                        <th className="px-5 py-4">اسم المستخدم</th>
-                        <th className="px-5 py-4">البريد الإلكتروني</th>
-                        <th className="px-5 py-4">رقم الجوال</th>
-                        <th className="px-5 py-4">الحالة</th>
-                        <th className="px-5 py-4">آخر نشاط</th>
-                        <th className="px-5 py-4">تاريخ الإنشاء</th>
-                        <th className="px-5 py-4">تعديل المعلومات</th>
+                        <th className="px-5 py-4">{locale === "en" ? "Name" : "الاسم"}</th>
+                        <th className="px-5 py-4">{t("users.username")}</th>
+                        <th className="px-5 py-4">{locale === "en" ? "Email" : "البريد الإلكتروني"}</th>
+                        <th className="px-5 py-4">{t("users.phone")}</th>
+                        <th className="px-5 py-4">{t("common.status")}</th>
+                        <th className="px-5 py-4">{locale === "en" ? "Last Activity" : "آخر نشاط"}</th>
+                        <th className="px-5 py-4">{locale === "en" ? "Created Date" : "تاريخ الإنشاء"}</th>
+                        <th className="px-5 py-4">{t("common.actions")}</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
@@ -146,32 +150,32 @@ export default function UsersPage() {
                     {users.map(user => (
                         <tr key={user.id} className="hover:bg-blue-500/5">
                             <td className="px-5 py-4">
-                                <b className="block">{user.displayNameAr || user.displayNameEn}</b>
+                                <b className="block">{locale === "en" ? (user.displayNameEn || user.displayNameAr) : (user.displayNameAr || user.displayNameEn)}</b>
                             </td>
                             <td className="px-5 py-4 font-medium" dir="ltr">{user.userName}</td>
                             <td className="px-5 py-4" dir="ltr">{user.email}</td>
                             <td className="px-5 py-4" dir="ltr">{user.phoneNumber || "—"}</td>
                             <td className="px-5 py-4">
                                 <Badge tone={user.status === "Active" ? "green" : user.status === "Locked" ? "red" : "orange"}>
-                                    {statusLabels[user.status] ?? user.status}
+                                    {statusLabels[user.status]?.[locale] ?? user.status}
                                 </Badge>
                             </td>
                             <td className="px-5 py-4 text-[var(--muted)]">
-                                {formatArabicDate(user.lastActivityAtUtc)}
+                                {formatDate(user.lastActivityAtUtc, locale)}
                             </td>
                             <td className="px-5 py-4 text-[var(--muted)]">
-                                {formatArabicDate(user.createdAtUtc)}
+                                {formatDate(user.createdAtUtc, locale)}
                             </td>
                             <td className="px-5 py-4">
-                                <Link href={`/dashboard/users/${user.id}`} aria-label={`تعديل معلومات المستخدم ${user.displayNameAr || user.userName}`} title="تعديل المعلومات" className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-[#1167c9] hover:bg-blue-500/10">
+                                <Link href={`/dashboard/users/${user.id}`} aria-label={`${t("common.edit")} ${user.displayNameAr || user.userName}`} title={t("common.edit")} className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-[#1167c9] hover:bg-blue-500/10">
                                     <Pencil size={17} />
-                                    <span className="hidden sm:inline">تعديل</span>
+                                    <span className="hidden sm:inline">{t("common.edit")}</span>
                                 </Link>
                             </td>
                         </tr>
                     ))}
                     {users.length === 0 && <tr>
-                        <td colSpan={8} className="px-5 py-10 text-center text-sm text-[var(--muted)]">لا توجد نتائج مطابقة.</td>
+                        <td colSpan={8} className="px-5 py-10 text-center text-sm text-[var(--muted)]">{locale === "en" ? "No matching users found." : "لا توجد نتائج مطابقة."}</td>
                     </tr>}
                 </tbody>
             </Table>}

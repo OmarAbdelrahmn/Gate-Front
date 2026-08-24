@@ -100,38 +100,69 @@ export type EmployeeDetails = {
 };
 export type RiderInput = {
   tShirtSize?: string | null;
-  operationalNotes: string | null;
+  operationalNotes?: string | null;
   rowVersion?: string | null;
   status?: string;
   riderStartDate?: string | null;
   riderEndDate?: string | null;
   preferredCityId?: string | null;
 };
-export type EmployeeUpsertRequest = Omit<
-  EmployeeDetails["employee"],
-  "id" | "rowVersion" | "sponsorNameAr" | "riderProfileId"
-> & {
+
+export type EmployeeUpsertPayload = {
+  iqamaNo: string | null;
+  residencyProfession: string | null;
+  workingForMeAs: string | null;
+  fullNameAr: string;
+  fullNameEn: string | null;
+  nationality: string | null;
+  birthDate: string | null;
+  gender: string | null;
+  primaryPhone: string | null;
+  secondaryPhone: string | null;
+  email: string | null;
+  profilePhotoDocumentId: string | null;
+  maritalStatus: string | null;
+  emergencyContactName: string | null;
+  emergencyContactRelationship: string | null;
+  emergencyContactPhone: string | null;
+  isEmployee: boolean;
+  engagementType: "SponsoredInternal" | "OutsideRider" | string;
+  status: string;
+  statusReason: string | null;
+  hireDate: string | null;
+  operationalWorkTypeId: string | null;
+  operatingCityId: string | null;
+  sponsorId: string | null;
+  contractStartDate: string | null;
+  contractEndDate: string | null;
+  probationEndDate: string | null;
+  terminationDate: string | null;
+  alternateContactName: string | null;
+  alternateContactPhone: string | null;
+  notes: string | null;
   rider: RiderInput | null;
   rowVersion: string | null;
-} & LegacyEmployeeFields;
-export type LegacyEmployeeFields = {
-  employeeNumber?: string;
-  nationalityCountryCode?: string | null;
-  relationshipType?: string;
-  sponsoredDetails?: unknown;
-  outsideRiderDetails?: unknown;
 };
-// Transitional alias while employee forms are migrated to the new workforce contract.
-export type CreateEmployeeRequest = any;
-export type UpdateEmployeeRequest = any;
+
+export type CreateEmployeeRequest = EmployeeUpsertPayload;
+export type UpdateEmployeeRequest = EmployeeUpsertPayload & { rowVersion: string };
+
+export type UpdateRiderProfileRequest = {
+  tShirtSize?: string | null;
+  operationalNotes?: string | null;
+  rowVersion: string;
+};
+
 export type ChangeEmployeeStatusRequest = {
   status: string;
   effectiveDate: string;
   reason: string;
 };
+
 export type RoleTransitionRequest = {
   isEmployee: boolean;
   effectiveDate: string;
   reason: string;
   rider: RiderInput | null;
 };
+

@@ -127,3 +127,19 @@ export async function authDownload(path: string) {
   if (!response.ok) throw new Error("تعذر تنزيل الملف");
   return { blob: await response.blob(), fileName: response.headers.get("content-disposition")?.match(/filename\*?=(?:UTF-8'')?[\"']?([^\"';]+)/i)?.[1] ?? "document" };
 }
+export async function authPreviewBlob(path: string) {
+  const auth = readAuth();
+  const headers = new Headers();
+  if (auth) headers.set("Authorization", `${auth.tokenType} ${auth.accessToken}`);
+  const url = path.startsWith("/api/") ? `${API_BASE_URL}${path}` : `${AUTH_ROUTE}${path}`;
+  let response = await fetch(url, { headers, cache: "no-store" });
+  if (response.status === 401 && auth?.refreshToken) {
+    const refreshed = await refreshAccessToken();
+    headers.set("Authorization", `${refreshed.tokenType} ${refreshed.accessToken}`);
+    response = await fetch(url, { headers, cache: "no-store" });
+  }
+  if (!response.ok) throw new Error("تعذر عرض الوثيقة");
+  const blob = await response.blob();
+  const contentType = response.headers.get("content-type") || blob.type || "application/pdf";
+  return { blob, contentType, url: URL.createObjectURL(blob) };
+}

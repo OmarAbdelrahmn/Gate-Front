@@ -9,14 +9,14 @@ export const permissionGroups = [
   "Workflows",
 ] as const;
 export type PermissionGroup = (typeof permissionGroups)[number];
-const labels: Record<PermissionGroup, string> = {
-  Security: "الأمن",
-  Workforce: "القوى العاملة",
-  Compliance: "الالتزام",
-  Documents: "المستندات",
-  Operations: "العمليات",
-  Fleet: "الأسطول",
-  Workflows: "مسارات العمل",
+const labels: Record<PermissionGroup, { ar: string; en: string }> = {
+  Security: { ar: "الأمن", en: "Security" },
+  Workforce: { ar: "القوى العاملة", en: "Workforce" },
+  Compliance: { ar: "الالتزام", en: "Compliance" },
+  Documents: { ar: "المستندات", en: "Documents" },
+  Operations: { ar: "العمليات", en: "Operations" },
+  Fleet: { ar: "الأسطول", en: "Fleet" },
+  Workflows: { ar: "مسارات العمل", en: "Workflows" },
 };
 export function permissionGroup(key: string): PermissionGroup {
   if (/^(users|roles|permissions|audit|support_access)\./.test(key))
@@ -34,8 +34,8 @@ export function permissionGroup(key: string): PermissionGroup {
     return "Workflows";
   return "Operations";
 }
-export function permissionGroupLabel(group: PermissionGroup) {
-  return labels[group];
+export function permissionGroupLabel(group: PermissionGroup, locale: "ar" | "en" = "ar") {
+  return labels[group]?.[locale] ?? group;
 }
 export function groupPermissions<T extends Pick<PermissionCatalogItem, "key">>(
   items: T[],

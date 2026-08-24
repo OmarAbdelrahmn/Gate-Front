@@ -17,11 +17,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { systemConfirm } from "../ui/SystemDialog";
+import { translate } from "../../lib/i18n";
+
 export function Header({ onMenu }: { onMenu: () => void }) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
   const { user, logout, logoutAll, locale, theme, setPreferences } = useAuth();
+  const t = (key: string) => translate(locale, key);
   const router = useRouter();
   const name =
     locale === "en"
@@ -56,19 +59,19 @@ export function Header({ onMenu }: { onMenu: () => void }) {
       <div className="flex items-center gap-3">
         <button
           onClick={onMenu}
-          aria-label="فتح القائمة"
+          aria-label={t("nav.mainMenu")}
           className="grid h-11 w-11 place-items-center rounded-xl hover:bg-white/15 md:hidden"
         >
           <Menu size={21} />
         </button>
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-lg font-black text-[#1167c9] shadow-sm">
-          ب
+          {locale === "en" ? "M" : "ب"}
         </div>
         <div>
           <div className="text-sm font-black leading-tight">
-            البوابة المقبلة
+            {t("header.appName")}
           </div>
-          <div className="text-[11px] text-blue-100">للخدمات اللوجستية</div>
+          <div className="text-[11px] text-blue-100">{t("header.appSubtitle")}</div>
         </div>
       </div>
       <div className="flex items-center gap-1">
@@ -77,7 +80,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
           onClick={() =>
             void updatePreference({ locale: locale === "ar" ? "en" : "ar" })
           }
-          aria-label="تغيير اللغة"
+          aria-label={t("header.switchLanguage")}
           className="hidden h-10 items-center gap-2 rounded-xl px-3 text-sm hover:bg-white/15 disabled:opacity-60 sm:flex"
         >
           <Globe2 size={17} />
@@ -90,13 +93,13 @@ export function Header({ onMenu }: { onMenu: () => void }) {
               theme: theme === "dark" ? "light" : "dark",
             })
           }
-          aria-label="تبديل المظهر"
+          aria-label={t("header.switchTheme")}
           className="grid h-10 w-10 place-items-center rounded-xl hover:bg-white/15 disabled:opacity-60"
         >
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </button>
         <button
-          aria-label="الإشعارات"
+          aria-label={t("header.notifications")}
           className="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-white/15"
         >
           <Bell size={18} />
@@ -123,7 +126,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
           {open && (
             <div className="absolute left-0 top-14 w-64 rounded-xl border border-slate-200 bg-white p-2 text-sm text-slate-700 shadow-xl">
               <div className="border-b border-slate-100 px-3 py-2">
-                <b className="block">حسابي</b>
+                <b className="block">{t("header.myAccount")}</b>
                 <small className="text-slate-500">{name}</small>
               </div>
               <Link
@@ -132,7 +135,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                 className={menuLink}
               >
                 <UserRound size={17} />
-                ملفي الشخصي
+                {t("header.profile")}
               </Link>
               <Link
                 href="/dashboard/profile#change-password"
@@ -140,7 +143,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                 className={menuLink}
               >
                 <KeyRound size={17} />
-                تغيير كلمة المرور
+                {t("header.changePassword")}
               </Link>
               <Link
                 href="/dashboard/profile/sessions"
@@ -148,7 +151,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                 className={menuLink}
               >
                 <MonitorSmartphone size={17} />
-                الجلسات النشطة
+                {t("header.activeSessions")}
               </Link>
               <div className="my-1 border-t border-slate-100" />
               <button
@@ -158,19 +161,19 @@ export function Header({ onMenu }: { onMenu: () => void }) {
               >
                 <LogOut size={16} />
                 {loggingOut
-                  ? "جارٍ تسجيل الخروج…"
-                  : "تسجيل الخروج من هذه الجلسة"}
+                  ? t("common.loading")
+                  : t("header.signOut")}
               </button>
               <button
                 disabled={loggingOut}
                 onClick={async () => {
-                  if (await systemConfirm("هل تريد تسجيل الخروج من جميع الأجهزة؟", "تسجيل الخروج من جميع الأجهزة", true))
+                  if (await systemConfirm(t("header.confirmSignOutAll"), t("header.signOutAll"), true))
                     void leave(true);
                 }}
                 className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right font-bold text-red-700 hover:bg-red-50 disabled:opacity-60"
               >
                 <ShieldCheck size={16} />
-                تسجيل الخروج من جميع الأجهزة
+                {t("header.signOutAll")}
               </button>
             </div>
           )}

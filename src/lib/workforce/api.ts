@@ -6,6 +6,7 @@ import type {
   EmployeeDetails,
   Rider,
   UpdateEmployeeRequest,
+  UpdateRiderProfileRequest,
   RoleTransitionRequest,
 } from "./types";
 export function listEmployees() {
@@ -133,35 +134,72 @@ export function listRiders(outsideOnly?: boolean) {
     `/api/riders${outsideOnly === undefined ? "" : `?outsideOnly=${outsideOnly}`}`,
   );
 }
+export function getOutsideRiders() {
+  return authFetch<Rider[]>("/api/riders/outside");
+}
+export function updateRiderProfile(
+  riderProfileId: string,
+  payload: UpdateRiderProfileRequest,
+) {
+  return authFetch<Rider>(
+    `/api/riders/${encodeURIComponent(riderProfileId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+export type SponsorAddress = {
+  buildingNumber?: string | null;
+  street?: string | null;
+  district?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  additionalNumber?: string | null;
+};
+
 export type Sponsor = {
   id: string;
+  companyProfileId?: string | null;
   employerIdentityNumber: string;
   registryNameAr: string;
-  registryNameEn: string | null;
-  commercialRegistrationNumber: string | null;
+  registryNameEn?: string | null;
+  commercialRegistrationNumber?: string | null;
+  unifiedNationalNumber?: string | null;
   sponsorType: string;
   status: string;
-  contactName: string | null;
-  contactPhone: string | null;
-  contactEmail: string | null;
-  notes: string | null;
+  activeFrom?: string | null;
+  activeTo?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  address?: SponsorAddress | null;
+  notes?: string | null;
   rowVersion: string;
 };
+
 export function listSponsors() {
   return authFetch<Sponsor[]>("/api/sponsors");
 }
+
+export function getSponsor(id: string) {
+  return authFetch<Sponsor>(`/api/sponsors/${encodeURIComponent(id)}`);
+}
+
 export function createSponsor(payload: Record<string, unknown>) {
   return authFetch<Sponsor>("/api/sponsors", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
+
 export function updateSponsor(id: string, payload: Record<string, unknown>) {
   return authFetch<Sponsor>(`/api/sponsors/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 }
+
 export function archiveSponsor(
   id: string,
   payload: { reason: string; rowVersion: string },

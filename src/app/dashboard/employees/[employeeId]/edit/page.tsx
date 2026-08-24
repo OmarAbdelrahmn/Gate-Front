@@ -53,6 +53,7 @@ export default function EditEmployeePage({
       </Link>
       <h1 className="text-3xl font-black">تعديل الإداري أو المندوب</h1>
       <EmployeeForm
+        key={details.employee.id}
         initial={initial}
         submitLabel="حفظ التعديلات"
         onSave={async (payload) =>

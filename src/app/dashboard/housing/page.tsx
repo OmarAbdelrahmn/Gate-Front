@@ -12,17 +12,20 @@ import {
 } from "../../../lib/housing/api";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
-type City = { id: string; nameAr: string; code: string };
+import { translate } from "../../../lib/i18n";
+type City = { id: string; nameAr: string; nameEn?: string; code: string };
 export default function HousingPage() {
-  const { can } = useAuth(),
-    [items, setItems] = useState<Housing[]>([]),
-    [cities, setCities] = useState<City[]>([]),
-    [search, setSearch] = useState(""),
-    [editing, setEditing] = useState<Housing | null>(null),
-    [open, setOpen] = useState(false),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+  const { can, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
+  const [items, setItems] = useState<Housing[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<Housing | null>(null);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const manage = can("housing.manage");
+
   async function load() {
     try {
       const [h, c] = await Promise.all([
@@ -32,12 +35,13 @@ export default function HousingPage() {
       setItems(h);
       setCities(c);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر تحميل السكن");
+      setError(e instanceof Error ? e.message : (locale === "en" ? "Failed to load housing" : "تعذر تحميل السكن"));
     }
   }
   useEffect(() => {
     void load();
-  }, []);
+  }, [locale]);
+
   const shown = useMemo(
     () =>
       items.filter((x) =>
@@ -47,6 +51,7 @@ export default function HousingPage() {
       ),
     [items, search],
   );
+
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -83,7 +88,7 @@ export default function HousingPage() {
       setEditing(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر الحفظ");
+      setError(e instanceof Error ? e.message : (locale === "en" ? "Failed to save" : "تعذر الحفظ"));
     } finally {
       setBusy(false);
     }
@@ -91,13 +96,13 @@ export default function HousingPage() {
   const cls =
     "h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3";
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-bold text-[#1167c9]">إدارة السكن</p>
-          <h1 className="text-3xl font-black">السكن</h1>
+          <p className="text-sm font-bold text-[#1167c9]">{t("nav.housing")}</p>
+          <h1 className="text-3xl font-black">{t("housing.title")}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            إدارة المساكن والسعة والسكان والمشرفين.
+            {locale === "en" ? "Manage residential units, capacity, residents, and supervisors." : "إدارة المساكن والسعة والسكان والمشرفين."}
           </p>
         </div>
         {manage && (
@@ -108,7 +113,7 @@ export default function HousingPage() {
             }}
           >
             <Plus size={18} />
-            إضافة سكن
+            {t("housing.addHousing")}
           </Button>
         )}
       </header>
@@ -118,26 +123,26 @@ export default function HousingPage() {
       {open && (
         <Card className="p-5">
           <h2 className="mb-4 text-xl font-black">
-            {editing ? "تعديل السكن" : "إضافة سكن"}
+            {editing ? (locale === "en" ? "Edit Housing Unit" : "تعديل السكن") : t("housing.addHousing")}
           </h2>
           <form
             onSubmit={save}
             className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
           >
             {[
-              ["code", "الرمز"],
-              ["nameAr", "الاسم العربي"],
-              ["nameEn", "الاسم الإنجليزي"],
-              ["totalCapacity", "السعة الإجمالية"],
-              ["contactPhone", "هاتف التواصل"],
-              ["buildingNumber", "رقم المبنى"],
-              ["street", "الشارع"],
-              ["district", "الحي"],
-              ["postalCode", "الرمز البريدي"],
-              ["openedDate", "تاريخ الافتتاح"],
-              ["closedDate", "تاريخ الإغلاق"],
-              ["statusReason", "سبب الحالة"],
-              ["notes", "ملاحظات"],
+              ["code", locale === "en" ? "Code" : "الرمز"],
+              ["nameAr", locale === "en" ? "Arabic Name" : "الاسم العربي"],
+              ["nameEn", locale === "en" ? "English Name" : "الاسم الإنجليزي"],
+              ["totalCapacity", t("housing.totalCapacity")],
+              ["contactPhone", locale === "en" ? "Contact Phone" : "هاتف التواصل"],
+              ["buildingNumber", locale === "en" ? "Building No." : "رقم المبنى"],
+              ["street", locale === "en" ? "Street" : "الشارع"],
+              ["district", locale === "en" ? "District" : "الحي"],
+              ["postalCode", locale === "en" ? "Postal Code" : "الرمز البريدي"],
+              ["openedDate", locale === "en" ? "Opening Date" : "تاريخ الافتتاح"],
+              ["closedDate", locale === "en" ? "Closing Date" : "تاريخ الإغلاق"],
+              ["statusReason", locale === "en" ? "Status Reason" : "سبب الحالة"],
+              ["notes", locale === "en" ? "Notes" : "ملاحظات"],
             ].map(([k, l]) => (
               <label key={k} className="grid gap-2 font-bold">
                 {l}
@@ -164,32 +169,32 @@ export default function HousingPage() {
               </label>
             ))}
             <label className="grid gap-2 font-bold">
-              مدينة التشغيل
+              {t("cities.operatingCities")}
               <select
                 name="cityId"
                 required
                 defaultValue={editing?.cityId ?? ""}
                 className={cls}
               >
-                <option value="">اختر مدينة</option>
+                <option value="">{locale === "en" ? "Select City" : "اختر مدينة"}</option>
                 {cities.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.nameAr} — {c.code}
+                    {locale === "en" ? c.nameEn || c.nameAr : c.nameAr} — {c.code}
                   </option>
                 ))}
               </select>
             </label>
             <label className="grid gap-2 font-bold">
-              الحالة
+              {t("common.status")}
               <select
                 name="status"
                 required
                 defaultValue={editing?.status ?? "Active"}
                 className={cls}
               >
-                <option value="Active">نشط</option>
-                <option value="Inactive">غير نشط</option>
-                <option value="Closed">مغلق</option>
+                <option value="Active">{t("common.active")}</option>
+                <option value="Inactive">{t("common.inactive")}</option>
+                <option value="Closed">{locale === "en" ? "Closed" : "مغلق"}</option>
               </select>
             </label>
             <div className="col-span-full flex justify-end gap-2">
@@ -198,10 +203,10 @@ export default function HousingPage() {
                 variant="secondary"
                 onClick={() => setOpen(false)}
               >
-                إلغاء
+                {t("common.cancel")}
               </Button>
               <Button type="submit" loading={busy}>
-                حفظ
+                {t("common.save")}
               </Button>
             </div>
           </form>
@@ -210,12 +215,12 @@ export default function HousingPage() {
       <Card className="overflow-hidden">
         <div className="p-4">
           <label className="relative block">
-            <Search className="absolute right-3 top-3" size={18} />
+            <Search className={`absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"}`} size={18} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث فوري"
-              className="h-11 w-full rounded-xl border pr-10"
+              placeholder={t("housing.searchPlaceholder")}
+              className={`h-11 w-full rounded-xl border ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
             />
           </label>
         </div>
@@ -228,7 +233,7 @@ export default function HousingPage() {
                   className="flex gap-2 font-black text-[#1167c9]"
                 >
                   <Building size={18} />
-                  {x.nameAr}
+                  {locale === "en" ? (x.nameEn || x.nameAr) : x.nameAr}
                 </Link>
                 {manage && (
                   <button
@@ -236,7 +241,7 @@ export default function HousingPage() {
                       setEditing(x);
                       setOpen(true);
                     }}
-                    aria-label="تعديل"
+                    aria-label={t("common.edit")}
                     className="grid h-10 w-10 place-items-center rounded-lg border"
                   >
                     <Edit3 size={16} />
@@ -248,14 +253,19 @@ export default function HousingPage() {
               </p>
               <div className="mt-4 flex justify-between text-sm">
                 <span>
-                  السكان {x.currentResidents}/{x.totalCapacity}
+                  {t("housing.residents")} {x.currentResidents}/{x.totalCapacity}
                 </span>
                 <span className="font-bold text-emerald-700">
-                  متاح {x.availableCapacity}
+                  {t("housing.availableCapacity")} {x.availableCapacity}
                 </span>
               </div>
             </article>
           ))}
+          {!shown.length && (
+            <p className="col-span-full p-8 text-center text-[var(--muted)]">
+              {locale === "en" ? "No housing units found." : "لا يوجد سكن مطابق."}
+            </p>
+          )}
         </div>
       </Card>
     </div>

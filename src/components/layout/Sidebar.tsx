@@ -11,6 +11,8 @@ import {
 } from "../../lib/config/navigation";
 import { useAuth } from "../../lib/auth/AuthProvider";
 
+import { translate } from "../../lib/i18n";
+
 const permitted = (
   item: NavItem,
   role: Role,
@@ -28,7 +30,9 @@ export function Sidebar({
 }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { can, isLoading, authorization } = useAuth();
+  const { can, isLoading, authorization, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     "إدارة المستخدمين": path.startsWith("/dashboard/users"),
     "الموارد البشرية": path.startsWith("/dashboard/hr") || path.startsWith("/dashboard/employees"),
@@ -76,19 +80,19 @@ export function Sidebar({
           <div
             className={`px-2 text-xs font-bold tracking-widest text-slate-400 ${collapsed ? "md:hidden" : ""}`}
           >
-            القائمة الرئيسية
+            {t("nav.mainMenu")}
           </div>
           <button
             onClick={onClose}
-            aria-label="إغلاق القائمة"
+            aria-label={t("common.close")}
             className="grid h-10 w-10 place-items-center rounded-xl md:hidden"
           >
             <X size={19} />
           </button>
         </div>
-        <nav className="flex-1 space-y-1" aria-label="التنقل الرئيسي">
+        <nav className="flex-1 space-y-1" aria-label={t("nav.mainMenu")}>
           {isLoading && (
-            <div className="space-y-3 px-2" aria-label="جاري تحميل الصلاحيات">
+            <div className="space-y-3 px-2" aria-label={t("common.loading")}>
               <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
               <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
               <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
@@ -104,6 +108,8 @@ export function Sidebar({
                 isChildActive(item.href) ||
                 children.some((child) => isChildActive(child.href));
 
+              const itemLabel = item.labelKey ? t(item.labelKey) : item.label;
+
               if (!children.length && item.href)
                 return (
                   <Link
@@ -115,7 +121,7 @@ export function Sidebar({
                   >
                     <Icon size={19} />
                     <span className={collapsed ? "md:hidden" : ""}>
-                      {item.label}
+                      {itemLabel}
                     </span>
                     {active && (
                       <span className="mr-auto h-2 w-2 rounded-full bg-[#f28b35]" />
@@ -138,7 +144,7 @@ export function Sidebar({
                   >
                     <Icon size={19} />
                     <span className={collapsed ? "md:hidden" : ""}>
-                      {item.label}
+                      {itemLabel}
                     </span>
                     <ChevronDown
                       size={17}
@@ -152,6 +158,7 @@ export function Sidebar({
                       {children.map((child) => {
                         const ChildIcon = child.icon;
                         const childActive = isChildActive(child.href);
+                        const childLabel = child.labelKey ? t(child.labelKey) : child.label;
                         return (
                           <Link
                             key={child.href}
@@ -161,7 +168,7 @@ export function Sidebar({
                             className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-bold ${childActive ? "bg-blue-50 text-[#1167c9]" : "text-slate-600 hover:bg-slate-50"}`}
                           >
                             <ChildIcon size={16} />
-                            <span>{child.label}</span>
+                            <span>{childLabel}</span>
                           </Link>
                         );
                       })}
@@ -173,7 +180,7 @@ export function Sidebar({
           {!isLoading && !authorization && (
             <div className="px-2 pt-4 text-center text-xs text-slate-500">
               <ShieldAlert className="mx-auto mb-2 text-orange-500" size={20} />
-              تعذر التحقق من الصلاحيات
+              {t("authorization.cannotVerify")}
             </div>
           )}
         </nav>
@@ -185,7 +192,7 @@ export function Sidebar({
             size={16}
             className={collapsed ? "rotate-90" : "-rotate-90"}
           />
-          <span className={collapsed ? "hidden" : ""}>تصغير القائمة</span>
+          <span className={collapsed ? "hidden" : ""}>{collapsed ? t("nav.expandMenu") : t("nav.collapseMenu")}</span>
         </button>
       </aside>
     </>

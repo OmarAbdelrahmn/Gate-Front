@@ -29,6 +29,8 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { systemPrompt } from "../ui/SystemDialog";
 
+import { translate } from "../../lib/i18n";
+
 const workflowResources = new Set([
   "leave-types",
   "leave-approval-workflows",
@@ -36,18 +38,18 @@ const workflowResources = new Set([
   "absence-cases",
   "employee-status-change-requests",
 ]);
-const display = (value: unknown) =>
+const display = (value: unknown, locale: "ar" | "en" = "ar") =>
   value === true
-    ? "نعم"
+    ? (locale === "en" ? "Yes" : "نعم")
     : value === false
-      ? "لا"
+      ? (locale === "en" ? "No" : "لا")
       : value == null || value === ""
         ? "—"
         : String(value);
-const errorMessage = (error: unknown) =>
+const errorMessage = (error: unknown, locale: "ar" | "en" = "ar") =>
   error instanceof Error
     ? error.message
-    : "تعذر تنفيذ العملية. تحقق من البيانات والصلاحية ثم حاول مجددًا.";
+    : (locale === "en" ? "Operation failed. Check data and permissions then try again." : "تعذر تنفيذ العملية. تحقق من البيانات والصلاحية ثم حاول مجددًا.");
 const inferredSource = (field: HrField): HrField["source"] =>
   field.source ??
   (
@@ -106,12 +108,15 @@ function Field({
   value,
   onChange,
   options,
+  locale = "ar",
 }: {
   field: HrField;
   value: string | boolean;
   onChange: (value: string | boolean) => void;
-  options?: { value: string; label: string }[];
+  options?: { value: string; label: string; labelEn?: string }[];
+  locale?: "ar" | "en";
 }) {
+  const label = locale === "en" ? (field.labelEn || field.label) : field.label;
   if (field.kind === "boolean")
     return (
       <label className="flex min-h-11 items-center gap-3 rounded-xl border border-[var(--border)] px-3 text-sm font-bold">
@@ -121,23 +126,23 @@ function Field({
           onChange={(e) => onChange(e.target.checked)}
           className="h-4 w-4 accent-[#1167c9]"
         />
-        {field.label}
+        {label}
       </label>
     );
   if (field.kind === "select" || inferredSource(field))
     return (
       <label className="grid gap-2 text-sm font-bold">
-        <span>{field.label.replace("معرّف ", "")}</span>
+        <span>{label.replace("معرّف ", "").replace(" ID", "")}</span>
         <select
           required={field.required}
           value={String(value)}
           onChange={(e) => onChange(e.target.value)}
           className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 font-normal"
         >
-          <option value="">اختر</option>
+          <option value="">{locale === "en" ? "Select" : "اختر"}</option>
           {(options ?? field.options)?.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {locale === "en" ? (option.labelEn || option.label) : option.label}
             </option>
           ))}
         </select>
@@ -146,7 +151,7 @@ function Field({
   if (field.kind === "json")
     return (
       <label className="col-span-full grid gap-2 text-sm font-bold">
-        <span>{field.label}</span>
+        <span>{label}</span>
         <textarea
           dir="ltr"
           rows={8}
@@ -159,7 +164,7 @@ function Field({
     );
   return (
     <label className="grid gap-2 text-sm font-bold">
-      <span>{field.label}</span>
+      <span>{label}</span>
       <input
         type={
           field.kind === "date"
@@ -185,7 +190,8 @@ export function HrSectionManager({
   embedded?: boolean;
 }) {
   const section = hrSections[sectionKey];
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
   const [rows, setRows] = useState<HrRow[]>([]);
   const [editing, setEditing] = useState<HrRow | null>(null);
   const [creating, setCreating] = useState(false);
@@ -196,7 +202,7 @@ export function HrSectionManager({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [lookups, setLookups] = useState<
-    Record<string, { value: string; label: string }[]>
+    Record<string, { value: string; label: string; labelEn?: string }[]>
   >({});
   const manageable = section ? can(section.permissionManage) : false;
 
@@ -209,12 +215,12 @@ export function HrSectionManager({
         ? await hrWorkflowApi.list(section.resource)
         : await hrCatalogApi.list(section.resource);
       setRows(data);
-    } catch (error) {
-      setError(errorMessage(error));
+    } catch (err) {
+      setError(errorMessage(err, locale));
     } finally {
       setLoading(false);
     }
-  }, [section]);
+  }, [section, locale]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -246,6 +252,14 @@ export function HrSectionManager({
                   row.code ??
                   row.id,
               ),
+              labelEn: String(
+                row.fullNameEn ??
+                  row.nameEn ??
+                  row.platformNameEn ??
+                  row.contractNameEn ??
+                  row.code ??
+                  row.id,
+              ),
             })),
           ] as const;
         } catch {
@@ -262,7 +276,7 @@ export function HrSectionManager({
       ),
     [rows, search],
   );
-  if (!section) return <p role="alert">القسم المطلوب غير موجود.</p>;
+  if (!section) return <p role="alert">{locale === "en" ? "Requested section not found." : "القسم المطلوب غير موجود."}</p>;
 
   const openForm = (row: HrRow | null) => {
     setEditing(row);
@@ -287,10 +301,10 @@ export function HrSectionManager({
           : hrCatalogApi.create(section.resource, payload));
       setCreating(false);
       setEditing(null);
-      setNotice("تم حفظ البيانات بنجاح.");
+      setNotice(locale === "en" ? "Data saved successfully." : "تم حفظ البيانات بنجاح.");
       await load();
-    } catch (error) {
-      setError(errorMessage(error));
+    } catch (err) {
+      setError(errorMessage(err, locale));
     } finally {
       setBusy(false);
     }
@@ -303,14 +317,14 @@ export function HrSectionManager({
       await operation();
       setNotice(success);
       await load();
-    } catch (error) {
-      setError(errorMessage(error));
+    } catch (err) {
+      setError(errorMessage(err, locale));
     } finally {
       setBusy(false);
     }
   };
   const leaveAction = async (row: HrRow, action: string) => {
-    const comment = (await systemPrompt("أدخل التعليق أو سبب الإجراء"))?.trim();
+    const comment = (await systemPrompt(locale === "en" ? "Enter comment or reason for action" : "أدخل التعليق أو سبب الإجراء"))?.trim();
     if (!comment) return;
     const op =
       action === "force-cancel"
@@ -332,16 +346,16 @@ export function HrSectionManager({
               comment,
               String(row.rowVersion || ""),
             );
-    void run(() => op, "تم تحديث طلب الإجازة.");
+    void run(() => op, locale === "en" ? "Leave request updated." : "تم تحديث طلب الإجازة.");
   };
   const absenceAction = async (row: HrRow) => {
     const status = (
       await systemPrompt(
-        "الحالة الجديدة: UnderReview / DeadlineApproaching / Overdue / Resolved / Cancelled / Closed",
+        locale === "en" ? "New Status: UnderReview / DeadlineApproaching / Overdue / Resolved / Cancelled / Closed" : "الحالة الجديدة: UnderReview / DeadlineApproaching / Overdue / Resolved / Cancelled / Closed",
       )
     )?.trim();
     if (!status) return;
-    const reason = (await systemPrompt("سبب التغيير"))?.trim();
+    const reason = (await systemPrompt(locale === "en" ? "Reason for change" : "سبب التغيير"))?.trim();
     if (!reason) return;
     void run(
       () =>
@@ -352,11 +366,11 @@ export function HrSectionManager({
           resolutionNotes: null,
           rowVersion: row.rowVersion,
         }),
-      "تم تحديث حالة الغياب.",
+      locale === "en" ? "Absence case updated." : "تم تحديث حالة الغياب.",
     );
   };
   const statusAction = async (row: HrRow, approve: boolean) => {
-    const resolutionReason = (await systemPrompt("سبب القرار"))?.trim();
+    const resolutionReason = (await systemPrompt(locale === "en" ? "Decision reason" : "سبب القرار"))?.trim();
     if (!resolutionReason) return;
     void run(
       () =>
@@ -365,12 +379,12 @@ export function HrSectionManager({
           resolutionReason,
           rowVersion: row.rowVersion,
         }),
-      "تم تسجيل القرار.",
+      locale === "en" ? "Decision recorded." : "تم تسجيل القرار.",
     );
   };
   const setWorkTypes = async (row: HrRow) => {
     const raw =
-      (await systemPrompt("اختر أنواع العمل من محرر الربط", ""))?.trim() ?? "";
+      (await systemPrompt(locale === "en" ? "Select work types from mapping editor" : "اختر أنواع العمل من محرر الربط", ""))?.trim() ?? "";
     void run(
       () =>
         hrCatalogApi.setJobTitleWorkTypes(
@@ -382,32 +396,35 @@ export function HrSectionManager({
                 .filter(Boolean)
             : [],
         ),
-      "تم تحديث أنواع العمل المرتبطة.",
+      locale === "en" ? "Linked work types updated." : "تم تحديث أنواع العمل المرتبطة.",
     );
   };
 
+  const sectionTitle = locale === "en" ? (section.titleEn || section.title) : section.title;
+  const sectionDesc = locale === "en" ? (section.descriptionEn || section.description) : section.description;
+
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6">
       <header
         className={`flex flex-wrap items-end justify-between gap-4 ${embedded ? "rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4" : ""}`}
       >
         <div>
           {!embedded && (
-            <p className="text-sm font-bold text-[#1167c9]">الموارد البشرية</p>
+            <p className="text-sm font-bold text-[#1167c9]">{t("nav.hrManagement")}</p>
           )}
           {embedded ? (
-            <h2 className="text-xl font-black">{section.title}</h2>
+            <h2 className="text-xl font-black">{sectionTitle}</h2>
           ) : (
-            <h1 className="mt-1 text-3xl font-black">{section.title}</h1>
+            <h1 className="mt-1 text-3xl font-black">{sectionTitle}</h1>
           )}
           <p className="mt-2 text-sm text-[var(--muted)]">
-            {section.description}
+            {sectionDesc}
           </p>
         </div>
         {manageable && (
           <Button onClick={() => openForm(null)}>
             <Plus size={18} />
-            إضافة جديد
+            {t("common.add")}
           </Button>
         )}
       </header>
@@ -423,11 +440,11 @@ export function HrSectionManager({
         <Card className="p-5">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-xl font-black">
-              {editing ? "تعديل البيانات" : "إضافة سجل"}
+              {editing ? (locale === "en" ? "Edit Data" : "تعديل البيانات") : (locale === "en" ? "Add New Record" : "إضافة سجل")}
             </h2>
             <button
               type="button"
-              aria-label="إغلاق"
+              aria-label={t("common.close")}
               onClick={() => setCreating(false)}
               className="grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100"
             >
@@ -444,6 +461,7 @@ export function HrSectionManager({
                 <Field
                   key={field.key}
                   field={field}
+                  locale={locale}
                   value={
                     values[field.key] ?? (field.kind === "boolean" ? false : "")
                   }
@@ -460,11 +478,11 @@ export function HrSectionManager({
                 variant="secondary"
                 onClick={() => setCreating(false)}
               >
-                إلغاء
+                {t("common.cancel")}
               </Button>
               <Button type="submit" loading={busy}>
                 <Check size={18} />
-                حفظ
+                {t("common.save")}
               </Button>
             </div>
           </form>
@@ -474,23 +492,23 @@ export function HrSectionManager({
         <div className="flex flex-wrap gap-3 border-b border-[var(--border)] p-4">
           <label className="relative min-w-[280px] flex-1">
             <Search
-              className="absolute right-3 top-3 text-[var(--muted)]"
+              className={`absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"}`}
               size={18}
             />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث فوري في جميع البيانات"
-              className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pr-10 pl-3"
+              placeholder={locale === "en" ? "Search all fields..." : "بحث فوري في جميع البيانات"}
+              className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
             />
           </label>
           <Button variant="secondary" onClick={() => void load()}>
             <RefreshCw size={17} />
-            تحديث
+            {locale === "en" ? "Refresh" : "تحديث"}
           </Button>
         </div>
         {loading ? (
-          <div className="space-y-3 p-5" aria-label="جاري التحميل">
+          <div className="space-y-3 p-5" aria-label={t("common.loading")}>
             {[1, 2, 3].map((x) => (
               <div
                 key={x}
@@ -500,15 +518,15 @@ export function HrSectionManager({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-right text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-slate-50 text-[var(--muted)]">
                 <tr>
                   {section.columns.map((column) => (
                     <th key={column.key} className="px-4 py-3">
-                      {column.label}
+                      {locale === "en" ? (column.labelEn || column.label) : column.label}
                     </th>
                   ))}
-                  <th className="px-4 py-3">الإجراءات</th>
+                  <th className="px-4 py-3">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -516,7 +534,7 @@ export function HrSectionManager({
                   <tr key={row.id} className="border-t border-[var(--border)]">
                     {section.columns.map((column) => (
                       <td key={column.key} className="px-4 py-3 font-medium">
-                        {display(row[column.key])}
+                        {display(row[column.key], locale)}
                       </td>
                     ))}
                     <td className="px-4 py-3">
@@ -527,7 +545,7 @@ export function HrSectionManager({
                             className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[var(--border)] px-3 font-bold text-[#1167c9]"
                           >
                             <Edit3 size={15} />
-                            تعديل
+                            {t("common.edit")}
                           </button>
                         )}
                         {section.resource === "job-titles" && manageable && (
@@ -536,12 +554,12 @@ export function HrSectionManager({
                             className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[var(--border)] px-3 font-bold"
                           >
                             <Settings2 size={15} />
-                            ربط أنواع العمل
+                            {locale === "en" ? "Link Work Types" : "ربط أنواع العمل"}
                           </button>
                         )}
                         {section.workflow === "leave" && (
                           <select
-                            aria-label="إجراء طلب الإجازة"
+                            aria-label={locale === "en" ? "Leave request action" : "إجراء طلب الإجازة"}
                             defaultValue=""
                             onChange={(e) => {
                               if (e.target.value)
@@ -550,17 +568,17 @@ export function HrSectionManager({
                             }}
                             className="h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 font-bold"
                           >
-                            <option value="">اختر إجراء</option>
-                            <option value="submit">إرسال</option>
-                            <option value="activate">تفعيل</option>
-                            <option value="complete">إكمال</option>
+                            <option value="">{locale === "en" ? "Choose Action" : "اختر إجراء"}</option>
+                            <option value="submit">{locale === "en" ? "Submit" : "إرسال"}</option>
+                            <option value="activate">{locale === "en" ? "Activate" : "تفعيل"}</option>
+                            <option value="complete">{locale === "en" ? "Complete" : "إكمال"}</option>
                             {can("leave_requests.approve") && (
                               <>
-                                <option value="approve">اعتماد</option>
-                                <option value="reject">رفض</option>
-                                <option value="return">إعادة للتعديل</option>
+                                <option value="approve">{locale === "en" ? "Approve" : "اعتماد"}</option>
+                                <option value="reject">{locale === "en" ? "Reject" : "رفض"}</option>
+                                <option value="return">{locale === "en" ? "Return" : "إعادة للتعديل"}</option>
                                 <option value="force-cancel">
-                                  إلغاء إجباري
+                                  {locale === "en" ? "Force Cancel" : "إلغاء إجباري"}
                                 </option>
                               </>
                             )}
@@ -571,7 +589,7 @@ export function HrSectionManager({
                             onClick={() => absenceAction(row)}
                             className="min-h-10 rounded-lg border px-3 font-bold"
                           >
-                            تغيير المسار
+                            {locale === "en" ? "Change Path" : "تغيير المسار"}
                           </button>
                         )}
                         {section.workflow === "status" &&
@@ -581,13 +599,13 @@ export function HrSectionManager({
                                 onClick={() => statusAction(row, true)}
                                 className="min-h-10 rounded-lg bg-emerald-600 px-3 font-bold text-white"
                               >
-                                اعتماد
+                                {locale === "en" ? "Approve" : "اعتماد"}
                               </button>
                               <button
                                 onClick={() => statusAction(row, false)}
                                 className="min-h-10 rounded-lg bg-red-600 px-3 font-bold text-white"
                               >
-                                رفض
+                                {locale === "en" ? "Reject" : "رفض"}
                               </button>
                             </>
                           )}
@@ -601,7 +619,7 @@ export function HrSectionManager({
                       colSpan={section.columns.length + 1}
                       className="p-10 text-center text-[var(--muted)]"
                     >
-                      لا توجد بيانات مطابقة.
+                      {locale === "en" ? "No matching data found." : "لا توجد بيانات مطابقة."}
                     </td>
                   </tr>
                 )}

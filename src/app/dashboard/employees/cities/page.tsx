@@ -5,10 +5,12 @@ import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { hrCatalogApi, type HrRow } from "../../../../lib/hr/api";
 import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
+import { translate } from "../../../../lib/i18n";
 type Tab = "global-cities" | "operating-cities";
 const text = (v: unknown) => (v == null || v === "" ? "—" : String(v));
 export default function CitiesPage() {
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
   const [tab, setTab] = useState<Tab>("operating-cities"),
     [globals, setGlobals] = useState<HrRow[]>([]),
     [operating, setOperating] = useState<HrRow[]>([]),
@@ -28,7 +30,7 @@ export default function CitiesPage() {
       setGlobals(g);
       setOperating(o);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر تحميل بيانات المدن.");
+      setError(e instanceof Error ? e.message : (locale === "en" ? "Failed to load city data." : "تعذر تحميل بيانات المدن."));
     }
   }
   useEffect(() => {
@@ -82,7 +84,7 @@ export default function CitiesPage() {
       setEditing(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر حفظ المدينة.");
+      setError(e instanceof Error ? e.message : (locale === "en" ? "Failed to save city." : "تعذر حفظ المدينة."));
     } finally {
       setBusy(false);
     }
@@ -90,21 +92,21 @@ export default function CitiesPage() {
   const input =
     "h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 font-normal";
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-bold text-[#1167c9]">
-            الإداريون والمناديب
+            {t("nav.employees")}
           </p>
-          <h1 className="mt-1 text-3xl font-black">إعدادات المدن</h1>
+          <h1 className="mt-1 text-3xl font-black">{t("cities.title")}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            إدارة المدن العالمية ثم تفعيل المدن المستخدمة في التشغيل.
+            {locale === "en" ? "Manage global cities and activate operating locations." : "إدارة المدن العالمية ثم تفعيل المدن المستخدمة في التشغيل."}
           </p>
         </div>
         {manage && (
           <Button onClick={() => open(null)}>
             <Plus size={18} />
-            إضافة {tab === "global-cities" ? "مدينة عالمية" : "مدينة تشغيل"}
+            {t("common.add")} {tab === "global-cities" ? t("cities.globalCities") : t("cities.operatingCities")}
           </Button>
         )}
       </header>
@@ -114,8 +116,8 @@ export default function CitiesPage() {
       >
         {(
           [
-            ["operating-cities", "مدن التشغيل"],
-            ["global-cities", "المدن العالمية"],
+            ["operating-cities", t("cities.operatingCities")],
+            ["global-cities", t("cities.globalCities")],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -144,12 +146,12 @@ export default function CitiesPage() {
         <Card className="p-5">
           <div className="mb-4 flex justify-between">
             <h2 className="text-xl font-black">
-              {editing ? "تعديل" : "إضافة"}
+              {editing ? t("common.edit") : t("common.add")}
             </h2>
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              aria-label="إغلاق"
+              aria-label={t("common.close")}
               className="grid h-11 w-11 place-items-center rounded-xl"
             >
               <X />
@@ -163,55 +165,55 @@ export default function CitiesPage() {
               <>
                 <Field
                   name="code"
-                  label="الرمز"
+                  label={locale === "en" ? "Code" : "الرمز"}
                   value={editing?.code}
                   required
                 />
                 <Field
                   name="nameAr"
-                  label="الاسم العربي"
+                  label={locale === "en" ? "Arabic Name" : "الاسم العربي"}
                   value={editing?.nameAr}
                   required
                 />
                 <Field
                   name="nameEn"
-                  label="الاسم الإنجليزي"
+                  label={locale === "en" ? "English Name" : "الاسم الإنجليزي"}
                   value={editing?.nameEn}
                   required
                 />
                 <Field
                   name="regionAr"
-                  label="المنطقة بالعربية"
+                  label={locale === "en" ? "Arabic Region" : "المنطقة بالعربية"}
                   value={editing?.regionAr}
                   required
                 />
                 <Field
                   name="regionEn"
-                  label="المنطقة بالإنجليزية"
+                  label={locale === "en" ? "English Region" : "المنطقة بالإنجليزية"}
                   value={editing?.regionEn}
                   required
                 />
                 <Field
                   name="countryCode"
-                  label="رمز الدولة"
+                  label={locale === "en" ? "Country Code" : "رمز الدولة"}
                   value={editing?.countryCode}
                   required
                 />
                 <Field
                   name="latitude"
-                  label="خط العرض"
+                  label={locale === "en" ? "Latitude" : "خط العرض"}
                   value={editing?.latitude}
                   type="number"
                 />
                 <Field
                   name="longitude"
-                  label="خط الطول"
+                  label={locale === "en" ? "Longitude" : "خط الطول"}
                   value={editing?.longitude}
                   type="number"
                 />
                 <Field
                   name="displayOrder"
-                  label="ترتيب العرض"
+                  label={locale === "en" ? "Display Order" : "ترتيب العرض"}
                   value={editing?.displayOrder ?? 0}
                   type="number"
                   required
@@ -220,38 +222,38 @@ export default function CitiesPage() {
             ) : (
               <>
                 <label className="grid gap-2 font-bold">
-                  المدينة العالمية
+                  {t("cities.globalCities")}
                   <select
                     name="globalCityId"
                     defaultValue={text(editing?.globalCityId).replace("—", "")}
                     required
                     className={input}
                   >
-                    <option value="">اختر مدينة</option>
+                    <option value="">{locale === "en" ? "Select City" : "اختر مدينة"}</option>
                     {globals.map((city) => (
                       <option key={city.id} value={city.id}>
-                        {text(city.nameAr)} — {text(city.code)}
+                        {text(locale === "en" ? city.nameEn || city.nameAr : city.nameAr)} — {text(city.code)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <Field
                   name="enabledFrom"
-                  label="تاريخ التفعيل"
+                  label={locale === "en" ? "Enabled Date" : "تاريخ التفعيل"}
                   value={editing?.enabledFrom}
                   type="date"
                   required
                 />
                 <Field
                   name="disabledAt"
-                  label="تاريخ التعطيل"
+                  label={locale === "en" ? "Disabled Date" : "تاريخ التعطيل"}
                   value={editing?.disabledAt}
                   type="date"
                 />
               </>
             )}
             <label className="grid gap-2 font-bold">
-              الحالة
+              {t("common.status")}
               <select
                 name="status"
                 required
@@ -260,13 +262,13 @@ export default function CitiesPage() {
                 }
                 className={input}
               >
-                <option value="Active">نشط</option>
-                <option value="Inactive">غير نشط</option>
+                <option value="Active">{t("common.active")}</option>
+                <option value="Inactive">{t("common.inactive")}</option>
               </select>
             </label>
             <div className="col-span-full flex justify-end">
               <Button type="submit" loading={busy}>
-                حفظ
+                {t("common.save")}
               </Button>
             </div>
           </form>
@@ -276,14 +278,14 @@ export default function CitiesPage() {
         <div className="border-b border-[var(--border)] p-4">
           <label className="relative block">
             <Search
-              className="absolute right-3 top-3 text-[var(--muted)]"
+              className={`absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"}`}
               size={18}
             />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث فوري باسم المدينة أو الرمز أو المنطقة"
-              className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pr-10 pl-3"
+              placeholder={t("cities.searchPlaceholder")}
+              className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
             />
           </label>
         </div>
@@ -296,7 +298,7 @@ export default function CitiesPage() {
               <div className="flex items-start justify-between gap-3">
                 <span className="flex items-center gap-2 font-black">
                   <MapPin size={18} className="text-[#1167c9]" />
-                  {text(city.nameAr || city.code)}
+                  {text(locale === "en" ? city.nameEn || city.nameAr || city.code : city.nameAr || city.code)}
                 </span>
                 {manage && (
                   <button
@@ -304,21 +306,21 @@ export default function CitiesPage() {
                     className="inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 font-bold text-[#1167c9]"
                   >
                     <Edit3 size={15} />
-                    تعديل
+                    {t("common.edit")}
                   </button>
                 )}
               </div>
               <p className="mt-2 text-sm text-[var(--muted)]">
-                {text(city.nameEn)} · {text(city.code)}
+                {text(locale === "en" ? city.nameAr : city.nameEn)} · {text(city.code)}
               </p>
               <span className="mt-4 inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-                {text(city.status)}
+                {city.status === "Active" ? t("common.active") : city.status === "Inactive" ? t("common.inactive") : text(city.status)}
               </span>
             </article>
           ))}
           {!filtered.length && (
             <p className="col-span-full p-8 text-center text-[var(--muted)]">
-              لا توجد مدن مطابقة.
+              {locale === "en" ? "No matching cities found." : "لا توجد مدن مطابقة."}
             </p>
           )}
         </div>

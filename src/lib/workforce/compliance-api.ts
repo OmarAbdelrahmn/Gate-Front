@@ -1,4 +1,4 @@
-import { authDownload, authFetch } from "../auth/api";
+import { authDownload, authFetch, authPreviewBlob } from "../auth/api";
 
 export type ExpiringRecord = {
   id: string;
@@ -180,6 +180,9 @@ export function getEmployeeDocumentVersions(employeeId: string, documentId: stri
 }
 export function downloadEmployeeDocument(employeeId: string, documentId: string, versionId?: string) {
   return authDownload(`/api/employees/${encodeURIComponent(employeeId)}/documents/${encodeURIComponent(documentId)}/download${versionId ? `?versionId=${encodeURIComponent(versionId)}` : ""}`);
+}
+export function previewEmployeeDocument(employeeId: string, documentId: string, versionId?: string) {
+  return authPreviewBlob(`/api/employees/${encodeURIComponent(employeeId)}/documents/${encodeURIComponent(documentId)}/preview${versionId ? `?versionId=${encodeURIComponent(versionId)}` : ""}`);
 }
 export function archiveEmployeeDocument(employeeId: string, documentId: string, reason: string, rowVersion: string) {
   return authFetch<void>(`/api/employees/${encodeURIComponent(employeeId)}/documents/${encodeURIComponent(documentId)}/archive`, { method: "PATCH", body: JSON.stringify({ reason, rowVersion }) });
