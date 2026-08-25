@@ -11,6 +11,7 @@ import {
   CalendarDays,
   ContactRound,
   FileText,
+  History,
   Pencil,
   Plus,
   ShieldCheck,
@@ -39,6 +40,7 @@ import { toast } from "../../../../components/ui/Toast";
 import { EmployeeComplianceTabs } from "../../../../components/employees/EmployeeComplianceTabs";
 import { EmployeeDocumentsInsurance } from "../../../../components/employees/EmployeeDocumentsInsurance";
 import { EmployeePlatformAccounts } from "../../../../components/employees/EmployeePlatformAccounts";
+import { EmployeeRiderHistoryModal } from "../../../../components/employees/EmployeeRiderHistoryModal";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
   SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
@@ -210,6 +212,7 @@ export default function EmployeeDetailsPage({
   const [cities, setCities] = useState<HrRow[]>([]);
   const [error, setError] = useState("");
   const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
+  const [openRiderHistoryModal, setOpenRiderHistoryModal] = useState(false);
 
   // Housing Assignment Modal State
   const [openHousingModal, setOpenHousingModal] = useState(false);
@@ -675,6 +678,12 @@ export default function EmployeeDetailsPage({
                 : "تسكين بالسكن"}
             </Button>
           )}
+          {can("platform_assignments.read") && (
+            <Button variant="secondary" onClick={() => setOpenRiderHistoryModal(true)}>
+              <History size={17} />
+              {locale === "en" ? "Rider Platform History" : "سجل تشغيل المنصات"}
+            </Button>
+          )}
           <Link href={`/dashboard/employees/${employee.id}/actions`}>
             <Button>{locale === "en" ? "Employee Actions" : "إجراءات الموظف"}</Button>
           </Link>
@@ -832,6 +841,18 @@ export default function EmployeeDetailsPage({
                 : "لا يوجد ملف رايدر مرتبط بهذا الموظف."}
             </p>
           )}
+          {can("platform_assignments.read") && (
+            <div className="mt-4 pt-3 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setOpenRiderHistoryModal(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1167c9] hover:underline"
+              >
+                <History size={14} />
+                {locale === "en" ? "View Full Platform History" : "عرض سجل تشغيل المنصات"}
+              </button>
+            </div>
+          )}
         </Card>
 
         <Card className="p-5">
@@ -847,6 +868,7 @@ export default function EmployeeDetailsPage({
       <EmployeePlatformAccounts
         employeeId={employee.id}
         riderProfileId={rider?.id ?? null}
+        onOpenHistoryModal={() => setOpenRiderHistoryModal(true)}
       />
 
       <EmployeeComplianceTabs
@@ -1093,6 +1115,15 @@ export default function EmployeeDetailsPage({
           </div>
         </div>
       )}
+
+      {/* Rider Platform History Modal Popup */}
+      <EmployeeRiderHistoryModal
+        isOpen={openRiderHistoryModal}
+        onClose={() => setOpenRiderHistoryModal(false)}
+        employeeId={employee.id}
+        riderProfileId={rider?.id ?? employee.riderProfileId ?? null}
+        riderName={displayName || undefined}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Layers, Server, ExternalLink, RefreshCw } from "lucide-react";
+import { Layers, Server, ExternalLink, RefreshCw, History } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
@@ -33,9 +33,11 @@ interface PlatformAccountDisplayItem {
 export function EmployeePlatformAccounts({
   employeeId,
   riderProfileId,
+  onOpenHistoryModal,
 }: {
   employeeId: string;
   riderProfileId: string | null;
+  onOpenHistoryModal?: () => void;
 }) {
   const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
@@ -229,14 +231,36 @@ export function EmployeePlatformAccounts({
           </div>
         </div>
 
-        <button
-          onClick={loadPlatformAccounts}
-          disabled={loading}
-          className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-        >
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-          {locale === "en" ? "Refresh" : "تحديث"}
-        </button>
+        <div className="flex items-center gap-2">
+          {can("platform_assignments.read") && (
+            onOpenHistoryModal ? (
+              <button
+                type="button"
+                onClick={onOpenHistoryModal}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50/80 px-2.5 py-1 text-xs font-bold text-[#1167c9] hover:bg-blue-100 transition-colors"
+              >
+                <History size={13} />
+                {locale === "en" ? "Full Platform History" : "سجل تشغيل المنصات"}
+              </button>
+            ) : (
+              <Link
+                href={`/dashboard/platforms/rider-history?riderId=${targetRiderId}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50/80 px-2.5 py-1 text-xs font-bold text-[#1167c9] hover:bg-blue-100 transition-colors"
+              >
+                <History size={13} />
+                {locale === "en" ? "Full Platform History" : "سجل تشغيل المنصات"}
+              </Link>
+            )
+          )}
+          <button
+            onClick={loadPlatformAccounts}
+            disabled={loading}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            {locale === "en" ? "Refresh" : "تحديث"}
+          </button>
+        </div>
       </div>
 
       {loading ? (

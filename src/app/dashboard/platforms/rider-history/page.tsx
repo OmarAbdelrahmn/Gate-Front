@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
@@ -24,9 +25,15 @@ import {
   Clock,
 } from "lucide-react";
 
-export default function RiderPlatformHistoryPage() {
+function RiderPlatformHistoryContent() {
   const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
+
+  const searchParams = useSearchParams();
+  const queryRiderId =
+    searchParams.get("riderId") ||
+    searchParams.get("riderProfileId") ||
+    searchParams.get("employeeId");
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedRiderId, setSelectedRiderId] = useState<string>("");
@@ -34,25 +41,7 @@ export default function RiderPlatformHistoryPage() {
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  useEffect(() => {
-    if (!can("platform_assignments.read")) return;
-
-    const fetchRiders = async () => {
-      setLoadingEmployees(true);
-      try {
-        const empList = await listEmployees();
-        setEmployees(empList);
-      } catch (err) {
-        console.error("Failed to load riders list", err);
-      } finally {
-        setLoadingEmployees(false);
-      }
-    };
-
-    fetchRiders();
-  }, []);
-
-  const handleSelectRider = async (riderId: string) => {
+  const fetchHistoryForRider = async (riderId: string) => {
     setSelectedRiderId(riderId);
     if (!riderId) {
       setHistoryData(null);
@@ -69,6 +58,39 @@ export default function RiderPlatformHistoryPage() {
     } finally {
       setLoadingHistory(false);
     }
+  };
+
+  useEffect(() => {
+    if (!can("platform_assignments.read")) return;
+
+    const fetchRiders = async () => {
+      setLoadingEmployees(true);
+      try {
+        const empList = await listEmployees();
+        setEmployees(empList);
+
+        if (queryRiderId) {
+          const match = empList.find(
+            (e) =>
+              e.riderProfileId === queryRiderId ||
+              e.id === queryRiderId ||
+              e.rider?.id === queryRiderId
+          );
+          const targetId = match ? match.riderProfileId || match.id : queryRiderId;
+          fetchHistoryForRider(targetId);
+        }
+      } catch (err) {
+        console.error("Failed to load riders list", err);
+      } finally {
+        setLoadingEmployees(false);
+      }
+    };
+
+    fetchRiders();
+  }, [queryRiderId]);
+
+  const handleSelectRider = (riderId: string) => {
+    fetchHistoryForRider(riderId);
   };
 
   if (!can("platform_assignments.read")) {
@@ -309,5 +331,13 @@ export default function RiderPlatformHistoryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function RiderPlatformHistoryPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-sm text-[var(--muted)]">جاري تحميل السجل...</div>}>
+      <RiderPlatformHistoryContent />
+    </Suspense>
   );
 }

@@ -275,7 +275,7 @@ export default function EmployeesPage() {
                                     </th>
                                     <th className="px-5 py-4 relative">
                                         <div className="flex items-center gap-2">
-                                            <span>{locale === "en" ? "Relationship & Sponsor" : "العلاقة والكفيل"}</span>
+                                            <span>{locale === "en" ? "Relationship & Sponsor" : "الكفيل"}</span>
                                             <div className="relative inline-block text-right">
                                                 <button
                                                     ref={filterBtnRef}
