@@ -11,14 +11,17 @@ import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 
 const statusLabel: Record<string, { ar: string; en: string }> = {
-    Active: { ar: "نشط", en: "Active" },
-    Suspended: { ar: "موقوف", en: "Suspended" },
-    Archived: { ar: "مؤرشف", en: "Archived" },
-    Inactive: { ar: "غير نشط", en: "Inactive" },
     Draft: { ar: "مسودة", en: "Draft" },
     Onboarding: { ar: "قيد التهيئة", en: "Onboarding" },
+    Active: { ar: "نشط", en: "Active" },
+    Suspended: { ar: "موقوف", en: "Suspended" },
     OnLeave: { ar: "في إجازة", en: "On Leave" },
-    Terminated: { ar: "منتهي", en: "Terminated" },
+    Terminated: { ar: "منتهي الخدمة", en: "Terminated" },
+    Archived: { ar: "مؤرشف", en: "Archived" },
+    Fleeing: { ar: "هروب / انقطاع", en: "Fleeing" },
+    Accident: { ar: "حادث", en: "Accident" },
+    Sick: { ar: "إجازة مرضية", en: "Sick" },
+    Inactive: { ar: "غير نشط", en: "Inactive" },
 };
 
 const relationshipLabel: Record<string, { ar: string; en: string }> = {
@@ -137,8 +140,10 @@ export default function EmployeesPage() {
                 const cityStr = getCityDisplay(item, cities, locale);
                 const housingStr = (item.housingNameAr || item.housingNameEn || (empRecord.housingNameAr as string) || (empRecord.housingNameEn as string) || (empRecord.housingName as string) || "") as string;
                 const nat = item.nationality || "";
+                const platformName = item.currentWorkPlatform?.nameAr || item.currentWorkPlatform?.nameEn || item.currentWorkPlatform?.code || "";
+                const platformAccountId = item.currentWorkPlatform?.externalAccountId || item.currentWorkPlatform?.platformRiderAccountId || "";
 
-                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${housingStr} ${nat}`
+                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${housingStr} ${nat} ${platformName} ${platformAccountId}`
                     .toLowerCase()
                     .includes(search.toLowerCase());
             }),
@@ -179,8 +184,8 @@ export default function EmployeesPage() {
                             onChange={(event) => setSearch(event.target.value)}
                             placeholder={
                                 locale === "en"
-                                    ? "Search by name, Iqama #, sponsor, nationality, or phone..."
-                                    : "ابحث بالاسم، رقم الإقامة، الكفيل، الجنسية، الجوال..."
+                                    ? "Search by name, Iqama #, platform, sponsor, nationality, or phone..."
+                                    : "ابحث بالاسم، رقم الإقامة، المنصة، الكفيل، الجنسية، الجوال..."
                             }
                             className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-3 text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
                         />
@@ -201,7 +206,7 @@ export default function EmployeesPage() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className={`min-w-[1050px] w-full ${locale === "en" ? "text-left" : "text-right"}`}>
+                        <table className={`min-w-[1180px] w-full ${locale === "en" ? "text-left" : "text-right"}`}>
                             <thead className="bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                                 <tr>
                                     <th className="px-5 py-4">
@@ -218,6 +223,9 @@ export default function EmployeesPage() {
                                     </th>
                                     <th className="px-5 py-4">
                                         {locale === "en" ? "Operational Role" : "الدور التشغيلي"}
+                                    </th>
+                                    <th className="px-5 py-4">
+                                        {locale === "en" ? "Work Platform" : "منصة العمل"}
                                     </th>
                                     <th className="px-5 py-4">
                                         {locale === "en" ? "City" : "المدينة"}
@@ -322,6 +330,22 @@ export default function EmployeesPage() {
                                                 )}
                                             </td>
                                             <td className="px-5 py-4">
+                                                {employee.currentWorkPlatform ? (
+                                                    <div>
+                                                        <div className="font-bold text-slate-700">
+                                                            {employee.currentWorkPlatform.nameAr || employee.currentWorkPlatform.nameEn || employee.currentWorkPlatform.code || "—"}
+                                                        </div>
+                                                        {(employee.currentWorkPlatform.externalAccountId || employee.currentWorkPlatform.platformRiderAccountId) && (
+                                                            <div className="mt-0.5 text-xs font-mono font-semibold text-[#1167c9]">
+                                                                {employee.currentWorkPlatform.externalAccountId || employee.currentWorkPlatform.platformRiderAccountId}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[var(--muted)] font-bold">—</span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-4">
                                                 <div className="font-bold text-slate-700">{city}</div>
                                                 {housingName && (
                                                     <div className="mt-0.5 text-xs font-semibold text-[var(--muted)]">
@@ -353,7 +377,7 @@ export default function EmployeesPage() {
                                 {!results.length && (
                                     <tr>
                                         <td
-                                            colSpan={8}
+                                            colSpan={9}
                                             className="p-10 text-center text-sm font-bold text-[var(--muted)]"
                                         >
                                             {locale === "en"

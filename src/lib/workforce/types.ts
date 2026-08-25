@@ -1,3 +1,24 @@
+export type EmployeeStatus =
+  | "Draft"
+  | "Onboarding"
+  | "Active"
+  | "Suspended"
+  | "OnLeave"
+  | "Terminated"
+  | "Archived"
+  | "Fleeing"
+  | "Accident"
+  | "Sick";
+
+export type CurrentWorkPlatform = {
+  id: string;
+  code?: string | null;
+  nameAr?: string | null;
+  nameEn?: string | null;
+  platformRiderAccountId?: string | null;
+  externalAccountId?: string | null;
+};
+
 export type Employee = {
   id: string;
   iqamaNo: string | null;
@@ -11,7 +32,7 @@ export type Employee = {
   email?: string | null;
   isEmployee: boolean;
   engagementType: "SponsoredInternal" | "OutsideRider" | string;
-  status: string;
+  status: EmployeeStatus | string;
   hireDate?: string | null;
   workingForMeAs?: string | null;
   residencyProfession?: string | null;
@@ -41,6 +62,7 @@ export type Employee = {
     rowVersion?: string | null;
   } | null;
   riderProfileId?: string | null;
+  currentWorkPlatform?: CurrentWorkPlatform | null;
   rowVersion: string;
   employeeNumber?: string;
   relationshipType?: string | null;
@@ -78,7 +100,7 @@ export type Rider = {
   fullNameAr: string;
   fullNameEn: string | null;
   engagementType: string;
-  status: string;
+  status: EmployeeStatus | string;
   tShirtSize: string | null;
   operationalNotes: string | null;
   rowVersion: string;
@@ -143,7 +165,7 @@ export type RiderInput = {
   tShirtSize?: string | null;
   operationalNotes?: string | null;
   rowVersion?: string | null;
-  status?: string;
+  status?: EmployeeStatus | string;
   riderStartDate?: string | null;
   riderEndDate?: string | null;
   preferredCityId?: string | null;
@@ -168,7 +190,7 @@ export type EmployeeUpsertPayload = {
   emergencyContactPhone: string | null;
   isEmployee: boolean;
   engagementType: "SponsoredInternal" | "OutsideRider" | string;
-  status: string;
+  status: EmployeeStatus | string;
   statusReason: string | null;
   hireDate: string | null;
   operationalWorkTypeId: string | null;
@@ -195,7 +217,7 @@ export type UpdateRiderProfileRequest = {
 };
 
 export type ChangeEmployeeStatusRequest = {
-  status: string;
+  status: EmployeeStatus | string;
   effectiveDate: string;
   reason: string;
 };

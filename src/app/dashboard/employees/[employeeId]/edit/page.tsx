@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { EmployeeForm } from "../../../../../components/employees/EmployeeForm";
-import { getEmployee, updateEmployee } from "../../../../../lib/workforce/api";
-import type { EmployeeDetails } from "../../../../../lib/workforce/types";
+import { archiveEmployee, getEmployee, updateEmployee } from "../../../../../lib/workforce/api";
+import type { EmployeeDetails, UpdateEmployeeRequest } from "../../../../../lib/workforce/types";
 
 export default function EditEmployeePage({
   params,
 }: {
   params: Promise<{ employeeId: string }>;
 }) {
+  const router = useRouter();
   const [id, setId] = useState("");
   const [details, setDetails] = useState<EmployeeDetails>();
   const [error, setError] = useState("");
@@ -53,12 +55,20 @@ export default function EditEmployeePage({
       </Link>
       <h1 className="text-3xl font-black">تعديل الإداري أو المندوب</h1>
       <EmployeeForm
-        key={details.employee.id}
+        key={`${details.employee.id}_${details.employee.rowVersion}_${details.rider?.rowVersion ?? ""}`}
         initial={initial}
         submitLabel="حفظ التعديلات"
-        onSave={async (payload) =>
-          setDetails(await updateEmployee(id, payload as never))
-        }
+        onSave={async (payload) => {
+          if (payload.status === "Archived") {
+            await archiveEmployee(id, {
+              reason: String(payload.statusReason ?? "أرشفة عبر نموذج التعديل"),
+              rowVersion: details.employee.rowVersion,
+            });
+          } else {
+            await updateEmployee(id, payload as UpdateEmployeeRequest);
+          }
+          router.push(`/dashboard/employees/${id}`);
+        }}
       />
     </div>
   );

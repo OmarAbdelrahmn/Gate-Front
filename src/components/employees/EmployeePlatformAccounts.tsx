@@ -178,48 +178,48 @@ export function EmployeePlatformAccounts({
       case "Active":
       case "Assigned":
         return (
-          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
+          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0.5">
             {locale === "en" ? "Active" : "نشط"}
           </Badge>
         );
       case "Available":
         return (
-          <Badge className="bg-blue-50 text-[#1167c9] border-blue-200">
+          <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 text-[10px] px-1.5 py-0.5">
             {locale === "en" ? "Available" : "متاح"}
           </Badge>
         );
       case "Suspended":
         return (
-          <Badge className="bg-amber-50 text-amber-700 border-amber-200">
+          <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0.5">
             {locale === "en" ? "Suspended" : "موقوف"}
           </Badge>
         );
       case "Ended":
       case "Retired":
         return (
-          <Badge className="bg-slate-100 text-slate-600 border-slate-300">
+          <Badge className="bg-slate-100 text-slate-600 border-slate-300 text-[10px] px-1.5 py-0.5">
             {locale === "en" ? "Ended" : "منتهي"}
           </Badge>
         );
       default:
-        return <Badge>{status}</Badge>;
+        return <Badge className="text-[10px] px-1.5 py-0.5">{status}</Badge>;
     }
   };
 
   return (
-    <Card className="p-5 sm:p-6 space-y-4">
-      <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-[#1167c9]">
-            <Server size={20} />
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="grid size-8 place-items-center rounded-lg bg-blue-50 text-[#1167c9]">
+            <Server size={18} />
           </span>
           <div>
-            <h2 className="text-lg font-black text-slate-900">
+            <h2 className="text-base font-black text-slate-900">
               {locale === "en" ? "Platform Accounts & Working IDs" : "حسابات المنصات وأرقام العمل"}
             </h2>
-            <p className="text-xs text-[var(--muted)]">
+            <p className="text-[11px] text-[var(--muted)]">
               {locale === "en"
-                ? "Platform accounts registered or assigned to this employee (e.g. HungerStation, Jahez)"
+                ? "Platform accounts registered or assigned to this employee"
                 : "حسابات المنصات المشترك بها أو المعينة للموظف (مثل هنجرستيشن، جاهز، إلخ)"}
             </p>
           </div>
@@ -228,91 +228,86 @@ export function EmployeePlatformAccounts({
         <button
           onClick={loadPlatformAccounts}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+          className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
         >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           {locale === "en" ? "Refresh" : "تحديث"}
         </button>
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-sm text-[var(--muted)]">
+        <div className="py-4 text-center text-xs text-[var(--muted)]">
           {locale === "en" ? "Loading platform accounts..." : "جارٍ تحميل حسابات المنصات..."}
         </div>
       ) : error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
           {error}
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--muted)]">
-          <Layers className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+        <div className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--muted)]">
+          <Layers className="mx-auto mb-1 h-6 w-6 text-slate-300" />
           <p className="font-bold">
             {locale === "en"
               ? "No platform accounts linked to this employee."
               : "لا توجد حسابات منصات مرتبطة بهذا الموظف."}
           </p>
-          <p className="mt-1 text-xs text-slate-400">
-            {locale === "en"
-              ? "Accounts created or assigned in Platform Management will appear here."
-              : "ستظهر الحسابات المنشأة أو المعينة في إدارة المنصات هنا تلقائياً."}
-          </p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {items.map((item) => (
             <div
               key={`${item.id}-${item.platformId}`}
-              className="relative flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm hover:border-[#1167c9]/40 transition-all"
+              className="flex flex-col justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xs hover:border-[#1167c9]/40 transition-all text-xs"
             >
-              <div>
-                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-8 place-items-center rounded-lg bg-blue-100/60 font-bold text-[#1167c9] text-xs">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-blue-100/60 font-black text-[#1167c9] text-[10px]">
                       {item.platformCode ? item.platformCode.slice(0, 3).toUpperCase() : "PF"}
                     </span>
-                    <div>
-                      <h3 className="font-black text-slate-900 text-sm">{item.platformName}</h3>
-                      <p className="text-[11px] font-mono text-slate-400">{item.accountCode}</p>
+                    <div className="truncate">
+                      <h3 className="font-black text-slate-900 text-xs truncate">{item.platformName}</h3>
+                      <p className="text-[10px] font-mono text-slate-400 truncate">{item.accountCode}</p>
                     </div>
                   </div>
-                  {renderStatusBadge(item.status)}
+                  <div className="shrink-0">{renderStatusBadge(item.status)}</div>
                 </div>
 
-                <div className="mt-3 space-y-2 text-xs">
-                  {/* Working ID / External ID */}
-                  <div className="rounded-lg bg-blue-50/60 p-2.5 border border-blue-100">
-                    <span className="block text-[10px] font-bold text-[#1167c9] uppercase tracking-wider">
-                      {locale === "en" ? "Working ID / Account ID:" : "رقم العمل / المعرف الخارجي:"}
-                    </span>
-                    <span className="font-mono text-sm font-black text-slate-900 block mt-0.5">
-                      {item.workingId}
-                    </span>
-                  </div>
+                {/* Compact Working ID Banner */}
+                <div className="flex items-center justify-between rounded-md bg-blue-50/60 px-2.5 py-1.5 border border-blue-100/80">
+                  <span className="text-[10px] font-bold text-[#1167c9]">
+                    {locale === "en" ? "Working ID:" : "رقم العمل / المعرف:"}
+                  </span>
+                  <span className="font-mono text-xs font-black text-slate-900">
+                    {item.workingId}
+                  </span>
+                </div>
 
+                <div className="space-y-1 text-[11px] text-slate-600">
                   {item.userName && (
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="text-slate-400">{locale === "en" ? "Username:" : "اسم المستخدم:"}</span>
-                      <span className="font-mono font-medium">{item.userName}</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">{locale === "en" ? "User:" : "المستخدم:"}</span>
+                      <span className="font-mono font-medium truncate max-w-[120px]">{item.userName}</span>
                     </div>
                   )}
 
                   {item.ownerName && (
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="text-slate-400">{locale === "en" ? "Account Owner:" : "صاحب الحساب:"}</span>
-                      <span className="font-medium">{item.ownerName}</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">{locale === "en" ? "Owner:" : "صاحب الحساب:"}</span>
+                      <span className="font-medium truncate max-w-[120px]">{item.ownerName}</span>
                     </div>
                   )}
 
                   {item.operatingCity && (
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="text-slate-400">{locale === "en" ? "Operating City:" : "مدينة التشغيل:"}</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">{locale === "en" ? "City:" : "المدينة:"}</span>
                       <span className="font-medium">{item.operatingCity}</span>
                     </div>
                   )}
 
                   {item.effectiveFrom && (
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="text-slate-400">{locale === "en" ? "Assigned From:" : "معين من:"}</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">{locale === "en" ? "Assigned:" : "معين من:"}</span>
                       <span className="font-medium">{item.effectiveFrom}</span>
                     </div>
                   )}
@@ -320,13 +315,13 @@ export function EmployeePlatformAccounts({
               </div>
 
               {can("platform_accounts.read") && (
-                <div className="mt-4 border-t border-slate-100 pt-2.5 text-end">
+                <div className="mt-2 border-t border-slate-100 pt-1.5 text-end">
                   <Link
                     href={`/dashboard/platforms/accounts/${item.id}`}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-[#1167c9] hover:underline"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1167c9] hover:underline"
                   >
-                    {locale === "en" ? "View Account Details" : "عرض تفاصيل الحساب"}
-                    <ExternalLink size={13} />
+                    {locale === "en" ? "View Details" : "عرض تفاصيل الحساب"}
+                    <ExternalLink size={11} />
                   </Link>
                 </div>
               )}

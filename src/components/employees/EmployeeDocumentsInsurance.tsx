@@ -46,9 +46,11 @@ import { SearchableSelect } from "../ui/SearchableSelect";
 export function EmployeeDocumentsInsurance({
   employeeId,
   riderProfileId,
+  activeTab = "all",
 }: {
   employeeId: string;
   riderProfileId?: string | null;
+  activeTab?: "docs" | "insurance" | "all";
 }) {
   const { can, locale } = useAuth();
   const [docs, setDocs] = useState<EmployeeDocument[]>([]);
@@ -426,7 +428,8 @@ export function EmployeeDocumentsInsurance({
           {error}
         </p>
       )}
-      <Card className="p-5">
+      {(activeTab === "all" || activeTab === "docs") && (
+        <Card className={`p-5 ${activeTab === "docs" ? "xl:col-span-2" : ""}`}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-xl font-black">
             <FilePlus size={20} />
@@ -788,7 +791,9 @@ export function EmployeeDocumentsInsurance({
           })}
         </div>
       </Card>
-      <Card className="p-5">
+      )}
+      {(activeTab === "all" || activeTab === "insurance") && (
+        <Card className={`p-5 ${activeTab === "insurance" ? "xl:col-span-2" : ""}`}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-xl font-black">
             <ShieldCheck size={20} />
@@ -1004,6 +1009,7 @@ export function EmployeeDocumentsInsurance({
           })}
         </div>
       </Card>
+      )}
       {previewModalData && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"

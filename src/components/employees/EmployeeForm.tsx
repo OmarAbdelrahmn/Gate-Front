@@ -124,15 +124,16 @@ export function EmployeeForm({
       rider: effectiveIsEmployee
         ? null
         : {
-            tShirtSize: blank(form.get("tShirtSize")),
-            operationalNotes: blank(form.get("operationalNotes")),
-            rowVersion: initial.riderRowVersion ?? null,
+            tShirtSize: blank(form.get("tShirtSize")) ?? (initial.tShirtSize ? String(initial.tShirtSize) : null),
+            operationalNotes: blank(form.get("operationalNotes")) ?? (initial.operationalNotes ? String(initial.operationalNotes) : null),
+            rowVersion: initial.riderRowVersion ?? (initial.rider as { rowVersion?: string })?.rowVersion ?? null,
           },
     };
     allFields.forEach(([key]) => (payload[key] = blank(form.get(key))));
     payload.isEmployee = effectiveIsEmployee;
     payload.engagementType = engagement;
     payload.status = status;
+    payload.statusReason = blank(form.get("statusReason"));
     payload.gender = blank(form.get("gender"));
     payload.maritalStatus = blank(form.get("maritalStatus"));
     payload.notes = blank(form.get("notes"));
@@ -151,21 +152,29 @@ export function EmployeeForm({
     }
 
     const iqama = String(payload.iqamaNo ?? "");
-    if (!iqama || !/^\d{10}$/.test(iqama)) {
+    if (status === "Active") {
+      if (!iqama || !/^\d{10}$/.test(iqama)) {
+        const msg = locale === "en"
+          ? "For Active status, a valid 10-digit Iqama / National ID number is required."
+          : "لحالة نشط، رقم الإقامة / الهوية الوطنية مكوّن من 10 أرقام مطلوب.";
+        setError(msg);
+        toast.error(locale === "en" ? "Validation Error" : "خطأ في رقم الإقامة", msg);
+        return;
+      }
+      if (engagement === "SponsoredInternal" && !payload.sponsorId) {
+        const msg = locale === "en"
+          ? "Sponsored internal employees require selecting a sponsor when Active."
+          : "الموظف على كفالة الشركة يتطلب اختيار كفيل عندما يكون نشطاً.";
+        setError(msg);
+        toast.error(locale === "en" ? "Validation Error" : "خطأ في التحديد", msg);
+        return;
+      }
+    } else if (iqama && !/^\d{10}$/.test(iqama)) {
       const msg = locale === "en"
-        ? "A valid 10-digit Iqama / National ID number is required."
-        : "رقم الإقامة / الهوية الوطنية مكوّن من 10 أرقام مطلوب.";
+        ? "Iqama / National ID number must be exactly 10 digits."
+        : "رقم الإقامة / الهوية الوطنية يجب أن يكون 10 أرقام بالضبط.";
       setError(msg);
       toast.error(locale === "en" ? "Validation Error" : "خطأ في رقم الإقامة", msg);
-      return;
-    }
-
-    if (engagement === "SponsoredInternal" && !payload.sponsorId) {
-      const msg = locale === "en"
-        ? "Sponsored internal employees require selecting a sponsor."
-        : "الموظف على كفالة الشركة يتطلب اختيار كفيل.";
-      setError(msg);
-      toast.error(locale === "en" ? "Validation Error" : "خطأ في التحديد", msg);
       return;
     }
 
@@ -189,12 +198,19 @@ export function EmployeeForm({
         locale === "en" ? "Employee details updated successfully." : "تم التحديث بنجاح"
       );
     } catch (err: any) {
-      const msg =
-        err?.message ||
-        (locale === "en"
+      let msg = err?.message;
+      if (err?.status === 409 || String(err?.message ?? "").includes("409") || String(err?.message ?? "").includes("conflict")) {
+        msg = locale === "en"
+          ? "Role transition failed (409 Conflict): Rider has an active platform or vehicle assignment."
+          : "تعذر تحويل المندوب إلى موظف إداري لوجود منصة أو مركبة مسندة إليه حالياً. يجب إلغاء الإسنادات أولاً. (409)";
+      }
+      if (!msg) {
+        msg = locale === "en"
           ? "Failed to save data. Check required fields and values."
-          : "تعذر حفظ البيانات. راجع الحقول المطلوبة والقيم المختارة.");
+          : "تعذر حفظ البيانات. راجع الحقول المطلوبة والقيم المختارة.";
+      }
       setError(msg);
+      toast.error(locale === "en" ? "Validation Error" : "خطأ في الحفظ", msg);
     } finally {
       setSaving(false);
     }
@@ -382,7 +398,11 @@ export function EmployeeForm({
                 { value: "Active", label: locale === "en" ? "Active" : "نشط" },
                 { value: "Suspended", label: locale === "en" ? "Suspended" : "موقوف" },
                 { value: "OnLeave", label: locale === "en" ? "On Leave" : "في إجازة" },
-                { value: "Terminated", label: locale === "en" ? "Terminated" : "منتهي" },
+                { value: "Terminated", label: locale === "en" ? "Terminated" : "منتهي الخدمة" },
+                { value: "Archived", label: locale === "en" ? "Archived" : "مؤرشف" },
+                { value: "Fleeing", label: locale === "en" ? "Fleeing" : "هروب / انقطاع" },
+                { value: "Accident", label: locale === "en" ? "Accident" : "حادث" },
+                { value: "Sick", label: locale === "en" ? "Sick" : "إجازة مرضية" },
               ]}
               className={selectClass}
             />

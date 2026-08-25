@@ -1,14 +1,17 @@
 "use client";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Pencil, Plus, Search, RefreshCw, UsersRound } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { createUser, listUsers } from "../../../lib/users/api";
 import type { ManagedUser } from "../../../lib/users/types";
+import { listEmployees } from "../../../lib/workforce/api";
+import type { Employee } from "../../../lib/workforce/types";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { Input } from "../../../components/ui/Input";
+import { SearchableSelect } from "../../../components/ui/SearchableSelect";
 import { Table } from "../../../components/ui/Table";
 
 import { translate } from "../../../lib/i18n";
@@ -40,6 +43,7 @@ export default function UsersPage() {
     const { can, isLoading, locale } = useAuth();
     const t = (key: string) => translate(locale, key);
     const [users, setUsers] = useState<ManagedUser[]>([]);
+    const [employees, setEmployees] = useState<Employee[]>([]);
     const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -52,7 +56,12 @@ export default function UsersPage() {
         setLoading(true);
         setError("");
         try {
-            setUsers(await listUsers(search));
+            const [usersData, employeesData] = await Promise.all([
+                listUsers(search),
+                listEmployees().catch(() => [] as Employee[]),
+            ]);
+            setUsers(usersData);
+            setEmployees(employeesData);
         } catch {
             setError(locale === "en" ? "Failed to load users. Verify API connection and permissions." : "تعذر تحميل المستخدمين. تأكد من اتصال واجهة API وصلاحياتك.");
         } finally {
@@ -65,6 +74,36 @@ export default function UsersPage() {
         const timer = window.setTimeout(() => void load(), 350);
         return () => window.clearTimeout(timer);
     }, [isLoading, canRead, load]);
+
+    const employeeOptions = useMemo(() => {
+        return [
+            { value: "", label: locale === "en" ? "None (No linked employee)" : "بدون (غير مرتبط بموظف)" },
+            ...employees.map(emp => ({
+                value: emp.id,
+                label: locale === "en" && emp.fullNameEn ? emp.fullNameEn : emp.fullNameAr,
+                sublabel: emp.employeeNumber ? `رقم: ${emp.employeeNumber}` : emp.iqamaNo ? `هوية: ${emp.iqamaNo}` : emp.primaryPhone || "",
+            }))
+        ];
+    }, [employees, locale]);
+
+    const handleEmployeeChange = (employeeId: string) => {
+        const selected = employees.find((e) => e.id === employeeId);
+        if (selected) {
+            setForm((prev) => ({
+                ...prev,
+                employeeId: selected.id,
+                displayNameAr: selected.fullNameAr || prev.displayNameAr,
+                displayNameEn: selected.fullNameEn || prev.displayNameEn,
+                email: selected.email || prev.email,
+                phoneNumber: selected.primaryPhone || prev.phoneNumber,
+            }));
+        } else {
+            setForm((prev) => ({
+                ...prev,
+                employeeId: null,
+            }));
+        }
+    };
 
     async function submit(event: FormEvent) {
         event.preventDefault();
@@ -95,6 +134,17 @@ export default function UsersPage() {
 
         {showForm && <Card className="p-5">
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="sm:col-span-2 lg:col-span-3">
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                        {locale === "en" ? "Linked Employee" : "الموظف المرتبط"}
+                    </label>
+                    <SearchableSelect
+                        value={form.employeeId || ""}
+                        onChange={handleEmployeeChange}
+                        options={employeeOptions}
+                        placeholder={locale === "en" ? "Select Employee (Optional)..." : "اختر الموظف (اختياري)..."}
+                    />
+                </div>
                 <Input label={t("users.username")} required value={form.userName} onChange={e => setForm({ ...form, userName: e.target.value })} />
                 <Input label={locale === "en" ? "Initial Password" : "كلمة المرور الأولية"} type="password" minLength={12} required value={form.initialPassword} onChange={e => setForm({ ...form, initialPassword: e.target.value })} />
                 <Input label={locale === "en" ? "Arabic Name" : "الاسم بالعربية"} required value={form.displayNameAr} onChange={e => setForm({ ...form, displayNameAr: e.target.value })} />
@@ -147,33 +197,41 @@ export default function UsersPage() {
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                     
-                    {users.map(user => (
-                        <tr key={user.id} className="hover:bg-blue-500/5">
-                            <td className="px-5 py-4">
-                                <b className="block">{locale === "en" ? (user.displayNameEn || user.displayNameAr) : (user.displayNameAr || user.displayNameEn)}</b>
-                            </td>
-                            <td className="px-5 py-4 font-medium" dir="ltr">{user.userName}</td>
-                            <td className="px-5 py-4" dir="ltr">{user.email}</td>
-                            <td className="px-5 py-4" dir="ltr">{user.phoneNumber || "—"}</td>
-                            <td className="px-5 py-4">
-                                <Badge tone={user.status === "Active" ? "green" : user.status === "Locked" ? "red" : "orange"}>
-                                    {statusLabels[user.status]?.[locale] ?? user.status}
-                                </Badge>
-                            </td>
-                            <td className="px-5 py-4 text-[var(--muted)]">
-                                {formatDate(user.lastActivityAtUtc, locale)}
-                            </td>
-                            <td className="px-5 py-4 text-[var(--muted)]">
-                                {formatDate(user.createdAtUtc, locale)}
-                            </td>
-                            <td className="px-5 py-4">
-                                <Link href={`/dashboard/users/${user.id}`} aria-label={`${t("common.edit")} ${user.displayNameAr || user.userName}`} title={t("common.edit")} className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-[#1167c9] hover:bg-blue-500/10">
-                                    <Pencil size={17} />
-                                    <span className="hidden sm:inline">{t("common.edit")}</span>
-                                </Link>
-                            </td>
-                        </tr>
-                    ))}
+                    {users.map(user => {
+                        const linkedEmp = user.employeeId ? employees.find(e => e.id === user.employeeId) : null;
+                        return (
+                            <tr key={user.id} className="hover:bg-blue-500/5">
+                                <td className="px-5 py-4">
+                                    <b className="block">{locale === "en" ? (user.displayNameEn || user.displayNameAr) : (user.displayNameAr || user.displayNameEn)}</b>
+                                    {linkedEmp && (
+                                        <span className="block text-xs font-normal text-[var(--muted)]">
+                                            {locale === "en" ? `Employee: ${linkedEmp.fullNameEn || linkedEmp.fullNameAr}` : `الموظف: ${linkedEmp.fullNameAr}`}
+                                        </span>
+                                    )}
+                                </td>
+                                <td className="px-5 py-4 font-medium" dir="ltr">{user.userName}</td>
+                                <td className="px-5 py-4" dir="ltr">{user.email}</td>
+                                <td className="px-5 py-4" dir="ltr">{user.phoneNumber || "—"}</td>
+                                <td className="px-5 py-4">
+                                    <Badge tone={user.status === "Active" ? "green" : user.status === "Locked" ? "red" : "orange"}>
+                                        {statusLabels[user.status]?.[locale] ?? user.status}
+                                    </Badge>
+                                </td>
+                                <td className="px-5 py-4 text-[var(--muted)]">
+                                    {formatDate(user.lastActivityAtUtc, locale)}
+                                </td>
+                                <td className="px-5 py-4 text-[var(--muted)]">
+                                    {formatDate(user.createdAtUtc, locale)}
+                                </td>
+                                <td className="px-5 py-4">
+                                    <Link href={`/dashboard/users/${user.id}`} aria-label={`${t("common.edit")} ${user.displayNameAr || user.userName}`} title={t("common.edit")} className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-[#1167c9] hover:bg-blue-500/10">
+                                        <Pencil size={17} />
+                                        <span className="hidden sm:inline">{t("common.edit")}</span>
+                                    </Link>
+                                </td>
+                            </tr>
+                        );
+                    })}
                     {users.length === 0 && <tr>
                         <td colSpan={8} className="px-5 py-10 text-center text-sm text-[var(--muted)]">{locale === "en" ? "No matching users found." : "لا توجد نتائج مطابقة."}</td>
                     </tr>}
@@ -182,3 +240,4 @@ export default function UsersPage() {
         </Card>
     </div>;
 }
+

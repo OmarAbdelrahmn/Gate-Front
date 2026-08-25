@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   KeyRound,
@@ -21,6 +21,8 @@ import {
   updateUserStatus,
 } from "../../lib/users/api";
 import type { ManagedUser, TemporaryCredential } from "../../lib/users/types";
+import { listEmployees } from "../../lib/workforce/api";
+import type { Employee } from "../../lib/workforce/types";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
@@ -177,6 +179,7 @@ export function UserManagementPanel({ user, onChanged }: Props) {
     null,
   );
   const [authorizationError, setAuthorizationError] = useState("");
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [edit, setEdit] = useState({
     userName: user.userName ?? "",
     displayNameAr: user.displayNameAr ?? "",
@@ -185,6 +188,43 @@ export function UserManagementPanel({ user, onChanged }: Props) {
     phoneNumber: user.phoneNumber ?? "",
     employeeId: user.employeeId,
   });
+
+  useEffect(() => {
+    void listEmployees()
+      .then(setEmployees)
+      .catch(() => {});
+  }, []);
+
+  const employeeOptions = useMemo(() => {
+    return [
+      { value: "", label: locale === "en" ? "None (No linked employee)" : "بدون (غير مرتبط بموظف)" },
+      ...employees.map((emp) => ({
+        value: emp.id,
+        label: `${locale === "en" && emp.fullNameEn ? emp.fullNameEn : emp.fullNameAr}`,
+        sublabel: emp.employeeNumber ? `رقم: ${emp.employeeNumber}` : emp.iqamaNo ? `هوية: ${emp.iqamaNo}` : emp.primaryPhone || "",
+      })),
+    ];
+  }, [employees, locale]);
+
+  const handleEmployeeChange = (employeeId: string) => {
+    const selected = employees.find((e) => e.id === employeeId);
+    if (selected) {
+      setEdit((prev) => ({
+        ...prev,
+        employeeId: selected.id,
+        displayNameAr: selected.fullNameAr || prev.displayNameAr,
+        displayNameEn: selected.fullNameEn || prev.displayNameEn,
+        email: selected.email || prev.email,
+        phoneNumber: selected.primaryPhone || prev.phoneNumber,
+      }));
+    } else {
+      setEdit((prev) => ({
+        ...prev,
+        employeeId: null,
+      }));
+    }
+  };
+
   const canReadAuthorization = can("permissions.read");
   useEffect(() => {
     if (!canReadAuthorization) return;
@@ -240,6 +280,19 @@ export function UserManagementPanel({ user, onChanged }: Props) {
               {locale === "en" ? "Account Details" : "بيانات الحساب"}
             </h2>
           </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-bold text-slate-700">
+              {locale === "en" ? "Linked Employee" : "الموظف المرتبط"}
+            </label>
+            <SearchableSelect
+              value={edit.employeeId || ""}
+              onChange={handleEmployeeChange}
+              options={employeeOptions}
+              placeholder={
+                locale === "en" ? "Select Employee (Optional)..." : "اختر الموظف (اختياري)..."
+              }
+            />
+          </div>
           <Input
             label={locale === "en" ? "Username" : "اسم المستخدم"}
             required
@@ -272,7 +325,7 @@ export function UserManagementPanel({ user, onChanged }: Props) {
             value={edit.phoneNumber}
             onChange={(e) => setEdit({ ...edit, phoneNumber: e.target.value })}
           />
-          <div className="flex items-end">
+          <div className="flex items-end sm:col-span-2">
             {can("users.update") && (
               <Button loading={busy} type="submit">
                 {t("common.save")}
