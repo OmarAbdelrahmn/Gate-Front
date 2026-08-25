@@ -683,17 +683,20 @@ export default function EmployeeDetailsPage({
                 {stText}
               </span>
             </div>
-            <dl className="grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-5">
+            <dl className="grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-6">
               {([
-                { label: locale === "en" ? "Phone Number" : "رقم الجوال", value: String(phoneNumber ?? "—") },
-                { label: locale === "en" ? "Nationality" : "الجنسية", value: String(nationality ?? "—") },
-                { label: locale === "en" ? "Hire Date" : "تاريخ التعيين", value: formatDate(rawHireDate, locale) },
-                { label: locale === "en" ? "Operating City" : "المدينة", value: String(operatingCity ?? "—") },
-                { label: locale === "en" ? "Housing" : "السكن", value: String(housingName) },
-              ] as const).map(({ label, value }) => (
+                { label: locale === "en" ? "Phone Number" : "رقم الجوال", value: String(phoneNumber ?? "—"), dir: undefined },
+                { label: locale === "en" ? "Nationality" : "الجنسية", value: String(nationality ?? "—"), dir: undefined },
+                { label: locale === "en" ? "IBAN" : "رقم الآيبان", value: String(employee.iban || "—"), dir: "ltr" as const },
+                { label: locale === "en" ? "Hire Date" : "تاريخ التعيين", value: formatDate(rawHireDate, locale), dir: undefined },
+                { label: locale === "en" ? "Operating City" : "المدينة", value: String(operatingCity ?? "—"), dir: undefined },
+                { label: locale === "en" ? "Housing" : "السكن", value: String(housingName), dir: undefined },
+              ]).map(({ label, value, dir }) => (
                 <div key={label} className="bg-[var(--surface)] p-4">
                   <dt className="text-xs font-bold text-[var(--muted)]">{label}</dt>
-                  <dd className="mt-1 text-sm font-bold">{value}</dd>
+                  <dd className={`mt-1 text-sm font-bold ${dir === "ltr" ? "font-mono" : ""}`} dir={dir}>
+                    {value}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -779,6 +782,22 @@ export default function EmployeeDetailsPage({
                 </dt>
                 <dd className="font-bold">{preferredCity}</dd>
               </div>
+              {rider.nationality && (
+                <div className="flex justify-between">
+                  <dt className="text-xs text-[var(--muted)]">
+                    {locale === "en" ? "Nationality" : "الجنسية"}
+                  </dt>
+                  <dd className="font-bold">{rider.nationality}</dd>
+                </div>
+              )}
+              {rider.iban && (
+                <div className="flex justify-between">
+                  <dt className="text-xs text-[var(--muted)]">
+                    {locale === "en" ? "IBAN" : "الآيبان"}
+                  </dt>
+                  <dd className="font-bold font-mono text-xs" dir="ltr">{rider.iban}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-xs text-[var(--muted)]">
                   {locale === "en" ? "Start Date" : "بداية الملف"}

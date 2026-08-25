@@ -5,6 +5,8 @@ export type ExternalRider = {
   riderProfileId: string;
   iqamaNo: string;
   fullNameAr: string;
+  nationality?: string | null;
+  iban?: string | null;
   primaryPhone?: string;
   operatingCityId?: string;
   operationalWorkTypeId?: string;
@@ -15,14 +17,21 @@ export type ExternalRider = {
 export type CreateExternalRiderRequest = {
   iqamaNo: string;
   fullNameAr: string;
+  nationality?: string | null;
+  iban?: string | null;
   primaryPhone: string;
   operatingCityId: string;
   operationalWorkTypeId: string;
 };
 
 export type UpdateExternalRiderRequest = {
-  iqamaNo: string;
-  fullNameAr: string;
+  iqamaNo?: string;
+  fullNameAr?: string;
+  nationality?: string | null;
+  iban?: string | null;
+  primaryPhone?: string;
+  operatingCityId?: string;
+  operationalWorkTypeId?: string;
   rowVersion: string;
 };
 

@@ -25,6 +25,7 @@ export type Employee = {
   fullNameAr: string;
   fullNameEn: string | null;
   nationality: string | null;
+  iban?: string | null;
   birthDate?: string | null;
   gender?: string | null;
   primaryPhone: string | null;
@@ -99,6 +100,8 @@ export type Rider = {
   iqamaNo: string | null;
   fullNameAr: string;
   fullNameEn: string | null;
+  nationality?: string | null;
+  iban?: string | null;
   engagementType: string;
   status: EmployeeStatus | string;
   tShirtSize: string | null;
@@ -124,6 +127,7 @@ export type EmployeeDetails = {
     gender: string | null;
     secondaryPhone: string | null;
     email: string | null;
+    iban: string | null;
     profilePhotoDocumentId: string | null;
     maritalStatus: string | null;
     emergencyContactName: string | null;
@@ -178,6 +182,7 @@ export type EmployeeUpsertPayload = {
   fullNameAr: string;
   fullNameEn: string | null;
   nationality: string | null;
+  iban: string | null;
   birthDate: string | null;
   gender: string | null;
   primaryPhone: string | null;

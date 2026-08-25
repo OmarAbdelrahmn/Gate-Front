@@ -13,9 +13,12 @@ import {
   MapPin,
   Briefcase,
   Phone,
+  Globe,
+  CreditCard,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
+import { getNationalityOptions } from "../../../../lib/constants/nationalities";
 import {
   listExternalRiders,
   createExternalRider,
@@ -51,6 +54,8 @@ export default function ExternalRidersPage() {
   const [formData, setFormData] = useState({
     iqamaNo: "",
     fullNameAr: "",
+    nationality: "",
+    iban: "",
     primaryPhone: "",
     operatingCityId: "",
     operationalWorkTypeId: "",
@@ -156,6 +161,8 @@ export default function ExternalRidersPage() {
         r.fullNameAr?.toLowerCase().includes(query) ||
         r.iqamaNo?.includes(query) ||
         r.primaryPhone?.includes(query) ||
+        r.nationality?.toLowerCase().includes(query) ||
+        r.iban?.toLowerCase().includes(query) ||
         r.employeeId?.toLowerCase().includes(query) ||
         r.riderProfileId?.toLowerCase().includes(query)
     );
@@ -264,6 +271,8 @@ export default function ExternalRidersPage() {
     setFormData({
       iqamaNo: "",
       fullNameAr: "",
+      nationality: "",
+      iban: "",
       primaryPhone: "",
       operatingCityId: "",
       operationalWorkTypeId: "",
@@ -277,6 +286,8 @@ export default function ExternalRidersPage() {
     setFormData({
       iqamaNo: rider.iqamaNo || "",
       fullNameAr: rider.fullNameAr || "",
+      nationality: rider.nationality || "",
+      iban: rider.iban || "",
       primaryPhone: rider.primaryPhone || "",
       operatingCityId: rider.operatingCityId || "",
       operationalWorkTypeId: rider.operationalWorkTypeId || "",
@@ -290,6 +301,8 @@ export default function ExternalRidersPage() {
     setFormData({
       iqamaNo: "",
       fullNameAr: "",
+      nationality: "",
+      iban: "",
       primaryPhone: "",
       operatingCityId: "",
       operationalWorkTypeId: "",
@@ -306,6 +319,8 @@ export default function ExternalRidersPage() {
       await createExternalRider({
         iqamaNo: formData.iqamaNo.trim(),
         fullNameAr: formData.fullNameAr.trim(),
+        nationality: formData.nationality.trim() || null,
+        iban: formData.iban.trim() || null,
         primaryPhone: formData.primaryPhone.trim(),
         operatingCityId: formData.operatingCityId,
         operationalWorkTypeId: formData.operationalWorkTypeId,
@@ -355,6 +370,8 @@ export default function ExternalRidersPage() {
       const updated = await updateExternalRider(editingRider.employeeId, {
         iqamaNo: formData.iqamaNo.trim(),
         fullNameAr: formData.fullNameAr.trim(),
+        nationality: formData.nationality.trim(),
+        iban: formData.iban.trim(),
         rowVersion: editingRider.rowVersion,
       });
       toast.success(
@@ -543,8 +560,14 @@ export default function ExternalRidersPage() {
                         <div className="font-black text-slate-900">
                           {rider.fullNameAr}
                         </div>
-                        <div className="mt-0.5 text-xs text-[var(--muted)] font-semibold">
-                          {locale === "en" ? "Outside Rider" : "مندوب خارجي"}
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted)] font-semibold">
+                          <span>{locale === "en" ? "Outside Rider" : "مندوب خارجي"}</span>
+                          {rider.nationality && (
+                            <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">
+                              <Globe size={11} />
+                              {rider.nationality}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-5 py-4">
@@ -555,6 +578,12 @@ export default function ExternalRidersPage() {
                           <div className="mt-0.5 flex items-center gap-1 font-mono text-xs text-[var(--muted)]">
                             <Phone size={12} />
                             <span>{rider.primaryPhone}</span>
+                          </div>
+                        )}
+                        {rider.iban && (
+                          <div className="mt-0.5 flex items-center gap-1 font-mono text-xs text-[#1167c9]">
+                            <CreditCard size={12} className="shrink-0" />
+                            <span dir="ltr">{rider.iban}</span>
                           </div>
                         )}
                       </td>
@@ -634,8 +663,8 @@ export default function ExternalRidersPage() {
               </h2>
               <p className="mt-1 text-xs text-[var(--muted)]">
                 {locale === "en"
-                  ? "All five fields below are required to register an external rider."
-                  : "جميع الحقول الخمسة أدناه مطلوبة لتسجيل مندوب خارجي."}
+                  ? "Enter rider details to register an external rider."
+                  : "أدخل بيانات المندوب لتسجيل مندوب خارجي جديد."}
               </p>
             </div>
 
@@ -690,7 +719,34 @@ export default function ExternalRidersPage() {
                 )}
               </div>
 
-              {/* 3. Primary Phone */}
+              {/* 3. Nationality */}
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">
+                  {locale === "en" ? "Nationality" : "الجنسية"}
+                </label>
+                <SearchableSelect
+                  value={formData.nationality}
+                  onChange={(val) => setFormData({ ...formData, nationality: val })}
+                  options={getNationalityOptions(locale, formData.nationality)}
+                  placeholder={locale === "en" ? "Select nationality..." : "اختر الجنسية..."}
+                  searchPlaceholder={locale === "en" ? "Search nationalities..." : "ابحث عن جنسية..."}
+                />
+              </div>
+
+              {/* 4. IBAN */}
+              <div>
+                <Input
+                  label={locale === "en" ? "IBAN" : "رقم الآيبان"}
+                  value={formData.iban}
+                  onChange={(e) =>
+                    setFormData({ ...formData, iban: e.target.value })
+                  }
+                  placeholder="SA0380000000608010167519"
+                  dir="ltr"
+                />
+              </div>
+
+              {/* 5. Primary Phone */}
               <div>
                 <Input
                   label={locale === "en" ? "Primary Phone *" : "رقم الجوال الرئيسي *"}
@@ -708,7 +764,7 @@ export default function ExternalRidersPage() {
                 )}
               </div>
 
-              {/* 4. Operating City */}
+              {/* 6. Operating City */}
               <div>
                 <label className="mb-1 block text-xs font-bold text-slate-700">
                   {locale === "en" ? "Operating City *" : "المدينة التشغيلية *"}
@@ -728,7 +784,7 @@ export default function ExternalRidersPage() {
                 )}
               </div>
 
-              {/* 5. Operational Role (Work Type) */}
+              {/* 7. Operational Role (Work Type) */}
               <div>
                 <label className="mb-1 block text-xs font-bold text-slate-700">
                   {locale === "en" ? "Operational Role *" : "الدور التشغيلي (نوع العمل) *"}
@@ -782,8 +838,8 @@ export default function ExternalRidersPage() {
               </h2>
               <p className="mt-1 text-xs text-[var(--muted)]">
                 {locale === "en"
-                  ? "Update Iqama number or Arabic full name. (Phone, city, and operational role are preserved from creation)."
-                  : "تحديث رقم الإقامة أو الاسم الكامل بالعربية (يتم حفظ الهاتف والمدينة والدور من الإنشاء)."}
+                  ? "Update Iqama, name, nationality, or IBAN."
+                  : "تحديث رقم الإقامة، الاسم، الجنسية، أو رقم الآيبان."}
               </p>
             </div>
 
@@ -834,6 +890,33 @@ export default function ExternalRidersPage() {
                       : "مطلوب ولا يتجاوز 200 حرف."}
                   </p>
                 )}
+              </div>
+
+              {/* Nationality */}
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">
+                  {locale === "en" ? "Nationality" : "الجنسية"}
+                </label>
+                <SearchableSelect
+                  value={formData.nationality}
+                  onChange={(val) => setFormData({ ...formData, nationality: val })}
+                  options={getNationalityOptions(locale, formData.nationality)}
+                  placeholder={locale === "en" ? "Select nationality..." : "اختر الجنسية..."}
+                  searchPlaceholder={locale === "en" ? "Search nationalities..." : "ابحث عن جنسية..."}
+                />
+              </div>
+
+              {/* IBAN */}
+              <div>
+                <Input
+                  label={locale === "en" ? "IBAN" : "رقم الآيبان"}
+                  value={formData.iban}
+                  onChange={(e) =>
+                    setFormData({ ...formData, iban: e.target.value })
+                  }
+                  placeholder="SA0380000000608010167519"
+                  dir="ltr"
+                />
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-[var(--border)]">

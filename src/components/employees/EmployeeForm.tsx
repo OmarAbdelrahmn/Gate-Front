@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth/AuthProvider";
 import { translate } from "../../lib/i18n";
 import { hrCatalogApi, type HrRow } from "../../lib/hr/api";
 import { listSponsors, type Sponsor } from "../../lib/workforce/api";
+import { getNationalityOptions } from "../../lib/constants/nationalities";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
@@ -19,6 +20,7 @@ const allFields = [
   ["fullNameAr", "الاسم بالعربية", "Arabic Name", "text"],
   ["fullNameEn", "الاسم بالإنجليزية", "English Name", "text"],
   ["nationality", "الجنسية", "Nationality", "text"],
+  ["iban", "رقم الآيبان", "IBAN", "text"],
   ["birthDate", "تاريخ الميلاد", "Date of Birth", "date"],
   ["primaryPhone", "الجوال", "Primary Phone", "text"],
   ["secondaryPhone", "جوال إضافي", "Secondary Phone", "text"],
@@ -38,7 +40,7 @@ const allFields = [
 
 type FieldKey = (typeof allFields)[number][0];
 type Tab = "basic" | "contact" | "work" | "rider";
-const basic: FieldKey[] = ["iqamaNo", "fullNameAr", "fullNameEn", "nationality", "birthDate"];
+const basic: FieldKey[] = ["iqamaNo", "fullNameAr", "fullNameEn", "birthDate", "iban"];
 const contact: FieldKey[] = [
   "primaryPhone",
   "secondaryPhone",
@@ -253,7 +255,7 @@ export function EmployeeForm({
           required={key === "fullNameAr" || key === "iqamaNo"}
           defaultValue={valStr}
           maxLength={key === "iqamaNo" ? 10 : undefined}
-          dir={key === "email" || key.includes("Phone") || key === "iqamaNo" ? "ltr" : undefined}
+          dir={key === "email" || key.includes("Phone") || key === "iqamaNo" || key === "iban" ? "ltr" : undefined}
         />
       );
     });
@@ -295,6 +297,13 @@ export function EmployeeForm({
               {locale === "en" ? "Identity & Personal Details" : "الهوية والبيانات الشخصية"}
             </h2>
             {renderFields(basic)}
+            <Select
+              label={locale === "en" ? "Nationality" : "الجنسية"}
+              name="nationality"
+              value={initial.nationality}
+              options={getNationalityOptions(locale, initial.nationality)}
+              className={selectClass}
+            />
             <CatalogSelect
               name="residencyProfession"
               label={locale === "en" ? "Residency Profession" : "مهنة الإقامة"}

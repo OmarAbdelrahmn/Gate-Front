@@ -162,7 +162,7 @@ export default function EmployeesPage() {
                 const platformName = item.currentWorkPlatform?.nameAr || item.currentWorkPlatform?.nameEn || item.currentWorkPlatform?.code || "";
                 const platformAccountId = item.currentWorkPlatform?.externalAccountId || item.currentWorkPlatform?.platformRiderAccountId || "";
 
-                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${housingStr} ${nat} ${platformName} ${platformAccountId}`
+                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.iban || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${housingStr} ${nat} ${platformName} ${platformAccountId}`
                     .toLowerCase()
                     .includes(search.toLowerCase());
             }),
