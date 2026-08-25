@@ -16,6 +16,7 @@ export interface VacationFormData {
   supervisorRecommendation?: "approved_covered" | "approved_need_cover" | "rejected";
   supervisorName?: string;
   supervisorJobTitle?: string;
+  companyName?: string;
 }
 
 export function VacationFormView({ data }: { data: VacationFormData }) {
@@ -24,13 +25,13 @@ export function VacationFormView({ data }: { data: VacationFormData }) {
   return (
     <div className="bg-white text-black p-6 md:p-8 rounded-xl border-2 border-black font-sans leading-snug text-right dir-rtl shadow-xs page-break-inside-avoid print-container">
       {/* Title Header */}
-      <div className="text-center mb-6">
+      <div className="text-center mb-6 border-b-2 border-black pb-3">
+        <h1 className="text-base md:text-lg font-extrabold text-gray-900 mb-1">
+          {data.companyName || "شركة اكسبرس جابت"}
+        </h1>
         <h2 className="text-xl md:text-2xl font-black text-black">
           نموذج طلب إجازة
         </h2>
-        <h3 className="text-base md:text-lg font-bold text-gray-700 dir-ltr">
-          Vacation Form
-        </h3>
       </div>
 
       {/* Top Header Meta Info Grid */}

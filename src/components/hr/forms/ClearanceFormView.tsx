@@ -10,6 +10,7 @@ export interface ClearanceFormData {
   decisionDate?: string;
   reason?: "leave" | "transfer" | "resignation" | "death" | "other";
   otherReason?: string;
+  companyName?: string;
 }
 
 export function ClearanceFormView({ data }: { data: ClearanceFormData }) {
@@ -19,8 +20,11 @@ export function ClearanceFormView({ data }: { data: ClearanceFormData }) {
   return (
     <div className="bg-white text-black p-4 md:p-6 rounded-xl border-2 border-black font-sans leading-tight text-right dir-rtl shadow-xs page-break-inside-avoid print-container text-xs">
       {/* Title */}
-      <div className="text-center mb-3">
-        <h2 className="text-xl md:text-2xl font-black text-black border-b-2 border-black pb-0.5 inline-block px-6">
+      <div className="text-center mb-3 border-b-2 border-black pb-2">
+        <h1 className="text-xs md:text-sm font-extrabold text-gray-900 mb-0.5">
+          {data.companyName || "شركة اكسبرس جابت"}
+        </h1>
+        <h2 className="text-xl md:text-2xl font-black text-black inline-block px-6">
           نموذج إخلاء طرف
         </h2>
       </div>

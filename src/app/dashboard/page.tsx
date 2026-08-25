@@ -127,7 +127,7 @@ export default function DashboardPage() {
           <Button variant="ghost">{t("dashboard.viewAll")}</Button>
         </div>
         <Table>
-          <thead className="border-b border-[var(--border)] bg-slate-50/70 text-xs text-[var(--muted)]">
+          <thead className="border-b border-[var(--border)] bg-[var(--subtle-bg)] text-xs text-[var(--muted)]">
             <tr>
               <th className="px-5 py-4">{t("dashboard.shipmentNo")}</th>
               <th className="px-5 py-4">{t("dashboard.customer")}</th>
@@ -138,7 +138,7 @@ export default function DashboardPage() {
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {shipments.map((r) => (
-              <tr key={r.id} className="hover:bg-blue-50/40">
+              <tr key={r.id} className="hover:bg-blue-500/5 transition-colors">
                 <td className="px-5 py-4 font-bold text-[#1167c9]">{r.id}</td>
                 <td className="px-5 py-4">{r.customer}</td>
                 <td className="px-5 py-4">{r.route}</td>

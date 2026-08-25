@@ -468,7 +468,7 @@ export default function HousingPage() {
       {/* Main Content Area */}
       <Card className="overflow-hidden">
         {/* Filter Toolbar */}
-        <div className="p-4 border-b space-y-4 bg-slate-50/50">
+        <div className="p-4 border-b border-[var(--border)] space-y-4 bg-[var(--subtle-bg)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Search Input */}
             <div className="relative flex-1 min-w-[260px]">
@@ -498,7 +498,7 @@ export default function HousingPage() {
             </div>
 
             {/* Status Pills */}
-            <div className="flex items-center gap-1 rounded-xl bg-[var(--surface)] border p-1">
+            <div className="flex items-center gap-1 rounded-xl bg-[var(--surface)] border border-[var(--border)] p-1">
               {[
                 { id: "ALL", label: isEn ? "All" : "الكل" },
                 { id: "Active", label: isEn ? "Active" : "نشط" },
@@ -511,7 +511,7 @@ export default function HousingPage() {
                   className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                     statusFilter === st.id
                       ? "bg-[#1167c9] text-white shadow-sm"
-                      : "text-[var(--muted)] hover:text-slate-900 hover:bg-slate-100"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   {st.label}
@@ -546,7 +546,7 @@ export default function HousingPage() {
                 <article
                   key={x.id}
                   className={`flex flex-col justify-between rounded-2xl border p-5 transition-all hover:shadow-md ${
-                    isArchived ? "bg-slate-50/70 border-slate-200 opacity-80" : "bg-[var(--surface)] border-[var(--border)]"
+                    isArchived ? "bg-slate-50/70 dark:bg-slate-800/40 border-[var(--border)] opacity-80" : "bg-[var(--surface)] border-[var(--border)]"
                   }`}
                 >
                   <div>
@@ -569,10 +569,10 @@ export default function HousingPage() {
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
                           isArchived
-                            ? "bg-slate-200 text-slate-700"
+                            ? "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                             : x.status === "Inactive"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-emerald-100 text-emerald-800"
+                            ? "bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300"
+                            : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300"
                         }`}
                       >
                         {isArchived ? (
@@ -620,7 +620,7 @@ export default function HousingPage() {
                     </div>
 
                     {/* Capacity Progress Bar */}
-                    <div className="mt-5 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                    <div className="mt-5 rounded-xl bg-[var(--subtle-bg)] p-3 border border-[var(--border)]">
                       <div className="flex items-center justify-between text-xs font-bold mb-2">
                         <span className="text-[var(--muted)]">
                           {isEn ? "Occupancy:" : "الإشغال الحالي:"}
@@ -631,7 +631,7 @@ export default function HousingPage() {
                       </div>
 
                       {/* Progress Bar Track */}
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                         <div
                           className={`h-full rounded-full transition-all duration-300 ${
                             occupancyPct >= 100
@@ -645,7 +645,7 @@ export default function HousingPage() {
                       </div>
 
                       <div className="mt-2 flex items-center justify-between text-[11px] font-semibold">
-                        <span className="text-emerald-700">
+                        <span className="text-emerald-700 dark:text-emerald-400">
                           {isEn ? "Available:" : "المتاح:"} {x.availableCapacity}
                         </span>
                         <span className="text-[var(--muted)]">{occupancyPct}%</span>
@@ -654,7 +654,7 @@ export default function HousingPage() {
                   </div>
 
                   {/* Action Footer */}
-                  <div className="mt-5 pt-3 border-t flex items-center justify-between gap-2">
+                  <div className="mt-5 pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
                     <Link
                       href={`/dashboard/housing/${x.id}`}
                       className="text-xs font-extrabold text-[#1167c9] hover:underline"
@@ -667,7 +667,7 @@ export default function HousingPage() {
                         <button
                           onClick={() => handleOpenEdit(x)}
                           title={isEn ? "Edit Housing" : "تعديل السكن"}
-                          className="grid h-9 w-9 place-items-center rounded-lg border text-slate-700 hover:bg-slate-100 transition-all"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                         >
                           <Edit3 size={15} />
                         </button>
@@ -679,7 +679,7 @@ export default function HousingPage() {
                               setArchiveError("");
                             }}
                             title={isEn ? "Archive Housing" : "أرشفة السكن"}
-                            className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600 border-rose-100 bg-rose-50/50 hover:bg-rose-100 transition-all"
+                            className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600 border-rose-100 bg-rose-50/50 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-900/50 transition-all"
                           >
                             <Archive size={15} />
                           </button>

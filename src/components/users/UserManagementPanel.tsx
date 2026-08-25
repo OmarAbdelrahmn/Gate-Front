@@ -115,12 +115,12 @@ function AuthorizationView({ data, locale = "ar" }: { data: Authorization; local
           {permissions.slice(0, 5).map((item) => (
             <div
               key={item.assignmentId}
-              className={`min-h-28 rounded-xl border p-3 ${item.effect === "Deny" ? "border-red-200 bg-red-50/60" : "border-emerald-200 bg-emerald-50/60"}`}
+              className={`min-h-28 rounded-xl border p-3 ${item.effect === "Deny" ? "border-red-200 bg-red-50/60 dark:border-red-900/40 dark:bg-red-950/40" : "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/40"}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <b>{permissionLabel(item.permissionKey, locale)}</b>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${item.effect === "Deny" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
+                  className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${item.effect === "Deny" ? "bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"}`}
                 >
                   {item.effect === "Deny" ? (locale === "en" ? "Deny" : "منع") : (locale === "en" ? "Grant" : "مسموح")}
                 </span>

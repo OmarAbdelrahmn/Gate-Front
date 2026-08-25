@@ -1,13 +1,21 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
   --background: #f4f7fb;
   --foreground: #10233f;
   --muted: #61708a;
-  --surface: #fff;
+  --surface: #ffffff;
   --border: #dbe4f0;
   --brand: #1167c9;
   --orange: #f28b35;
+
+  --card-bg: #ffffff;
+  --subtle-bg: #f8fafc;
+  --subtle-hover: #f1f5f9;
+  --table-header-bg: #f8fafc;
+  --table-row-hover: rgba(17, 103, 201, 0.04);
 }
 
 @theme inline {
@@ -23,6 +31,64 @@ html[data-theme="dark"] {
   --surface: #152238;
   --border: #2a3b54;
   --muted: #9bacbf;
+  --brand: #3b82f6;
+  --orange: #f28b35;
+
+  --card-bg: #152238;
+  --subtle-bg: #1c2d4a;
+  --subtle-hover: #243757;
+  --table-header-bg: #1c2d4a;
+  --table-row-hover: rgba(59, 130, 246, 0.08);
+}
+
+/* Global Theme Auto-Fixes for hardcoded Tailwind Slate & Light mode utility classes in Dark Theme */
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-slate-800 {
+  color: #e7eef9 !important;
+}
+
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100 {
+  background-color: #1c2d4a !important;
+}
+
+html[data-theme="dark"] .bg-slate-200 {
+  background-color: #243757 !important;
+}
+
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200 {
+  border-color: #2a3b54 !important;
+}
+
+html[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="dark"] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #2a3b54 !important;
+}
+
+html[data-theme="dark"] .hover\:bg-slate-50:hover,
+html[data-theme="dark"] .hover\:bg-slate-100:hover {
+  background-color: #243757 !important;
+}
+
+html[data-theme="dark"] .bg-blue-50 {
+  background-color: rgba(30, 58, 138, 0.35) !important;
+  color: #93c5fd !important;
+}
+
+html[data-theme="dark"] .text-blue-700,
+html[data-theme="dark"] .text-blue-600 {
+  color: #60a5fa !important;
 }
 
 html[data-theme="dark"] .bg-emerald-50\/60 {
@@ -35,14 +101,50 @@ html[data-theme="dark"] .bg-red-50\/60 {
   border-color: rgb(252 165 165 / .55) !important;
 }
 
+html[data-theme="dark"] .bg-emerald-50 {
+  background-color: rgba(6, 78, 59, 0.45) !important;
+  color: #6ee7b7 !important;
+}
+
 html[data-theme="dark"] .bg-emerald-100 {
   background-color: rgb(6 95 70) !important;
   color: rgb(167 243 208) !important;
 }
 
+html[data-theme="dark"] .text-emerald-700,
+html[data-theme="dark"] .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+html[data-theme="dark"] .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.45) !important;
+  color: #fca5a5 !important;
+}
+
 html[data-theme="dark"] .bg-red-100 {
   background-color: rgb(127 29 29) !important;
   color: rgb(254 202 202) !important;
+}
+
+html[data-theme="dark"] .text-red-700,
+html[data-theme="dark"] .text-red-600 {
+  color: #f87171 !important;
+}
+
+html[data-theme="dark"] .bg-orange-50,
+html[data-theme="dark"] .bg-amber-50 {
+  background-color: rgba(124, 45, 18, 0.45) !important;
+  color: #fdba74 !important;
+}
+
+html[data-theme="dark"] .bg-purple-50 {
+  background-color: rgba(88, 28, 135, 0.45) !important;
+  color: #d8b4fe !important;
+}
+
+html[data-theme="dark"] .text-purple-700,
+html[data-theme="dark"] .text-purple-600 {
+  color: #c084fc !important;
 }
 
 .bg-emerald-50\/60,

@@ -118,7 +118,7 @@ export function Sidebar({
                     href={item.href}
                     onClick={onClose}
                     aria-current={active ? "page" : undefined}
-                    className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-bold ${active ? "bg-blue-50 text-[#1167c9]" : "text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-bold ${active ? "bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
                   >
                     <Icon size={19} />
                     <span className={collapsed ? "md:hidden" : ""}>
@@ -141,7 +141,7 @@ export function Sidebar({
                       }))
                     }
                     aria-expanded={isOpen}
-                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-right text-sm font-bold ${active ? "bg-blue-50 text-[#1167c9]" : "text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-right text-sm font-bold transition-colors ${active ? "text-[#1167c9] dark:text-blue-400 bg-blue-50/60 dark:bg-blue-950/30" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
                   >
                     <Icon size={19} />
                     <span className={collapsed ? "md:hidden" : ""}>
@@ -154,7 +154,7 @@ export function Sidebar({
                   </button>
                   {isOpen ? (
                     <div
-                      className={`mt-1 space-y-1 border-r-2 border-blue-100 pr-3 ${collapsed ? "md:hidden" : ""}`}
+                      className={`mt-1 space-y-1 border-r-2 rtl:border-r-2 ltr:border-l-2 ltr:border-r-0 border-blue-200/60 dark:border-blue-900/40 rtl:pr-2 ltr:pl-2 ${collapsed ? "md:hidden" : ""}`}
                     >
                       {children.map((child) => {
                         const ChildIcon = child.icon;
@@ -166,7 +166,7 @@ export function Sidebar({
                             href={child.href!}
                             onClick={onClose}
                             aria-current={childActive ? "page" : undefined}
-                            className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-bold ${childActive ? "bg-blue-50 text-[#1167c9]" : "text-slate-600 hover:bg-slate-50"}`}
+                            className={`flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm font-bold transition-all ${childActive ? "bg-[#1167c9] text-white dark:bg-[#1167c9] dark:text-white shadow-sm" : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80"}`}
                           >
                             <ChildIcon size={16} />
                             <span>{childLabel}</span>

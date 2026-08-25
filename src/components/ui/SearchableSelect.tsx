@@ -145,7 +145,7 @@ export function SearchableSelect({
       className="max-h-60 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl animate-in fade-in zoom-in-95 duration-100 flex flex-col"
     >
       {/* Options List */}
-      <div className="overflow-y-auto p-1 max-h-60 divide-y divide-slate-100">
+      <div className="overflow-y-auto p-1 max-h-60 divide-y divide-[var(--border)]">
         {filteredOptions.length === 0 ? (
           <div className="p-4 text-center text-xs text-[var(--muted)] font-medium">
             {noOptionsText}
@@ -160,8 +160,8 @@ export function SearchableSelect({
                 onClick={() => handleSelect(opt.value)}
                 className={`w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-start text-xs font-bold transition-all ${
                   isSelected
-                    ? "bg-blue-50 text-[#1167c9]"
-                    : "text-[var(--foreground)] hover:bg-slate-100"
+                    ? "bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
+                    : "text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`}
               >
                 <div className="truncate">
@@ -172,7 +172,7 @@ export function SearchableSelect({
                     </p>
                   )}
                 </div>
-                {isSelected && <Check size={16} className="shrink-0 text-[#1167c9]" />}
+                {isSelected && <Check size={16} className="shrink-0 text-[#1167c9] dark:text-blue-400" />}
               </button>
             );
           })

@@ -53,7 +53,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
     }
   }
   const menuLink =
-    "flex min-h-11 items-center gap-2 rounded-lg px-3 text-right font-bold hover:bg-slate-50";
+    "flex min-h-11 items-center gap-2 rounded-lg px-3 text-right font-bold hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-200";
   return (
     <header className="sticky top-0 z-30 flex h-[72px] items-center justify-between gap-4 bg-gradient-to-l from-[#0b55a8] via-[#1167c9] to-[#2e8ce6] px-4 text-white shadow-lg md:px-7">
       <div className="flex items-center gap-3">
@@ -124,10 +124,10 @@ export function Header({ onMenu }: { onMenu: () => void }) {
             <ChevronDown size={15} />
           </button>
           {open && (
-            <div className="absolute left-0 top-14 w-64 rounded-xl border border-slate-200 bg-white p-2 text-sm text-slate-700 shadow-xl">
-              <div className="border-b border-slate-100 px-3 py-2">
+            <div className="absolute left-0 top-14 w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-sm text-[var(--foreground)] shadow-xl">
+              <div className="border-b border-[var(--border)] px-3 py-2">
                 <b className="block">{t("header.myAccount")}</b>
-                <small className="text-slate-500">{name}</small>
+                <small className="text-[var(--muted)]">{name}</small>
               </div>
               <Link
                 href="/dashboard/profile"
@@ -153,11 +153,11 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                 <MonitorSmartphone size={17} />
                 {t("header.activeSessions")}
               </Link>
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-[var(--border)]" />
               <button
                 disabled={loggingOut}
                 onClick={() => void leave()}
-                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right font-bold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right font-bold text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-60"
               >
                 <LogOut size={16} />
                 {loggingOut
@@ -170,7 +170,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                   if (await systemConfirm(t("header.confirmSignOutAll"), t("header.signOutAll"), true))
                     void leave(true);
                 }}
-                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right font-bold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right font-bold text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-60"
               >
                 <ShieldCheck size={16} />
                 {t("header.signOutAll")}

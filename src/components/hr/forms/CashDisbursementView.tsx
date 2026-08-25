@@ -8,6 +8,7 @@ export interface CashDisbursementData {
   reason: string;
   date: string;
   showDoubleVoucher?: boolean;
+  companyName?: string;
 }
 
 export function CashDisbursementView({ data }: { data: CashDisbursementData }) {
@@ -20,8 +21,9 @@ export function CashDisbursementView({ data }: { data: CashDisbursementData }) {
   const renderSingleVoucher = (footerTitle3: string) => (
     <div className={`bg-white text-black rounded-xl border-2 border-black font-sans leading-snug text-right dir-rtl shadow-xs page-break-inside-avoid ${isDouble ? 'p-3.5 sm:p-4 print:p-3' : 'p-6'}`}>
       {/* Header */}
-      <div className="flex justify-between items-start mb-1">
-        <span className="font-bold text-base text-black">إدارة الموارد البشرية</span>
+      <div className="flex justify-between items-start mb-1 border-b border-black pb-1.5">
+        <span className="font-extrabold text-base text-black">{data.companyName || "شركة اكسبرس جابت"}</span>
+        <span className="font-bold text-xs text-gray-700">إدارة الموارد البشرية</span>
       </div>
 
       {/* Main Title */}

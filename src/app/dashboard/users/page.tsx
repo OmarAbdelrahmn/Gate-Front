@@ -135,7 +135,7 @@ export default function UsersPage() {
         {showForm && <Card className="p-5">
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="sm:col-span-2 lg:col-span-3">
-                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                    <label className="mb-1 block text-xs font-bold text-[var(--foreground)]">
                         {locale === "en" ? "Linked Employee" : "الموظف المرتبط"}
                     </label>
                     <SearchableSelect

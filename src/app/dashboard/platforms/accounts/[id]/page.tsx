@@ -109,11 +109,11 @@ export default function AccountDetailPage() {
             <ArrowRight className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
-              <Server className="h-6 w-6 text-[#1167c9]" />
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-[var(--foreground)]">
+              <Server className="h-6 w-6 text-[#1167c9] dark:text-blue-400" />
               حساب منصة: {account.code}
             </h1>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[var(--muted)]">
               ID: {account.id} | RowVersion: {account.rowVersion}
             </p>
           </div>
@@ -127,18 +127,18 @@ export default function AccountDetailPage() {
       {/* Main Details Card */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Account Info */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4 lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="font-bold text-slate-900 flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-[#1167c9]" />
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm space-y-4 lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+            <h2 className="font-bold text-[var(--foreground)] flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-[#1167c9] dark:text-blue-400" />
               البيانات الأساسية للحساب
             </h2>
             <div className="flex items-center gap-2">
               <Badge
                 className={
                   account.paymentModel === "Salary"
-                    ? "bg-purple-50 text-purple-700 border-purple-200 font-semibold"
-                    : "bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                    ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900/50 font-semibold"
+                    : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/50 font-semibold"
                 }
               >
                 {account.paymentModel === "PayPerOrder"
@@ -147,7 +147,7 @@ export default function AccountDetailPage() {
                   ? t("platforms.salary")
                   : account.paymentModel}
               </Badge>
-              <Badge className="bg-blue-50 text-[#1167c9] font-semibold">
+              <Badge className="bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-300 font-semibold">
                 {account.status}
               </Badge>
             </div>
@@ -155,22 +155,22 @@ export default function AccountDetailPage() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
             <div>
-              <span className="text-xs font-bold text-slate-400 block">المنصة:</span>
-              <span className="font-bold text-slate-800">
+              <span className="text-xs font-bold text-[var(--muted)] block">المنصة:</span>
+              <span className="font-bold text-[var(--foreground)]">
                 {account.platformNameAr || account.platformCode} ({account.platformCode})
               </span>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">مدينة التشغيل:</span>
-              <span className="font-bold text-slate-800">
+              <span className="text-xs font-bold text-[var(--muted)] block">مدينة التشغيل:</span>
+              <span className="font-bold text-[var(--foreground)]">
                 {account.operatingCityNameAr || "—"}
               </span>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">{t("platforms.paymentModel")}:</span>
-              <span className="font-bold text-slate-800">
+              <span className="text-xs font-bold text-[var(--muted)] block">{t("platforms.paymentModel")}:</span>
+              <span className="font-bold text-[var(--foreground)]">
                 {account.paymentModel === "PayPerOrder"
                   ? t("platforms.payPerOrder")
                   : account.paymentModel === "Salary"
@@ -180,66 +180,66 @@ export default function AccountDetailPage() {
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">صاحب الحساب (Owner):</span>
-              <span className="font-bold text-slate-800">
+              <span className="text-xs font-bold text-[var(--muted)] block">صاحب الحساب (Owner):</span>
+              <span className="font-bold text-[var(--foreground)]">
                 {account.ownerRiderNameAr || "—"}
               </span>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">اسم المستخدم للحساب:</span>
-              <span className="font-mono text-slate-800">{account.userName || "—"}</span>
+              <span className="text-xs font-bold text-[var(--muted)] block">اسم المستخدم للحساب:</span>
+              <span className="font-mono text-[var(--foreground)]">{account.userName || "—"}</span>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">معرف الحساب الخارجي:</span>
-              <span className="font-mono text-slate-800">{account.externalAccountId || "—"}</span>
+              <span className="text-xs font-bold text-[var(--muted)] block">معرف الحساب الخارجي:</span>
+              <span className="font-mono text-[var(--foreground)]">{account.externalAccountId || "—"}</span>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">تاريخ الاستحواذ:</span>
-              <span className="text-slate-800">{account.acquisitionDate || "—"}</span>
+              <span className="text-xs font-bold text-[var(--muted)] block">تاريخ الاستحواذ:</span>
+              <span className="text-[var(--foreground)]">{account.acquisitionDate || "—"}</span>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">تاريخ البداية:</span>
-              <span className="text-slate-800">{account.startDate || "—"}</span>
+              <span className="text-xs font-bold text-[var(--muted)] block">تاريخ البداية:</span>
+              <span className="text-[var(--foreground)]">{account.startDate || "—"}</span>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-slate-400 block">تاريخ النهاية:</span>
-              <span className="text-slate-800">{account.endDate || "—"}</span>
+              <span className="text-xs font-bold text-[var(--muted)] block">تاريخ النهاية:</span>
+              <span className="text-[var(--foreground)]">{account.endDate || "—"}</span>
             </div>
           </div>
 
           {account.notes && (
-            <div className="pt-2 border-t border-slate-100">
-              <span className="text-xs font-bold text-slate-400 block mb-1">الملاحظات:</span>
-              <p className="text-xs text-slate-600 bg-slate-50 rounded-xl p-3">{account.notes}</p>
+            <div className="pt-2 border-t border-[var(--border)]">
+              <span className="text-xs font-bold text-[var(--muted)] block mb-1">الملاحظات:</span>
+              <p className="text-xs text-[var(--foreground)] bg-[var(--subtle-bg)] rounded-xl p-3">{account.notes}</p>
             </div>
           )}
         </div>
 
         {/* Current Assignment Card */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-          <h2 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-            <UserCheck className="h-5 w-5 text-emerald-600" />
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm space-y-4">
+          <h2 className="font-bold text-[var(--foreground)] flex items-center gap-2 border-b border-[var(--border)] pb-3">
+            <UserCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             التعيين الحالي للمندوب
           </h2>
 
           {account.currentAssignment ? (
             <div className="space-y-3 text-sm">
               <div>
-                <span className="text-xs font-bold text-slate-400 block">المندوب الفعلي:</span>
-                <span className="font-bold text-slate-900 text-base">
+                <span className="text-xs font-bold text-[var(--muted)] block">المندوب الفعلي:</span>
+                <span className="font-bold text-[var(--foreground)] text-base">
                   {account.currentAssignment.actualRiderNameAr || "مندوب معين"}
                 </span>
               </div>
 
               {account.currentAssignment.paymentModel && (
                 <div>
-                  <span className="text-xs font-bold text-slate-400 block">نموذج الدفع للتعيين:</span>
-                  <Badge className={account.currentAssignment.paymentModel === "Salary" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
+                  <span className="text-xs font-bold text-[var(--muted)] block">نموذج الدفع للتعيين:</span>
+                  <Badge className={account.currentAssignment.paymentModel === "Salary" ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900/50" : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/50"}>
                     {account.currentAssignment.paymentModel === "PayPerOrder"
                       ? t("platforms.payPerOrder")
                       : account.currentAssignment.paymentModel === "Salary"
@@ -250,25 +250,25 @@ export default function AccountDetailPage() {
               )}
 
               <div>
-                <span className="text-xs font-bold text-slate-400 block">فعال من:</span>
-                <span className="text-slate-800">{account.currentAssignment.effectiveFrom}</span>
+                <span className="text-xs font-bold text-[var(--muted)] block">فعال من:</span>
+                <span className="text-[var(--foreground)]">{account.currentAssignment.effectiveFrom}</span>
               </div>
 
               {account.currentAssignment.startReason && (
                 <div>
-                  <span className="text-xs font-bold text-slate-400 block">سبب التعيين:</span>
-                  <span className="text-xs text-slate-600">{account.currentAssignment.startReason}</span>
+                  <span className="text-xs font-bold text-[var(--muted)] block">سبب التعيين:</span>
+                  <span className="text-xs text-[var(--muted)]">{account.currentAssignment.startReason}</span>
                 </div>
               )}
 
               {account.currentAssignment.wasBackdated && (
-                <div className="rounded-xl bg-amber-50 p-2 text-xs text-amber-800">
+                <div className="rounded-xl bg-amber-50 dark:bg-amber-950/60 p-2 text-xs text-amber-800 dark:text-amber-300">
                   أثر رجي: {account.currentAssignment.backdatedReason || "نعم"}
                 </div>
               )}
             </div>
           ) : (
-            <div className="py-8 text-center text-slate-400 text-xs">
+            <div className="py-8 text-center text-[var(--muted)] text-xs">
               لا يوجد مندوب فعلي تعيينه حالياً لهذا الحساب. الحساب متاح لتخصيص مندوب.
             </div>
           )}
@@ -279,35 +279,35 @@ export default function AccountDetailPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Assignment History */}
         {can("platform_assignments.read") && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-            <h2 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <History className="h-5 w-5 text-[#1167c9]" />
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm space-y-4">
+            <h2 className="font-bold text-[var(--foreground)] flex items-center gap-2 border-b border-[var(--border)] pb-3">
+              <History className="h-5 w-5 text-[#1167c9] dark:text-blue-400" />
               سجل التعيينات التاريخية
             </h2>
 
             {assignmentHistory.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">لا يوجد سجل تعيينات سابق</p>
+              <p className="text-xs text-[var(--muted)] text-center py-6">لا يوجد سجل تعيينات سابق</p>
             ) : (
               <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
                 {assignmentHistory.map((item) => (
-                  <div key={item.id} className="rounded-xl border border-slate-100 p-3 text-xs space-y-1 bg-slate-50/50">
+                  <div key={item.id} className="rounded-xl border border-[var(--border)] p-3 text-xs space-y-1 bg-[var(--subtle-bg)]">
                     <div className="flex items-center justify-between font-bold">
-                      <span className="text-slate-900">{item.actualRiderNameAr || "مندوب فعلي"}</span>
+                      <span className="text-[var(--foreground)]">{item.actualRiderNameAr || "مندوب فعلي"}</span>
                       <div className="flex items-center gap-2">
                         {item.paymentModel && (
-                          <Badge className={item.paymentModel === "Salary" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
+                          <Badge className={item.paymentModel === "Salary" ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300" : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"}>
                             {item.paymentModel === "PayPerOrder" ? t("platforms.payPerOrder") : item.paymentModel === "Salary" ? t("platforms.salary") : item.paymentModel}
                           </Badge>
                         )}
-                        <Badge className={item.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600"}>
+                        <Badge className={item.status === "Active" ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}>
                           {item.status}
                         </Badge>
                       </div>
                     </div>
-                    <div className="text-slate-500">
+                    <div className="text-[var(--muted)]">
                       من: {item.effectiveFrom} {item.effectiveTo ? `إلى: ${item.effectiveTo}` : "(نشط حتى الآن)"}
                     </div>
-                    {item.endReason && <div className="text-slate-600">سبب الإنهاء: {item.endReason}</div>}
+                    {item.endReason && <div className="text-[var(--muted)]">سبب الإنهاء: {item.endReason}</div>}
                   </div>
                 ))}
               </div>
@@ -317,24 +317,24 @@ export default function AccountDetailPage() {
 
         {/* Credential History */}
         {can("platform_credentials.read") && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-            <h2 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <KeyRound className="h-5 w-5 text-indigo-600" />
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm space-y-4">
+            <h2 className="font-bold text-[var(--foreground)] flex items-center gap-2 border-b border-[var(--border)] pb-3">
+              <KeyRound className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
               سجل تدوير بيانات الاعتماد
             </h2>
 
             {credentialHistory.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">لا يوجد سجل تدوير سابق</p>
+              <p className="text-xs text-[var(--muted)] text-center py-6">لا يوجد سجل تدوير سابق</p>
             ) : (
               <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
                 {credentialHistory.map((c) => (
-                  <div key={c.id} className="rounded-xl border border-slate-100 p-3 text-xs flex justify-between items-center bg-slate-50/50">
+                  <div key={c.id} className="rounded-xl border border-[var(--border)] p-3 text-xs flex justify-between items-center bg-[var(--subtle-bg)]">
                     <div>
-                      <div className="font-bold text-slate-900">إصدار v{c.version}</div>
-                      <div className="text-slate-500">{new Date(c.rotatedAtUtc).toLocaleString("ar-SA")}</div>
-                      {c.reason && <div className="text-slate-600 mt-1">السبب: {c.reason}</div>}
+                      <div className="font-bold text-[var(--foreground)]">إصدار v{c.version}</div>
+                      <div className="text-[var(--muted)]">{new Date(c.rotatedAtUtc).toLocaleString("ar-SA")}</div>
+                      {c.reason && <div className="text-[var(--muted)] mt-1">السبب: {c.reason}</div>}
                     </div>
-                    <ShieldCheck className="h-5 w-5 text-indigo-600" />
+                    <ShieldCheck className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                   </div>
                 ))}
               </div>

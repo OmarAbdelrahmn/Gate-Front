@@ -26,6 +26,8 @@ import { GenericDocumentView } from "@/components/hr/forms/GenericDocumentView";
 import { VacationFormView } from "@/components/hr/forms/VacationFormView";
 import { SalaryCertificateView } from "@/components/hr/forms/SalaryCertificateView";
 import { ClearanceFormView } from "@/components/hr/forms/ClearanceFormView";
+import { ResignationFormView } from "@/components/hr/forms/ResignationFormView";
+import { FinalSettlementView } from "@/components/hr/forms/FinalSettlementView";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -81,6 +83,9 @@ export default function HrFormsPage() {
   const [decisionNo, setDecisionNo] = useState<string>("");
   const [decisionDate, setDecisionDate] = useState<string>("");
   const [clearanceReason, setClearanceReason] = useState<"leave" | "transfer" | "resignation" | "death" | "other">("resignation");
+  const [mobile, setMobile] = useState<string>("");
+  const [effectiveDay, setEffectiveDay] = useState<string>("الأحد");
+  const [effectiveDate, setEffectiveDate] = useState<string>("2026/09/01");
 
   // Initialize today's date and default Tafreet
   useEffect(() => {
@@ -420,6 +425,14 @@ export default function HrFormsPage() {
             </div>
 
             <div className="space-y-4 text-sm">
+              {/* Universal Company Name Input */}
+              <Input
+                label="اسم الشركة في الورقة الرسمية"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="شركة اكسبرس جابت"
+              />
+
               {/* Render Date if required */}
               {activeTemplate.requiresDate && (
                 <Input
@@ -688,8 +701,84 @@ export default function HrFormsPage() {
                 </div>
               )}
 
-              {/* City for templates requiring city (other than promissory note & leave request & clearance) */}
-              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && (
+              {/* Resignation Form specific fields */}
+              {selectedTemplateId === "resignation_form" && (
+                <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="الجنسية"
+                      value={nationality}
+                      onChange={(e) => setNationality(e.target.value)}
+                    />
+                    <Input
+                      label="رقم الجوال"
+                      value={mobile}
+                      onChange={(e) => setMobile(e.target.value)}
+                      placeholder="05XXXXXXXX"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="اعتباراً من يوم"
+                      value={effectiveDay}
+                      onChange={(e) => setEffectiveDay(e.target.value)}
+                      placeholder="مثال: الأحد"
+                    />
+                    <Input
+                      label="التاريخ الموافق"
+                      value={effectiveDate}
+                      onChange={(e) => setEffectiveDate(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                      سبب الاستقالة التفصيلي
+                    </label>
+                    <textarea
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="اذكر أسباب الاستقالة..."
+                      className="w-full p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm text-[var(--foreground)] outline-none focus:border-[#1167c9] min-h-[70px]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Final Settlement specific fields */}
+              {selectedTemplateId === "final_settlement" && (
+                <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+                  <Input
+                    label="اسم الشركة"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="شركة اكسبرس جابت"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="الجنسية"
+                      value={nationality}
+                      onChange={(e) => setNationality(e.target.value)}
+                    />
+                    <Input
+                      label="المسمى الوظيفي"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                    />
+                  </div>
+                  <Input
+                    label="تاريخ انتهاء رابطة العمل"
+                    value={vacationEndDate}
+                    onChange={(e) => setVacationEndDate(e.target.value)}
+                    placeholder="YYYY/MM/DD"
+                  />
+                </div>
+              )}
+
+              {/* City for templates requiring city (other than promissory note & leave request & clearance & resignation & final settlement) */}
+              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
                 <Input
                   label="المدينة / الفرع"
                   value={issueCity}
@@ -713,7 +802,7 @@ export default function HrFormsPage() {
               )}
 
               {/* Generic Document notes */}
-              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && (
+              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
                 <div className="pt-2 border-t border-[var(--border)]">
                   <label className="block text-xs font-bold text-[var(--muted)] mb-1">
                     ملاحظات إضافية (اختياري)
@@ -751,6 +840,7 @@ export default function HrFormsPage() {
                   reason,
                   date,
                   showDoubleVoucher,
+                  companyName,
                 }}
               />
             )}
@@ -788,6 +878,7 @@ export default function HrFormsPage() {
                   otherReasonText,
                   joiningDate,
                   telExt,
+                  companyName,
                 }}
               />
             )}
@@ -818,11 +909,43 @@ export default function HrFormsPage() {
                   decisionDate,
                   reason: clearanceReason,
                   otherReason: otherReasonText,
+                  companyName,
                 }}
               />
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && (
+            {selectedTemplateId === "resignation_form" && (
+              <ResignationFormView
+                data={{
+                  employeeName: riderName,
+                  iqamaNo,
+                  nationality,
+                  mobile,
+                  employeeNo: iqamaNo ? iqamaNo.slice(-5) : "",
+                  city: issueCity,
+                  effectiveDay,
+                  effectiveDate,
+                  reasonText: reason,
+                  companyName,
+                }}
+              />
+            )}
+
+            {selectedTemplateId === "final_settlement" && (
+              <FinalSettlementView
+                data={{
+                  employeeName: riderName,
+                  iqamaNo,
+                  nationality,
+                  jobTitle,
+                  companyName,
+                  endDate: vacationEndDate,
+                  date,
+                }}
+              />
+            )}
+
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{
@@ -835,6 +958,7 @@ export default function HrFormsPage() {
                   date,
                   city: issueCity,
                   notes,
+                  companyName,
                 }}
               />
             )}

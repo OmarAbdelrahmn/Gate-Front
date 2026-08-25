@@ -190,7 +190,7 @@ export const FORM_TEMPLATES: FormTemplate[] = [
   {
     id: "salary_transfer_auth",
     titleAr: "تفويض تحويل مستحقات",
-    titleEn: "Payment Transfer Auth",
+    titleEn: "",
     category: "financial",
     categoryNameAr: "النماذج المالية",
     descriptionAr: "تفويض تحويل المستحقات المالية أو المكافآت إلى حساب الحساب البنكي.",

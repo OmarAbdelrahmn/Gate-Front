@@ -11,6 +11,7 @@ export interface GenericDocumentData {
   date: string;
   city: string;
   notes?: string;
+  companyName?: string;
 }
 
 export function GenericDocumentView({
@@ -29,12 +30,12 @@ export function GenericDocumentView({
       {/* Header */}
       <div className="flex justify-between items-center border-b-2 border-black pb-3 mb-4">
         <div>
-          <h1 className="text-lg font-bold text-black">شركة ألبوابا الموكبلا للخدمات اللوجستية</h1>
+          <h1 className="text-lg font-bold text-black">{data.companyName || "شركة اكسبرس جابت"}</h1>
           <p className="text-xs font-semibold text-gray-700">إدارة الموارد البشرية والشؤون الإدارية</p>
         </div>
-        <div className="text-left text-xs font-bold dir-ltr">
+        <div className="text-left text-xs font-bold">
           <p>التاريخ: {data.date || "2026/08/25"}</p>
-          <p>الرقم المرجعي: HR-FORM-{template.id.toUpperCase()}</p>
+          <p>الرقم المرجعي: {data.iqamaNo ? data.iqamaNo.slice(-4) : "1024"}</p>
         </div>
       </div>
 
@@ -43,7 +44,6 @@ export function GenericDocumentView({
         <h2 className="text-xl md:text-2xl font-black underline tracking-wide inline-block border-b-2 border-black pb-1">
           {template.titleAr}
         </h2>
-        <p className="text-xs text-gray-600 mt-0.5 font-semibold">{template.titleEn}</p>
       </div>
 
       {/* Employee / Delegate Info Box */}

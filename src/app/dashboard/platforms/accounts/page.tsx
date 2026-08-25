@@ -620,10 +620,10 @@ export default function PlatformAccountsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-4">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-500">المنصة</label>
+            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">المنصة</label>
             <SearchableSelect
               options={[{ value: "", label: "جميع المنصات" }, ...platformOptions]}
               value={filterPlatformId}
@@ -633,7 +633,7 @@ export default function PlatformAccountsPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-500">المدينة</label>
+            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">المدينة</label>
             <SearchableSelect
               options={[{ value: "", label: "جميع المدن" }, ...cityOptions]}
               value={filterCityId}
@@ -643,7 +643,7 @@ export default function PlatformAccountsPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-500">{t("platforms.paymentModel")}</label>
+            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">{t("platforms.paymentModel")}</label>
             <SearchableSelect
               options={[
                 { value: "", label: "جميع النماذج" },
@@ -657,7 +657,7 @@ export default function PlatformAccountsPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-500">حالة الحساب</label>
+            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">حالة الحساب</label>
             <SearchableSelect
               options={[
                 { value: "", label: "جميع الحالات" },
@@ -674,7 +674,7 @@ export default function PlatformAccountsPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-500">صاحب الحساب</label>
+            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">صاحب الحساب</label>
             <SearchableSelect
               options={[{ value: "", label: "جميع أصحاب الحسابات" }, ...employeeOptions]}
               value={filterOwnerId}
@@ -684,9 +684,9 @@ export default function PlatformAccountsPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-[var(--border)]">
           <div className="relative flex-1 min-w-[240px]">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -695,13 +695,13 @@ export default function PlatformAccountsPage() {
             />
           </div>
 
-          <div className="flex items-center gap-4 text-sm font-medium text-slate-700">
+          <div className="flex items-center gap-4 text-sm font-medium text-[var(--foreground)]">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={currentOnly}
                 onChange={(e) => setCurrentOnly(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-[#1167c9]"
+                className="h-4 w-4 rounded border-[var(--border)] text-[#1167c9]"
               />
               التعيينات الحالية فقط
             </label>
@@ -711,7 +711,7 @@ export default function PlatformAccountsPage() {
                 type="checkbox"
                 checked={includeArchived}
                 onChange={(e) => setIncludeArchived(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-[#1167c9]"
+                className="h-4 w-4 rounded border-[var(--border)] text-[#1167c9]"
               />
               تضمين المؤرشفة
             </label>
@@ -725,22 +725,22 @@ export default function PlatformAccountsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
         {loading ? (
           <div className="space-y-4 p-6">
-            <div className="h-8 animate-pulse rounded-lg bg-slate-100" />
-            <div className="h-12 animate-pulse rounded-lg bg-slate-100" />
-            <div className="h-12 animate-pulse rounded-lg bg-slate-100" />
+            <div className="h-8 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
+            <div className="h-12 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
+            <div className="h-12 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
           </div>
         ) : filteredAccounts.length === 0 ? (
-          <div className="py-12 text-center text-slate-500">
-            <Server className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <div className="py-12 text-center text-[var(--muted)]">
+            <Server className="mx-auto mb-3 h-10 w-10 opacity-40" />
             <p className="font-semibold">لا توجد حسابات منصات مطابقة لخيارات البحث</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
-              <thead className="bg-slate-50/80 text-xs font-bold uppercase text-slate-500">
+              <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
                   <th className="px-6 py-4">{t("platforms.accountCode")}</th>
                   <th className="px-6 py-4">المنصة والمدينة</th>
@@ -751,29 +751,29 @@ export default function PlatformAccountsPage() {
                   <th className="px-6 py-4 text-center">{t("common.actions")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[var(--border)]">
                 {filteredAccounts.map((acc) => (
-                  <tr key={acc.id} className="transition-colors hover:bg-slate-50/60">
+                  <tr key={acc.id} className="transition-colors hover:bg-blue-500/5">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <Link
                           href={`/dashboard/platforms/accounts/${acc.id}`}
-                          className="font-mono font-bold text-[#1167c9] hover:underline flex items-center gap-1"
+                          className="font-mono font-bold text-[#1167c9] dark:text-blue-400 hover:underline flex items-center gap-1"
                         >
                           {acc.code}
                           <ExternalLink className="h-3 w-3" />
                         </Link>
                       </div>
-                      <div className="text-xs text-slate-400 font-mono">
+                      <div className="text-xs text-[var(--muted)] font-mono">
                         Ext: {acc.externalAccountId || "—"} | User: {acc.userName || "—"}
                       </div>
                     </td>
 
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-900">
+                      <div className="font-semibold text-[var(--foreground)]">
                         {acc.platformNameAr || acc.platformCode}
                       </div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-[var(--muted)]">
                         {acc.operatingCityNameAr || "—"}
                       </div>
                     </td>
@@ -782,8 +782,8 @@ export default function PlatformAccountsPage() {
                       <Badge
                         className={
                           acc.paymentModel === "Salary"
-                            ? "bg-purple-50 text-purple-700 border-purple-200 font-semibold"
-                            : "bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                            ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900/50 font-semibold"
+                            : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/50 font-semibold"
                         }
                       >
                         {acc.paymentModel === "PayPerOrder"
@@ -795,7 +795,7 @@ export default function PlatformAccountsPage() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <div className="font-medium text-slate-800">
+                      <div className="font-medium text-[var(--foreground)]">
                         {acc.ownerRiderNameAr || "—"}
                       </div>
                     </td>
@@ -803,16 +803,16 @@ export default function PlatformAccountsPage() {
                     <td className="px-6 py-4">
                       {acc.currentAssignment ? (
                         <div>
-                          <div className="font-bold text-slate-900 flex items-center gap-1">
-                            <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
+                          <div className="font-bold text-[var(--foreground)] flex items-center gap-1">
+                            <UserCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                             {acc.currentAssignment.actualRiderNameAr || "مندوب معين"}
                           </div>
-                          <div className="text-xs text-slate-400">
+                          <div className="text-xs text-[var(--muted)]">
                             منذ: {acc.currentAssignment.effectiveFrom}
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400">لا يوجد تعيين حالي</span>
+                        <span className="text-xs text-[var(--muted)]">لا يوجد تعيين حالي</span>
                       )}
                     </td>
 

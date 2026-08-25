@@ -73,7 +73,7 @@ export function PromissoryNoteView({ data }: { data: PromissoryNoteData }) {
         <p>
           أتعهد أنا الموقع أدناه بأن أدفع بدون قيد أو شرط بموجب هذا السند لأمر:{" "}
           <strong className="font-extrabold text-black">
-            {data.companyName || "شركة ألبوابا الموكبلا"}
+            {data.companyName || "شركة اكسبرس جابت"}
           </strong>{" "}
           سجل تجاري رقم: (
           <span className="font-bold">{data.companyCr || "4030362130"}</span>) - المبلغ وقدره (

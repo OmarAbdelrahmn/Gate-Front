@@ -251,9 +251,9 @@ export default function PlatformsPage() {
       </div>
 
       {/* Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
         <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -263,12 +263,12 @@ export default function PlatformsPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--foreground)]">
             <input
               type="checkbox"
               checked={includeArchived}
               onChange={(e) => setIncludeArchived(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-[#1167c9] focus:ring-[#1167c9]"
+              className="h-4 w-4 rounded border-[var(--border)] text-[#1167c9] focus:ring-[#1167c9]"
             />
             {t("platforms.includeArchived")}
           </label>
@@ -286,22 +286,22 @@ export default function PlatformsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
         {loading ? (
           <div className="space-y-4 p-6">
-            <div className="h-8 animate-pulse rounded-lg bg-slate-100" />
-            <div className="h-12 animate-pulse rounded-lg bg-slate-100" />
-            <div className="h-12 animate-pulse rounded-lg bg-slate-100" />
+            <div className="h-8 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
+            <div className="h-12 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
+            <div className="h-12 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
           </div>
         ) : filteredPlatforms.length === 0 ? (
-          <div className="py-12 text-center text-slate-500">
-            <Layers className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <div className="py-12 text-center text-[var(--muted)]">
+            <Layers className="mx-auto mb-3 h-10 w-10 opacity-40" />
             <p className="font-semibold">لا توجد منصات مطابقة للبحث</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
-              <thead className="bg-slate-50/80 text-xs font-bold uppercase text-slate-500">
+              <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
                   <th className="px-6 py-4">{t("platforms.platformCode")}</th>
                   <th className="px-6 py-4">{t("platforms.nameAr")}</th>
@@ -314,19 +314,19 @@ export default function PlatformsPage() {
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[var(--border)]">
                 {filteredPlatforms.map((platform) => (
                   <tr
                     key={platform.id}
-                    className="transition-colors hover:bg-slate-50/60"
+                    className="transition-colors hover:bg-blue-500/5"
                   >
-                    <td className="px-6 py-4 font-mono font-bold text-slate-900">
+                    <td className="px-6 py-4 font-mono font-bold text-[var(--foreground)]">
                       {platform.code}
                     </td>
-                    <td className="px-6 py-4 font-medium text-slate-800">
+                    <td className="px-6 py-4 font-medium text-[var(--foreground)]">
                       {platform.nameAr}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-[var(--muted)]">
                       {platform.nameEn}
                     </td>
                     <td className="px-6 py-4">
@@ -336,8 +336,8 @@ export default function PlatformsPage() {
                             key={m}
                             className={
                               m === "Salary"
-                                ? "bg-purple-50 text-purple-700 border-purple-200 font-semibold"
-                                : "bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                                ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900/50 font-semibold"
+                                : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/50 font-semibold"
                             }
                           >
                             {m === "PayPerOrder" ? t("platforms.payPerOrder") : m === "Salary" ? t("platforms.salary") : m}
@@ -348,7 +348,7 @@ export default function PlatformsPage() {
                     <td className="px-6 py-4">
                       {renderStatusBadge(platform.status)}
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">
+                    <td className="px-6 py-4 text-xs text-[var(--muted)] max-w-xs truncate">
                       {platform.notes || "—"}
                     </td>
                     {can("platform_accounts.manage") && (
@@ -357,7 +357,7 @@ export default function PlatformsPage() {
                           <button
                             onClick={() => handleOpenEditModal(platform)}
                             title={t("common.edit")}
-                            className="rounded-lg p-2 text-slate-500 hover:bg-blue-50 hover:text-[#1167c9]"
+                            className="rounded-lg p-2 text-[var(--muted)] hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-[#1167c9] dark:hover:text-blue-400"
                           >
                             <Edit2 className="h-4 w-4" />
                           </button>
@@ -366,7 +366,7 @@ export default function PlatformsPage() {
                             <button
                               onClick={() => handleOpenArchiveModal(platform)}
                               title={t("platforms.archivePlatform")}
-                              className="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                              className="rounded-lg p-2 text-[var(--muted)] hover:bg-red-50 dark:hover:bg-red-950/60 hover:text-red-600 dark:hover:text-red-400"
                             >
                               <Archive className="h-4 w-4" />
                             </button>

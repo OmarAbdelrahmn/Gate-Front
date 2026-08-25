@@ -248,8 +248,8 @@ export default function EmployeesPage() {
                                                     onClick={toggleFilterPopup}
                                                     className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-bold transition-all ${
                                                         engagementFilter !== "all"
-                                                            ? "border-[#1167c9] bg-blue-50 text-[#1167c9]"
-                                                            : "border-[var(--border)] text-[var(--muted)] hover:bg-slate-200/60"
+                                                            ? "border-[#1167c9] bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
+                                                            : "border-[var(--border)] text-[var(--muted)] hover:bg-slate-200/60 dark:hover:bg-slate-800"
                                                     }`}
                                                     title={locale === "en" ? "Filter by relationship" : "تصفية حسب العلاقة"}
                                                 >
@@ -291,12 +291,12 @@ export default function EmployeesPage() {
                                                                     }}
                                                                     className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
                                                                         engagementFilter === opt.key
-                                                                            ? "bg-blue-50 text-[#1167c9]"
-                                                                            : "text-slate-700 hover:bg-slate-100"
+                                                                            ? "bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
+                                                                            : "text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800"
                                                                     }`}
                                                                 >
                                                                     <span>{locale === "en" ? opt.labelEn : opt.labelAr}</span>
-                                                                    {engagementFilter === opt.key && <Check size={14} className="text-[#1167c9]" />}
+                                                                    {engagementFilter === opt.key && <Check size={14} className="text-[#1167c9] dark:text-blue-400" />}
                                                                 </button>
                                                             ))}
                                                         </div>
