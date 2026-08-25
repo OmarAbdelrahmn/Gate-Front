@@ -93,6 +93,14 @@ export const navigation: NavItem[] = [
         roles: ["admin", "member"],
         permission: "employee_status_changes.read",
       },
+      {
+        label: "المناديب الخارجيين",
+        labelKey: "nav.externalRiders",
+        href: "/dashboard/hr/external-riders",
+        icon: Users,
+        roles: ["admin", "member"],
+        permission: "riders.read",
+      },
     ],
   },
   {

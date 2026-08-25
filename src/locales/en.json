@@ -59,6 +59,7 @@
     "insurance": "Medical Insurance",
     "absenceCases": "Absence Cases",
     "statusChangeRequests": "Status Change Requests",
+    "externalRiders": "External Riders",
     "housing": "Housing Management",
     "platforms": "Platform Management",
     "platformList": "Platforms",
@@ -325,5 +326,25 @@
     "statusDisabled": "Disabled",
     "statusEnded": "Ended",
     "statusCancelled": "Cancelled"
+  },
+  "externalRiders": {
+    "title": "External Riders",
+    "subtitle": "Manage outside riders, Iqama records, and operational profiles.",
+    "newRider": "Add External Rider",
+    "editRider": "Edit External Rider",
+    "iqamaNo": "Iqama / National ID",
+    "fullNameAr": "Arabic Full Name",
+    "iqamaHint": "Iqama number must contain exactly 10 digits",
+    "nameHint": "Arabic full name is required and cannot exceed 200 characters",
+    "riderProfileId": "Rider Profile ID",
+    "employeeId": "Employee ID",
+    "searchPlaceholder": "Search by name, Iqama #, or ID...",
+    "noRidersFound": "No matching external riders found.",
+    "iqamaInvalid": "Invalid Iqama number. Must be exactly 10 digits.",
+    "nameInvalid": "Arabic full name is required (max 200 characters).",
+    "createSuccess": "External rider created successfully.",
+    "updateSuccess": "External rider updated successfully.",
+    "conflictError": "Failed to save: Iqama number already exists or record version is outdated.",
+    "notFoundError": "External rider not found."
   }
 }

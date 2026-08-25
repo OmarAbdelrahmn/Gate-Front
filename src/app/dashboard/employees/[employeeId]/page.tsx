@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   BriefcaseBusiness,
@@ -11,6 +12,7 @@ import {
   ContactRound,
   FileText,
   Pencil,
+  Plus,
   ShieldCheck,
   UserRound,
   X,
@@ -19,6 +21,12 @@ import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { hrCatalogApi, type HrRow } from "../../../../lib/hr/api";
 import { getEmployee } from "../../../../lib/workforce/api";
+import {
+  listHousing,
+  assignResident,
+  type Housing,
+  type AssignResidentPayload,
+} from "../../../../lib/housing/api";
 import type {
   EmployeeDetails,
   OperationalAssignment,
@@ -26,6 +34,8 @@ import type {
 } from "../../../../lib/workforce/types";
 import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
+import { SearchableSelect, type SelectOption } from "../../../../components/ui/SearchableSelect";
+import { toast } from "../../../../components/ui/Toast";
 import { EmployeeComplianceTabs } from "../../../../components/employees/EmployeeComplianceTabs";
 import { EmployeeDocumentsInsurance } from "../../../../components/employees/EmployeeDocumentsInsurance";
 import { EmployeePlatformAccounts } from "../../../../components/employees/EmployeePlatformAccounts";
@@ -190,13 +200,133 @@ export default function EmployeeDetailsPage({
 }: {
   params: Promise<{ employeeId: string }>;
 }) {
-  const { locale } = useAuth();
+  const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
+  const isEn = locale === "en";
+  const canManageHousing = can("housing.manage");
+
   const [employeeId, setEmployeeId] = useState<string>();
   const [details, setDetails] = useState<EmployeeDetails>();
   const [cities, setCities] = useState<HrRow[]>([]);
   const [error, setError] = useState("");
   const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
+
+  // Housing Assignment Modal State
+  const [openHousingModal, setOpenHousingModal] = useState(false);
+  const [housings, setHousings] = useState<Housing[]>([]);
+  const [loadingHousings, setLoadingHousings] = useState(false);
+  const [selectedHousingId, setSelectedHousingId] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split("T")[0]);
+  const [moveInReason, setMoveInReason] = useState("");
+  const [sourceReference, setSourceReference] = useState("");
+  const [capacityOverrideUsed, setCapacityOverrideUsed] = useState(false);
+  const [capacityOverrideReason, setCapacityOverrideReason] = useState("");
+  const [housingBusy, setHousingBusy] = useState(false);
+  const [housingError, setHousingError] = useState("");
+
+  const handleOpenHousingModal = async () => {
+    setHousingError("");
+    setOpenHousingModal(true);
+    setSelectedHousingId(details?.housing?.id || "");
+    setEffectiveFrom(new Date().toISOString().split("T")[0]);
+    setMoveInReason("");
+    setSourceReference("");
+    setCapacityOverrideUsed(false);
+    setCapacityOverrideReason("");
+    setLoadingHousings(true);
+    try {
+      const data = await listHousing();
+      setHousings(data || []);
+    } catch {
+      toast.error(isEn ? "Failed to load housing list" : "تعذر تحميل قائمة السكنات");
+    } finally {
+      setLoadingHousings(false);
+    }
+  };
+
+  const handleAssignHousing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!details?.employee) return;
+    if (!selectedHousingId) {
+      setHousingError(isEn ? "Please select a housing unit" : "يرجى اختيار وحدة السكن");
+      return;
+    }
+    if (!effectiveFrom) {
+      setHousingError(isEn ? "Effective date is required" : "تاريخ البداية مطلوب");
+      return;
+    }
+    if (capacityOverrideUsed && !capacityOverrideReason.trim()) {
+      setHousingError(
+        isEn
+          ? "Override reason is required when capacity override is used"
+          : "سبب التجاوز مطلوب عند استخدام تجاوز السعة",
+      );
+      return;
+    }
+
+    setHousingError("");
+    setHousingBusy(true);
+
+    try {
+      const payload: AssignResidentPayload = {
+        employeeId: details.employee.id,
+        effectiveFrom,
+        moveInReason: moveInReason.trim() || null,
+        sourceReference: sourceReference.trim() || null,
+        capacityOverrideUsed,
+        capacityOverrideReason: capacityOverrideUsed ? capacityOverrideReason.trim() : null,
+      };
+
+      await assignResident(selectedHousingId, payload);
+      toast.success(
+        isEn ? "Housing Assigned" : "تم تسكين الموظف",
+        isEn
+          ? "Employee assigned to housing unit successfully."
+          : "تم تسكين الموظف في وحدة السكن بنجاح.",
+      );
+      setOpenHousingModal(false);
+      setSelectedHousingId("");
+      setMoveInReason("");
+      setSourceReference("");
+      setCapacityOverrideUsed(false);
+      setCapacityOverrideReason("");
+
+      if (employeeId) {
+        const updated = await getEmployee(employeeId);
+        setDetails(updated);
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : isEn
+          ? "Failed to assign resident"
+          : "تعذر إسناد الساكن";
+      if (msg.includes("capacity_exceeded") || msg.toLowerCase().includes("capacity")) {
+        setCapacityOverrideUsed(true);
+      }
+      setHousingError(msg);
+    } finally {
+      setHousingBusy(false);
+    }
+  };
+
+  const housingOptions: SelectOption[] = useMemo(
+    () =>
+      housings
+        .filter((h) => h.status !== "Archived" && !h.isDeleted)
+        .map((h) => {
+          const isCurrent = details?.housing?.id === h.id;
+          const capInfo = `${isEn ? "Available" : "الشاغر"}: ${h.availableCapacity} / ${h.totalCapacity}`;
+          return {
+            value: h.id,
+            label: `${isEn ? h.nameEn || h.nameAr : h.nameAr} (${h.code})`,
+            sublabel: `${h.cityAr || ""} · ${capInfo}${isCurrent ? (isEn ? " (Current)" : " (السكن الحالي)") : ""}`,
+            keywords: `${h.nameAr} ${h.nameEn || ""} ${h.code} ${h.cityAr || ""}`,
+          };
+        }),
+    [housings, details?.housing?.id, isEn],
+  );
 
   useEffect(() => {
     void params.then(({ employeeId: id }) => setEmployeeId(id));
@@ -515,6 +645,18 @@ export default function EmployeeDetailsPage({
             <ShieldCheck size={17} />
             {locale === "en" ? "Medical Insurance" : "التأمين الطبي"}
           </Button>
+          {canManageHousing && (
+            <Button variant="secondary" onClick={handleOpenHousingModal}>
+              <Building size={17} />
+              {housing
+                ? locale === "en"
+                  ? "Change Housing"
+                  : "تغيير السكن"
+                : locale === "en"
+                ? "Assign Housing"
+                : "تسكين بالسكن"}
+            </Button>
+          )}
           <Link href={`/dashboard/employees/${employee.id}/actions`}>
             <Button>{locale === "en" ? "Employee Actions" : "إجراءات الموظف"}</Button>
           </Link>
@@ -561,12 +703,33 @@ export default function EmployeeDetailsPage({
 
       <div className="grid gap-6 sm:grid-cols-3">
         <Card className="p-5">
-          <h2 className="flex items-center gap-2 font-black">
-            <Building size={18} />
-            {locale === "en" ? "Housing Residence" : "السكن الحالي"}
-          </h2>
+          <div className="flex items-center justify-between gap-2 border-b pb-3 mb-3">
+            <h2 className="flex items-center gap-2 font-black">
+              <Building size={18} className="text-[#1167c9]" />
+              {locale === "en" ? "Housing Residence" : "السكن الحالي"}
+            </h2>
+            {canManageHousing && (
+              <Button
+                variant="secondary"
+                onClick={handleOpenHousingModal}
+                className="h-8 min-h-0 px-2.5 text-xs gap-1.5"
+              >
+                {housing ? (
+                  <>
+                    <Pencil size={13} />
+                    {locale === "en" ? "Change Housing" : "تغيير السكن"}
+                  </>
+                ) : (
+                  <>
+                    <Plus size={13} />
+                    {locale === "en" ? "Assign Housing" : "تسكين الموظف"}
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
           {housing ? (
-            <div className="mt-4 space-y-1.5">
+            <div className="space-y-1.5">
               <Link
                 href={`/dashboard/housing/${housing.id}`}
                 className="block text-sm font-extrabold text-[#1167c9] hover:underline"
@@ -580,11 +743,22 @@ export default function EmployeeDetailsPage({
               )}
             </div>
           ) : (
-            <p className="mt-4 text-sm text-[var(--muted)]">
-              {locale === "en"
-                ? "Not currently housed in any housing unit."
-                : "غير مسكن حالياً في أي وحدة سكنية."}
-            </p>
+            <div className="space-y-3">
+              <p className="text-sm text-[var(--muted)] font-medium">
+                {locale === "en"
+                  ? "Not currently housed in any housing unit."
+                  : "غير مسكن حالياً في أي وحدة سكنية."}
+              </p>
+              {canManageHousing && (
+                <Button
+                  onClick={handleOpenHousingModal}
+                  className="w-full h-9 text-xs gap-1.5 bg-[#1167c9] hover:bg-blue-700 text-white font-bold"
+                >
+                  <Plus size={15} />
+                  {locale === "en" ? "Assign to Housing Unit" : "تسكين الموظف في وحدة سكنية"}
+                </Button>
+              )}
+            </div>
           )}
         </Card>
 
@@ -717,6 +891,168 @@ export default function EmployeeDetailsPage({
                 activeTab={activeModalTab}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {openHousingModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+          onClick={() => setOpenHousingModal(false)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 shadow-2xl border border-[var(--border)] space-y-5 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-[#1167c9]">
+                  <Building size={20} />
+                </span>
+                <div>
+                  <h3 className="font-extrabold text-lg">
+                    {housing
+                      ? isEn
+                        ? "Change Housing Assignment"
+                        : "تغيير وحدة السكن"
+                      : isEn
+                      ? "Assign Employee to Housing"
+                      : "تسكين الموظف في وحدة سكنية"}
+                  </h3>
+                  <p className="text-xs text-[var(--muted)] font-medium">{displayName}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenHousingModal(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--muted)] hover:bg-slate-100 transition-colors"
+                aria-label={isEn ? "Close" : "إغلاق"}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {housingError && (
+              <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700 border border-rose-200">
+                <AlertCircle size={16} className="shrink-0" />
+                <span>{housingError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAssignHousing} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1.5 text-[var(--foreground)]">
+                  {isEn ? "Select Housing Unit" : "اختر وحدة السكن"} <span className="text-rose-500">*</span>
+                </label>
+                {loadingHousings ? (
+                  <div className="h-11 rounded-xl border bg-slate-50 flex items-center justify-center text-xs text-[var(--muted)] animate-pulse">
+                    {isEn ? "Loading housing units..." : "جاري تحميل وحدات السكن..."}
+                  </div>
+                ) : (
+                  <SearchableSelect
+                    options={housingOptions}
+                    value={selectedHousingId}
+                    onChange={(val) => {
+                      setSelectedHousingId(val);
+                      const target = housings.find((h) => h.id === val);
+                      if (target && target.availableCapacity <= 0) {
+                        setCapacityOverrideUsed(true);
+                      }
+                    }}
+                    placeholder={isEn ? "Choose housing..." : "اختر وحدة السكن..."}
+                    searchPlaceholder={isEn ? "Search housing units..." : "ابحث في وحدات السكن..."}
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1.5 text-[var(--foreground)]">
+                  {isEn ? "Effective Start Date" : "تاريخ بداية التسكين"} <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={effectiveFrom}
+                  onChange={(e) => setEffectiveFrom(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium transition-all focus:border-[#1167c9] outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1.5 text-[var(--foreground)]">
+                  {isEn ? "Reason / Notes" : "سبب التسكين / ملاحظات"}
+                </label>
+                <input
+                  type="text"
+                  value={moveInReason}
+                  onChange={(e) => setMoveInReason(e.target.value)}
+                  placeholder={isEn ? "Optional move-in reason" : "سبب اختياري لنقل أو تسكين الموظف"}
+                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium transition-all focus:border-[#1167c9] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1.5 text-[var(--foreground)]">
+                  {isEn ? "Source Reference" : "المرجع / المصدر"}
+                </label>
+                <input
+                  type="text"
+                  value={sourceReference}
+                  onChange={(e) => setSourceReference(e.target.value)}
+                  placeholder={isEn ? "Optional reference ID or document no." : "رقم مرجعي اختياري أو رقم العقد"}
+                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium transition-all focus:border-[#1167c9] outline-none"
+                />
+              </div>
+
+              {/* Capacity Override Section */}
+              <div className="rounded-xl border p-3 bg-slate-50/50 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold select-none">
+                  <input
+                    type="checkbox"
+                    checked={capacityOverrideUsed}
+                    onChange={(e) => setCapacityOverrideUsed(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#1167c9] focus:ring-[#1167c9]"
+                  />
+                  <span>{isEn ? "Override Housing Capacity" : "تجاوز السعة الاستيعابية للسكن"}</span>
+                </label>
+
+                {capacityOverrideUsed && (
+                  <div>
+                    <label className="block text-[11px] font-bold mb-1 text-slate-600">
+                      {isEn ? "Override Reason" : "سبب تجاوز السعة"} <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={capacityOverrideReason}
+                      onChange={(e) => setCapacityOverrideReason(e.target.value)}
+                      placeholder={isEn ? "Reason for exceeding housing capacity..." : "سبب السماح بتجاوز سعة السكن..."}
+                      className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
+                      required={capacityOverrideUsed}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setOpenHousingModal(false)}
+                  disabled={housingBusy}
+                >
+                  {isEn ? "Cancel" : "إلغاء"}
+                </Button>
+                <Button type="submit" disabled={housingBusy || loadingHousings}>
+                  {housingBusy
+                    ? isEn
+                      ? "Saving..."
+                      : "جاري التسكين..."
+                    : isEn
+                    ? "Confirm Assignment"
+                    : "تأكيد التسكين"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

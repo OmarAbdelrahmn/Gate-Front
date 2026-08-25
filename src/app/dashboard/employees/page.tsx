@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, UsersRound } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Filter, Plus, Search, UsersRound } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { translate } from "../../../lib/i18n";
 import { hrCatalogApi, type HrRow } from "../../../lib/hr/api";
@@ -110,8 +110,24 @@ export default function EmployeesPage() {
     const [cities, setCities] = useState<HrRow[]>([]);
     const [workTypes, setWorkTypes] = useState<HrRow[]>([]);
     const [search, setSearch] = useState("");
+    const [engagementFilter, setEngagementFilter] = useState<string>("all");
+    const [showFilterPopup, setShowFilterPopup] = useState(false);
+    const filterBtnRef = useRef<HTMLButtonElement>(null);
+    const [popupCoords, setPopupCoords] = useState<{ top: number; left?: number; right?: number } | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+
+    const toggleFilterPopup = () => {
+        if (!showFilterPopup && filterBtnRef.current) {
+            const rect = filterBtnRef.current.getBoundingClientRect();
+            if (locale === "en") {
+                setPopupCoords({ top: rect.bottom + 6, left: rect.left });
+            } else {
+                setPopupCoords({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+            }
+        }
+        setShowFilterPopup((prev) => !prev);
+    };
 
     useEffect(() => {
         setLoading(true);
@@ -134,6 +150,9 @@ export default function EmployeesPage() {
     const results = useMemo(
         () =>
             employees.filter((item) => {
+                if (engagementFilter !== "all" && item.engagementType !== engagementFilter) {
+                    return false;
+                }
                 const empRecord = item as Record<string, unknown>;
                 const sponsor = item.sponsor?.nameAr || item.sponsor?.nameEn || (empRecord.sponsorNameAr as string) || "";
                 const workTypeStr = getWorkTypeDisplay(item, workTypes, locale);
@@ -147,7 +166,7 @@ export default function EmployeesPage() {
                     .toLowerCase()
                     .includes(search.toLowerCase());
             }),
-        [employees, search, cities, workTypes, locale],
+        [employees, search, cities, workTypes, locale, engagementFilter],
     );
 
     return (
@@ -187,7 +206,7 @@ export default function EmployeesPage() {
                                     ? "Search by name, Iqama #, platform, sponsor, nationality, or phone..."
                                     : "ابحث بالاسم، رقم الإقامة، المنصة، الكفيل، الجنسية، الجوال..."
                             }
-                            className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-3 text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
+                            className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
                         />
                     </div>
                     <span className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
@@ -207,7 +226,7 @@ export default function EmployeesPage() {
                 ) : (
                     <div className="overflow-x-auto">
                         <table className={`min-w-[1180px] w-full ${locale === "en" ? "text-left" : "text-right"}`}>
-                            <thead className="bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
+                            <thead className="relative z-30 bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                                 <tr>
                                     <th className="px-5 py-4">
                                         {locale === "en" ? "Employee" : "الموظف"}
@@ -218,8 +237,72 @@ export default function EmployeesPage() {
                                     <th className="px-5 py-4">
                                         {locale === "en" ? "Nationality" : "الجنسية"}
                                     </th>
-                                    <th className="px-5 py-4">
-                                        {locale === "en" ? "Relationship & Sponsor" : "العلاقة والكفيل"}
+                                    <th className="px-5 py-4 relative">
+                                        <div className="flex items-center gap-2">
+                                            <span>{locale === "en" ? "Relationship & Sponsor" : "العلاقة والكفيل"}</span>
+                                            <div className="relative inline-block text-right">
+                                                <button
+                                                    ref={filterBtnRef}
+                                                    type="button"
+                                                    onClick={toggleFilterPopup}
+                                                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-bold transition-all ${
+                                                        engagementFilter !== "all"
+                                                            ? "border-[#1167c9] bg-blue-50 text-[#1167c9]"
+                                                            : "border-[var(--border)] text-[var(--muted)] hover:bg-slate-200/60"
+                                                    }`}
+                                                    title={locale === "en" ? "Filter by relationship" : "تصفية حسب العلاقة"}
+                                                >
+                                                    <Filter size={13} />
+                                                    {engagementFilter !== "all" && (
+                                                        <span className="inline-block size-1.5 rounded-full bg-[#1167c9]" />
+                                                    )}
+                                                </button>
+
+                                                {showFilterPopup && (
+                                                    <>
+                                                        <div
+                                                            className="fixed inset-0 z-[9998] bg-transparent"
+                                                            onClick={() => setShowFilterPopup(false)}
+                                                        />
+                                                        <div
+                                                            style={{
+                                                                top: popupCoords?.top ?? 0,
+                                                                ...(locale === "en"
+                                                                    ? { left: popupCoords?.left ?? 0 }
+                                                                    : { right: popupCoords?.right ?? 0 }),
+                                                            }}
+                                                            className="fixed z-[9999] w-48 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-2xl"
+                                                        >
+                                                            <div className="px-2.5 py-1 text-[11px] font-black text-[var(--muted)] border-b border-[var(--border)] mb-1">
+                                                                {locale === "en" ? "Filter Relationship" : "تصفية نوع العلاقة"}
+                                                            </div>
+                                                            {[
+                                                                { key: "all", labelAr: "الكل", labelEn: "All" },
+                                                                { key: "SponsoredInternal", labelAr: "على الكفالة", labelEn: "Company Sponsored" },
+                                                                { key: "OutsideRider", labelAr: "مندوب خارجي", labelEn: "External Delegate" },
+                                                            ].map((opt) => (
+                                                                <button
+                                                                    key={opt.key}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setEngagementFilter(opt.key);
+                                                                        setShowFilterPopup(false);
+                                                                    }}
+                                                                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                                                                        engagementFilter === opt.key
+                                                                            ? "bg-blue-50 text-[#1167c9]"
+                                                                            : "text-slate-700 hover:bg-slate-100"
+                                                                    }`}
+                                                                >
+                                                                    <span>{locale === "en" ? opt.labelEn : opt.labelAr}</span>
+                                                                    {engagementFilter === opt.key && <Check size={14} className="text-[#1167c9]" />}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
                                     </th>
                                     <th className="px-5 py-4">
                                         {locale === "en" ? "Operational Role" : "الدور التشغيلي"}

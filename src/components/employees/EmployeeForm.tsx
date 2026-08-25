@@ -151,30 +151,22 @@ export function EmployeeForm({
       return;
     }
 
-    const iqama = String(payload.iqamaNo ?? "");
-    if (status === "Active") {
-      if (!iqama || !/^\d{10}$/.test(iqama)) {
-        const msg = locale === "en"
-          ? "For Active status, a valid 10-digit Iqama / National ID number is required."
-          : "لحالة نشط، رقم الإقامة / الهوية الوطنية مكوّن من 10 أرقام مطلوب.";
-        setError(msg);
-        toast.error(locale === "en" ? "Validation Error" : "خطأ في رقم الإقامة", msg);
-        return;
-      }
-      if (engagement === "SponsoredInternal" && !payload.sponsorId) {
-        const msg = locale === "en"
-          ? "Sponsored internal employees require selecting a sponsor when Active."
-          : "الموظف على كفالة الشركة يتطلب اختيار كفيل عندما يكون نشطاً.";
-        setError(msg);
-        toast.error(locale === "en" ? "Validation Error" : "خطأ في التحديد", msg);
-        return;
-      }
-    } else if (iqama && !/^\d{10}$/.test(iqama)) {
+    const iqama = String(payload.iqamaNo ?? "").trim();
+    if (!iqama || !/^\d{10}$/.test(iqama)) {
       const msg = locale === "en"
-        ? "Iqama / National ID number must be exactly 10 digits."
-        : "رقم الإقامة / الهوية الوطنية يجب أن يكون 10 أرقام بالضبط.";
+        ? "Iqama / National ID number is required and must contain exactly 10 digits."
+        : "رقم الإقامة / الهوية الوطنية مطلوب ويجب أن يتكون من 10 أرقام بالضبط.";
       setError(msg);
       toast.error(locale === "en" ? "Validation Error" : "خطأ في رقم الإقامة", msg);
+      return;
+    }
+
+    if (status === "Active" && engagement === "SponsoredInternal" && !payload.sponsorId) {
+      const msg = locale === "en"
+        ? "Sponsored internal employees require selecting a sponsor when Active."
+        : "الموظف على كفالة الشركة يتطلب اختيار كفيل عندما يكون نشطاً.";
+      setError(msg);
+      toast.error(locale === "en" ? "Validation Error" : "خطأ في التحديد", msg);
       return;
     }
 
@@ -260,6 +252,7 @@ export function EmployeeForm({
           type={field[3]}
           required={key === "fullNameAr" || key === "iqamaNo"}
           defaultValue={valStr}
+          maxLength={key === "iqamaNo" ? 10 : undefined}
           dir={key === "email" || key.includes("Phone") || key === "iqamaNo" ? "ltr" : undefined}
         />
       );
