@@ -1,0 +1,202 @@
+import React from "react";
+import {
+  Banknote,
+  FileCheck,
+  FileSignature,
+  ShieldAlert,
+  CalendarCheck,
+  Building2,
+  FileText,
+  UserCheck,
+  Award,
+  Wallet,
+  Briefcase,
+  Layers,
+} from "lucide-react";
+
+export type FormCategory = "financial" | "custody" | "employment" | "leave" | "administrative";
+
+export interface FormTemplate {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  category: FormCategory;
+  categoryNameAr: string;
+  descriptionAr: string;
+  icon: React.ComponentType<{ className?: string }>;
+  requiresAmount?: boolean;
+  requiresReason?: boolean;
+  requiresCity?: boolean;
+  requiresDate?: boolean;
+  requiresRider?: boolean;
+  badge?: string;
+}
+
+export const FORM_CATEGORIES: { id: FormCategory; labelAr: string; labelEn: string }[] = [
+  { id: "financial", labelAr: "النماذج المالية والسندات", labelEn: "Financial & Notes" },
+  { id: "custody", labelAr: "العهد والتسليم", labelEn: "Custody & Clearance" },
+  { id: "employment", labelAr: "التوظيف والمناصب", labelEn: "Employment & Contracts" },
+  { id: "leave", labelAr: "الإجازات والاستقالات", labelEn: "Leaves & Resignations" },
+  { id: "administrative", labelAr: "النماذج الإدارية والإنذارات", labelEn: "Administrative & Notices" },
+];
+
+export const FORM_TEMPLATES: FormTemplate[] = [
+  {
+    id: "cash_disbursement",
+    titleAr: "طلب صرف نقدي",
+    titleEn: "Cash Disbursement Request",
+    category: "financial",
+    categoryNameAr: "النماذج المالية",
+    descriptionAr: "نموذج صرف مالي نقدي للمندوب أو الموظف مع اعتماد الموارد البشرية والمالية والإدارة.",
+    icon: Banknote,
+    requiresAmount: true,
+    requiresReason: true,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "مكتمل ومعتمد",
+  },
+  {
+    id: "promissory_note",
+    titleAr: "سند لأمر",
+    titleEn: "Promissory Note",
+    category: "financial",
+    categoryNameAr: "النماذج المالية",
+    descriptionAr: "سند تجاري ملزم قانونياً بموجب نظام الأوراق التجارية يحدد المبلغ ومحرر السند والإقامة.",
+    icon: FileSignature,
+    requiresAmount: true,
+    requiresCity: true,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "قانوني ملزم",
+  },
+  {
+    id: "salary_certificate",
+    titleAr: "تعريف راتب",
+    titleEn: "Salary Certificate Letter",
+    category: "financial",
+    categoryNameAr: "النماذج المالية",
+    descriptionAr: "إفادة رسمية بإجمالي الراتب الشهري والمسمى الوظيفي موجهة للجهات الحكومية والخاصة.",
+    icon: Award,
+    requiresAmount: true,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "خطاب رسمى",
+  },
+  {
+    id: "financial_advance",
+    titleAr: "طلب سلفة مالية",
+    titleEn: "Financial Advance Request",
+    category: "financial",
+    categoryNameAr: "النماذج المالية",
+    descriptionAr: "نموذج طلب سلفة راتب وتحديد طريقة الخصم الشهري.",
+    icon: Wallet,
+    requiresAmount: true,
+    requiresReason: true,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "clearance_form",
+    titleAr: "نموذج إخلاء طرف موظف",
+    titleEn: "Employee Clearance Form",
+    category: "custody",
+    categoryNameAr: "العهد والتسليم",
+    descriptionAr: "إخلاء طرف شامل من السكن، المركبة، المنصات، والعهد المالية والعينية.",
+    icon: FileCheck,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "custody_receipt",
+    titleAr: "إقرار وتعهد استلام عهدة",
+    titleEn: "Custody Receipt & Undertaking",
+    category: "custody",
+    categoryNameAr: "العهد والتسليم",
+    descriptionAr: "تعهد استلام عهدة (سيارة، دراجة، معدات، هاتف) والالتزام بالحفاظ عليها.",
+    icon: Building2,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "work_commencement",
+    titleAr: "نموذج مباشرة عمل",
+    titleEn: "Work Commencement Form",
+    category: "employment",
+    categoryNameAr: "التوظيف والمناصب",
+    descriptionAr: "إثبات وتأكيد تاريخ مباشرة العمل الفعلي للموظف أو المندوب.",
+    icon: UserCheck,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "job_offer",
+    titleAr: "عرض عمل وتوظيف",
+    titleEn: "Job Offer Agreement",
+    category: "employment",
+    categoryNameAr: "التوظيف والمناصب",
+    descriptionAr: "وثيقة عرض العمل الرسمية المتضمنة الشروط والراتب البدائي.",
+    icon: Briefcase,
+    requiresAmount: true,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "leave_request",
+    titleAr: "طلب إجازة رسمية",
+    titleEn: "Official Leave Request",
+    category: "leave",
+    categoryNameAr: "الإجازات والاستقالات",
+    descriptionAr: "طلب إجازة سنوية أو مرشية أو استثنائية وتحديد البديل وتاريخ العودة.",
+    icon: CalendarCheck,
+    requiresReason: true,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "resignation_form",
+    titleAr: "نموذج تقديم استقالة",
+    titleEn: "Resignation Notice Form",
+    category: "leave",
+    categoryNameAr: "الإجازات والاستقالات",
+    descriptionAr: "طلب إنهاء الخدمات وتقديم فترة الإخطار النظامية.",
+    icon: FileText,
+    requiresReason: true,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "violation_warning",
+    titleAr: "إنذار وتنبيه موظف / مندوب",
+    titleEn: "Employee Violation Warning",
+    category: "administrative",
+    categoryNameAr: "النماذج الإدارية",
+    descriptionAr: "إشعار إنذار كتابي بسبب التخلف عن العمل أو مخالفت لائحة العمل.",
+    icon: ShieldAlert,
+    requiresReason: true,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "experience_certificate",
+    titleAr: "شهادة خبرة موظف",
+    titleEn: "Experience Certificate",
+    category: "administrative",
+    categoryNameAr: "النماذج الإدارية",
+    descriptionAr: "إفادة رسمية بالفترة التي قضاها الموظف في العمل والمسمى الوظيفي.",
+    icon: Award,
+    requiresDate: true,
+    requiresRider: true,
+  },
+  {
+    id: "salary_transfer_auth",
+    titleAr: "تفويض تحويل مستحقات",
+    titleEn: "Payment Transfer Auth",
+    category: "financial",
+    categoryNameAr: "النماذج المالية",
+    descriptionAr: "تفويض تحويل المستحقات المالية أو المكافآت إلى حساب الحساب البنكي.",
+    icon: Layers,
+    requiresAmount: true,
+    requiresDate: true,
+    requiresRider: true,
+  },
+];

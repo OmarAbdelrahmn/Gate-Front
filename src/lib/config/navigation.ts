@@ -10,6 +10,7 @@ import {
   Layers,
   Server,
   History,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 export type Role = "admin" | "member" | "accountant";
@@ -92,6 +93,14 @@ export const navigation: NavItem[] = [
         icon: ClipboardList,
         roles: ["admin", "member"],
         permission: "employee_status_changes.read",
+      },
+      {
+        label: "نماذج الموارد البشرية",
+        labelKey: "nav.hrForms",
+        href: "/dashboard/hr/forms",
+        icon: FileText,
+        roles: ["admin", "member"],
+        permission: "employees.read",
       },
       {
         label: "المناديب الخارجيين",
