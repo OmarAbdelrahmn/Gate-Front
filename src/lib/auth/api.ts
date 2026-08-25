@@ -18,7 +18,32 @@ export type CustomRequestInit = RequestInit & {
   suppressErrorToast?: boolean;
 };
 
-export function getFriendlyErrorMessage(status: number, rawMessage?: string | null): string {
+export function getFriendlyErrorMessage(
+  status: number,
+  rawMessage?: string | null,
+  errorCode?: string | null,
+): string {
+  if (errorCode) {
+    switch (errorCode) {
+      case "platform.payment_model_not_supported":
+        return "نموذج الدفع غير مدعوم للمنصة المحددة. يرجى تحديث المنصة واختيار نموذج من النماذج المدعومة.";
+      case "platform.payment_models_in_use":
+        return "لا يمكن إزالة نموذج الدفع لأن هناك حسابات غير مؤرشفة تستخدمه حالياً.";
+      case "platform.rider_account_limit_reached":
+        return "المندوب لديه حسابان نشطان بالفعل. يرجى إنهاء تعيين حساب قبل تعيين حساب آخر.";
+      case "platform.rider_salary_account_limit_reached":
+        return "المندوب لديه حساب راتب (Salary) نشط بالفعل. استخدم PayPerOrder أو أنهِ تعيين حساب الراتب الحالي.";
+      case "platform.rider_profile_not_found":
+        return "لم يتم العثور على ملف المندوب. يرجى التأكد من اختيار مندوب يملك ملف سائق صالح (Rider Profile ID).";
+      case "platform.rider_profile_unavailable":
+        return "ملف المندوب غير متاح حالياً أو غير مؤهل لتعيين حساب منصة.";
+      case "hr.concurrency_conflict":
+        return "حدث تعارض في التحديث بالتزامن. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+      case "hr.invalid_request":
+        return "طلب غير صالح. يرجى التأكد من صحة البيانات والمدخلات.";
+    }
+  }
+
   if (
     rawMessage &&
     typeof rawMessage === "string" &&
@@ -85,7 +110,8 @@ async function parseResponse<T>(
         (typeof body === "string" ? body : null);
     }
 
-    const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg);
+    const errorCode = body?.errorCode || body?.code;
+    const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg, errorCode);
 
     const error = new Error(friendlyMsg) as AuthApiError;
     error.status = response.status;

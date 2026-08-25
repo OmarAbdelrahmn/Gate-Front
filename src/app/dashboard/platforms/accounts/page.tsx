@@ -16,13 +16,14 @@ import {
   getPlatforms,
   type AccountResponse,
   type AccountUpsertRequest,
+  type AssignRequest,
   type AssignmentResponse,
   type CredentialHistoryResponse,
   type PlatformResponse,
   type AccountStatus,
 } from "@/lib/platforms/api";
-import { listEmployees, listOperatingCities, type OperatingCity } from "@/lib/workforce/api";
-import type { Employee } from "@/lib/workforce/types";
+import { listEmployees, listOperatingCities, listRiders, type OperatingCity } from "@/lib/workforce/api";
+import type { Employee, Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -54,6 +55,7 @@ export default function PlatformAccountsPage() {
   const [platforms, setPlatforms] = useState<PlatformResponse[]>([]);
   const [cities, setCities] = useState<OperatingCity[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [riders, setRiders] = useState<Rider[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -61,6 +63,7 @@ export default function PlatformAccountsPage() {
   // Filters
   const [filterPlatformId, setFilterPlatformId] = useState("");
   const [filterCityId, setFilterCityId] = useState("");
+  const [filterPaymentModel, setFilterPaymentModel] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterOwnerId, setFilterOwnerId] = useState("");
   const [currentOnly, setCurrentOnly] = useState(false);
@@ -96,6 +99,7 @@ export default function PlatformAccountsPage() {
     code: "",
     externalAccountId: "",
     userName: "",
+    paymentModel: "PayPerOrder",
     status: "Available",
     acquisitionDate: new Date().toISOString().split("T")[0],
     startDate: new Date().toISOString().split("T")[0],
@@ -105,9 +109,10 @@ export default function PlatformAccountsPage() {
     rowVersion: null,
   });
 
-  const [assignFormData, setAssignFormData] = useState({
+  const [assignFormData, setAssignFormData] = useState<AssignRequest>({
     actualRiderProfileId: "",
     effectiveFrom: new Date().toISOString().split("T")[0],
+    paymentModel: "PayPerOrder",
     reason: "",
     wasBackdated: false,
     backdatedReason: "",
@@ -127,10 +132,11 @@ export default function PlatformAccountsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [accRes, platRes, cityRes, empRes] = await Promise.allSettled([
+      const [accRes, platRes, cityRes, empRes, riderRes] = await Promise.allSettled([
         getPlatformAccounts({
           platformId: filterPlatformId || undefined,
           operatingCityId: filterCityId || undefined,
+          paymentModel: (filterPaymentModel as any) || undefined,
           status: filterStatus || undefined,
           ownerRiderProfileId: filterOwnerId || undefined,
           currentOnly,
@@ -139,6 +145,7 @@ export default function PlatformAccountsPage() {
         getPlatforms(true),
         listOperatingCities(),
         listEmployees(),
+        listRiders(),
       ]);
 
       if (accRes.status === "fulfilled") {
@@ -154,6 +161,7 @@ export default function PlatformAccountsPage() {
       }
       if (cityRes.status === "fulfilled") setCities(cityRes.value);
       if (empRes.status === "fulfilled") setEmployees(empRes.value);
+      if (riderRes.status === "fulfilled") setRiders(riderRes.value);
     } catch (err: any) {
       console.error("Failed to load account data", err);
     } finally {
@@ -165,7 +173,7 @@ export default function PlatformAccountsPage() {
     if (can("platform_accounts.read")) {
       loadData();
     }
-  }, [filterPlatformId, filterCityId, filterStatus, filterOwnerId, currentOnly, includeArchived]);
+  }, [filterPlatformId, filterCityId, filterPaymentModel, filterStatus, filterOwnerId, currentOnly, includeArchived]);
 
   if (!can("platform_accounts.read")) {
     return (
@@ -193,37 +201,99 @@ export default function PlatformAccountsPage() {
     label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
   }));
 
-  // Filter employees for assignment: exclude riders who already have an active platform account ID assigned
+  // Filter employees / riders for assignment: MUST send riderProfileId (not employeeId)
   const assignableEmployeeOptions = useMemo(() => {
-    const assignedRiderIds = new Set<string>();
+    const riderActiveMap = new Map<string, { total: number; salary: number }>();
 
     accounts.forEach((acc) => {
-      // Riders currently assigned to an active account
-      if (acc.status === "Assigned" && acc.currentAssignment?.actualRiderProfileId) {
-        assignedRiderIds.add(acc.currentAssignment.actualRiderProfileId);
-        if (acc.currentAssignment.actualEmployeeId) {
-          assignedRiderIds.add(acc.currentAssignment.actualEmployeeId);
+      if (acc.status === "Assigned" && acc.currentAssignment) {
+        const rId = acc.currentAssignment.actualRiderProfileId;
+        const eId = acc.currentAssignment.actualEmployeeId;
+        const isSalary = acc.paymentModel === "Salary" || acc.currentAssignment.paymentModel === "Salary";
+
+        const trackRider = (id: string | null | undefined) => {
+          if (!id) return;
+          const curr = riderActiveMap.get(id) || { total: 0, salary: 0 };
+          riderActiveMap.set(id, {
+            total: curr.total + 1,
+            salary: curr.salary + (isSalary ? 1 : 0),
+          });
+        };
+
+        trackRider(rId);
+        if (eId && eId !== rId) {
+          trackRider(eId);
         }
-      }
-      // If assigning to a specific platform, also exclude owners/assignees on that platform
-      if (assigningAccount && acc.platformId === assigningAccount.platformId) {
-        if (acc.ownerRiderProfileId) assignedRiderIds.add(acc.ownerRiderProfileId);
-        if (acc.ownerEmployeeId) assignedRiderIds.add(acc.ownerEmployeeId);
       }
     });
 
-    return employees
-      .filter((e) => {
-        const rId = e.riderProfileId;
-        const eId = e.id;
-        const isAssigned = (rId && assignedRiderIds.has(rId)) || (eId && assignedRiderIds.has(eId));
-        return !isAssigned;
-      })
-      .map((e) => ({
-        value: e.riderProfileId || e.id,
-        label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
-      }));
-  }, [employees, accounts, assigningAccount]);
+    const targetIsSalary = assigningAccount?.paymentModel === "Salary";
+
+    // Map employeeId -> riderProfileId from listRiders()
+    const empToRiderProfileMap = new Map<string, string>();
+    riders.forEach((r) => {
+      if (r.employeeId && r.id) {
+        empToRiderProfileMap.set(r.employeeId, r.id);
+      }
+    });
+
+    const options: { value: string; label: string }[] = [];
+    const usedRiderProfileIds = new Set<string>();
+
+    // 1. Process Employees with valid riderProfileId
+    employees.forEach((e) => {
+      const rId = e.riderProfileId || e.rider?.id || empToRiderProfileMap.get(e.id);
+      if (!rId) return; // Skip employees without a rider profile ID
+
+      usedRiderProfileIds.add(rId);
+
+      const infoR = riderActiveMap.get(rId);
+      const infoE = e.id ? riderActiveMap.get(e.id) : undefined;
+      const totalActive = Math.max(infoR?.total || 0, infoE?.total || 0);
+      const salaryActive = Math.max(infoR?.salary || 0, infoE?.salary || 0);
+
+      if (totalActive >= 2) return;
+      if (targetIsSalary && salaryActive >= 1) return;
+
+      let activeTag = "";
+      if (totalActive > 0) {
+        activeTag = locale === "en"
+          ? ` (${totalActive} active account)`
+          : ` (لديـه ${totalActive} حساب نشط)`;
+      }
+
+      options.push({
+        value: rId, // Guaranteed riderProfileId
+        label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}${activeTag}`,
+      });
+    });
+
+    // 2. Process Riders from listRiders() not in employees list
+    riders.forEach((r) => {
+      if (!r.id || usedRiderProfileIds.has(r.id)) return;
+
+      const info = riderActiveMap.get(r.id);
+      const totalActive = info?.total || 0;
+      const salaryActive = info?.salary || 0;
+
+      if (totalActive >= 2) return;
+      if (targetIsSalary && salaryActive >= 1) return;
+
+      let activeTag = "";
+      if (totalActive > 0) {
+        activeTag = locale === "en"
+          ? ` (${totalActive} active account)`
+          : ` (لديـه ${totalActive} حساب نشط)`;
+      }
+
+      options.push({
+        value: r.id, // Guaranteed riderProfileId
+        label: `${r.fullNameAr} - ${r.iqamaNo || ""}${activeTag}`,
+      });
+    });
+
+    return options;
+  }, [employees, riders, accounts, assigningAccount, locale]);
 
   const filteredAccounts = accounts.filter((acc) => {
     const term = search.toLowerCase().trim();
@@ -240,13 +310,17 @@ export default function PlatformAccountsPage() {
   // Modal Open Handlers
   const handleOpenAdd = () => {
     setEditingAccount(null);
+    const initialPlatId = platforms[0]?.id || "";
+    const selectedPlat = platforms.find((p) => p.id === initialPlatId);
+    const defaultPaymentModel = selectedPlat?.supportedPaymentModels?.[0] || "PayPerOrder";
     setAccountFormData({
-      platformId: platforms[0]?.id || "",
+      platformId: initialPlatId,
       operatingCityId: cities[0]?.id || "",
       ownerRiderProfileId: "",
       code: "",
       externalAccountId: "",
       userName: "",
+      paymentModel: defaultPaymentModel as any,
       status: "Available",
       acquisitionDate: new Date().toISOString().split("T")[0],
       startDate: new Date().toISOString().split("T")[0],
@@ -266,6 +340,7 @@ export default function PlatformAccountsPage() {
       code: acc.code,
       externalAccountId: acc.externalAccountId || "",
       userName: acc.userName || "",
+      paymentModel: acc.paymentModel || "PayPerOrder",
       status: acc.status as AccountStatus,
       acquisitionDate: acc.acquisitionDate || "",
       startDate: acc.startDate || "",
@@ -282,6 +357,7 @@ export default function PlatformAccountsPage() {
     setAssignFormData({
       actualRiderProfileId: "",
       effectiveFrom: new Date().toISOString().split("T")[0],
+      paymentModel: acc.paymentModel || "PayPerOrder",
       reason: "",
       wasBackdated: false,
       backdatedReason: "",
@@ -333,8 +409,8 @@ export default function PlatformAccountsPage() {
   // Submit Handlers
   const handleSubmitAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accountFormData.platformId || !accountFormData.operatingCityId || !accountFormData.ownerRiderProfileId || !accountFormData.code) {
-      toast.error("خطأ في المدخلات", "يرجى تعبئة المنصة، المدينة، صاحب الحساب، ورمز الحساب.");
+    if (!accountFormData.platformId || !accountFormData.operatingCityId || !accountFormData.ownerRiderProfileId || !accountFormData.code || !accountFormData.paymentModel) {
+      toast.error("خطأ في المدخلات", "يرجى تعبئة المنصة، المدينة، صاحب الحساب، نموذج الدفع، ورمز الحساب.");
       return;
     }
 
@@ -350,7 +426,10 @@ export default function PlatformAccountsPage() {
         }
         setIsUpsertOpen(false);
         loadData();
-      } catch (err) {}
+      } catch (err: any) {
+        console.error("Account upsert error:", err);
+        toast.error("فشل الحفظ", err?.message || "تعذر حفظ حساب المنصة.");
+      }
     });
   };
 
@@ -366,12 +445,45 @@ export default function PlatformAccountsPage() {
       return;
     }
 
+    const selRiderId = assignFormData.actualRiderProfileId;
+    const riderActiveAccounts = accounts.filter(
+      (a) => a.status === "Assigned" && (a.currentAssignment?.actualRiderProfileId === selRiderId || a.currentAssignment?.actualEmployeeId === selRiderId)
+    );
+    if (riderActiveAccounts.length >= 2) {
+      toast.error("تنبيه القيود", "المندوب لديه حسابان نشطان بالفعل. (platform.rider_account_limit_reached)");
+      return;
+    }
+    const targetIsSalary = assigningAccount.paymentModel === "Salary";
+    const salaryActive = riderActiveAccounts.filter(
+      (a) => a.paymentModel === "Salary" || a.currentAssignment?.paymentModel === "Salary"
+    ).length;
+    if (targetIsSalary && salaryActive >= 1) {
+      toast.error("تنبيه القيود", "المندوب لديه حساب راتب نشط بالفعل. لا يُسمح بأكثر من حساب براتب واحد (platform.rider_salary_account_limit_reached)");
+      return;
+    }
+
     startTransition(async () => {
       try {
-        await assignPlatformAccount(assigningAccount.id, assignFormData);
+        const payload: AssignRequest = {
+          actualRiderProfileId: assignFormData.actualRiderProfileId,
+          effectiveFrom: assignFormData.effectiveFrom,
+          ...(assignFormData.reason?.trim() ? { reason: assignFormData.reason.trim() } : {}),
+          ...(assignFormData.wasBackdated
+            ? { wasBackdated: true, backdatedReason: assignFormData.backdatedReason?.trim() }
+            : {}),
+        };
+        console.log("=== Sending Assign Platform Account Payload ===");
+        console.log("Account ID:", assigningAccount.id);
+        console.log("Target Endpoint:", `/api/platform-accounts/${assigningAccount.id}/assign`);
+        console.log("JSON Body:", JSON.stringify(payload, null, 2));
+
+        await assignPlatformAccount(assigningAccount.id, payload);
         setIsAssignOpen(false);
         loadData();
-      } catch (err) {}
+      } catch (err: any) {
+        console.error("Assign error:", err);
+        toast.error("فشل التعيين", err?.message || "تعذر تعيين المندوب للحساب. يرجى مراجعة المدخلات.");
+      }
     });
   };
 
@@ -392,7 +504,10 @@ export default function PlatformAccountsPage() {
         });
         setIsReleaseOpen(false);
         loadData();
-      } catch (err) {}
+      } catch (err: any) {
+        console.error("Release error:", err);
+        toast.error("فشل إنهاء التعيين", err?.message || "تعذر إنهاء التعيين للحساب.");
+      }
     });
   };
 
@@ -414,7 +529,7 @@ export default function PlatformAccountsPage() {
           setCredentialHistoryList(data);
         }
         setActiveCredTab("history");
-      } catch (err) {}
+      } catch (err) { }
     });
   };
 
@@ -482,7 +597,7 @@ export default function PlatformAccountsPage() {
 
       {/* Filter Bar */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-500">المنصة</label>
             <SearchableSelect
@@ -500,6 +615,20 @@ export default function PlatformAccountsPage() {
               value={filterCityId}
               onChange={setFilterCityId}
               placeholder="تصفية حسب المدينة..."
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-500">{t("platforms.paymentModel")}</label>
+            <SearchableSelect
+              options={[
+                { value: "", label: "جميع النماذج" },
+                { value: "PayPerOrder", label: t("platforms.payPerOrder") },
+                { value: "Salary", label: t("platforms.salary") },
+              ]}
+              value={filterPaymentModel}
+              onChange={setFilterPaymentModel}
+              placeholder="تصفية حسب نموذج الدفع..."
             />
           </div>
 
@@ -591,6 +720,7 @@ export default function PlatformAccountsPage() {
                 <tr>
                   <th className="px-6 py-4">{t("platforms.accountCode")}</th>
                   <th className="px-6 py-4">المنصة والمدينة</th>
+                  <th className="px-6 py-4">{t("platforms.paymentModel")}</th>
                   <th className="px-6 py-4">{t("platforms.ownerRider")}</th>
                   <th className="px-6 py-4">{t("platforms.actualRider")} (التعيين الحالى)</th>
                   <th className="px-6 py-4">{t("platforms.status")}</th>
@@ -622,6 +752,22 @@ export default function PlatformAccountsPage() {
                       <div className="text-xs text-slate-500">
                         {acc.operatingCityNameAr || "—"}
                       </div>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <Badge
+                        className={
+                          acc.paymentModel === "Salary"
+                            ? "bg-purple-50 text-purple-700 border-purple-200 font-semibold"
+                            : "bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                        }
+                      >
+                        {acc.paymentModel === "PayPerOrder"
+                          ? t("platforms.payPerOrder")
+                          : acc.paymentModel === "Salary"
+                            ? t("platforms.salary")
+                            : acc.paymentModel || "—"}
+                      </Badge>
                     </td>
 
                     <td className="px-6 py-4">
@@ -736,7 +882,16 @@ export default function PlatformAccountsPage() {
               <SearchableSelect
                 options={platformOptions}
                 value={accountFormData.platformId}
-                onChange={(val) => setAccountFormData({ ...accountFormData, platformId: val })}
+                onChange={(val) => {
+                  const selectedPlatObj = platforms.find((p) => p.id === val);
+                  const supportedModels = selectedPlatObj?.supportedPaymentModels?.length
+                    ? selectedPlatObj.supportedPaymentModels
+                    : ["PayPerOrder", "Salary"];
+                  const newModel = supportedModels.includes(accountFormData.paymentModel as any)
+                    ? accountFormData.paymentModel
+                    : (supportedModels[0] || "PayPerOrder");
+                  setAccountFormData({ ...accountFormData, platformId: val, paymentModel: newModel as any });
+                }}
                 placeholder="اختر المنصة..."
                 disabled={Boolean(editingAccount && editingAccount.status === "Assigned")}
               />
@@ -756,17 +911,43 @@ export default function PlatformAccountsPage() {
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">
-              صاحب الحساب <span className="text-red-500">*</span>
-            </label>
-            <SearchableSelect
-              options={employeeOptions}
-              value={accountFormData.ownerRiderProfileId}
-              onChange={(val) => setAccountFormData({ ...accountFormData, ownerRiderProfileId: val })}
-              placeholder="اختر صاحب الحساب..."
-              disabled={Boolean(editingAccount && editingAccount.status === "Assigned")}
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">
+                {t("platforms.paymentModel")} <span className="text-red-500">*</span>
+              </label>
+              {(() => {
+                const currentPlatObj = platforms.find((p) => p.id === accountFormData.platformId);
+                const supportedModels = currentPlatObj?.supportedPaymentModels?.length
+                  ? currentPlatObj.supportedPaymentModels
+                  : ["PayPerOrder", "Salary"];
+                const modelOpts = supportedModels.map((m) => ({
+                  value: m,
+                  label: m === "PayPerOrder" ? t("platforms.payPerOrder") : m === "Salary" ? t("platforms.salary") : m,
+                }));
+                return (
+                  <SearchableSelect
+                    options={modelOpts}
+                    value={accountFormData.paymentModel}
+                    onChange={(val) => setAccountFormData({ ...accountFormData, paymentModel: val as any })}
+                    placeholder="اختر نموذج الدفع..."
+                  />
+                );
+              })()}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">
+                صاحب الحساب <span className="text-red-500">*</span>
+              </label>
+              <SearchableSelect
+                options={employeeOptions}
+                value={accountFormData.ownerRiderProfileId}
+                onChange={(val) => setAccountFormData({ ...accountFormData, ownerRiderProfileId: val })}
+                placeholder="اختر صاحب الحساب..."
+                disabled={Boolean(editingAccount && editingAccount.status === "Assigned")}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -814,17 +995,17 @@ export default function PlatformAccountsPage() {
                 options={
                   editingAccount
                     ? [
-                        { value: "Available", label: "متاح (Available)" },
-                        { value: "Assigned", label: "معيّن (Assigned)" },
-                        { value: "Suspended", label: "موقوف (Suspended)" },
-                        { value: "Retired", label: "مستبعد (Retired)" },
-                        { value: "Archived", label: "مؤرشف (Archived)" },
-                      ]
+                      { value: "Available", label: "متاح (Available)" },
+                      { value: "Assigned", label: "معيّن (Assigned)" },
+                      { value: "Suspended", label: "موقوف (Suspended)" },
+                      { value: "Retired", label: "مستبعد (Retired)" },
+                      { value: "Archived", label: "مؤرشف (Archived)" },
+                    ]
                     : [
-                        { value: "Available", label: "متاح (Available)" },
-                        { value: "Suspended", label: "موقوف (Suspended)" },
-                        { value: "Retired", label: "مستبعد (Retired)" },
-                      ]
+                      { value: "Available", label: "متاح (Available)" },
+                      { value: "Suspended", label: "موقوف (Suspended)" },
+                      { value: "Retired", label: "مستبعد (Retired)" },
+                    ]
                 }
                 value={accountFormData.status}
                 onChange={(val) => setAccountFormData({ ...accountFormData, status: val as AccountStatus })}
@@ -888,8 +1069,32 @@ export default function PlatformAccountsPage() {
         title={t("platforms.assignRider")}
       >
         <form onSubmit={handleSubmitAssign} className="space-y-4 pt-2">
-          <div className="rounded-xl bg-blue-50 p-3 text-xs text-[#1167c9]">
-            تخصيص حساب المنصة ({assigningAccount?.code}) لمندوب فعلي.
+          <div className="rounded-xl bg-blue-50/80 p-3.5 border border-blue-200/60 text-xs text-[#1167c9] space-y-2">
+            <div className="flex items-center justify-between font-bold">
+              <span>تخصيص حساب المنصة ({assigningAccount?.code}) لمندوب فعلي.</span>
+              {assigningAccount?.paymentModel && (
+                <Badge
+                  className={
+                    assigningAccount.paymentModel === "Salary"
+                      ? "bg-purple-100 text-purple-700 border-purple-300 font-semibold"
+                      : "bg-blue-100 text-blue-700 border-blue-300 font-semibold"
+                  }
+                >
+                  {t("platforms.paymentModel")}:{" "}
+                  {assigningAccount.paymentModel === "PayPerOrder"
+                    ? t("platforms.payPerOrder")
+                    : assigningAccount.paymentModel === "Salary"
+                      ? t("platforms.salary")
+                      : assigningAccount.paymentModel}
+                </Badge>
+              )}
+            </div>
+
+            {assigningAccount?.paymentModel === "Salary" && (
+              <div className="text-[11px] text-purple-800 bg-purple-50/90 p-2 rounded-lg border border-purple-200">
+                ⚠️ تنبيه: هذا الحساب يعمل بنمط الدفع (راتب). يحظر النظام تعيين المندوب لأكثر من حساب براتب في نفس الوقت.
+              </div>
+            )}
           </div>
 
           <div>
@@ -902,6 +1107,44 @@ export default function PlatformAccountsPage() {
               onChange={(val) => setAssignFormData({ ...assignFormData, actualRiderProfileId: val })}
               placeholder="اختر المندوب الفعلي..."
             />
+
+            {(() => {
+              if (!assignFormData.actualRiderProfileId) return null;
+              const selRiderId = assignFormData.actualRiderProfileId;
+              const riderActiveAccounts = accounts.filter(
+                (a) => a.status === "Assigned" && (a.currentAssignment?.actualRiderProfileId === selRiderId || a.currentAssignment?.actualEmployeeId === selRiderId)
+              );
+              const totalActive = riderActiveAccounts.length;
+              const salaryActive = riderActiveAccounts.filter(
+                (a) => a.paymentModel === "Salary" || a.currentAssignment?.paymentModel === "Salary"
+              ).length;
+
+              const targetIsSalary = assigningAccount?.paymentModel === "Salary";
+              const isLimitReached = totalActive >= 2;
+              const isSalaryLimitReached = targetIsSalary && salaryActive >= 1;
+
+              if (isLimitReached) {
+                return (
+                  <div className="mt-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-800 border border-red-200">
+                    🛑 <strong>تنبيه:</strong> المندوب المختار يملك حالياً حسابين نشطين ({totalActive}/2). يتسبب هذا في خطأ النظام (<code>platform.rider_account_limit_reached</code>).
+                  </div>
+                );
+              }
+
+              if (isSalaryLimitReached) {
+                return (
+                  <div className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200">
+                    ⚠️ <strong>تنبيه:</strong> المندوب المختار يملك بالفعل حساب براتب نشط ({salaryActive}/1). يتسبب هذا في خطأ النظام (<code>platform.rider_salary_account_limit_reached</code>).
+                  </div>
+                );
+              }
+
+              return (
+                <div className="mt-2 rounded-xl bg-emerald-50 p-2 text-xs text-emerald-800 border border-emerald-200">
+                  ✓ المندوب متاح للتعيين (الحسابات النشطة الحالية: {totalActive}/2 | حسابات الراتب: {salaryActive}/1)
+                </div>
+              );
+            })()}
           </div>
 
           <div>
@@ -921,7 +1164,7 @@ export default function PlatformAccountsPage() {
               {t("platforms.reason")}
             </label>
             <Input
-              value={assignFormData.reason}
+              value={assignFormData.reason || ""}
               onChange={(e) => setAssignFormData({ ...assignFormData, reason: e.target.value })}
               placeholder="سبب التعيين..."
             />
@@ -944,7 +1187,7 @@ export default function PlatformAccountsPage() {
                   {t("platforms.backdatedReason")} <span className="text-red-500">*</span>
                 </label>
                 <Input
-                  value={assignFormData.backdatedReason}
+                  value={assignFormData.backdatedReason || ""}
                   onChange={(e) => setAssignFormData({ ...assignFormData, backdatedReason: e.target.value })}
                   placeholder="اكتب سبب التعيين بأثر رجي..."
                   required
@@ -1047,9 +1290,16 @@ export default function PlatformAccountsPage() {
                 <div key={item.id} className="rounded-xl border border-slate-200 p-3 text-xs space-y-1">
                   <div className="flex items-center justify-between font-bold">
                     <span className="text-slate-900">{item.actualRiderNameAr || "مندوب فعلي"}</span>
-                    <Badge className={item.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}>
-                      {item.status}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {item.paymentModel && (
+                        <Badge className={item.paymentModel === "Salary" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
+                          {item.paymentModel === "PayPerOrder" ? t("platforms.payPerOrder") : item.paymentModel === "Salary" ? t("platforms.salary") : item.paymentModel}
+                        </Badge>
+                      )}
+                      <Badge className={item.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}>
+                        {item.status}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="text-slate-500">
                     الفترة: {item.effectiveFrom} — {item.effectiveTo || "حتى الآن"}

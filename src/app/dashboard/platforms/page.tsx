@@ -48,6 +48,7 @@ export default function PlatformsPage() {
     nameAr: "",
     nameEn: "",
     status: "Active",
+    supportedPaymentModels: ["PayPerOrder", "Salary"],
     notes: "",
     archiveReason: "",
     rowVersion: null,
@@ -108,6 +109,7 @@ export default function PlatformsPage() {
       nameAr: "",
       nameEn: "",
       status: "Active",
+      supportedPaymentModels: ["PayPerOrder", "Salary"],
       notes: "",
       archiveReason: null,
       rowVersion: null,
@@ -122,6 +124,9 @@ export default function PlatformsPage() {
       nameAr: platform.nameAr || "",
       nameEn: platform.nameEn || "",
       status: platform.status || "Active",
+      supportedPaymentModels: platform.supportedPaymentModels?.length
+        ? platform.supportedPaymentModels
+        : ["PayPerOrder"],
       notes: platform.notes || "",
       archiveReason: null,
       rowVersion: platform.rowVersion,
@@ -139,6 +144,11 @@ export default function PlatformsPage() {
     e.preventDefault();
     if (!formData.code || !formData.nameAr || !formData.nameEn) {
       toast.error("خطأ في المدخلات", "يرجى تعبئة جميع الحقول الإلزامية (الرمز والاسم بالعربية والإنجليزية).");
+      return;
+    }
+
+    if (!formData.supportedPaymentModels || formData.supportedPaymentModels.length === 0) {
+      toast.error("خطأ في المدخلات", "يرجى تحديد نموذج دفع واحد على الأقل للمنصة.");
       return;
     }
 
@@ -174,6 +184,7 @@ export default function PlatformsPage() {
           nameAr: archivingPlatform.nameAr,
           nameEn: archivingPlatform.nameEn,
           status: "Archived",
+          supportedPaymentModels: archivingPlatform.supportedPaymentModels || ["PayPerOrder"],
           notes: archivingPlatform.notes,
           archiveReason: archiveReasonInput.trim(),
           rowVersion: archivingPlatform.rowVersion,
@@ -295,6 +306,7 @@ export default function PlatformsPage() {
                   <th className="px-6 py-4">{t("platforms.platformCode")}</th>
                   <th className="px-6 py-4">{t("platforms.nameAr")}</th>
                   <th className="px-6 py-4">{t("platforms.nameEn")}</th>
+                  <th className="px-6 py-4">{t("platforms.supportedPaymentModels")}</th>
                   <th className="px-6 py-4">{t("platforms.status")}</th>
                   <th className="px-6 py-4">{t("platforms.notes")}</th>
                   {can("platform_accounts.manage") && (
@@ -316,6 +328,22 @@ export default function PlatformsPage() {
                     </td>
                     <td className="px-6 py-4 text-slate-600">
                       {platform.nameEn}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {(platform.supportedPaymentModels || []).map((m) => (
+                          <Badge
+                            key={m}
+                            className={
+                              m === "Salary"
+                                ? "bg-purple-50 text-purple-700 border-purple-200 font-semibold"
+                                : "bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                            }
+                          >
+                            {m === "PayPerOrder" ? t("platforms.payPerOrder") : m === "Salary" ? t("platforms.salary") : m}
+                          </Badge>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       {renderStatusBadge(platform.status)}
@@ -395,6 +423,42 @@ export default function PlatformsPage() {
                 placeholder="Keeta"
                 required
               />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-slate-700">
+              {t("platforms.supportedPaymentModels")} <span className="text-red-500">*</span>
+            </label>
+            <div className="flex items-center gap-6 rounded-xl border border-slate-200 p-3 bg-slate-50/50">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={formData.supportedPaymentModels.includes("PayPerOrder")}
+                  onChange={(e) => {
+                    const updated = e.target.checked
+                      ? [...formData.supportedPaymentModels, "PayPerOrder"]
+                      : formData.supportedPaymentModels.filter((m) => m !== "PayPerOrder");
+                    setFormData({ ...formData, supportedPaymentModels: updated });
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-[#1167c9] focus:ring-[#1167c9]"
+                />
+                {t("platforms.payPerOrder")}
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={formData.supportedPaymentModels.includes("Salary")}
+                  onChange={(e) => {
+                    const updated = e.target.checked
+                      ? [...formData.supportedPaymentModels, "Salary"]
+                      : formData.supportedPaymentModels.filter((m) => m !== "Salary");
+                    setFormData({ ...formData, supportedPaymentModels: updated });
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-[#1167c9] focus:ring-[#1167c9]"
+                />
+                {t("platforms.salary")}
+              </label>
             </div>
           </div>
 

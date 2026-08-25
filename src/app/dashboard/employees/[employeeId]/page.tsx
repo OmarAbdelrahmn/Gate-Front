@@ -356,7 +356,13 @@ export default function EmployeeDetailsPage({
   const statusEntries = useMemo(() => {
     if (!details) return [];
     if (details.statusHistory && details.statusHistory.length > 0) {
-      return details.statusHistory;
+      return [...details.statusHistory].sort(
+        (a, b) =>
+          new Date(b.effectiveFrom || (b as any).effectiveDate || (b as any).createdAtUtc || 0).getTime() -
+          new Date(a.effectiveFrom || (a as any).effectiveDate || (a as any).createdAtUtc || 0).getTime() ||
+          new Date((b as any).createdAtUtc || 0).getTime() -
+          new Date((a as any).createdAtUtc || 0).getTime(),
+      );
     }
     const filtered = (details.workHistory ?? []).filter(
       (w) => w.changeType === "Status",
@@ -364,7 +370,9 @@ export default function EmployeeDetailsPage({
     const sorted = [...filtered].sort(
       (a, b) =>
         new Date(a.effectiveDate || a.createdAtUtc).getTime() -
-        new Date(b.effectiveDate || b.createdAtUtc).getTime(),
+        new Date(b.effectiveDate || b.createdAtUtc).getTime() ||
+        new Date(a.createdAtUtc).getTime() -
+        new Date(b.createdAtUtc).getTime(),
     );
     const mapped = sorted.map((w, idx) => {
       const valText =
@@ -398,7 +406,9 @@ export default function EmployeeDetailsPage({
     const sorted = [...filtered].sort(
       (a, b) =>
         new Date(a.effectiveDate || a.createdAtUtc).getTime() -
-        new Date(b.effectiveDate || b.createdAtUtc).getTime(),
+        new Date(b.effectiveDate || b.createdAtUtc).getTime() ||
+        new Date(a.createdAtUtc).getTime() -
+        new Date(b.createdAtUtc).getTime(),
     );
     const mapped = sorted.map((w, idx) => {
       const valStr = w.newValue ?? "";
@@ -432,7 +442,13 @@ export default function EmployeeDetailsPage({
   const relationshipEntries = useMemo(() => {
     if (!details) return [];
     if (details.relationshipHistory && details.relationshipHistory.length > 0) {
-      return details.relationshipHistory;
+      return [...details.relationshipHistory].sort(
+        (a, b) =>
+          new Date(b.effectiveFrom || (b as any).effectiveDate || (b as any).createdAtUtc || 0).getTime() -
+          new Date(a.effectiveFrom || (a as any).effectiveDate || (a as any).createdAtUtc || 0).getTime() ||
+          new Date((b as any).createdAtUtc || 0).getTime() -
+          new Date((a as any).createdAtUtc || 0).getTime(),
+      );
     }
     const filtered = (details.workHistory ?? []).filter(
       (w) => w.changeType === "Engagement" || w.changeType === "Relationship",
@@ -440,7 +456,9 @@ export default function EmployeeDetailsPage({
     const sorted = [...filtered].sort(
       (a, b) =>
         new Date(a.effectiveDate || a.createdAtUtc).getTime() -
-        new Date(b.effectiveDate || b.createdAtUtc).getTime(),
+        new Date(b.effectiveDate || b.createdAtUtc).getTime() ||
+        new Date(a.createdAtUtc).getTime() -
+        new Date(b.createdAtUtc).getTime(),
     );
     const mapped = sorted.map((w, idx) => {
       const valText =

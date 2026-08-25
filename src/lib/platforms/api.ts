@@ -1,6 +1,7 @@
 import { authFetch } from "../auth/api";
 
 export type PlatformStatus = "Active" | "Disabled" | "Archived";
+export type PaymentModel = "PayPerOrder" | "Salary";
 
 export interface PlatformResponse {
   id: string;
@@ -8,6 +9,7 @@ export interface PlatformResponse {
   nameAr: string;
   nameEn: string;
   status: PlatformStatus | string;
+  supportedPaymentModels: (PaymentModel | string)[];
   notes?: string | null;
   rowVersion: string;
 }
@@ -17,6 +19,7 @@ export interface PlatformUpsertRequest {
   nameAr: string;
   nameEn: string;
   status: PlatformStatus | string;
+  supportedPaymentModels: (PaymentModel | string)[];
   notes?: string | null;
   archiveReason?: string | null;
   rowVersion?: string | null;
@@ -36,6 +39,7 @@ export interface AssignmentResponse {
   effectiveFrom: string;
   effectiveTo?: string | null;
   status: AssignmentStatus | string;
+  paymentModel?: PaymentModel | string | null;
   startReason?: string | null;
   endReason?: string | null;
   wasBackdated: boolean;
@@ -61,6 +65,7 @@ export interface AccountResponse {
   code: string;
   externalAccountId?: string | null;
   userName?: string | null;
+  paymentModel: PaymentModel | string;
   status: AccountStatus | string;
   statusReason?: string | null;
   acquisitionDate?: string | null;
@@ -78,6 +83,7 @@ export interface AccountUpsertRequest {
   code: string;
   externalAccountId?: string | null;
   userName?: string | null;
+  paymentModel: PaymentModel | string;
   status: AccountStatus | string;
   statusReason?: string | null;
   acquisitionDate?: string | null;
@@ -91,6 +97,7 @@ export interface AccountUpsertRequest {
 export interface AssignRequest {
   actualRiderProfileId: string;
   effectiveFrom: string;
+  paymentModel?: PaymentModel | string | null;
   reason?: string | null;
   wasBackdated?: boolean;
   backdatedReason?: string | null;
@@ -128,6 +135,7 @@ export interface RiderPlatformHistoryItem {
   ownerRiderProfileId?: string | null;
   ownerRiderNameAr?: string | null;
   ownerRiderNameEn?: string | null;
+  paymentModel?: PaymentModel | string | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
   status: AssignmentStatus | string;
@@ -151,6 +159,7 @@ export interface AccountFilterParams {
   operatingCityId?: string;
   ownerRiderProfileId?: string;
   actualRiderProfileId?: string;
+  paymentModel?: PaymentModel | string;
   status?: AccountStatus | string;
   currentOnly?: boolean;
   includeArchived?: boolean;
@@ -192,6 +201,7 @@ export const getPlatformAccounts = async (filters?: AccountFilterParams) => {
   if (filters?.operatingCityId) query.set("operatingCityId", filters.operatingCityId);
   if (filters?.ownerRiderProfileId) query.set("ownerRiderProfileId", filters.ownerRiderProfileId);
   if (filters?.actualRiderProfileId) query.set("actualRiderProfileId", filters.actualRiderProfileId);
+  if (filters?.paymentModel) query.set("paymentModel", filters.paymentModel);
   if (filters?.status) query.set("status", filters.status);
   if (filters?.currentOnly !== undefined) query.set("currentOnly", String(filters.currentOnly));
   if (filters?.includeArchived !== undefined) query.set("includeArchived", String(filters.includeArchived));
@@ -235,12 +245,14 @@ export const updatePlatformAccount = (id: string, payload: AccountUpsertRequest)
   });
 
 // 8. POST /api/platform-accounts/{id}/assign
-export const assignPlatformAccount = (id: string, payload: AssignRequest) =>
-  authFetch<AssignmentResponse>(`/api/platform-accounts/${encodeURIComponent(id)}/assign`, {
+export const assignPlatformAccount = (id: string, payload: AssignRequest) => {
+  console.log(`[API POST] /api/platform-accounts/${id}/assign Payload:`, payload);
+  return authFetch<AssignmentResponse>(`/api/platform-accounts/${encodeURIComponent(id)}/assign`, {
     method: "POST",
     body: JSON.stringify(payload),
     notifySuccess: "تم تعيين المندوب للحساب بنجاح",
   });
+};
 
 // 9. POST /api/platform-accounts/{id}/release
 export const releasePlatformAccount = (id: string, payload: ReleaseRequest) =>

@@ -17,6 +17,7 @@ export type CurrentWorkPlatform = {
   nameEn?: string | null;
   platformRiderAccountId?: string | null;
   externalAccountId?: string | null;
+  paymentModel?: "PayPerOrder" | "Salary" | string | null;
 };
 
 export type Employee = {
@@ -64,6 +65,7 @@ export type Employee = {
   } | null;
   riderProfileId?: string | null;
   currentWorkPlatform?: CurrentWorkPlatform | null;
+  currentWorkPlatforms?: CurrentWorkPlatform[] | null;
   rowVersion: string;
   employeeNumber?: string;
   relationshipType?: string | null;

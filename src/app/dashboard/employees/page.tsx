@@ -9,6 +9,7 @@ import { listEmployees } from "../../../lib/workforce/api";
 import type { Employee } from "../../../lib/workforce/types";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
+import { Badge } from "../../../components/ui/Badge";
 
 const statusLabel: Record<string, { ar: string; en: string }> = {
     Draft: { ar: "مسودة", en: "Draft" },
@@ -415,8 +416,19 @@ export default function EmployeesPage() {
                                             <td className="px-5 py-4">
                                                 {employee.currentWorkPlatform ? (
                                                     <div>
-                                                        <div className="font-bold text-slate-700">
-                                                            {employee.currentWorkPlatform.nameAr || employee.currentWorkPlatform.nameEn || employee.currentWorkPlatform.code || "—"}
+                                                        <div className="font-bold text-slate-700 flex items-center gap-1.5 flex-wrap">
+                                                            <span>
+                                                                {employee.currentWorkPlatform.nameAr || employee.currentWorkPlatform.nameEn || employee.currentWorkPlatform.code || "—"}
+                                                            </span>
+                                                            {employee.currentWorkPlatform.paymentModel && (
+                                                                <Badge className={`text-[10px] px-1.5 py-0.5 ${employee.currentWorkPlatform.paymentModel === "Salary" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                                                                    {employee.currentWorkPlatform.paymentModel === "PayPerOrder"
+                                                                        ? (locale === "en" ? "Pay Per Order" : "بالطلب")
+                                                                        : employee.currentWorkPlatform.paymentModel === "Salary"
+                                                                        ? (locale === "en" ? "Salary" : "راتب")
+                                                                        : employee.currentWorkPlatform.paymentModel}
+                                                                </Badge>
+                                                            )}
                                                         </div>
                                                         {(employee.currentWorkPlatform.externalAccountId || employee.currentWorkPlatform.platformRiderAccountId) && (
                                                             <div className="mt-0.5 text-xs font-mono font-semibold text-[#1167c9]">

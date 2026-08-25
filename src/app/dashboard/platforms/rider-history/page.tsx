@@ -211,6 +211,7 @@ export default function RiderPlatformHistoryPage() {
                   <tr>
                     <th className="px-6 py-4">المنصة</th>
                     <th className="px-6 py-4">رمز الحساب والمعرف الخارجي</th>
+                    <th className="px-6 py-4">{t("platforms.paymentModel")}</th>
                     <th className="px-6 py-4">صاحب الحساب (Owner)</th>
                     <th className="px-6 py-4">فترة التعيين</th>
                     <th className="px-6 py-4">حالة التعيين</th>
@@ -239,6 +240,26 @@ export default function RiderPlatformHistoryPage() {
                           <div className="text-xs text-slate-500 font-mono">
                             Ext: {item.externalAccountId}
                           </div>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        {item.paymentModel ? (
+                          <Badge
+                            className={
+                              item.paymentModel === "Salary"
+                                ? "bg-purple-50 text-purple-700 border-purple-200 font-semibold"
+                                : "bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                            }
+                          >
+                            {item.paymentModel === "PayPerOrder"
+                              ? t("platforms.payPerOrder")
+                              : item.paymentModel === "Salary"
+                              ? t("platforms.salary")
+                              : item.paymentModel}
+                          </Badge>
+                        ) : (
+                          "—"
                         )}
                       </td>
 

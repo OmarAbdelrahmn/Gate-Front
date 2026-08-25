@@ -21,6 +21,7 @@ interface PlatformAccountDisplayItem {
   accountCode: string;
   workingId: string;
   userName?: string | null;
+  paymentModel?: string | null;
   status: string;
   roleType: "owner" | "assigned" | "history";
   effectiveFrom?: string | null;
@@ -78,6 +79,7 @@ export function EmployeePlatformAccounts({
             accountCode: acc.code,
             workingId: acc.externalAccountId || acc.code,
             userName: acc.userName,
+            paymentModel: acc.paymentModel || acc.currentAssignment?.paymentModel,
             status: acc.status,
             roleType: "assigned",
             operatingCity:
@@ -109,6 +111,7 @@ export function EmployeePlatformAccounts({
               accountCode: acc.code,
               workingId: acc.externalAccountId || acc.code,
               userName: acc.userName,
+              paymentModel: acc.paymentModel,
               status: acc.status,
               roleType: "owner",
               operatingCity:
@@ -139,6 +142,7 @@ export function EmployeePlatformAccounts({
               platformCode: item.platformCode || "",
               accountCode: item.accountCode || "",
               workingId: item.externalAccountId || item.accountCode || "",
+              paymentModel: item.paymentModel,
               status: item.status,
               roleType: item.status === "Active" ? "assigned" : "history",
               effectiveFrom: item.effectiveFrom,
@@ -270,7 +274,18 @@ export function EmployeePlatformAccounts({
                       <p className="text-[10px] font-mono text-slate-400 truncate">{item.accountCode}</p>
                     </div>
                   </div>
-                  <div className="shrink-0">{renderStatusBadge(item.status)}</div>
+                  <div className="shrink-0 flex items-center gap-1">
+                    {item.paymentModel && (
+                      <Badge className={`text-[10px] px-1.5 py-0.5 ${item.paymentModel === "Salary" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                        {item.paymentModel === "PayPerOrder"
+                          ? (locale === "en" ? "Pay Per Order" : "بالطلب")
+                          : item.paymentModel === "Salary"
+                          ? (locale === "en" ? "Salary" : "راتب")
+                          : item.paymentModel}
+                      </Badge>
+                    )}
+                    {renderStatusBadge(item.status)}
+                  </div>
                 </div>
 
                 {/* Compact Working ID Banner */}

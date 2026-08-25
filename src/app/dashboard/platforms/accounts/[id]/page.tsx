@@ -133,9 +133,24 @@ export default function AccountDetailPage() {
               <Building2 className="h-5 w-5 text-[#1167c9]" />
               البيانات الأساسية للحساب
             </h2>
-            <Badge className="bg-blue-50 text-[#1167c9] font-semibold">
-              {account.status}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge
+                className={
+                  account.paymentModel === "Salary"
+                    ? "bg-purple-50 text-purple-700 border-purple-200 font-semibold"
+                    : "bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                }
+              >
+                {account.paymentModel === "PayPerOrder"
+                  ? t("platforms.payPerOrder")
+                  : account.paymentModel === "Salary"
+                  ? t("platforms.salary")
+                  : account.paymentModel}
+              </Badge>
+              <Badge className="bg-blue-50 text-[#1167c9] font-semibold">
+                {account.status}
+              </Badge>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
@@ -150,6 +165,17 @@ export default function AccountDetailPage() {
               <span className="text-xs font-bold text-slate-400 block">مدينة التشغيل:</span>
               <span className="font-bold text-slate-800">
                 {account.operatingCityNameAr || "—"}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-xs font-bold text-slate-400 block">{t("platforms.paymentModel")}:</span>
+              <span className="font-bold text-slate-800">
+                {account.paymentModel === "PayPerOrder"
+                  ? t("platforms.payPerOrder")
+                  : account.paymentModel === "Salary"
+                  ? t("platforms.salary")
+                  : account.paymentModel}
               </span>
             </div>
 
@@ -210,6 +236,19 @@ export default function AccountDetailPage() {
                 </span>
               </div>
 
+              {account.currentAssignment.paymentModel && (
+                <div>
+                  <span className="text-xs font-bold text-slate-400 block">نموذج الدفع للتعيين:</span>
+                  <Badge className={account.currentAssignment.paymentModel === "Salary" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
+                    {account.currentAssignment.paymentModel === "PayPerOrder"
+                      ? t("platforms.payPerOrder")
+                      : account.currentAssignment.paymentModel === "Salary"
+                      ? t("platforms.salary")
+                      : account.currentAssignment.paymentModel}
+                  </Badge>
+                </div>
+              )}
+
               <div>
                 <span className="text-xs font-bold text-slate-400 block">فعال من:</span>
                 <span className="text-slate-800">{account.currentAssignment.effectiveFrom}</span>
@@ -254,9 +293,16 @@ export default function AccountDetailPage() {
                   <div key={item.id} className="rounded-xl border border-slate-100 p-3 text-xs space-y-1 bg-slate-50/50">
                     <div className="flex items-center justify-between font-bold">
                       <span className="text-slate-900">{item.actualRiderNameAr || "مندوب فعلي"}</span>
-                      <Badge className={item.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600"}>
-                        {item.status}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        {item.paymentModel && (
+                          <Badge className={item.paymentModel === "Salary" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
+                            {item.paymentModel === "PayPerOrder" ? t("platforms.payPerOrder") : item.paymentModel === "Salary" ? t("platforms.salary") : item.paymentModel}
+                          </Badge>
+                        )}
+                        <Badge className={item.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600"}>
+                          {item.status}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="text-slate-500">
                       من: {item.effectiveFrom} {item.effectiveTo ? `إلى: ${item.effectiveTo}` : "(نشط حتى الآن)"}
