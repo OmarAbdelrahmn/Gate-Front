@@ -106,7 +106,7 @@ export interface AssignRequest {
 export interface ReleaseRequest {
   effectiveTo: string;
   status: "Ended" | "Cancelled" | string;
-  reason?: string | null;
+  reason: string;
   rowVersion: string; // Assignment rowVersion!
 }
 
@@ -255,12 +255,14 @@ export const assignPlatformAccount = (id: string, payload: AssignRequest) => {
 };
 
 // 9. POST /api/platform-accounts/{id}/release
-export const releasePlatformAccount = (id: string, payload: ReleaseRequest) =>
-  authFetch<AssignmentResponse>(`/api/platform-accounts/${encodeURIComponent(id)}/release`, {
+export const releasePlatformAccount = (id: string, payload: ReleaseRequest) => {
+  console.log(`[API POST] /api/platform-accounts/${id}/release Payload:`, payload);
+  return authFetch<AssignmentResponse>(`/api/platform-accounts/${encodeURIComponent(id)}/release`, {
     method: "POST",
     body: JSON.stringify(payload),
     notifySuccess: "تم إنهاء تعيين المندوب للحساب بنجاح",
   });
+};
 
 // 10. GET /api/platform-accounts/{id}/assignment-history
 export const getAccountAssignmentHistory = async (id: string) => {

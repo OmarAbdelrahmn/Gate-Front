@@ -17,6 +17,7 @@ import {
   type AccountResponse,
   type AccountUpsertRequest,
   type AssignRequest,
+  type ReleaseRequest,
   type AssignmentResponse,
   type CredentialHistoryResponse,
   type PlatformResponse,
@@ -375,6 +376,53 @@ export default function PlatformAccountsPage() {
     setIsReleaseOpen(true);
   };
 
+  const handleSubmitRelease = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!releasingAccount || !releasingAccount.currentAssignment) {
+      toast.error("خطأ", "لا يوجد تعيين نشط لإنهائه.");
+      return;
+    }
+
+    if (!releaseFormData.reason || !releaseFormData.reason.trim()) {
+      toast.error("خطأ", "سبب إنهاء التعيين مطلوب ولا يمكن أن يكون فارغاً.");
+      return;
+    }
+
+    if (!releaseFormData.effectiveTo) {
+      toast.error("خطأ", "تاريخ إنهاء التعيين مطلوب.");
+      return;
+    }
+
+    const assignmentEffectiveFrom = releasingAccount.currentAssignment.effectiveFrom;
+    if (assignmentEffectiveFrom && new Date(releaseFormData.effectiveTo) < new Date(assignmentEffectiveFrom.split("T")[0])) {
+      toast.error("خطأ", `تاريخ نهاية التعيين (${releaseFormData.effectiveTo}) لا يمكن أن يكون قبل تاريخ بدء التعيين (${assignmentEffectiveFrom.split("T")[0]}).`);
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const payload: ReleaseRequest = {
+          effectiveTo: releaseFormData.effectiveTo,
+          status: releaseFormData.status || "Ended",
+          reason: releaseFormData.reason.trim(),
+          rowVersion: releasingAccount.currentAssignment!.rowVersion, // Send assignment rowVersion!
+        };
+
+        console.log("=== Sending Release Platform Account Payload ===");
+        console.log("Account ID:", releasingAccount.id);
+        console.log("Target Endpoint:", `/api/platform-accounts/${releasingAccount.id}/release`);
+        console.log("JSON Body:", JSON.stringify(payload, null, 2));
+
+        await releasePlatformAccount(releasingAccount.id, payload);
+        setIsReleaseOpen(false);
+        loadData();
+      } catch (err: any) {
+        console.error("Release error:", err);
+        toast.error("فشل إنهاء التعيين", err?.message || "تعذر إنهاء التعيين للحساب.");
+      }
+    });
+  };
+
   const handleOpenAssignmentHistory = async (acc: AccountResponse) => {
     setHistoryAccount(acc);
     setIsAssignmentHistoryOpen(true);
@@ -483,30 +531,6 @@ export default function PlatformAccountsPage() {
       } catch (err: any) {
         console.error("Assign error:", err);
         toast.error("فشل التعيين", err?.message || "تعذر تعيين المندوب للحساب. يرجى مراجعة المدخلات.");
-      }
-    });
-  };
-
-  const handleSubmitRelease = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!releasingAccount || !releasingAccount.currentAssignment) {
-      toast.error("خطأ", "لا يوجد تعيين نشط لإنهائه.");
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        await releasePlatformAccount(releasingAccount.id, {
-          effectiveTo: releaseFormData.effectiveTo,
-          status: releaseFormData.status,
-          reason: releaseFormData.reason,
-          rowVersion: releasingAccount.currentAssignment!.rowVersion, // Send assignment rowVersion!
-        });
-        setIsReleaseOpen(false);
-        loadData();
-      } catch (err: any) {
-        console.error("Release error:", err);
-        toast.error("فشل إنهاء التعيين", err?.message || "تعذر إنهاء التعيين للحساب.");
       }
     });
   };
@@ -1247,12 +1271,13 @@ export default function PlatformAccountsPage() {
 
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">
-              {t("platforms.reason")}
+              {t("platforms.reason")} <span className="text-red-500">*</span>
             </label>
             <Input
               value={releaseFormData.reason}
               onChange={(e) => setReleaseFormData({ ...releaseFormData, reason: e.target.value })}
-              placeholder="سبب الإنهاء..."
+              placeholder="سبب الإنهاء (مطلوب)..."
+              required
             />
           </div>
 
