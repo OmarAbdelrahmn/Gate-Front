@@ -104,6 +104,22 @@ function getWorkTypeDisplay(employee: Employee, workTypes: HrRow[], locale: stri
     return locale === "en" ? "Unspecified" : "غير محدد";
 }
 
+function extractAllObjectValues(obj: unknown, visited = new WeakSet()): string[] {
+    if (obj === null || obj === undefined) return [];
+    if (typeof obj === "string" || typeof obj === "number" || typeof obj === "boolean") {
+        return [String(obj)];
+    }
+    if (typeof obj === "object") {
+        if (visited.has(obj as object)) return [];
+        visited.add(obj as object);
+        if (Array.isArray(obj)) {
+            return obj.flatMap((item) => extractAllObjectValues(item, visited));
+        }
+        return Object.values(obj).flatMap((val) => extractAllObjectValues(val, visited));
+    }
+    return [];
+}
+
 export default function EmployeesPage() {
     const { locale } = useAuth();
     const t = (key: string) => translate(locale, key);
@@ -151,21 +167,40 @@ export default function EmployeesPage() {
     const results = useMemo(
         () =>
             employees.filter((item) => {
-                if (engagementFilter !== "all" && item.engagementType !== engagementFilter) {
+                if (engagementFilter !== "all" && item.engagementType !== engagementFilter && item.relationshipType !== engagementFilter) {
                     return false;
                 }
+                const searchTerm = search.trim().toLowerCase();
+                if (!searchTerm) return true;
+
                 const empRecord = item as Record<string, unknown>;
-                const sponsor = item.sponsor?.nameAr || item.sponsor?.nameEn || (empRecord.sponsorNameAr as string) || "";
+                const rawValues = extractAllObjectValues(item).join(" ");
+                
                 const workTypeStr = getWorkTypeDisplay(item, workTypes, locale);
                 const cityStr = getCityDisplay(item, cities, locale);
                 const housingStr = (item.housingNameAr || item.housingNameEn || (empRecord.housingNameAr as string) || (empRecord.housingNameEn as string) || (empRecord.housingName as string) || "") as string;
-                const nat = item.nationality || "";
-                const platformName = item.currentWorkPlatform?.nameAr || item.currentWorkPlatform?.nameEn || item.currentWorkPlatform?.code || "";
-                const platformAccountId = item.currentWorkPlatform?.externalAccountId || item.currentWorkPlatform?.platformRiderAccountId || "";
+                
+                const statusObj = statusLabel[item.status];
+                const statusAr = statusObj?.ar || "";
+                const statusEn = statusObj?.en || "";
+                
+                const engKey = item.engagementType || item.relationshipType || "";
+                const relObj = relationshipLabel[engKey];
+                const relAr = relObj?.ar || "";
+                const relEn = relObj?.en || "";
+                
+                const roleAr = item.isEmployee ? "إداري" : "مندوب";
+                const roleEn = item.isEmployee ? "Staff" : "Delegate";
+                
+                const pm = item.currentWorkPlatform?.paymentModel;
+                const pmAr = pm === "PayPerOrder" ? "بالطلب" : pm === "Salary" ? "راتب" : "";
+                const pmEn = pm === "PayPerOrder" ? "Pay Per Order" : pm === "Salary" ? "Salary" : "";
 
-                return `${item.employeeNumber || ""} ${item.iqamaNo || ""} ${item.iban || ""} ${item.fullNameAr} ${item.fullNameEn || ""} ${item.primaryPhone || ""} ${item.secondaryPhone || ""} ${item.email || ""} ${sponsor} ${workTypeStr} ${cityStr} ${housingStr} ${nat} ${platformName} ${platformAccountId}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase());
+                const fullSearchableText = `${rawValues} ${workTypeStr} ${cityStr} ${housingStr} ${statusAr} ${statusEn} ${relAr} ${relEn} ${roleAr} ${roleEn} ${pmAr} ${pmEn}`
+                    .toLowerCase();
+
+                const searchWords = searchTerm.split(/\s+/);
+                return searchWords.every((word) => fullSearchableText.includes(word));
             }),
         [employees, search, cities, workTypes, locale, engagementFilter],
     );
