@@ -22,6 +22,8 @@ import {
 } from "@/components/hr/forms/FormTemplateRegistry";
 import { CashDisbursementView } from "@/components/hr/forms/CashDisbursementView";
 import { PromissoryNoteView } from "@/components/hr/forms/PromissoryNoteView";
+import { CashAdvanceView } from "@/components/hr/forms/CashAdvanceView";
+import { CashCustodyPromissoryView } from "@/components/hr/forms/CashCustodyPromissoryView";
 import { GenericDocumentView } from "@/components/hr/forms/GenericDocumentView";
 import { VacationFormView } from "@/components/hr/forms/VacationFormView";
 import { SalaryCertificateView } from "@/components/hr/forms/SalaryCertificateView";
@@ -86,6 +88,12 @@ export default function HrFormsPage() {
   const [mobile, setMobile] = useState<string>("");
   const [effectiveDay, setEffectiveDay] = useState<string>("الأحد");
   const [effectiveDate, setEffectiveDate] = useState<string>("2026/09/01");
+
+  // Cash Custody Promissory State
+  const [custodyType, setCustodyType] = useState<string>("عهدة نقدية للأعمال التشغيلية");
+  const [promissoryNo, setPromissoryNo] = useState<string>("SN-2026/001");
+  const [deliveryMethod, setDeliveryMethod] = useState<"cash" | "bank">("cash");
+  const [bankAccountNo, setBankAccountNo] = useState<string>("");
 
   // Initialize today's date and default Tafreet
   useEffect(() => {
@@ -777,6 +785,57 @@ export default function HrFormsPage() {
                 </div>
               )}
 
+              {/* Cash Custody Promissory specific fields */}
+              {selectedTemplateId === "cash_custody_promissory" && (
+                <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="المسمى الوظيفي"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                    />
+                    <Input
+                      label="القسم / الإدارة"
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                    />
+                  </div>
+                  <Input
+                    label="بيان / نوع العهدة النقدية"
+                    value={custodyType}
+                    onChange={(e) => setCustodyType(e.target.value)}
+                    placeholder="عهدة نقدية للأعمال التشغيلية..."
+                  />
+                  <Input
+                    label="رقم السند لأمر"
+                    value={promissoryNo}
+                    onChange={(e) => setPromissoryNo(e.target.value)}
+                    placeholder="SN-2026/001"
+                  />
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                      طريقة تسليم العهدة
+                    </label>
+                    <select
+                      value={deliveryMethod}
+                      onChange={(e) => setDeliveryMethod(e.target.value as any)}
+                      className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                    >
+                      <option value="cash">نقداً</option>
+                      <option value="bank">تحويل بنكي</option>
+                    </select>
+                  </div>
+                  {deliveryMethod === "bank" && (
+                    <Input
+                      label="رقم الحساب البنكي"
+                      value={bankAccountNo}
+                      onChange={(e) => setBankAccountNo(e.target.value)}
+                      placeholder="SA00 0000 0000 0000 0000 0000"
+                    />
+                  )}
+                </div>
+              )}
+
               {/* City for templates requiring city (other than promissory note & leave request & clearance & resignation & final settlement) */}
               {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
                 <Input
@@ -945,7 +1004,41 @@ export default function HrFormsPage() {
               />
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
+            {selectedTemplateId === "financial_advance" && (
+              <CashAdvanceView
+                data={{
+                  riderName,
+                  iqamaNo,
+                  nationality,
+                  amount,
+                  amountInWords,
+                  date,
+                  companyName,
+                }}
+              />
+            )}
+
+            {selectedTemplateId === "cash_custody_promissory" && (
+              <CashCustodyPromissoryView
+                data={{
+                  riderName,
+                  iqamaNo,
+                  jobTitle,
+                  department,
+                  companyName,
+                  date,
+                  custodyType,
+                  amount,
+                  amountInWords,
+                  promissoryDate: date,
+                  promissoryNo,
+                  deliveryMethod,
+                  bankAccountNo,
+                }}
+              />
+            )}
+
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{
