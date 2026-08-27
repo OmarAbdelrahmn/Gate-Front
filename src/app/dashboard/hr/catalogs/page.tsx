@@ -7,6 +7,8 @@ const allowed = new Set<EmployeeCatalogTab>([
   "operational-work-types",
   "residency-professions",
   "driver-license-categories",
+  "sponsors",
+  "cities",
 ]);
 export default async function EmployeeCatalogsPage({
   searchParams,

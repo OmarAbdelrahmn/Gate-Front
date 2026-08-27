@@ -264,10 +264,47 @@ export const releasePlatformAccount = (id: string, payload: ReleaseRequest) => {
   });
 };
 
+export function parseAssignmentDate(d?: string | null): number {
+  if (!d) return 0;
+  const str = d.trim();
+  if (str.includes("-") && str.split("-")[0].length === 2) {
+    const parts = str.split("-");
+    if (parts.length === 3) {
+      return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
+    }
+  }
+  return new Date(str).getTime() || 0;
+}
+
+export function sortAssignmentsNewestFirst<
+  T extends { status?: string; effectiveFrom?: string | null; effectiveTo?: string | null }
+>(assignments: T[]): T[] {
+  return [...assignments].sort((a, b) => {
+    const isActiveA = a.status === "Active" || !a.effectiveTo;
+    const isActiveB = b.status === "Active" || !b.effectiveTo;
+    if (isActiveA && !isActiveB) return -1;
+    if (!isActiveA && isActiveB) return 1;
+
+    const timeA = parseAssignmentDate(a.effectiveFrom);
+    const timeB = parseAssignmentDate(b.effectiveFrom);
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+
+    const endTimeA = parseAssignmentDate(a.effectiveTo);
+    const endTimeB = parseAssignmentDate(b.effectiveTo);
+    return endTimeB - endTimeA;
+  });
+}
+
 // 10. GET /api/platform-accounts/{id}/assignment-history
 export const getAccountAssignmentHistory = async (id: string) => {
   try {
-    return await authFetch<AssignmentResponse[]>(`/api/platform-accounts/${encodeURIComponent(id)}/assignment-history`);
+    const res = await authFetch<AssignmentResponse[]>(`/api/platform-accounts/${encodeURIComponent(id)}/assignment-history`);
+    if (Array.isArray(res)) {
+      return sortAssignmentsNewestFirst(res);
+    }
+    return [];
   } catch (err: any) {
     console.error(`=== API Error: GET /api/platform-accounts/${id}/assignment-history ===`, err?.status, err?.message);
     return [];
@@ -295,9 +332,14 @@ export const rotateAccountCredential = (id: string, payload: RotateCredentialReq
 // 13. GET /api/riders/{riderProfileId}/platform-history
 export const getRiderPlatformHistory = async (riderProfileId: string) => {
   try {
-    return await authFetch<RiderPlatformHistoryResponse>(`/api/riders/${encodeURIComponent(riderProfileId)}/platform-history`);
+    const res = await authFetch<RiderPlatformHistoryResponse>(`/api/riders/${encodeURIComponent(riderProfileId)}/platform-history`);
+    if (res && Array.isArray(res.assignments)) {
+      res.assignments = sortAssignmentsNewestFirst(res.assignments);
+    }
+    return res;
   } catch (err: any) {
     console.error(`=== API Error: GET /api/riders/${riderProfileId}/platform-history ===`, err?.status, err?.message);
     return null;
   }
 };
+

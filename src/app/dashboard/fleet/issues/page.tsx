@@ -7,7 +7,8 @@ import { VehicleIssueStatus, VehicleIssueCategory, VehicleIssueSeverity, type Ve
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Wrench, RefreshCw, AlertTriangle, Filter, Plus } from "lucide-react";
+import { Input } from "@/components/ui/Input";
+import { Wrench, RefreshCw, AlertTriangle, Filter, Plus, Search } from "lucide-react";
 import { CreateIssueModal } from "./components/CreateIssueModal";
 import Link from "next/link";
 
@@ -26,6 +27,7 @@ export default function IssuesPage() {
   const { can } = useAuth();
   const [data, setData] = useState<VehicleIssueSummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
 
@@ -50,6 +52,13 @@ export default function IssuesPage() {
   useEffect(() => {
     loadData();
   }, [page, statusFilter]);
+
+  const filteredData = data.filter(item => 
+    !search || 
+    String(item.issueNumber).includes(search) || 
+    item.description.toLowerCase().includes(search.toLowerCase()) || 
+    (item.category !== undefined && item.category !== null && String(item.category).toLowerCase().includes(search.toLowerCase()))
+  );
 
   if (!can("fleet.issues.read")) {
     return (
@@ -101,7 +110,16 @@ export default function IssuesPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-1 flex-wrap items-center gap-4 min-w-[280px]">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث برقم البلاغ أو الوصف..."
+              className="pr-10"
+            />
+          </div>
           <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
             <Filter className="h-4 w-4" /> الحالة:
           </div>
@@ -128,10 +146,10 @@ export default function IssuesPage() {
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
         {loading ? (
           <div className="p-8 text-center text-[var(--muted)]">جارٍ التحميل...</div>
-        ) : data.length === 0 ? (
+        ) : filteredData.length === 0 ? (
           <div className="p-12 text-center text-[var(--muted)]">
             <Wrench className="mx-auto mb-3 h-12 w-12 opacity-30" />
-            <p className="text-lg font-bold">لا توجد بلاغات أعطال</p>
+            <p className="text-lg font-bold">لا توجد بلاغات أعطال مطابقة</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -147,7 +165,7 @@ export default function IssuesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {data.map((item) => (
+                {filteredData.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-6 py-4 font-mono font-bold text-[#1167c9]">
                       #{item.issueNumber}

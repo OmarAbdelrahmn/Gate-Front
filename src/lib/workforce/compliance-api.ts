@@ -359,3 +359,77 @@ export const archiveInsurancePolicy = (id: string, reason: string, rowVersion: s
     body: JSON.stringify({ reason, rowVersion }),
   });
 
+export type SourceTypeEnum = 0 | 1 | 2 | 3 | 4;
+export type DueStatusEnum = 0 | 1 | 2 | 3 | 4;
+
+export type ExpiryComplianceItem = {
+  employeeId: string;
+  riderProfileId: string | null;
+  employeeNameAr: string;
+  employeeStatus: string;
+  sourceType: SourceTypeEnum;
+  sourceId: string;
+  categoryCode: string;
+  categoryNameAr: string;
+  categoryNameEn: string;
+  referenceMasked: string | null;
+  sourceStatus: string;
+  expiryDate: string | null;
+  daysRemaining: number | null;
+  dueStatus: DueStatusEnum;
+  employeeDocumentId: string | null;
+};
+
+export type ExpiryComplianceSummary = {
+  valid: number;
+  upcoming: number;
+  dueToday: number;
+  expired: number;
+  missing: number;
+};
+
+export type ExpiryComplianceResponse = {
+  items: ExpiryComplianceItem[];
+  summary: ExpiryComplianceSummary;
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  checkDate: string;
+};
+
+export type ExpiryComplianceParams = {
+  checkDate?: string;
+  employeeId?: string;
+  riderProfileId?: string;
+  sourceType?: string;
+  dueStatus?: string;
+  employeeStatus?: string;
+  operatingCityId?: string;
+  sponsorId?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export function getComplianceExpiries(params: ExpiryComplianceParams = {}) {
+  const query = new URLSearchParams();
+  if (params.checkDate) query.set("checkDate", params.checkDate);
+  if (params.employeeId) query.set("employeeId", params.employeeId);
+  if (params.riderProfileId) query.set("riderProfileId", params.riderProfileId);
+  if (params.sourceType && params.sourceType !== "all") query.set("sourceType", params.sourceType);
+  if (params.dueStatus && params.dueStatus !== "all") query.set("dueStatus", params.dueStatus);
+  if (params.employeeStatus && params.employeeStatus !== "all") query.set("employeeStatus", params.employeeStatus);
+  if (params.operatingCityId && params.operatingCityId !== "all") query.set("operatingCityId", params.operatingCityId);
+  if (params.sponsorId && params.sponsorId !== "all") query.set("sponsorId", params.sponsorId);
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+  const str = query.toString();
+  return authFetch<ExpiryComplianceResponse>(`/api/compliance/expiries${str ? `?${str}` : ""}`);
+}
+
+export function getEmployeeComplianceExpiries(employeeId: string, checkDate?: string) {
+  const str = checkDate ? `?checkDate=${encodeURIComponent(checkDate)}` : "";
+  return authFetch<ExpiryComplianceResponse>(`/api/employees/${encodeURIComponent(employeeId)}/compliance-expiries${str}`);
+}
+
+

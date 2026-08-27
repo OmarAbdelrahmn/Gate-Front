@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicles } from "@/lib/fleet/api";
 import { VehicleOperationalStatus, type VehicleSummaryResponse } from "@/lib/fleet/types";
+import { formatVehicleType } from "@/lib/fleet/formatters";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -47,8 +48,11 @@ export default function VehiclesPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [page, statusFilter]);
+    const timer = setTimeout(() => {
+      loadData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, page, statusFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,7 +107,10 @@ export default function VehiclesPage() {
             <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
             <Input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="بحث بالرقم الداخلي، اللوحة، أو الهيكل..."
               className="pr-10"
             />
@@ -189,7 +196,7 @@ export default function VehiclesPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-bold">{item.manufacturer} {item.model}</div>
-                      <div className="text-xs text-[var(--muted)]">النوع: {item.vehicleType}</div>
+                      <div className="text-xs text-[var(--muted)]">النوع: {formatVehicleType(item.vehicleType)}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div>{item.operatingCity || "—"}</div>

@@ -443,9 +443,16 @@ export interface VehicleAttachmentResponse {
   id: string;
   vehicleId: string;
   kind: VehicleFileKind;
+  displayName?: string | null;
   currentVersionId?: string | null;
+  currentVersionNumber?: number | null;
+  originalFileName?: string | null;
+  contentType?: string | null;
+  fileSizeBytes?: number | null;
   currentFileName?: string | null;
   currentUploadAtUtc?: string | null;
+  isLegacy?: boolean;
+  rowVersion?: string;
 }
 
 export interface VehicleAttachmentVersionResponse {
@@ -490,9 +497,9 @@ export interface TakeVehicleRequest {
   startedAtUtc: string;
   startOdometer: number;
   startCondition: VehicleCondition;
-  startFuelLevelPercentage: number;
-  permissionReference?: string | null;
-  reason?: string | null;
+  startFuelLevelPercentage?: number | null;
+  permissionReference: string;
+  reason: string;
   notes?: string | null;
 }
 
@@ -550,12 +557,18 @@ export interface VehicleComplianceResponse {
   id: string;
   vehicleId: string;
   type: string; // 'Registration', 'InsurancePolicy', 'Inspection'
+  number?: string | null;
+  issuer?: string | null;
   referenceNumber?: string | null;
   providerName?: string | null;
   issueDate?: string | null;
+  effectiveFrom?: string | null;
   expiryDate: string;
-  status: VehicleComplianceDueStatus;
+  dueStatus?: VehicleComplianceDueStatus;
+  status?: VehicleComplianceDueStatus;
   isCurrent: boolean;
+  previousRecordId?: string | null;
+  rowVersion?: string;
   notes?: string | null;
 }
 

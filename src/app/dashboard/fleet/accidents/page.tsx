@@ -6,7 +6,8 @@ import { getVehicleAccidents } from "@/lib/fleet/api";
 import { VehicleAccidentStatus, VehicleAccidentSeverity, type VehicleAccidentSummaryResponse } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { AlertTriangle, RefreshCw, Filter, Plus } from "lucide-react";
+import { Input } from "@/components/ui/Input";
+import { AlertTriangle, RefreshCw, Filter, Plus, Search } from "lucide-react";
 import { CreateAccidentModal } from "./components/CreateAccidentModal";
 import Link from "next/link";
 
@@ -25,6 +26,7 @@ export default function AccidentsPage() {
   const { can } = useAuth();
   const [data, setData] = useState<VehicleAccidentSummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -47,6 +49,13 @@ export default function AccidentsPage() {
   useEffect(() => {
     loadData();
   }, [page]);
+
+  const filteredData = data.filter(item => 
+    !search || 
+    String(item.accidentNumber).includes(search) || 
+    (item.riderProfileId && item.riderProfileId.toLowerCase().includes(search.toLowerCase())) || 
+    (item.locationDescription && item.locationDescription.toLowerCase().includes(search.toLowerCase()))
+  );
 
   if (!can("fleet.accidents.read")) {
     return (
@@ -96,10 +105,14 @@ export default function AccidentsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
-            <Filter className="h-4 w-4" /> تصفية سريعة
-          </div>
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث برقم الحادث، المندوب، أو الموقع..."
+            className="pr-10"
+          />
         </div>
         <Button variant="secondary" onClick={loadData} disabled={loading} className="px-3">
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> تحديث
@@ -109,10 +122,10 @@ export default function AccidentsPage() {
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
         {loading ? (
           <div className="p-8 text-center text-[var(--muted)]">جارٍ التحميل...</div>
-        ) : data.length === 0 ? (
+        ) : filteredData.length === 0 ? (
           <div className="p-12 text-center text-[var(--muted)]">
             <AlertTriangle className="mx-auto mb-3 h-12 w-12 opacity-30" />
-            <p className="text-lg font-bold">لا توجد تقارير حوادث مسجلة</p>
+            <p className="text-lg font-bold">لا توجد تقارير حوادث مطابقة</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -128,7 +141,7 @@ export default function AccidentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {data.map((item) => (
+                {filteredData.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-6 py-4 font-mono font-bold text-red-600">
                       #{item.accidentNumber}

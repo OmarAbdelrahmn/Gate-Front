@@ -91,12 +91,12 @@ export function Sidebar({
             <X size={19} />
           </button>
         </div>
-        <nav className="flex-1 space-y-1" aria-label={t("nav.mainMenu")}>
+        <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden min-h-0 no-scrollbar px-1" aria-label={t("nav.mainMenu")}>
           {isLoading && (
             <div className="space-y-3 px-2" aria-label={t("common.loading")}>
-              <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
-              <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
-              <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+              <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+              <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+              <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
             </div>
           )}
           {!isLoading &&
@@ -185,16 +185,18 @@ export function Sidebar({
             </div>
           )}
         </nav>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="hidden items-center justify-center gap-2 rounded-xl border border-[var(--border)] py-3 text-xs font-bold text-slate-500 md:flex"
-        >
-          <ChevronDown
-            size={16}
-            className={collapsed ? "rotate-90" : "-rotate-90"}
-          />
-          <span className={collapsed ? "hidden" : ""}>{collapsed ? t("nav.expandMenu") : t("nav.collapseMenu")}</span>
-        </button>
+        <div className="mt-3 pt-3 border-t border-[var(--border)] shrink-0">
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="hidden w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] py-3 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors md:flex"
+          >
+            <ChevronDown
+              size={16}
+              className={collapsed ? "rotate-90" : "-rotate-90"}
+            />
+            <span className={collapsed ? "hidden" : ""}>{collapsed ? t("nav.expandMenu") : t("nav.collapseMenu")}</span>
+          </button>
+        </div>
       </aside>
     </>
   );

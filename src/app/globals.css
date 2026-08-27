@@ -251,6 +251,15 @@ html[data-theme="dark"] form label:not(.field-shell):has(> :is(input, select, te
   background: #7f1d1d !important;
 }
 
+/* Custom utility to hide scrollbars visually while retaining scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 @media print {
   @page {
     size: A4 portrait;

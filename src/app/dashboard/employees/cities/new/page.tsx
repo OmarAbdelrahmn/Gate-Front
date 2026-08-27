@@ -25,7 +25,7 @@ export default function NewCityPage() {
       status: "Active",
       rowVersion: null,
     });
-    router.replace("/dashboard/employees/cities");
+    router.replace("/dashboard/hr/catalogs?tab=cities");
   }
   return (
     <div className="mx-auto max-w-3xl space-y-6">

@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
   getRiderPlatformHistory,
+  sortAssignmentsNewestFirst,
   type RiderPlatformHistoryResponse,
 } from "@/lib/platforms/api";
 import { listEmployees } from "@/lib/workforce/api";
@@ -51,6 +52,9 @@ function RiderPlatformHistoryContent() {
     setLoadingHistory(true);
     try {
       const data = await getRiderPlatformHistory(riderId);
+      if (data && Array.isArray(data.assignments)) {
+        data.assignments = sortAssignmentsNewestFirst(data.assignments);
+      }
       setHistoryData(data);
     } catch (err) {
       console.error("Failed to load rider platform history", err);

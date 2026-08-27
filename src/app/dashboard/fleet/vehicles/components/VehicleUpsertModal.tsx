@@ -38,6 +38,29 @@ interface Props {
   editingVehicle?: VehicleDetailResponse;
 }
 
+const COMMON_VEHICLE_COLORS = [
+  { ar: "أبيض", en: "White" },
+  { ar: "لؤلؤي", en: "Pearl White" },
+  { ar: "أسود", en: "Black" },
+  { ar: "فضي", en: "Silver" },
+  { ar: "رمادي", en: "Gray" },
+  { ar: "رصاصي", en: "Charcoal" },
+  { ar: "كحلي", en: "Navy Blue" },
+  { ar: "أزرق", en: "Blue" },
+  { ar: "أحمر", en: "Red" },
+  { ar: "عنابي", en: "Maroon" },
+  { ar: "بني", en: "Brown" },
+  { ar: "بيج", en: "Beige" },
+  { ar: "ذهبي", en: "Gold" },
+  { ar: "برونزي", en: "Bronze" },
+  { ar: "شامبين", en: "Champagne" },
+  { ar: "موكا", en: "Mocha" },
+  { ar: "أخضر", en: "Green" },
+  { ar: "أصفر", en: "Yellow" },
+  { ar: "برتقالي", en: "Orange" },
+  { ar: "بنفسجي", en: "Purple" },
+];
+
 export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle }: Props) {
   const { locale } = useAuth();
   const [isPending, startTransition] = useTransition();
@@ -90,11 +113,24 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
         listSponsors(),
         getOperatingCities(),
       ]).then(([mfg, mod, sup, spo, cit]) => {
-        setManufacturers(mfg.filter((m) => m.status === VehicleCatalogStatus.Active));
-        setAllModels(mod.filter((m) => m.status === VehicleCatalogStatus.Active));
-        setSuppliers(sup.filter((s) => s.status === VehicleCatalogStatus.Active));
+        const activeMfg = mfg.filter((m) => m.status === VehicleCatalogStatus.Active);
+        const activeMod = mod.filter((m) => m.status === VehicleCatalogStatus.Active);
+        const activeSup = sup.filter((s) => s.status === VehicleCatalogStatus.Active);
+
+        setManufacturers(activeMfg);
+        setAllModels(activeMod);
+        setSuppliers(activeSup);
         setSponsors(spo);
         setCities(cit);
+
+        if (!editingVehicle) {
+          // Pre-select default sponsor & city if available
+          setFormData((prev) => ({
+            ...prev,
+            sponsorId: prev.sponsorId || (spo.length > 0 ? spo[0].id : ""),
+            operatingCityId: prev.operatingCityId || (cit.length > 0 ? cit[0].id : ""),
+          }));
+        }
       });
 
       if (editingVehicle) {
@@ -169,24 +205,92 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
     if (editingVehicle && !formData.assetNumber?.trim()) {
       toast.error("خطأ في البيانات", "الرقم المرجعي مطلوب عند تحديث بيانات المركبة");
       return;
     }
-    if (!formData.vehicleManufacturerId || !formData.vehicleModelId) {
-      toast.error("خطأ في البيانات", "يرجى تعبئة الحقول المطلوبة (الصانع، الموديل)");
+
+    // Required fields validation
+    if (!formData.serialNumber?.trim()) {
+      toast.error("خطأ في البيانات", "يرجى إدخال الرقم التسلسلي (الاستمارة)");
       return;
+    }
+    if (!formData.chassisNumber?.trim()) {
+      toast.error("خطأ في البيانات", "يرجى إدخال رقم الهيكل");
+      return;
+    }
+    if (!formData.plateNumberAr?.trim()) {
+      toast.error("خطأ في البيانات", "يرجى إدخال رقم اللوحة بالعربي");
+      return;
+    }
+    if (!formData.plateNumberEn?.trim()) {
+      toast.error("خطأ في البيانات", "يرجى إدخال رقم اللوحة بالإنجليزي");
+      return;
+    }
+    if (!formData.vehicleManufacturerId) {
+      toast.error("خطأ في البيانات", "يرجى اختيار الصانع");
+      return;
+    }
+    if (!formData.vehicleModelId) {
+      toast.error("خطأ في البيانات", "يرجى اختيار الموديل");
+      return;
+    }
+    if (!formData.sponsorId) {
+      toast.error("خطأ في البيانات", "يرجى اختيار الكفيل / الكيان المالك");
+      return;
+    }
+    if (!formData.operatingCityId) {
+      toast.error("خطأ في البيانات", "يرجى اختيار مدينة التشغيل");
+      return;
+    }
+
+    // Conditional requirement: Supplier is required when ownershipType is Owned (1)
+    if (formData.ownershipType === VehicleOwnershipType.Owned && !formData.purchasedFromSupplierId) {
+      toast.error("خطأ في البيانات", "مورد الشراء مطلوب عند اختيار نوع الملكية 'مملوكة للشركة'");
+      return;
+    }
+
+    // Model Year validation (1950 - 2200)
+    if (formData.modelYear !== null && formData.modelYear !== undefined && formData.modelYear !== 0) {
+      if (formData.modelYear < 1950 || formData.modelYear > 2200) {
+        toast.error("خطأ في البيانات", "سنة الصنع يجب أن تكون بين 1950 و 2200");
+        return;
+      }
+    }
+
+    // Odometer validation for new vehicles
+    if (!editingVehicle) {
+      if (formData.currentOdometer === undefined || formData.currentOdometer === null || formData.currentOdometer < 0) {
+        toast.error("خطأ في البيانات", "قراءة العداد الحالية يجب أن تكون 0 أو أكثر");
+        return;
+      }
     }
 
     startTransition(async () => {
       try {
-        const payload = { ...formData };
-        if (!payload.assetNumber?.trim()) {
-          payload.assetNumber = null;
-        }
-        if (!payload.sponsorId) payload.sponsorId = null;
-        if (!payload.operatingCityId) payload.operatingCityId = null;
-        if (!payload.purchasedFromSupplierId) payload.purchasedFromSupplierId = null;
+        const payload: VehicleUpsertRequest = {
+          ...formData,
+          assetNumber: formData.assetNumber?.trim() || null,
+          serialNumber: formData.serialNumber?.trim() || null,
+          chassisNumber: formData.chassisNumber?.trim() || null,
+          plateNumberAr: formData.plateNumberAr?.trim() || null,
+          plateNumberEn: formData.plateNumberEn?.trim() || null,
+          plateLettersAr: formData.plateLettersAr?.trim() || null,
+          plateLettersEn: formData.plateLettersEn?.trim() || null,
+          plateDigits: formData.plateDigits?.trim() || null,
+          vin: formData.vin?.trim() || null,
+          engineNumber: formData.engineNumber?.trim() || null,
+          sponsorId: formData.sponsorId || null,
+          operatingCityId: formData.operatingCityId || null,
+          purchasedFromSupplierId: formData.purchasedFromSupplierId || null,
+          colorAr: formData.colorAr?.trim() || null,
+          colorEn: formData.colorEn?.trim() || null,
+          ownerName: formData.ownerName?.trim() || null,
+          acquisitionDate: formData.acquisitionDate?.trim() || null,
+          leaseReference: formData.leaseReference?.trim() || null,
+          notes: formData.notes?.trim() || null,
+        };
 
         if (editingVehicle) {
           await updateVehicle(editingVehicle.summary.id, payload);
@@ -220,29 +324,99 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
               </div>
             )}
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">رقم اللوحة (عربي)</label>
-              <Input value={formData.plateNumberAr || ""} onChange={(e) => setFormData({ ...formData, plateNumberAr: e.target.value })} placeholder="أ ب ج 1234" />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                الرقم التسلسلي (الاستمارة) <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={formData.serialNumber || ""}
+                onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
+                placeholder="SN-001"
+              />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">رقم اللوحة (إنجليزي)</label>
-              <Input value={formData.plateNumberEn || ""} onChange={(e) => setFormData({ ...formData, plateNumberEn: e.target.value })} placeholder="ABC 1234" />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                رقم الهيكل (Chassis Number) <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={formData.chassisNumber || ""}
+                onChange={(e) => setFormData({ ...formData, chassisNumber: e.target.value })}
+                placeholder="CH-001"
+              />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">رقم الهيكل (VIN)</label>
-              <Input value={formData.vin || ""} onChange={(e) => setFormData({ ...formData, vin: e.target.value })} />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">رقم التعرف على المركبة (VIN)</label>
+              <Input
+                value={formData.vin || ""}
+                onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
+                placeholder="1HGCM82633A123456"
+              />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">الرقم التسلسلي (الاستمارة)</label>
-              <Input value={formData.serialNumber || ""} onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })} />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">رقم المحرك</label>
+              <Input
+                value={formData.engineNumber || ""}
+                onChange={(e) => setFormData({ ...formData, engineNumber: e.target.value })}
+                placeholder="EN-001"
+              />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">نوع التسجيل <span className="text-red-500">*</span></label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                رقم اللوحة (عربي) <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={formData.plateNumberAr || ""}
+                onChange={(e) => setFormData({ ...formData, plateNumberAr: e.target.value })}
+                placeholder="أ ب ج 1234"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                رقم اللوحة (إنجليزي) <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={formData.plateNumberEn || ""}
+                onChange={(e) => setFormData({ ...formData, plateNumberEn: e.target.value })}
+                placeholder="ABC 1234"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">أحرف اللوحة (عربي)</label>
+              <Input
+                value={formData.plateLettersAr || ""}
+                onChange={(e) => setFormData({ ...formData, plateLettersAr: e.target.value })}
+                placeholder="أ ب ج"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">أحرف اللوحة (إنجليزي)</label>
+              <Input
+                value={formData.plateLettersEn || ""}
+                onChange={(e) => setFormData({ ...formData, plateLettersEn: e.target.value })}
+                placeholder="ABC"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">أرقام اللوحة</label>
+              <Input
+                value={formData.plateDigits || ""}
+                onChange={(e) => setFormData({ ...formData, plateDigits: e.target.value })}
+                placeholder="1234"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                نوع التسجيل <span className="text-red-500">*</span>
+              </label>
               <SearchableSelect
                 options={[
                   { value: VehicleRegistrationType.Private.toString(), label: "خصوصي" },
                   { value: VehicleRegistrationType.PrivateTransport.toString(), label: "نقل خاص" },
                   { value: VehicleRegistrationType.PublicTransport.toString(), label: "نقل عام" },
                   { value: VehicleRegistrationType.Motorcycle.toString(), label: "دراجة آلية" },
+                  { value: VehicleRegistrationType.SmallBus.toString(), label: "حافلة صغيرة" },
+                  { value: VehicleRegistrationType.PublicBus.toString(), label: "حافلة عامة" },
+                  { value: VehicleRegistrationType.Taxi.toString(), label: "أجرة" },
+                  { value: VehicleRegistrationType.PublicWorks.toString(), label: "أشغال عامة" },
                 ]}
                 value={formData.registrationType.toString()}
                 onChange={(v) => setFormData({ ...formData, registrationType: parseInt(v) as VehicleRegistrationType })}
@@ -256,24 +430,35 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">مواصفات المركبة</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-semibold text-slate-700">الصانع <span className="text-red-500">*</span></label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                الصانع <span className="text-red-500">*</span>
+              </label>
               <SearchableSelect
-                options={manufacturers.map(m => ({ value: m.id, label: m.nameAr }))}
+                options={manufacturers.map((m) => ({ value: m.id, label: m.nameAr }))}
                 value={formData.vehicleManufacturerId}
+                placeholder="اختر الصانع..."
                 onChange={(v) => {
                   setFormData({ ...formData, vehicleManufacturerId: v, vehicleModelId: "" });
                 }}
               />
             </div>
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-semibold text-slate-700">الموديل <span className="text-red-500">*</span></label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                الموديل <span className="text-red-500">*</span>
+              </label>
               <SearchableSelect
-                options={availableModels.map(m => ({ value: m.id, label: m.nameAr }))}
+                options={availableModels.map((m) => ({ value: m.id, label: m.nameAr }))}
                 value={formData.vehicleModelId}
+                placeholder="اختر الموديل..."
                 onChange={(v) => {
-                  const mod = availableModels.find(x => x.id === v);
+                  const mod = availableModels.find((x) => x.id === v);
                   if (mod) {
-                    setFormData({ ...formData, vehicleModelId: v, vehicleType: mod.vehicleType, fuelType: mod.defaultFuelType });
+                    setFormData({
+                      ...formData,
+                      vehicleModelId: v,
+                      vehicleType: mod.vehicleType,
+                      fuelType: mod.defaultFuelType,
+                    });
                   } else {
                     setFormData({ ...formData, vehicleModelId: v });
                   }
@@ -282,27 +467,94 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">سنة الصنع</label>
-              <Input type="number" min="1990" max="2050" value={formData.modelYear || ""} onChange={(e) => setFormData({ ...formData, modelYear: parseInt(e.target.value) || new Date().getFullYear() })} />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                سنة الصنع <span className="text-slate-400 text-xs font-normal">(1950 - 2200)</span>
+              </label>
+              <Input
+                type="number"
+                min="1950"
+                max="2200"
+                value={formData.modelYear || ""}
+                onChange={(e) => setFormData({ ...formData, modelYear: parseInt(e.target.value) || new Date().getFullYear() })}
+              />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">ناقل الحركة</label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                نوع المركبة <span className="text-red-500">*</span>
+              </label>
+              <SearchableSelect
+                options={[
+                  { value: VehicleType.Car.toString(), label: "سيارة" },
+                  { value: VehicleType.Motorcycle.toString(), label: "دراجة نارية" },
+                  { value: VehicleType.Van.toString(), label: "فان / شاحنة صغيرة" },
+                  { value: VehicleType.Truck.toString(), label: "شاحنة" },
+                  { value: VehicleType.Other.toString(), label: "أخرى" },
+                ]}
+                value={formData.vehicleType.toString()}
+                onChange={(v) => setFormData({ ...formData, vehicleType: parseInt(v) as VehicleType })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                نوع الوقود <span className="text-red-500">*</span>
+              </label>
+              <SearchableSelect
+                options={[
+                  { value: VehicleFuelType.Petrol.toString(), label: "بنزين" },
+                  { value: VehicleFuelType.Diesel.toString(), label: "ديزل" },
+                  { value: VehicleFuelType.Electric.toString(), label: "كهرباء" },
+                  { value: VehicleFuelType.Hybrid.toString(), label: "هايبرد" },
+                  { value: VehicleFuelType.Other.toString(), label: "أخرى" },
+                ]}
+                value={formData.fuelType.toString()}
+                onChange={(v) => setFormData({ ...formData, fuelType: parseInt(v) as VehicleFuelType })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                ناقل الحركة <span className="text-red-500">*</span>
+              </label>
               <SearchableSelect
                 options={[
                   { value: VehicleTransmissionType.Automatic.toString(), label: "أوتوماتيك" },
                   { value: VehicleTransmissionType.Manual.toString(), label: "عادي" },
+                  { value: VehicleTransmissionType.Other.toString(), label: "أخرى" },
                 ]}
                 value={formData.transmissionType.toString()}
                 onChange={(v) => setFormData({ ...formData, transmissionType: parseInt(v) as VehicleTransmissionType })}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">اللون (عربي)</label>
-              <Input value={formData.colorAr || ""} onChange={(e) => setFormData({ ...formData, colorAr: e.target.value })} placeholder="أبيض" />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">اللون (عربي)</label>
+              <SearchableSelect
+                options={COMMON_VEHICLE_COLORS.map((c) => ({ value: c.ar, label: c.ar, sublabel: c.en }))}
+                value={formData.colorAr || ""}
+                placeholder="اختر اللون بالعربي..."
+                onChange={(val) => {
+                  const match = COMMON_VEHICLE_COLORS.find((c) => c.ar === val);
+                  setFormData({
+                    ...formData,
+                    colorAr: val,
+                    colorEn: match ? match.en : formData.colorEn,
+                  });
+                }}
+              />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">اللون (إنجليزي)</label>
-              <Input value={formData.colorEn || ""} onChange={(e) => setFormData({ ...formData, colorEn: e.target.value })} placeholder="White" />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">اللون (إنجليزي)</label>
+              <SearchableSelect
+                options={COMMON_VEHICLE_COLORS.map((c) => ({ value: c.en, label: c.en, sublabel: c.ar }))}
+                value={formData.colorEn || ""}
+                placeholder="Select English color..."
+                onChange={(val) => {
+                  const match = COMMON_VEHICLE_COLORS.find((c) => c.en === val);
+                  setFormData({
+                    ...formData,
+                    colorEn: val,
+                    colorAr: match ? match.ar : formData.colorAr,
+                  });
+                }}
+              />
             </div>
           </div>
         </div>
@@ -312,23 +564,31 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">الملكية والتشغيل</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">الكفيل / الكيان المالك</label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                الكفيل / الكيان المالك <span className="text-red-500">*</span>
+              </label>
               <SearchableSelect
-                options={[{ value: "", label: "لا يوجد" }, ...sponsors.map(s => ({ value: s.id, label: s.registryNameAr }))]}
+                options={sponsors.map((s) => ({ value: s.id, label: s.registryNameAr }))}
                 value={formData.sponsorId || ""}
+                placeholder="اختر الكفيل..."
                 onChange={(v) => setFormData({ ...formData, sponsorId: v })}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">مدينة التشغيل</label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                مدينة التشغيل <span className="text-red-500">*</span>
+              </label>
               <SearchableSelect
-                options={[{ value: "", label: "غير محدد" }, ...cities.map(c => ({ value: c.id, label: c.nameAr }))]}
+                options={cities.map((c) => ({ value: c.id, label: c.nameAr }))}
                 value={formData.operatingCityId || ""}
+                placeholder="اختر المدينة..."
                 onChange={(v) => setFormData({ ...formData, operatingCityId: v })}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">نوع الملكية</label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                نوع الملكية <span className="text-red-500">*</span>
+              </label>
               <SearchableSelect
                 options={[
                   { value: VehicleOwnershipType.Owned.toString(), label: "مملوكة للشركة" },
@@ -340,27 +600,73 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">مورد الشراء / التأجير</label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                مورد الشراء / التأجير{" "}
+                {formData.ownershipType === VehicleOwnershipType.Owned ? (
+                  <span className="text-red-500">*</span>
+                ) : (
+                  <span className="text-slate-400 text-xs font-normal">(اختياري)</span>
+                )}
+              </label>
               <SearchableSelect
-                options={[{ value: "", label: "لا يوجد" }, ...suppliers.map(s => ({ value: s.id, label: s.nameAr }))]}
+                options={[
+                  ...(formData.ownershipType !== VehicleOwnershipType.Owned ? [{ value: "", label: "لا يوجد" }] : []),
+                  ...suppliers.map((s) => ({ value: s.id, label: s.nameAr })),
+                ]}
                 value={formData.purchasedFromSupplierId || ""}
+                placeholder="اختر المورد..."
                 onChange={(v) => setFormData({ ...formData, purchasedFromSupplierId: v })}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700">تاريخ الاستحواذ / بداية العقد</label>
-              <Input type="date" value={formData.acquisitionDate || ""} onChange={(e) => setFormData({ ...formData, acquisitionDate: e.target.value })} />
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">اسم المالك المسجل</label>
+              <Input
+                value={formData.ownerName || ""}
+                onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                placeholder="مثال: شركة الحلول المتقدمة"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">تاريخ الاستحواذ / بداية العقد</label>
+              <Input
+                type="date"
+                value={formData.acquisitionDate || ""}
+                onChange={(e) => setFormData({ ...formData, acquisitionDate: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">مرجع عقد الإيجار</label>
+              <Input
+                value={formData.leaseReference || ""}
+                onChange={(e) => setFormData({ ...formData, leaseReference: e.target.value })}
+                placeholder="مثال: LEASE-2026-99"
+              />
             </div>
             {!editingVehicle && (
               <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">قراءة العداد الحالية (كم)</label>
-                <Input type="number" min="0" value={formData.currentOdometer} onChange={(e) => setFormData({ ...formData, currentOdometer: parseInt(e.target.value) || 0 })} />
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  قراءة العداد الحالية (كم) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={formData.currentOdometer}
+                  onChange={(e) => setFormData({ ...formData, currentOdometer: parseInt(e.target.value) || 0 })}
+                />
               </div>
             )}
+            <div className="md:col-span-3">
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">ملاحظات</label>
+              <Input
+                value={formData.notes || ""}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="أي ملاحظات أو بيانات إضافية..."
+              />
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
           <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
           <Button type="submit" disabled={isPending} className="bg-[#1167c9] hover:bg-[#0e56a8] px-8">
             {isPending ? "جارٍ الحفظ..." : "حفظ بيانات المركبة"}

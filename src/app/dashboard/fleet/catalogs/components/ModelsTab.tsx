@@ -10,6 +10,7 @@ import {
 } from "@/lib/fleet/api";
 import type { VehicleModelResponse, VehicleModelRequest, VehicleManufacturerResponse } from "@/lib/fleet/types";
 import { VehicleCatalogStatus, VehicleType, VehicleFuelType } from "@/lib/fleet/types";
+import { formatVehicleType, formatVehicleFuelType } from "@/lib/fleet/formatters";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -194,8 +195,8 @@ export function ModelsTab() {
                     <td className="px-6 py-4">{getManufacturerName(item.vehicleManufacturerId)}</td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-                        <span>نوع: {item.vehicleType}</span>
-                        <span>وقود: {item.defaultFuelType}</span>
+                        <span>نوع: {formatVehicleType(item.vehicleType)}</span>
+                        <span>وقود: {formatVehicleFuelType(item.defaultFuelType)}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">{renderStatusBadge(item.status)}</td>

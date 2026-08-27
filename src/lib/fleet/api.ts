@@ -188,7 +188,7 @@ export const getVehicleRegistrationTransitions = (id: string) =>
 export const getVehicleFiles = (vehicleId: string) =>
   authFetch<T.VehicleAttachmentResponse[]>(`/api/vehicles/${vehicleId}/files`);
 
-export const uploadVehicleFile = (vehicleId: string, kind: T.VehicleFileKind, formData: FormData) =>
+export const uploadVehicleFile = (vehicleId: string, kind: T.VehicleFileKind | string, formData: FormData) =>
   authFetch<T.VehicleAttachmentResponse>(`/api/vehicles/${vehicleId}/files/${kind}`, {
     method: "PUT",
     body: formData,
@@ -235,6 +235,9 @@ export const switchVehicle = (formData: FormData) =>
       notifySuccess: "تم تبديل المركبة بنجاح",
     })
   );
+
+export const getVehicleAssignment = (assignmentId: string) =>
+  authFetch<T.RiderVehicleAssignmentResponse>(`/api/vehicle-assignments/${assignmentId}`);
 
 export const renewVehiclePermission = (assignmentId: string, payload: T.RenewPermissionRequest) =>
   authFetch<T.RiderVehicleAssignmentResponse>(

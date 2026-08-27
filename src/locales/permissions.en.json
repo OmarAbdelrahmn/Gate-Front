@@ -72,6 +72,7 @@
   "fleet.accidents.finalize": "Finalize fleet accident",
   "fleet.accidents.download": "Download accident files",
   "fleet.corrections.manage": "Manage fleet corrections",
+  "fleet.registration-transitions.manage": "Manage vehicle registration transitions",
   "leave_requests.read": "View leave requests",
   "leave_requests.manage": "Manage leave requests",
   "leave_requests.approve": "Approve leave requests",

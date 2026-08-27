@@ -44,22 +44,16 @@ export function CreateIssueModal({ isOpen, onClose, onSuccess }: Props) {
         odometerAtReport: 0,
         blocksOperation: false,
       });
-      setVehicles([]);
-      setVehicleSearch("");
+      getVehiclesLookup("").then((res) => {
+        setVehicles(
+          res.map((v) => ({
+            value: v.id,
+            label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}`,
+          }))
+        );
+      });
     }
   }, [isOpen]);
-
-  // Debounced search for vehicles
-  useEffect(() => {
-    if (vehicleSearch.length >= 2) {
-      const timer = setTimeout(() => {
-        getVehiclesLookup(vehicleSearch).then(res => {
-          setVehicles(res.map(v => ({ value: v.id, label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}` })));
-        });
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [vehicleSearch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,19 +80,13 @@ export function CreateIssueModal({ isOpen, onClose, onSuccess }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">المركبة <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Input 
-                placeholder="ابحث برقم المركبة أو اللوحة..." 
-                value={vehicleSearch} 
-                onChange={(e) => setVehicleSearch(e.target.value)} 
-                className="mb-2" 
-              />
-              <SearchableSelect
-                options={vehicles}
-                value={formData.vehicleId}
-                onChange={(v) => setFormData({ ...formData, vehicleId: v })}
-              />
-            </div>
+            <SearchableSelect
+              options={vehicles}
+              value={formData.vehicleId}
+              placeholder="اختر المركبة..."
+              searchPlaceholder="بحث برقم المركبة أو اللوحة..."
+              onChange={(v) => setFormData({ ...formData, vehicleId: v })}
+            />
           </div>
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">تاريخ البلاغ <span className="text-red-500">*</span></label>

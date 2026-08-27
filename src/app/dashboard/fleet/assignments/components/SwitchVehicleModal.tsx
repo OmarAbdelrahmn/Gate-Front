@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { switchVehicle, getVehicleDetail, getVehiclesLookup } from "@/lib/fleet/api";
+import { switchVehicle, getVehicleDetail, getVehiclesLookup, getVehicleAssignment, getRiderVehicleTimeline } from "@/lib/fleet/api";
 import { VehicleCondition, type VehicleSummaryResponse } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
@@ -43,19 +43,47 @@ export function SwitchVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
   useEffect(() => {
     if (isOpen && preselectedVehicle && preselectedVehicle.currentAssignmentId) {
       setLoadingDetails(true);
-      getVehicleDetail(preselectedVehicle.id).then(res => {
-        if (res.summary.currentAssignmentId) {
-          setAssignmentId(res.summary.currentAssignmentId);
-          setRowVersion(res.summary.rowVersion);
-          setFormData(prev => ({
+      const activeAssignmentId = preselectedVehicle.currentAssignmentId;
+      setAssignmentId(activeAssignmentId);
+
+      getVehicleDetail(preselectedVehicle.id)
+        .then(async (res) => {
+          if (!res.summary.currentAssignmentId) {
+            toast.error("تنبيه", "المركبة غير مسلمة حالياً.");
+            onClose();
+            return;
+          }
+
+          setFormData((prev) => ({
             ...prev,
             oldVehicleOdometer: res.summary.currentOdometer,
           }));
-        } else {
-          toast.error("تنبيه", "المركبة غير مسلمة حالياً.");
-          onClose();
-        }
-      }).finally(() => setLoadingDetails(false));
+
+          let foundRowVersion: string | null = null;
+          try {
+            const assignment = await getVehicleAssignment(activeAssignmentId);
+            if (assignment?.rowVersion) {
+              foundRowVersion = assignment.rowVersion;
+            }
+          } catch (e) {
+            console.warn("Failed to fetch assignment directly, trying timeline...", e);
+          }
+
+          if (!foundRowVersion && res.summary.currentRiderProfileId) {
+            try {
+              const timeline = await getRiderVehicleTimeline(res.summary.currentRiderProfileId);
+              const activeItem = timeline?.find(
+                (t) => t.assignment.id === activeAssignmentId || t.assignment.status === 1
+              );
+              if (activeItem?.assignment?.rowVersion) {
+                foundRowVersion = activeItem.assignment.rowVersion;
+              }
+            } catch (e) {}
+          }
+
+          setRowVersion(foundRowVersion || res.summary.rowVersion);
+        })
+        .finally(() => setLoadingDetails(false));
       setFiles([]);
     }
   }, [isOpen, preselectedVehicle]);

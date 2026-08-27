@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { createVehicleAccident, getVehiclesLookup } from "@/lib/fleet/api";
 import { listExternalRiders } from "@/lib/workforce/external-riders-api";
+import { listRiders, listEmployees } from "@/lib/workforce/api";
 import { VehicleAccidentSeverity } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
@@ -60,37 +61,44 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
         faultAssessment: "",
         narrative: "",
       });
-      setVehicles([]);
-      setRiders([]);
-      setVehicleSearch("");
-      setRiderSearch("");
+      getVehiclesLookup("").then((res) => {
+        setVehicles(res.map((v) => ({ value: v.id, label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}` })));
+      });
+      Promise.all([
+        listRiders().catch(() => []),
+        listExternalRiders().catch(() => []),
+        listEmployees().catch(() => []),
+      ]).then(([ridersRes, externalRes, employeesRes]) => {
+        const map = new Map<string, { value: string; label: string }>();
+
+        ridersRes.forEach((r) => {
+          const id = r.id || r.employeeId;
+          if (id && !map.has(id)) {
+            const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+            map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
+          }
+        });
+
+        externalRes.forEach((r) => {
+          const id = r.riderProfileId || r.employeeId;
+          if (id && !map.has(id)) {
+            const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+            map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
+          }
+        });
+
+        employeesRes.forEach((e) => {
+          const id = e.riderProfileId || e.id;
+          if (id && !map.has(id)) {
+            const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
+            map.set(id, { value: id, label: `${e.fullNameAr}${iqamaStr}` });
+          }
+        });
+
+        setRiders(Array.from(map.values()));
+      });
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (vehicleSearch.length >= 2) {
-      const timer = setTimeout(() => {
-        getVehiclesLookup(vehicleSearch).then(res => {
-          setVehicles(res.map(v => ({ value: v.id, label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}` })));
-        });
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [vehicleSearch]);
-
-  useEffect(() => {
-    if (riderSearch.length >= 2) {
-      const timer = setTimeout(() => {
-        listExternalRiders().then(res => {
-          const filtered = res.filter(r => 
-            r.fullNameAr.includes(riderSearch) || (r.iqamaNo && r.iqamaNo.includes(riderSearch))
-          );
-          setRiders(filtered.map(r => ({ value: r.riderProfileId || r.employeeId, label: `${r.fullNameAr} (${r.iqamaNo || "—"})` })));
-        });
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [riderSearch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,25 +126,23 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">المركبة <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Input placeholder="ابحث برقم المركبة أو اللوحة..." value={vehicleSearch} onChange={(e) => setVehicleSearch(e.target.value)} className="mb-2" />
-              <SearchableSelect
-                options={vehicles}
-                value={formData.vehicleId}
-                onChange={(v) => setFormData({ ...formData, vehicleId: v })}
-              />
-            </div>
+            <SearchableSelect
+              options={vehicles}
+              value={formData.vehicleId}
+              placeholder="اختر المركبة..."
+              searchPlaceholder="بحث برقم المركبة أو اللوحة..."
+              onChange={(v) => setFormData({ ...formData, vehicleId: v })}
+            />
           </div>
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">المندوب (السائق) <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Input placeholder="ابحث بالاسم أو الإقامة..." value={riderSearch} onChange={(e) => setRiderSearch(e.target.value)} className="mb-2" />
-              <SearchableSelect
-                options={riders}
-                value={formData.riderProfileId}
-                onChange={(v) => setFormData({ ...formData, riderProfileId: v })}
-              />
-            </div>
+            <SearchableSelect
+              options={riders}
+              value={formData.riderProfileId}
+              placeholder="اختر المندوب..."
+              searchPlaceholder="بحث بالاسم أو الإقامة..."
+              onChange={(v) => setFormData({ ...formData, riderProfileId: v })}
+            />
           </div>
         </div>
 

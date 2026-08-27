@@ -2,13 +2,17 @@
 import { useState } from "react";
 import {
   BriefcaseBusiness,
+  Building2,
   ClipboardList,
   ContactRound,
   IdCard,
+  MapPin,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { translate } from "../../lib/i18n";
 import { HrSectionManager } from "./HrSectionManager";
+import { SponsorsView } from "./SponsorsView";
+import { CitiesView } from "./CitiesView";
 
 const tabs = [
   {
@@ -39,7 +43,22 @@ const tabs = [
     permission: "licenses.read",
     icon: IdCard,
   },
+  {
+    key: "sponsors",
+    labelAr: "الكفلاء",
+    labelEn: "Sponsors",
+    permission: "sponsors.read",
+    icon: Building2,
+  },
+  {
+    key: "cities",
+    labelAr: "إعدادات المدن",
+    labelEn: "City Settings",
+    permission: "operating_cities.read",
+    icon: MapPin,
+  },
 ] as const;
+
 export type EmployeeCatalogTab = (typeof tabs)[number]["key"];
 
 export function HrCatalogTabs({
@@ -78,8 +97,8 @@ export function HrCatalogTabs({
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
           {locale === "en"
-            ? "Manage professions, job titles, work types, and license categories from one place."
-            : "إدارة المهن والمسميات وأنواع العمل وفئات الرخص من مكان واحد."}
+            ? "Manage professions, job titles, work types, sponsors, cities, and license categories from one place."
+            : "إدارة المهن والمسميات وأنواع العمل والكفلاء والمدن وفئات الرخص من مكان واحد."}
         </p>
       </header>
       <div
@@ -106,8 +125,15 @@ export function HrCatalogTabs({
         })}
       </div>
       <div role="tabpanel">
-        <HrSectionManager key={active} sectionKey={active} embedded />
+        {active === "sponsors" ? (
+          <SponsorsView embedded />
+        ) : active === "cities" ? (
+          <CitiesView embedded />
+        ) : (
+          <HrSectionManager key={active} sectionKey={active} embedded />
+        )}
       </div>
     </div>
   );
 }
+

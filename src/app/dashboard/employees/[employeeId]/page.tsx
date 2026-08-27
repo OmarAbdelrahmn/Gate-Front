@@ -6,9 +6,10 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  BriefcaseBusiness,
   Building,
   CalendarDays,
+  Car,
+  ChevronDown,
   ContactRound,
   FileText,
   History,
@@ -22,6 +23,12 @@ import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { hrCatalogApi, type HrRow } from "../../../../lib/hr/api";
 import { getEmployee } from "../../../../lib/workforce/api";
+import { getRiderVehicleTimeline, getVehicleDetail } from "../../../../lib/fleet/api";
+import {
+  RiderVehicleAssignmentStatus,
+  type RiderVehicleTimelineResponse,
+  type VehicleDetailResponse,
+} from "../../../../lib/fleet/types";
 import {
   listHousing,
   assignResident,
@@ -157,41 +164,231 @@ function Timeline({
   entries: Period[] | OperationalAssignment[];
   locale?: "ar" | "en";
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const isEn = locale === "en";
+
   return (
-    <Card className="p-5">
-      <h2 className="font-black">{title}</h2>
-      {entries.length ? (
-        <ol className={`mt-4 space-y-3 border-s border-[var(--border)] ${locale === "en" ? "ps-4" : "ps-4"}`}>
-          {entries.map((entry) => {
-            const entryRec = entry as Record<string, unknown>;
-            const detail =
-              "value" in entry
-                ? entry.value
-                : locale === "en"
-                  ? (entryRec.operationalWorkTypeEn as string | undefined) || entry.operationalWorkTypeAr
-                  : entry.operationalWorkTypeAr;
-            return (
-              <li key={entry.id} className="relative text-sm">
-                <span className={`absolute top-1.5 size-2 rounded-full bg-[#1167c9] ${locale === "en" ? "-left-[1.05rem]" : "-right-[1.05rem]"}`} />
-                <p className="font-bold">{detail || (locale === "en" ? "Operational Assignment" : "تكليف تشغيلي")}</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  {locale === "en"
-                    ? `From ${formatDate(entry.effectiveFrom, locale)}${entry.effectiveTo ? ` to ${formatDate(entry.effectiveTo, locale)}` : " — Ongoing"}`
-                    : `من ${formatDate(entry.effectiveFrom, locale)}${entry.effectiveTo ? ` إلى ${formatDate(entry.effectiveTo, locale)}` : " — مستمر"}`}
-                </p>
-                {entry.reason ? (
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    {formatReason(entry.reason, locale)}
-                  </p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
-      ) : (
-        <p className="mt-4 text-sm text-[var(--muted)]">
-          {locale === "en" ? "No history entries yet." : "لا توجد سجلات حتى الآن."}
-        </p>
+    <Card className="p-5 transition-all">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between gap-2 text-start font-black text-[var(--foreground)] focus:outline-none select-none cursor-pointer"
+      >
+        <span className="text-base font-black">{title}</span>
+        <div className="flex items-center gap-2">
+          {entries.length > 0 && (
+            <span className="rounded-full bg-[var(--subtle-bg)] border border-[var(--border)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">
+              {entries.length}
+            </span>
+          )}
+          <ChevronDown
+            size={18}
+            className={`text-[var(--muted)] transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="pt-4 border-t border-[var(--border)] mt-3">
+          {entries.length ? (
+            <ol className={`space-y-3 border-s border-[var(--border)] ${isEn ? "ps-4" : "ps-4"}`}>
+              {entries.map((entry) => {
+                const entryRec = entry as Record<string, unknown>;
+                const detail =
+                  "value" in entry
+                    ? entry.value
+                    : isEn
+                      ? (entryRec.operationalWorkTypeEn as string | undefined) || entry.operationalWorkTypeAr
+                      : entry.operationalWorkTypeAr;
+                return (
+                  <li key={entry.id} className="relative text-sm">
+                    <span className={`absolute top-1.5 size-2 rounded-full bg-[#1167c9] ${isEn ? "-left-[1.05rem]" : "-right-[1.05rem]"}`} />
+                    <p className="font-bold">{detail || (isEn ? "Operational Assignment" : "تكليف تشغيلي")}</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {isEn
+                        ? `From ${formatDate(entry.effectiveFrom, locale)}${entry.effectiveTo ? ` to ${formatDate(entry.effectiveTo, locale)}` : " — Ongoing"}`
+                        : `من ${formatDate(entry.effectiveFrom, locale)}${entry.effectiveTo ? ` إلى ${formatDate(entry.effectiveTo, locale)}` : " — مستمر"}`}
+                    </p>
+                    {entry.reason ? (
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        {formatReason(entry.reason, locale)}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="text-sm text-[var(--muted)] font-medium">
+              {isEn ? "No history entries yet." : "لا توجد سجلات حتى الآن."}
+            </p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function VehicleTimelineCard({
+  entries,
+  loading,
+  locale = "ar",
+}: {
+  entries: RiderVehicleTimelineResponse[];
+  loading: boolean;
+  locale?: "ar" | "en";
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const isEn = locale === "en";
+
+  const getStatusBadge = (status: RiderVehicleAssignmentStatus, endedAtUtc?: string | null) => {
+    if (status === RiderVehicleAssignmentStatus.Active || !endedAtUtc) {
+      return (
+        <span className="rounded-md bg-emerald-100 text-emerald-950 border border-emerald-300 px-2 py-0.5 text-[11px] font-black">
+          {isEn ? "Active / In Custody" : "نشط / في العهدة"}
+        </span>
+      );
+    }
+    if (status === RiderVehicleAssignmentStatus.Completed) {
+      return (
+        <span className="rounded-md bg-slate-100 text-slate-700 border border-slate-300 px-2 py-0.5 text-[11px] font-bold">
+          {isEn ? "Returned" : "تم الإرجاع"}
+        </span>
+      );
+    }
+    if (status === RiderVehicleAssignmentStatus.Cancelled) {
+      return (
+        <span className="rounded-md bg-rose-100 text-rose-950 border border-rose-300 px-2 py-0.5 text-[11px] font-bold">
+          {isEn ? "Cancelled" : "ملغى"}
+        </span>
+      );
+    }
+    return (
+      <span className="rounded-md bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 text-[11px] font-bold">
+        {isEn ? "Corrected" : "معدل"}
+      </span>
+    );
+  };
+
+  return (
+    <Card className="p-5 transition-all">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between gap-2 text-start font-black text-[var(--foreground)] focus:outline-none select-none cursor-pointer"
+      >
+        <span className="flex items-center gap-2 text-base font-black">
+          <Car size={18} className="text-[#1167c9]" />
+          {isEn ? "Vehicle Assignment History" : "سجل عهد المركبات"}
+        </span>
+        <div className="flex items-center gap-2">
+          {entries.length > 0 && (
+            <span className="rounded-full bg-[var(--subtle-bg)] border border-[var(--border)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">
+              {entries.length}
+            </span>
+          )}
+          <ChevronDown
+            size={18}
+            className={`text-[var(--muted)] transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="pt-4 border-t border-[var(--border)] mt-3">
+          {loading ? (
+            <div className="space-y-3">
+              <div className="h-10 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
+              <div className="h-10 animate-pulse rounded-lg bg-[var(--subtle-bg)]" />
+            </div>
+          ) : entries.length > 0 ? (
+            <ol className={`space-y-4 border-s border-[var(--border)] ${isEn ? "ps-4" : "ps-4"}`}>
+              {entries.map((item) => {
+                const { assignment, issues, accidents } = item;
+                return (
+                  <li key={assignment.id} className="relative text-sm">
+                    <span className={`absolute top-1.5 size-2 rounded-full bg-[#1167c9] ${isEn ? "-left-[1.05rem]" : "-right-[1.05rem]"}`} />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-base text-[#1167c9]">
+                          {assignment.assetNumber}
+                        </span>
+                        {getStatusBadge(assignment.status, assignment.endedAtUtc)}
+                      </div>
+                      <Link
+                        href={`/dashboard/fleet/vehicles/${assignment.vehicleId}`}
+                        className="text-xs font-bold text-[#1167c9] hover:underline"
+                      >
+                        {isEn ? "View Details" : "عرض التفاصيل"}
+                      </Link>
+                    </div>
+
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {isEn
+                        ? `From ${formatDate(assignment.startedAtUtc, locale)}${assignment.endedAtUtc ? ` to ${formatDate(assignment.endedAtUtc, locale)}` : " — Ongoing"}`
+                        : `من ${formatDate(assignment.startedAtUtc, locale)}${assignment.endedAtUtc ? ` إلى ${formatDate(assignment.endedAtUtc, locale)}` : " — مستمر"}`}
+                    </p>
+
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs rounded-lg bg-[var(--subtle-bg)] p-2.5 border border-[var(--border)]">
+                      <div>
+                        <span className="text-[var(--muted)]">{isEn ? "Start Odo: " : "عداد البداية: "}</span>
+                        <span className="font-mono font-bold">{assignment.startOdometer?.toLocaleString()} {isEn ? "km" : "كم"}</span>
+                      </div>
+                      <div>
+                        <span className="text-[var(--muted)]">{isEn ? "End Odo: " : "عداد النهاية: "}</span>
+                        <span className="font-mono font-bold">
+                          {assignment.endOdometer != null ? `${assignment.endOdometer.toLocaleString()} ${isEn ? "km" : "كم"}` : "—"}
+                        </span>
+                      </div>
+                      {assignment.permissionReference && (
+                        <div className="col-span-2">
+                          <span className="text-[var(--muted)]">{isEn ? "Permission: " : "التفويض: "}</span>
+                          <span className="font-mono font-bold">{assignment.permissionReference}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {assignment.startReason && (
+                      <p className="mt-1.5 text-xs text-[var(--muted)]">
+                        <span className="font-bold text-[var(--foreground)]">{isEn ? "Start note: " : "سبب التسليم: "}</span>
+                        {assignment.startReason}
+                      </p>
+                    )}
+                    {assignment.endReason && (
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        <span className="font-bold text-[var(--foreground)]">{isEn ? "Return note: " : "سبب الإرجاع: "}</span>
+                        {assignment.endReason}
+                      </p>
+                    )}
+
+                    {(issues.length > 0 || accidents.length > 0) && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {issues.length > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 text-amber-950 border border-amber-200 px-2 py-0.5 text-[11px] font-bold">
+                            {isEn ? `${issues.length} Issues reported` : `${issues.length} أعطال مسبقة`}
+                          </span>
+                        )}
+                        {accidents.length > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded bg-rose-50 text-rose-950 border border-rose-200 px-2 py-0.5 text-[11px] font-bold">
+                            {isEn ? `${accidents.length} Accidents recorded` : `${accidents.length} حوادث مسجلة`}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="text-sm text-[var(--muted)] font-medium">
+              {isEn ? "No vehicle assignment history yet." : "لا توجد سجلات عهد مركبات حتى الآن."}
+            </p>
+          )}
+        </div>
       )}
     </Card>
   );
@@ -213,6 +410,51 @@ export default function EmployeeDetailsPage({
   const [error, setError] = useState("");
   const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
   const [openRiderHistoryModal, setOpenRiderHistoryModal] = useState(false);
+
+  // Vehicle Timeline & Details State
+  const [vehicleTimeline, setVehicleTimeline] = useState<RiderVehicleTimelineResponse[]>([]);
+  const [loadingVehicleTimeline, setLoadingVehicleTimeline] = useState(false);
+  const [currentVehicleDetails, setCurrentVehicleDetails] = useState<VehicleDetailResponse | null>(null);
+
+  useEffect(() => {
+    if (!details) return;
+    const targetRiderId = details.rider?.id || details.employee.riderProfileId || details.employee.id;
+    if (!targetRiderId) return;
+
+    setLoadingVehicleTimeline(true);
+    getRiderVehicleTimeline(targetRiderId)
+      .then(async (data) => {
+        const items = data || [];
+        setVehicleTimeline(items);
+
+        const active = items.find(
+          (t) => t.assignment.status === RiderVehicleAssignmentStatus.Active || !t.assignment.endedAtUtc
+        );
+        if (active?.assignment?.vehicleId) {
+          try {
+            const vehDetail = await getVehicleDetail(active.assignment.vehicleId);
+            setCurrentVehicleDetails(vehDetail);
+          } catch {
+            setCurrentVehicleDetails(null);
+          }
+        } else {
+          setCurrentVehicleDetails(null);
+        }
+      })
+      .catch(() => {
+        setVehicleTimeline([]);
+        setCurrentVehicleDetails(null);
+      })
+      .finally(() => {
+        setLoadingVehicleTimeline(false);
+      });
+  }, [details]);
+
+  const currentVehicleAssignment = useMemo(() => {
+    return vehicleTimeline.find(
+      (item) => item.assignment.status === RiderVehicleAssignmentStatus.Active || !item.assignment.endedAtUtc
+    )?.assignment;
+  }, [vehicleTimeline]);
 
   // Housing Assignment Modal State
   const [openHousingModal, setOpenHousingModal] = useState(false);
@@ -487,33 +729,7 @@ export default function EmployeeDetailsPage({
     return mapped.reverse();
   }, [details, locale]);
 
-  const assignmentEntries = useMemo(() => {
-    if (!details) return [];
-    if (
-      details.operationalAssignmentHistory &&
-      details.operationalAssignmentHistory.length > 0
-    ) {
-      return details.operationalAssignmentHistory;
-    }
-    const filtered = (details.workHistory ?? []).filter(
-      (w) =>
-        w.changeType === "OperationalAssignment" ||
-        w.changeType === "WorkType" ||
-        w.changeType === "Assignment",
-    );
-    return filtered.map((w) => ({
-      id: w.id,
-      jobTitleId: "",
-      jobTitleAr: w.newValue || "",
-      operationalWorkTypeId: "",
-      operationalWorkTypeAr: w.newValue || "",
-      operatingCityId: "",
-      operatingCityAr: "",
-      effectiveFrom: w.effectiveDate || w.createdAtUtc,
-      effectiveTo: null,
-      reason: w.reason,
-    }));
-  }, [details]);
+
 
   const BackIcon = locale === "en" ? ArrowLeft : ArrowRight;
 
@@ -856,12 +1072,80 @@ export default function EmployeeDetailsPage({
         </Card>
 
         <Card className="p-5">
-          <h2 className="flex items-center gap-2 font-black">
-            <BriefcaseBusiness size={18} />
-            {locale === "en" ? "Operational Work" : "العمل التشغيلي"}
-          </h2>
-          <p className="mt-4 text-sm font-bold">{workAssignment}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">{String(operatingCity ?? "")}</p>
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-3 mb-3">
+            <h2 className="flex items-center gap-2 font-black">
+              <Car size={18} className="text-[#1167c9]" />
+              {locale === "en" ? "Current Vehicle" : "المركبة الحالية"}
+            </h2>
+            {currentVehicleAssignment ? (
+              <span className="rounded-full bg-emerald-100 text-emerald-950 border border-emerald-300 px-2.5 py-0.5 text-xs font-bold shadow-sm">
+                {locale === "en" ? "In Custody" : "في العهدة"}
+              </span>
+            ) : (
+              <span className="rounded-full bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 text-xs font-bold">
+                {locale === "en" ? "None" : "لا يوجد"}
+              </span>
+            )}
+          </div>
+          {loadingVehicleTimeline ? (
+            <div className="space-y-2 py-2">
+              <div className="h-4 animate-pulse rounded bg-[var(--subtle-bg)] w-3/4" />
+              <div className="h-4 animate-pulse rounded bg-[var(--subtle-bg)] w-1/2" />
+            </div>
+          ) : currentVehicleAssignment ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-black text-base text-[#1167c9]">
+                  {currentVehicleAssignment.assetNumber}
+                </span>
+                {currentVehicleDetails?.summary.plateNumberAr && (
+                  <span className="font-bold border border-[var(--border)] rounded px-2 py-0.5 text-xs bg-[var(--subtle-bg)] shadow-sm">
+                    {currentVehicleDetails.summary.plateNumberAr}
+                  </span>
+                )}
+              </div>
+              {currentVehicleDetails?.summary.manufacturer && (
+                <p className="text-xs font-bold text-[var(--foreground)]">
+                  {currentVehicleDetails.summary.manufacturer} {currentVehicleDetails.summary.model}
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-2 text-xs text-[var(--muted)] pt-2 border-t border-[var(--border)]">
+                <div>
+                  <dt className="text-[11px] font-medium">{locale === "en" ? "Assigned Date" : "تاريخ التسليم"}</dt>
+                  <dd className="font-bold text-[var(--foreground)] mt-0.5">
+                    {formatDate(currentVehicleAssignment.startedAtUtc, locale)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium">{locale === "en" ? "Start Odometer" : "عداد البداية"}</dt>
+                  <dd className="font-bold font-mono text-[var(--foreground)] mt-0.5">
+                    {currentVehicleAssignment.startOdometer?.toLocaleString()} {locale === "en" ? "km" : "كم"}
+                  </dd>
+                </div>
+              </div>
+              {currentVehicleAssignment.permissionReference && (
+                <div className="text-xs pt-1">
+                  <span className="text-[var(--muted)]">{locale === "en" ? "Permission Ref: " : "رقم التفويض: "}</span>
+                  <span className="font-mono font-bold text-[var(--foreground)]">
+                    {currentVehicleAssignment.permissionReference}
+                  </span>
+                </div>
+              )}
+              <div className="pt-2">
+                <Link
+                  href={`/dashboard/fleet/vehicles/${currentVehicleAssignment.vehicleId}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1167c9] hover:underline"
+                >
+                  <Car size={13} />
+                  {locale === "en" ? "View Vehicle Profile" : "عرض ملف المركبة"}
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm font-medium text-[var(--muted)]">
+              {locale === "en" ? "No current vehicle assigned." : "لا توجد مركبة مسلمة حالياً."}
+            </p>
+          )}
         </Card>
       </div>
 
@@ -887,9 +1171,9 @@ export default function EmployeeDetailsPage({
           entries={roleEntries}
           locale={locale}
         />
-        <Timeline
-          title={locale === "en" ? "Operational Assignment History" : "سجل التكليفات التشغيلية"}
-          entries={assignmentEntries}
+        <VehicleTimelineCard
+          entries={vehicleTimeline}
+          loading={loadingVehicleTimeline}
           locale={locale}
         />
         <Timeline

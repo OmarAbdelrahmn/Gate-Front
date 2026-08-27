@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
   getRiderPlatformHistory,
+  sortAssignmentsNewestFirst,
   type RiderPlatformHistoryResponse,
 } from "@/lib/platforms/api";
 import { Modal } from "@/components/ui/Modal";
@@ -53,6 +54,9 @@ export function EmployeeRiderHistoryModal({
     setError("");
     try {
       const data = await getRiderPlatformHistory(targetRiderId);
+      if (data && Array.isArray(data.assignments)) {
+        data.assignments = sortAssignmentsNewestFirst(data.assignments);
+      }
       setHistoryData(data);
     } catch (err) {
       console.error("Failed to load rider platform history", err);

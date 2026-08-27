@@ -64,7 +64,7 @@ export default function NewSponsorPage() {
 
     try {
       await createSponsor(payload);
-      router.replace("/dashboard/employees/sponsors");
+      router.replace("/dashboard/hr/catalogs?tab=sponsors");
     } catch (err) {
       setError(
         err instanceof Error

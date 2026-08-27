@@ -47,8 +47,11 @@ export default function AssignmentsPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [filterType]);
+    const timer = setTimeout(() => {
+      loadData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, filterType]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,14 +101,14 @@ export default function AssignmentsPage() {
             className={filterType === "assigned" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
             onClick={() => setFilterType("assigned")}
           >
-            المركبات المسلمة (في العهدة)
+            المركبات المسلمة
           </Button>
           <Button 
             variant={filterType === "available" ? "primary" : "secondary"}
             className={filterType === "available" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
             onClick={() => setFilterType("available")}
           >
-            المركبات المتاحة (جاهزة)
+            المركبات المتاحة
           </Button>
         </div>
 

@@ -5,10 +5,24 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicleDetail, getVehicleIssues } from "@/lib/fleet/api";
 import { VehicleOperationalStatus, type VehicleDetailResponse, type VehicleIssueSummaryResponse } from "@/lib/fleet/types";
+import {
+  formatVehicleType,
+  formatVehicleFuelType,
+  formatVehicleTransmissionType,
+  formatVehicleOwnershipType,
+  formatVehicleComplianceDueStatus,
+  formatVehicleIssueCategory,
+  formatVehicleIssueStatus,
+  formatVehicleRegistrationType,
+} from "@/lib/fleet/formatters";
+import { VehicleRegistrationType } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { VehicleUpsertModal } from "../components/VehicleUpsertModal";
+import { AddComplianceModal, type ComplianceTabType } from "../components/AddComplianceModal";
+import { PrivateToPublicTransitionModal } from "../components/PrivateToPublicTransitionModal";
+import { VehicleFilesCard } from "../components/VehicleFilesCard";
 import {
   Car,
   ArrowRight,
@@ -19,6 +33,8 @@ import {
   Wrench,
   FileText,
   User,
+  Plus,
+  ArrowRightLeft,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -43,6 +59,9 @@ export default function VehicleDetailPage() {
   const [issues, setIssues] = useState<VehicleIssueSummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [isUpsertOpen, setIsUpsertOpen] = useState(false);
+  const [isComplianceOpen, setIsComplianceOpen] = useState(false);
+  const [isTransitionOpen, setIsTransitionOpen] = useState(false);
+  const [complianceType, setComplianceType] = useState<ComplianceTabType>("Registration");
 
   const loadData = async () => {
     setLoading(true);
@@ -56,6 +75,11 @@ export default function VehicleDetailPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOpenCompliance = (type: ComplianceTabType) => {
+    setComplianceType(type);
+    setIsComplianceOpen(true);
   };
 
   useEffect(() => {
@@ -104,10 +128,10 @@ export default function VehicleDetailPage() {
     }
   };
 
-  const complianceItems = [
-    { label: "استمارة السير", date: summary.registrationExpiryDate, status: summary.registrationStatus },
-    { label: "بوليصة التأمين", date: summary.insuranceExpiryDate, status: summary.insuranceStatus },
-    { label: "الفحص الدوري", date: summary.inspectionExpiryDate, status: summary.inspectionStatus },
+  const complianceItems: { label: string; type: ComplianceTabType; date?: string | null; status?: any }[] = [
+    { label: "استمارة السير", type: "Registration", date: summary.registrationExpiryDate, status: summary.registrationStatus },
+    { label: "بوليصة التأمين", type: "InsurancePolicy", date: summary.insuranceExpiryDate, status: summary.insuranceStatus },
+    { label: "الفحص الدوري", type: "Inspection", date: summary.inspectionExpiryDate, status: summary.inspectionStatus },
   ];
 
   return (
@@ -132,11 +156,24 @@ export default function VehicleDetailPage() {
           </div>
         </div>
         
-        {can("fleet.vehicles.manage") && (
-          <Button onClick={() => setIsUpsertOpen(true)} variant="secondary" className="gap-2">
-            <Edit2 className="h-4 w-4" /> تعديل البيانات
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {can("fleet.vehicles.manage") && (
+            <Button onClick={() => setIsUpsertOpen(true)} variant="secondary" className="gap-2">
+              <Edit2 className="h-4 w-4" /> تعديل البيانات
+            </Button>
+          )}
+
+          {(can("fleet.registration-transitions.manage") || can("fleet.vehicles.manage")) && (
+            <Button
+              onClick={() => setIsTransitionOpen(true)}
+              variant="secondary"
+              className="gap-2 border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+            >
+              <ArrowRightLeft className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              <span>تحويل إلى نقل عام</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -154,7 +191,7 @@ export default function VehicleDetailPage() {
             <Card className="p-4 flex flex-col gap-1">
               <span className="text-xs font-bold text-slate-500 uppercase">النوع</span>
               <span className="text-lg font-bold text-slate-800 dark:text-slate-200">
-                {summary.vehicleType}
+                {formatVehicleType(summary.vehicleType)}
               </span>
             </Card>
             <Card className="p-4 flex flex-col gap-1">
@@ -172,11 +209,29 @@ export default function VehicleDetailPage() {
           </div>
 
           <Card className="p-0 overflow-hidden">
-            <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-4 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-slate-500" />
-              <h3 className="font-bold text-slate-800 dark:text-slate-200">البيانات الفنية والتسجيل</h3>
+            <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-slate-500" />
+                <h3 className="font-bold text-slate-800 dark:text-slate-200">البيانات الفنية والتسجيل</h3>
+              </div>
+              <Badge className="bg-blue-50 text-[#1167c9] border-blue-200">
+                {formatVehicleRegistrationType(vehicle.registrationType || summary.registrationType)}
+              </Badge>
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12">
+              <div>
+                <div className="text-sm text-slate-500 mb-1">نوع التسجيل الرسمـي</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {formatVehicleRegistrationType(vehicle.registrationType || summary.registrationType)}
+                  </span>
+                  {(vehicle.registrationType === VehicleRegistrationType.PrivateTransport || summary.registrationType === VehicleRegistrationType.PrivateTransport) && (
+                    <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                      قابل للتحويل لنقل عام
+                    </Badge>
+                  )}
+                </div>
+              </div>
               <div>
                 <div className="text-sm text-slate-500 mb-1">رقم الهيكل (VIN)</div>
                 <div className="font-mono font-medium text-slate-900 dark:text-slate-100">{vehicle.vin || "—"}</div>
@@ -195,7 +250,7 @@ export default function VehicleDetailPage() {
               </div>
               <div>
                 <div className="text-sm text-slate-500 mb-1">المحرك والناقل</div>
-                <div className="font-medium text-slate-900 dark:text-slate-100">{vehicle.fuelType} - {vehicle.transmissionType}</div>
+                <div className="font-medium text-slate-900 dark:text-slate-100">{formatVehicleFuelType(vehicle.fuelType)} - {formatVehicleTransmissionType(vehicle.transmissionType)}</div>
               </div>
               <div>
                 <div className="text-sm text-slate-500 mb-1">مدينة التشغيل</div>
@@ -204,12 +259,14 @@ export default function VehicleDetailPage() {
               <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <div className="text-sm text-slate-500 mb-1">تاريخ الاستحواذ / الملكية</div>
                 <div className="font-medium text-slate-900 dark:text-slate-100">
-                  {vehicle.ownershipType} {vehicle.acquisitionDate ? `- ${formatDate(vehicle.acquisitionDate)}` : ""}
+                  {formatVehicleOwnershipType(vehicle.ownershipType)} {vehicle.acquisitionDate ? `- ${formatDate(vehicle.acquisitionDate)}` : ""}
                 </div>
               </div>
             </div>
           </Card>
 
+          {/* Documents and Files */}
+          <VehicleFilesCard vehicleId={id} registrationType={vehicle.registrationType} />
         </div>
 
         {/* Right Column - Status & Links */}
@@ -259,11 +316,23 @@ export default function VehicleDetailPage() {
                       تنتهي في: {formatDate(item.date)}
                     </div>
                   </div>
-                  {item.status && (
-                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                      {String(item.status)}
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {item.status && (
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                        {formatVehicleComplianceDueStatus(item.status)}
+                      </Badge>
+                    )}
+                    {can("fleet.vehicles.manage") && (
+                      <Button
+                        variant="ghost"
+                        className="text-xs text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40 gap-1 px-2 py-1 h-auto"
+                        onClick={() => handleOpenCompliance(item.type)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>تحديث</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -280,8 +349,8 @@ export default function VehicleDetailPage() {
                   {issues.map(issue => (
                     <div key={issue.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                       <div className="flex justify-between items-start mb-1">
-                        <div className="font-bold text-sm text-slate-800 dark:text-slate-200">{issue.category}</div>
-                        <Badge className="text-[10px] px-1">{issue.status}</Badge>
+                        <div className="font-bold text-sm text-slate-800 dark:text-slate-200">{formatVehicleIssueCategory(issue.category)}</div>
+                        <Badge className="text-[10px] px-1">{formatVehicleIssueStatus(issue.status)}</Badge>
                       </div>
                       <div className="text-xs text-slate-500 line-clamp-1">{issue.description}</div>
                       <div className="text-xs text-slate-400 mt-2">{formatDate(issue.reportedAtUtc)}</div>
@@ -303,6 +372,27 @@ export default function VehicleDetailPage() {
         onSuccess={() => { setIsUpsertOpen(false); loadData(); }}
         editingVehicle={vehicle}
       />
+
+      <AddComplianceModal
+        isOpen={isComplianceOpen}
+        onClose={() => setIsComplianceOpen(false)}
+        onSuccess={() => { setIsComplianceOpen(false); loadData(); }}
+        vehicleId={id}
+        initialType={complianceType}
+      />
+
+      {vehicle && (
+        <PrivateToPublicTransitionModal
+          isOpen={isTransitionOpen}
+          onClose={() => setIsTransitionOpen(false)}
+          onSuccess={() => {
+            setIsTransitionOpen(false);
+            loadData();
+          }}
+          vehicle={vehicle}
+        />
+      )}
     </div>
   );
 }
+

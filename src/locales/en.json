@@ -60,6 +60,7 @@
     "absenceCases": "Absence Cases",
     "statusChangeRequests": "Status Change Requests",
     "hrForms": "HR Forms",
+    "expiryCompliance": "Expiry Compliance",
     "externalRiders": "External Riders",
     "housing": "Housing Management",
     "platforms": "Platform Management",
@@ -358,5 +359,161 @@
     "updateSuccess": "External rider updated successfully.",
     "conflictError": "Failed to save: Iqama number already exists or record version is outdated.",
     "notFoundError": "External rider not found."
+  },
+  "fleet": {
+    "title": "Fleet & Vehicles Management",
+    "vehicles": "Vehicles",
+    "vehicleAssignments": "Assignments & Handovers",
+    "vehicleIssues": "Vehicle Issues",
+    "vehicleAccidents": "Accidents & Reports",
+    "vehicleCompliance": "Fleet Compliance",
+    "vehicleCatalogs": "Catalogs & Suppliers",
+    "addVehicle": "Add Vehicle",
+    "editVehicle": "Edit Vehicle",
+    "archiveVehicle": "Archive Vehicle",
+    "restoreVehicle": "Restore Vehicle",
+    "assetNumber": "Asset Number",
+    "plateNumber": "Plate Number",
+    "manufacturer": "Manufacturer",
+    "model": "Model",
+    "modelYear": "Model Year",
+    "chassisNumber": "Chassis Number",
+    "engineNumber": "Engine Number",
+    "vin": "VIN",
+    "serialNumber": "Serial Number",
+    "color": "Color",
+    "currentOdometer": "Current Odometer Reading",
+    "operatingCity": "Operating City",
+    "sponsor": "Sponsor / Owner",
+    "ownershipType": "Ownership Type",
+    "registrationType": "Registration Type",
+    "vehicleType": "Vehicle Type",
+    "fuelType": "Fuel Type",
+    "transmissionType": "Transmission Type",
+    "condition": "Vehicle Condition",
+    "status": "Operational Status",
+    "types": {
+      "motorcycle": "Motorcycle",
+      "car": "Car",
+      "van": "Van / Small Truck",
+      "truck": "Truck",
+      "other": "Other"
+    },
+    "fuelTypes": {
+      "petrol": "Petrol",
+      "diesel": "Diesel",
+      "electric": "Electric",
+      "hybrid": "Hybrid",
+      "other": "Other"
+    },
+    "transmissionTypes": {
+      "manual": "Manual",
+      "automatic": "Automatic",
+      "other": "Other"
+    },
+    "ownershipTypes": {
+      "owned": "Company Owned",
+      "leased": "Operational / Financial Lease",
+      "thirdParty": "Third Party"
+    },
+    "registrationTypes": {
+      "private": "Private",
+      "privateTransport": "Private Transport",
+      "smallBus": "Small Bus",
+      "taxi": "Taxi",
+      "publicTransport": "Public Transport",
+      "publicBus": "Public Bus",
+      "motorcycle": "Motorcycle",
+      "publicWorks": "Public Works"
+    },
+    "conditions": {
+      "unknown": "Unknown",
+      "good": "Good",
+      "fair": "Fair",
+      "damaged": "Damaged",
+      "unsafe": "Unsafe"
+    },
+    "operationalStatuses": {
+      "available": "Available",
+      "assigned": "Assigned",
+      "problemHold": "Problem Hold",
+      "accidentHold": "Accident Hold",
+      "stolen": "Stolen",
+      "outOfService": "Out of Service",
+      "decommissioned": "Decommissioned"
+    },
+    "fileKinds": {
+      "istimara": "Vehicle Registration (Istimara)",
+      "operationCard": "Operation Card",
+      "frontImage": "Front Image",
+      "rearImage": "Rear Image",
+      "leftImage": "Left Image",
+      "rightImage": "Right Image",
+      "legacy": "Legacy File"
+    },
+    "issueCategories": {
+      "problem": "Mechanical / Technical Issue",
+      "accident": "Accident",
+      "theft": "Theft",
+      "damage": "External Damage",
+      "administrative": "Administrative"
+    },
+    "issueStatuses": {
+      "open": "Open",
+      "underReview": "Under Review",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "rejected": "Rejected"
+    },
+    "complianceStatuses": {
+      "valid": "Valid",
+      "upcoming": "Expiring Soon",
+      "dueToday": "Expires Today",
+      "expired": "Expired",
+      "missing": "Not Added"
+    },
+    "accidentSeverities": {
+      "minor": "Minor",
+      "moderate": "Moderate",
+      "serious": "Serious",
+      "critical": "Critical"
+    },
+    "accidentStatuses": {
+      "reported": "Reported",
+      "finalized": "Preliminary Finalized",
+      "closed": "Finally Closed"
+    },
+    "messages": {
+      "created": "Vehicle created successfully",
+      "updated": "Vehicle updated successfully",
+      "archived": "Vehicle archived successfully",
+      "restored": "Vehicle restored successfully",
+      "statusChanged": "Vehicle status changed successfully",
+      "odometerRecorded": "Odometer reading recorded successfully",
+      "identityCorrected": "Vehicle identity corrected successfully",
+      "registrationTransitioned": "Vehicle registration type transitioned successfully",
+      "fileUploaded": "File uploaded successfully",
+      "assignmentTaken": "Vehicle assigned successfully",
+      "assignmentReturned": "Vehicle returned successfully",
+      "assignmentSwitched": "Vehicle switched successfully",
+      "permissionRenewed": "Permission renewed successfully",
+      "registrationAdded": "Registration added successfully",
+      "insuranceAdded": "Insurance policy added successfully",
+      "inspectionAdded": "Inspection added successfully",
+      "issueCreated": "Issue reported successfully",
+      "issueStatusChanged": "Issue status updated successfully",
+      "issueResolved": "Issue resolved successfully",
+      "accidentCreated": "Accident reported successfully",
+      "accidentFinalized": "Accident report finalized successfully",
+      "accidentCorrected": "Accident report corrected successfully",
+      "accidentClosed": "Accident process closed successfully",
+      "manufacturerCreated": "Vehicle manufacturer created successfully",
+      "manufacturerUpdated": "Vehicle manufacturer updated successfully",
+      "modelCreated": "Vehicle model created successfully",
+      "modelUpdated": "Vehicle model updated successfully",
+      "supplierCreated": "Supplier created successfully",
+      "supplierUpdated": "Supplier updated successfully",
+      "supplierArchived": "Supplier archived successfully"
+    }
   }
 }

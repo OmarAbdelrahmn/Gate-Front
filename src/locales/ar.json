@@ -60,6 +60,7 @@
     "absenceCases": "حالات الغياب",
     "statusChangeRequests": "طلبات تغيير الحالة",
     "hrForms": "نماذج الموارد البشرية",
+    "expiryCompliance": "تنبيهات الوثائق",
     "externalRiders": "المناديب الخارجيين",
     "housing": "إدارة السكن",
     "platforms": "إدارة المنصات",
@@ -358,5 +359,161 @@
     "updateSuccess": "تم تحديث بيانات المندوب الخارجي بنجاح.",
     "conflictError": "تعذر الحفظ: رقم الإقامة مستخدم بالفعل أو أن نسق البيانات قديم.",
     "notFoundError": "المندوب الخارجي غير موجود."
+  },
+  "fleet": {
+    "title": "إدارة الأسطول والمركبات",
+    "vehicles": "المركبات",
+    "vehicleAssignments": "التعيينات والاستلام",
+    "vehicleIssues": "الأعطال والمشاكل",
+    "vehicleAccidents": "الحوادث والتقارير",
+    "vehicleCompliance": "التزام الأسطول",
+    "vehicleCatalogs": "الكتالوجات والموردون",
+    "addVehicle": "إضافة مركبة",
+    "editVehicle": "تعديل البيانات",
+    "archiveVehicle": "أرشفة المركبة",
+    "restoreVehicle": "استعادة المركبة",
+    "assetNumber": "رقم الأصل",
+    "plateNumber": "رقم اللوحة",
+    "manufacturer": "الصانع / الشركة المصنعة",
+    "model": "الموديل",
+    "modelYear": "سنة الصنع",
+    "chassisNumber": "رقم الشاسيه",
+    "engineNumber": "رقم المحرك",
+    "vin": "رقم الهيكل (VIN)",
+    "serialNumber": "الرقم التسلسلي",
+    "color": "اللون",
+    "currentOdometer": "قراءة العداد الحالية",
+    "operatingCity": "مدينة التشغيل",
+    "sponsor": "الكفيل / المالك",
+    "ownershipType": "نوع الملكية",
+    "registrationType": "نوع التسجيل",
+    "vehicleType": "نوع المركبة",
+    "fuelType": "نوع الوقود",
+    "transmissionType": "ناقل الحركة",
+    "condition": "حالة المركبة",
+    "status": "حالة التشغيل",
+    "types": {
+      "motorcycle": "دراجة نارية",
+      "car": "سيارة",
+      "van": "فان / شاحنة صغيرة",
+      "truck": "شاحنة",
+      "other": "أخرى"
+    },
+    "fuelTypes": {
+      "petrol": "بنزين",
+      "diesel": "ديزل",
+      "electric": "كهرباء",
+      "hybrid": "هايبرد",
+      "other": "أخرى"
+    },
+    "transmissionTypes": {
+      "manual": "عادي",
+      "automatic": "أوتوماتيك",
+      "other": "أخرى"
+    },
+    "ownershipTypes": {
+      "owned": "مملوكة للشركة",
+      "leased": "تأجير تشغيلي / تمويلي",
+      "thirdParty": "طرف ثالث"
+    },
+    "registrationTypes": {
+      "private": "خصوصي",
+      "privateTransport": "نقل خاص",
+      "smallBus": "حافلة صغيرة",
+      "taxi": "أجرة",
+      "publicTransport": "نقل عام",
+      "publicBus": "حافلة عامة",
+      "motorcycle": "دراجة آلية",
+      "publicWorks": "أشغال عامة"
+    },
+    "conditions": {
+      "unknown": "غير معروف",
+      "good": "جيدة",
+      "fair": "مقبولة",
+      "damaged": "متضررة",
+      "unsafe": "غير آمنة"
+    },
+    "operationalStatuses": {
+      "available": "متاح",
+      "assigned": "معيّن",
+      "problemHold": "إيقاف (مشكلة)",
+      "accidentHold": "إيقاف (حادث)",
+      "stolen": "مسروق",
+      "outOfService": "خارج الخدمة",
+      "decommissioned": "مستبعد"
+    },
+    "fileKinds": {
+      "istimara": "استمارة السير",
+      "operationCard": "كرت التشغيل",
+      "frontImage": "صورة الأمام",
+      "rearImage": "صورة الخلف",
+      "leftImage": "صورة اليسار",
+      "rightImage": "صورة اليمين",
+      "legacy": "ملف قديم"
+    },
+    "issueCategories": {
+      "problem": "عطل ميكانيكي / فني",
+      "accident": "حادث",
+      "theft": "سرقة",
+      "damage": "تلفيات خارجية",
+      "administrative": "إدارية"
+    },
+    "issueStatuses": {
+      "open": "مفتوح",
+      "underReview": "قيد المراجعة",
+      "resolved": "تم الحل",
+      "closed": "مغلق",
+      "rejected": "مرفوض"
+    },
+    "complianceStatuses": {
+      "valid": "ساري",
+      "upcoming": "قريب الانتهاء",
+      "dueToday": "ينتهي اليوم",
+      "expired": "منتهي",
+      "missing": "غير مضاف"
+    },
+    "accidentSeverities": {
+      "minor": "طفيف",
+      "moderate": "متوسط",
+      "serious": "جسيم",
+      "critical": "حرج جداً"
+    },
+    "accidentStatuses": {
+      "reported": "مُبلّغ عنه",
+      "finalized": "مُقفل أولياً",
+      "closed": "مغلق نهائياً"
+    },
+    "messages": {
+      "created": "تم إضافة المركبة بنجاح",
+      "updated": "تم تحديث بيانات المركبة بنجاح",
+      "archived": "تمت أرشفة المركبة بنجاح",
+      "restored": "تم استعادة المركبة بنجاح",
+      "statusChanged": "تم تغيير حالة المركبة بنجاح",
+      "odometerRecorded": "تم تسجيل قراءة العداد بنجاح",
+      "identityCorrected": "تم تصحيح هوية المركبة بنجاح",
+      "registrationTransitioned": "تم تحويل نوع تسجيل المركبة بنجاح",
+      "fileUploaded": "تم رفع الملف بنجاح",
+      "assignmentTaken": "تم تسليم المركبة بنجاح",
+      "assignmentReturned": "تم إرجاع المركبة بنجاح",
+      "assignmentSwitched": "تم تبديل المركبة بنجاح",
+      "permissionRenewed": "تم تجديد التفويض بنجاح",
+      "registrationAdded": "تمت إضافة الاستمارة بنجاح",
+      "insuranceAdded": "تمت إضافة بوليصة التأمين بنجاح",
+      "inspectionAdded": "تمت إضافة الفحص الدوري بنجاح",
+      "issueCreated": "تم تسجيل العطل/المشكلة بنجاح",
+      "issueStatusChanged": "تم تغيير حالة العطل بنجاح",
+      "issueResolved": "تم حل المشكلة بنجاح",
+      "accidentCreated": "تم تسجيل الحادث بنجاح",
+      "accidentFinalized": "تم إقفال تقرير الحادث بنجاح",
+      "accidentCorrected": "تم تصحيح تقرير الحادث بنجاح",
+      "accidentClosed": "تم إنهاء معاملة الحادث بنجاح",
+      "manufacturerCreated": "تم إنشاء صانع المركبة بنجاح",
+      "manufacturerUpdated": "تم تحديث صانع المركبة بنجاح",
+      "modelCreated": "تم إنشاء موديل المركبة بنجاح",
+      "modelUpdated": "تم تحديث موديل المركبة بنجاح",
+      "supplierCreated": "تم إنشاء المورد بنجاح",
+      "supplierUpdated": "تم تحديث بيانات المورد بنجاح",
+      "supplierArchived": "تمت أرشفة المورد بنجاح"
+    }
   }
 }

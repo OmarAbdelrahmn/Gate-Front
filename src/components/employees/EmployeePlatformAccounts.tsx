@@ -8,6 +8,7 @@ import { translate } from "@/lib/i18n";
 import {
   getRiderPlatformHistory,
   getPlatformAccounts,
+  sortAssignmentsNewestFirst,
   type RiderPlatformHistoryItem,
 } from "@/lib/platforms/api";
 import { Card } from "@/components/ui/Card";
@@ -158,7 +159,7 @@ export function EmployeePlatformAccounts({
         });
       }
 
-      setItems(Array.from(displayMap.values()));
+      setItems(sortAssignmentsNewestFirst(Array.from(displayMap.values())));
     } catch (err) {
       console.error("Error loading employee platform accounts", err);
       setError(
