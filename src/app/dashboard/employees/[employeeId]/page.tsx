@@ -1186,7 +1186,7 @@ export default function EmployeeDetailsPage({
           locale={locale}
         />
         <Timeline
-          title={locale === "en" ? "Relationship History" : "سجل العلاقة"}
+          title={locale === "en" ? "Sponsorship History" : "سجل الكفالة"}
           entries={relationshipEntries}
           locale={locale}
         />

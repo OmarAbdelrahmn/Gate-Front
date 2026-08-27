@@ -37,7 +37,7 @@ export default function CompliancePage() {
       setData(res || []);
     } catch (e: any) {
       console.error("Failed to load compliance data:", e);
-      setError(e?.message || "تعذر جلب بيانات التزام الأسطول.");
+      setError(e?.message || "تعذر جلب بيانات متابعة تجديد التراخيص.");
     } finally {
       setLoading(false);
     }
@@ -76,9 +76,9 @@ export default function CompliancePage() {
     }
   };
 
-  const filtered = data.filter(item => 
-    !search || 
-    item.assetNumber.toLowerCase().includes(search.toLowerCase()) || 
+  const filtered = data.filter(item =>
+    !search ||
+    item.assetNumber.toLowerCase().includes(search.toLowerCase()) ||
     (item.plateNumber && item.plateNumber.includes(search))
   );
 
@@ -88,7 +88,7 @@ export default function CompliancePage() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
             <ShieldCheck className="h-7 w-7 text-emerald-600" />
-            التزام الأسطول (التراخيص)
+            ملاحظات التراخيص
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             متابعة تجديد الاستمارات، الفحص الدوري والتأمين للمركبات

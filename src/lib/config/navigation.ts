@@ -156,7 +156,7 @@ export const navigation: NavItem[] = [
         permission: "platform_accounts.read",
       },
       {
-        label: "سجل المنصات للمندوب",
+        label: "سجل العمل للمندوب",
         labelKey: "nav.riderPlatformHistory",
         href: "/dashboard/platforms/rider-history",
         icon: History,
@@ -211,7 +211,7 @@ export const navigation: NavItem[] = [
         permission: "fleet.accidents.read",
       },
       {
-        label: "التزام الأسطول",
+        label: "متابعة تجديد التراخيص",
         labelKey: "nav.vehicleCompliance",
         href: "/dashboard/fleet/compliance",
         icon: ShieldCheck,
