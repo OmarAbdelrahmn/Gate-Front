@@ -546,8 +546,14 @@ export interface RiderPromissoryFileResponse {
   riderProfileId: string;
   assignmentId?: string | null;
   currentVersionId?: string | null;
+  versionNumber?: number | null;
+  originalFileName?: string | null;
+  contentType?: string | null;
+  fileSizeBytes?: number | null;
+  sha256Checksum?: string | null;
   currentFileName?: string | null;
   uploadedAtUtc?: string | null;
+  rowVersion?: string | null;
 }
 
 // ---------------------------

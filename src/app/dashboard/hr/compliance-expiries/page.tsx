@@ -29,6 +29,29 @@ import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { SearchableSelect } from "../../../../components/ui/SearchableSelect";
 
+function isGeneralDocument(item: { categoryNameAr?: string; categoryNameEn?: string; categoryCode?: string }) {
+  const ar = (item.categoryNameAr || "").trim().toLowerCase();
+  const en = (item.categoryNameEn || "").trim().toLowerCase();
+  const code = (item.categoryCode || "").trim().toLowerCase();
+
+  return (
+    ar === "standers" ||
+    ar === "standard" ||
+    ar === "standards" ||
+    ar.includes("وثيقة عامة") ||
+    ar.includes("وثيقة عامه") ||
+    en === "standers" ||
+    en === "standard" ||
+    en === "standards" ||
+    en.includes("standard document") ||
+    code === "standers" ||
+    code === "standard" ||
+    code === "standards" ||
+    code === "general_document" ||
+    code === "general"
+  );
+}
+
 function formatCategoryName(nameAr: string, nameEn: string, locale: string) {
   const ar = (nameAr || "").trim();
   const en = (nameEn || "").trim();
@@ -169,9 +192,10 @@ export default function ExpiryCompliancePage() {
 
   const items = useMemo(() => {
     if (!data?.items) return [];
-    if (!search.trim()) return data.items;
+    const nonGeneralItems = data.items.filter((x) => !isGeneralDocument(x));
+    if (!search.trim()) return nonGeneralItems;
     const q = search.toLowerCase().trim();
-    return data.items.filter(
+    return nonGeneralItems.filter(
       (x) =>
         x.employeeNameAr.toLowerCase().includes(q) ||
         x.categoryNameAr.toLowerCase().includes(q) ||
@@ -180,15 +204,43 @@ export default function ExpiryCompliancePage() {
     );
   }, [data, search]);
 
-  const summary: ExpiryComplianceSummary = data?.summary ?? {
-    valid: 0,
-    upcoming: 0,
-    dueToday: 0,
-    expired: 0,
-    missing: 0,
-  };
+  const summary: ExpiryComplianceSummary = useMemo(() => {
+    const rawSummary = data?.summary ?? {
+      valid: 0,
+      upcoming: 0,
+      dueToday: 0,
+      expired: 0,
+      missing: 0,
+    };
+    if (!data?.items) return rawSummary;
 
-  const totalCount = data?.totalCount ?? 0;
+    const ignoredByStatus = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
+    for (const item of data.items) {
+      if (isGeneralDocument(item)) {
+        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
+        if (meta.en === "Valid") ignoredByStatus.valid++;
+        else if (meta.en === "Upcoming") ignoredByStatus.upcoming++;
+        else if (meta.en === "Due Today") ignoredByStatus.dueToday++;
+        else if (meta.en === "Expired") ignoredByStatus.expired++;
+        else if (meta.en === "Missing") ignoredByStatus.missing++;
+      }
+    }
+
+    return {
+      valid: Math.max(0, rawSummary.valid - ignoredByStatus.valid),
+      upcoming: Math.max(0, rawSummary.upcoming - ignoredByStatus.upcoming),
+      dueToday: Math.max(0, rawSummary.dueToday - ignoredByStatus.dueToday),
+      expired: Math.max(0, rawSummary.expired - ignoredByStatus.expired),
+      missing: Math.max(0, rawSummary.missing - ignoredByStatus.missing),
+    };
+  }, [data]);
+
+  const ignoredInCurrentPage = useMemo(() => {
+    if (!data?.items) return 0;
+    return data.items.filter(isGeneralDocument).length;
+  }, [data]);
+
+  const totalCount = Math.max(0, (data?.totalCount ?? 0) - ignoredInCurrentPage);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const resetFilters = () => {

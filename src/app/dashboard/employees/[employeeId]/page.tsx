@@ -48,6 +48,7 @@ import { EmployeeComplianceTabs } from "../../../../components/employees/Employe
 import { EmployeeDocumentsInsurance } from "../../../../components/employees/EmployeeDocumentsInsurance";
 import { EmployeePlatformAccounts } from "../../../../components/employees/EmployeePlatformAccounts";
 import { EmployeeRiderHistoryModal } from "../../../../components/employees/EmployeeRiderHistoryModal";
+import { AssignmentPromissoryFiles } from "../../../../components/fleet/AssignmentPromissoryFiles";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
   SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
@@ -378,6 +379,14 @@ function VehicleTimelineCard({
                           </span>
                         )}
                       </div>
+                    )}
+
+                    {assignment.riderProfileId && (
+                      <AssignmentPromissoryFiles
+                        riderProfileId={assignment.riderProfileId}
+                        promissoryFileVersionIds={assignment.promissoryFileVersionIds}
+                        locale={locale}
+                      />
                     )}
                   </li>
                 );

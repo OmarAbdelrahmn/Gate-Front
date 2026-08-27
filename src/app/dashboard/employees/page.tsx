@@ -127,7 +127,7 @@ export default function EmployeesPage() {
     const [cities, setCities] = useState<HrRow[]>([]);
     const [workTypes, setWorkTypes] = useState<HrRow[]>([]);
     const [search, setSearch] = useState("");
-    const [engagementFilter, setEngagementFilter] = useState<string>("all");
+    const [engagementFilter, setEngagementFilter] = useState<string>("SponsoredInternal");
     const [showFilterPopup, setShowFilterPopup] = useState(false);
     const filterBtnRef = useRef<HTMLButtonElement>(null);
     const [popupCoords, setPopupCoords] = useState<{ top: number; left?: number; right?: number } | null>(null);

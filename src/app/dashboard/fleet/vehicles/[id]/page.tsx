@@ -23,6 +23,7 @@ import { VehicleUpsertModal } from "../components/VehicleUpsertModal";
 import { AddComplianceModal, type ComplianceTabType } from "../components/AddComplianceModal";
 import { PrivateToPublicTransitionModal } from "../components/PrivateToPublicTransitionModal";
 import { VehicleFilesCard } from "../components/VehicleFilesCard";
+import { AssignmentPromissoryFiles } from "@/components/fleet/AssignmentPromissoryFiles";
 import {
   Car,
   ArrowRight,
@@ -290,6 +291,8 @@ export default function VehicleDetailPage() {
                       </Link>
                     </div>
                   </div>
+
+                  <AssignmentPromissoryFiles riderProfileId={summary.currentRiderProfileId} />
                 </div>
               ) : (
                 <div className="text-center py-6 text-slate-500">
