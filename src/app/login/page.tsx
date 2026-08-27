@@ -1,31 +1,56 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
+import { Building2, Eye, EyeOff, Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { useAuth } from "../../lib/auth/AuthProvider";
+
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { user, isAuthenticated, isLoading, login } = useAuth();
   const [form, setForm] = useState({ login: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user) {
+      router.replace(
+        user.requiresPasswordChange ? "/change-password" : "/dashboard"
+      );
+    }
+  }, [isLoading, isAuthenticated, user, router]);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const user = await login({ ...form, deviceLabel: "Web Browser" });
+      const loggedUser = await login({ ...form, deviceLabel: "Web Browser" });
       router.replace(
-        user.requiresPasswordChange ? "/change-password" : "/dashboard",
+        loggedUser.requiresPasswordChange ? "/change-password" : "/dashboard",
       );
     } catch {
       setError("اسم المستخدم أو كلمة المرور غير صحيحة، أو أن الحساب غير متاح.");
     } finally {
       setLoading(false);
     }
+  }
+
+  if (isLoading) {
+    return (
+      <main className="relative grid min-h-screen place-items-center bg-[#f3f7fc] text-slate-900">
+        <div className="flex items-center gap-3 text-sm font-bold text-[#1167c9]">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>جاري التحقق من الجلسة والتوجيه تلقائياً...</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (isAuthenticated && user) {
+    return null;
   }
   const controlClass =
     "!border-slate-300 !bg-white !text-slate-950 shadow-sm placeholder:!text-slate-400 hover:border-slate-400 focus:!border-[#1167c9]";

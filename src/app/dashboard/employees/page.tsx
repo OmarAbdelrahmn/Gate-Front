@@ -126,7 +126,9 @@ export default function EmployeesPage() {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [cities, setCities] = useState<HrRow[]>([]);
     const [workTypes, setWorkTypes] = useState<HrRow[]>([]);
+    const [sponsors, setSponsors] = useState<HrRow[]>([]);
     const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState<string>("all");
     const [engagementFilter, setEngagementFilter] = useState<string>("SponsoredInternal");
     const [showFilterPopup, setShowFilterPopup] = useState(false);
     const filterBtnRef = useRef<HTMLButtonElement>(null);
@@ -153,6 +155,7 @@ export default function EmployeesPage() {
             listEmployees().then(setEmployees),
             hrCatalogApi.list("operating-cities").then(setCities).catch(() => []),
             hrCatalogApi.list("operational-work-types").then(setWorkTypes).catch(() => []),
+            hrCatalogApi.list("sponsors").then(setSponsors).catch(() => []),
         ])
             .catch(() =>
                 setError(
@@ -164,12 +167,90 @@ export default function EmployeesPage() {
             .finally(() => setLoading(false));
     }, [locale]);
 
+    const uniqueSponsors = useMemo(() => {
+        const map = new Map<string, { id: string; nameAr: string; nameEn?: string }>();
+        
+        sponsors.forEach((s) => {
+            const nameAr = (s.nameAr || s.nameEn || s.name || s.code) as string;
+            const nameEn = (s.nameEn || s.nameAr || s.name || s.code) as string;
+            if (s.id && nameAr) {
+                map.set(s.id, { id: s.id, nameAr, nameEn });
+            }
+        });
+
+        employees.forEach((emp) => {
+            const empRec = emp as Record<string, unknown>;
+            const sObj = emp.sponsor;
+            const sId = sObj?.id || emp.sponsorId || (empRec.sponsorId as string);
+            const sNameAr = sObj?.nameAr || emp.sponsorNameAr || (empRec.sponsorNameAr as string);
+            const sNameEn = sObj?.nameEn || (empRec.sponsorNameEn as string);
+
+            if (sId && (sNameAr || sNameEn)) {
+                if (!map.has(sId)) {
+                    map.set(sId, { id: sId, nameAr: sNameAr || sNameEn || sId, nameEn: sNameEn || sNameAr || sId });
+                }
+            } else if (sNameAr) {
+                const key = `name:${sNameAr}`;
+                if (!map.has(key)) {
+                    map.set(key, { id: key, nameAr: sNameAr, nameEn: sNameEn || sNameAr });
+                }
+            }
+        });
+
+        return Array.from(map.values());
+    }, [sponsors, employees]);
+
+    const engagementOptions = useMemo(() => {
+        const options: { key: string; labelAr: string; labelEn: string }[] = [
+            { key: "all", labelAr: "الكل", labelEn: "All " },
+            { key: "SponsoredInternal", labelAr: "على الكفالة", labelEn: "Company Sponsored" },
+        ];
+
+        uniqueSponsors.forEach((sp) => {
+            const key = sp.id.startsWith("name:") ? `sponsorName:${sp.nameAr}` : `sponsor:${sp.id}`;
+            options.push({
+                key,
+                labelAr: `${sp.nameAr}`,
+                labelEn: `${sp.nameEn || sp.nameAr}`,
+            });
+        });
+
+        options.push({
+            key: "OutsideRider",
+            labelAr: "مندوب خارجي",
+            labelEn: "External Delegate",
+        });
+
+        return options;
+    }, [uniqueSponsors]);
+
     const results = useMemo(
         () =>
             employees.filter((item) => {
-                if (engagementFilter !== "all" && item.engagementType !== engagementFilter && item.relationshipType !== engagementFilter) {
+                if (statusFilter !== "all" && item.status !== statusFilter) {
                     return false;
                 }
+
+                if (engagementFilter !== "all") {
+                    const empRec = item as Record<string, unknown>;
+                    const relKey = item.engagementType || item.relationshipType;
+
+                    if (engagementFilter === "SponsoredInternal") {
+                        if (relKey !== "SponsoredInternal") return false;
+                    } else if (engagementFilter === "OutsideRider") {
+                        if (relKey !== "OutsideRider") return false;
+                    } else if (engagementFilter.startsWith("sponsor:")) {
+                        const targetId = engagementFilter.replace("sponsor:", "");
+                        const actualSId = item.sponsorId || item.sponsor?.id || (empRec.sponsorId as string);
+                        if (actualSId !== targetId) return false;
+                    } else if (engagementFilter.startsWith("sponsorName:")) {
+                        const targetName = engagementFilter.replace("sponsorName:", "");
+                        const actualNameAr = item.sponsor?.nameAr || item.sponsorNameAr || (empRec.sponsorNameAr as string);
+                        const actualNameEn = item.sponsor?.nameEn;
+                        if (actualNameAr !== targetName && actualNameEn !== targetName) return false;
+                    }
+                }
+
                 const searchTerm = search.trim().toLowerCase();
                 if (!searchTerm) return true;
 
@@ -202,7 +283,7 @@ export default function EmployeesPage() {
                 const searchWords = searchTerm.split(/\s+/);
                 return searchWords.every((word) => fullSearchableText.includes(word));
             }),
-        [employees, search, cities, workTypes, locale, engagementFilter],
+        [employees, search, cities, workTypes, locale, statusFilter, engagementFilter],
     );
 
     return (
@@ -228,24 +309,46 @@ export default function EmployeesPage() {
             </div>
 
             <Card className="overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] p-4">
-                    <div className="relative w-full max-w-xl">
-                        <Search
-                            className={`pointer-events-none absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"}`}
-                            size={18}
-                        />
-                        <input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder={
-                                locale === "en"
-                                    ? "Search by name, Iqama #, platform, sponsor, nationality, or phone..."
-                                    : "ابحث بالاسم، رقم الإقامة، المنصة، الكفيل، الجنسية، الجوال..."
-                            }
-                            className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
-                        />
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] p-4 bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1 max-w-4xl">
+                        {/* Search Input */}
+                        <div className="relative flex-1 min-w-[240px]">
+                            <Search
+                                className={`pointer-events-none absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"}`}
+                                size={18}
+                            />
+                            <input
+                                value={search}
+                                onChange={(event) => setSearch(event.target.value)}
+                                placeholder={
+                                    locale === "en"
+                                        ? "Search by name, Iqama #, platform, sponsor, nationality, or phone..."
+                                        : "ابحث بالاسم، رقم الإقامة، المنصة، الكفيل، الجنسية، الجوال..."
+                                }
+                                className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
+                            />
+                        </div>
+
+                        {/* Top Status Filter */}
+                        <div className="min-w-[160px]">
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--foreground)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1167c9]"
+                            >
+                                <option value="all">
+                                    {locale === "en" ? "Status: All" : "الحالة: جميع الحالات"}
+                                </option>
+                                {Object.entries(statusLabel).map(([key, val]) => (
+                                    <option key={key} value={key}>
+                                        {locale === "en" ? val.en : val.ar}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
-                    <span className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
+
+                    <span className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] shrink-0">
                         <UsersRound size={18} />
                         {results.length}{" "}
                         {locale === "en" ? "employees" : "موظف"}
@@ -286,7 +389,7 @@ export default function EmployeesPage() {
                                                             ? "border-[#1167c9] bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
                                                             : "border-[var(--border)] text-[var(--muted)] hover:bg-slate-200/60 dark:hover:bg-slate-800"
                                                     }`}
-                                                    title={locale === "en" ? "Filter by relationship" : "تصفية حسب العلاقة"}
+                                                    title={locale === "en" ? "Filter by relationship / sponsor" : "تصفية الكفيل والعلاقة"}
                                                 >
                                                     <Filter size={13} />
                                                     {engagementFilter !== "all" && (
@@ -307,16 +410,12 @@ export default function EmployeesPage() {
                                                                     ? { left: popupCoords?.left ?? 0 }
                                                                     : { right: popupCoords?.right ?? 0 }),
                                                             }}
-                                                            className="fixed z-[9999] w-48 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-2xl"
+                                                            className="fixed z-[9999] max-h-72 overflow-y-auto w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-2xl"
                                                         >
                                                             <div className="px-2.5 py-1 text-[11px] font-black text-[var(--muted)] border-b border-[var(--border)] mb-1">
-                                                                {locale === "en" ? "Filter Relationship" : "تصفية نوع العلاقة"}
+                                                                {locale === "en" ? "Filter Relationship & Sponsor" : "تصفية الكفيل ونوع العلاقة"}
                                                             </div>
-                                                            {[
-                                                                { key: "all", labelAr: "الكل", labelEn: "All" },
-                                                                { key: "SponsoredInternal", labelAr: "على الكفالة", labelEn: "Company Sponsored" },
-                                                                { key: "OutsideRider", labelAr: "مندوب خارجي", labelEn: "External Delegate" },
-                                                            ].map((opt) => (
+                                                            {engagementOptions.map((opt) => (
                                                                 <button
                                                                     key={opt.key}
                                                                     type="button"
@@ -324,14 +423,14 @@ export default function EmployeesPage() {
                                                                         setEngagementFilter(opt.key);
                                                                         setShowFilterPopup(false);
                                                                     }}
-                                                                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                                                                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors text-right ${
                                                                         engagementFilter === opt.key
                                                                             ? "bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
                                                                             : "text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800"
                                                                     }`}
                                                                 >
-                                                                    <span>{locale === "en" ? opt.labelEn : opt.labelAr}</span>
-                                                                    {engagementFilter === opt.key && <Check size={14} className="text-[#1167c9] dark:text-blue-400" />}
+                                                                    <span className="truncate">{locale === "en" ? opt.labelEn : opt.labelAr}</span>
+                                                                    {engagementFilter === opt.key && <Check size={14} className="text-[#1167c9] dark:text-blue-400 shrink-0 ms-1" />}
                                                                 </button>
                                                             ))}
                                                         </div>

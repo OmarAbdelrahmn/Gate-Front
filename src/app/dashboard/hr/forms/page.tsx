@@ -30,6 +30,9 @@ import { SalaryCertificateView } from "@/components/hr/forms/SalaryCertificateVi
 import { ClearanceFormView } from "@/components/hr/forms/ClearanceFormView";
 import { ResignationFormView } from "@/components/hr/forms/ResignationFormView";
 import { FinalSettlementView } from "@/components/hr/forms/FinalSettlementView";
+import { WorkCommencementView } from "@/components/hr/forms/WorkCommencementView";
+import { DisciplinaryActionView } from "@/components/hr/forms/DisciplinaryActionView";
+import { AnnualEntitlementsReceiptView } from "@/components/hr/forms/AnnualEntitlementsReceiptView";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -95,6 +98,23 @@ export default function HrFormsPage() {
   const [deliveryMethod, setDeliveryMethod] = useState<"cash" | "bank">("cash");
   const [bankAccountNo, setBankAccountNo] = useState<string>("");
 
+  // Work Commencement State
+  const [workplace, setWorkplace] = useState<string>("جده - المركز الرئيسي");
+  const [contractStartDate, setContractStartDate] = useState<string>("");
+  const [actualStartDate, setActualStartDate] = useState<string>("");
+  const [hrManagerName, setHrManagerName] = useState<string>("مسؤول الموارد البشرية");
+
+  // Disciplinary Action State
+  const [violation, setViolation] = useState<string>("التأخير عن مواعيد العمل الرسمية");
+  const [violationReasons, setViolationReasons] = useState<string>("");
+  const [actionTaken, setActionTaken] = useState<string>("خصم أجر يوم من الراتب / لفت نظر");
+  const [directManagerOpinion, setDirectManagerOpinion] = useState<string>("اعتماد تطبيق الإجراء الجزائي");
+  const [generalManagerName, setGeneralManagerName] = useState<string>("المدير العام");
+
+  // Annual Entitlements State
+  const [periodFrom, setPeriodFrom] = useState<string>("2025/09/01");
+  const [periodTo, setPeriodTo] = useState<string>("2026/09/01");
+
   // Initialize today's date and default Tafreet
   useEffect(() => {
     const today = new Date();
@@ -103,6 +123,8 @@ export default function HrFormsPage() {
       "0"
     )}/${String(today.getDate()).padStart(2, "0")}`;
     setDate(formattedDate);
+    setContractStartDate(formattedDate);
+    setActualStartDate(formattedDate);
     setAmountInWords(tafreetArabicNumber(15000, false));
   }, []);
 
@@ -836,8 +858,153 @@ export default function HrFormsPage() {
                 </div>
               )}
 
-              {/* City for templates requiring city (other than promissory note & leave request & clearance & resignation & final settlement) */}
-              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
+              {/* Work Commencement specific fields */}
+              {selectedTemplateId === "work_commencement" && (
+                <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="المسمى الوظيفي"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      placeholder="سائق مندوب توصيل"
+                    />
+                    <Input
+                      label="الإدارة / القسم"
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      placeholder="إدارة العمليات والتشغيل"
+                    />
+                  </div>
+                  <Input
+                    label="مكان العمل"
+                    value={workplace}
+                    onChange={(e) => setWorkplace(e.target.value)}
+                    placeholder="جده - المركز الرئيسي"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="تاريخ بدء العمل حسب العقد"
+                      value={contractStartDate}
+                      onChange={(e) => setContractStartDate(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                    <Input
+                      label="تاريخ المباشرة الفعلي"
+                      value={actualStartDate}
+                      onChange={(e) => setActualStartDate(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                  </div>
+                  <Input
+                    label="اسم مسؤول الموارد البشرية"
+                    value={hrManagerName}
+                    onChange={(e) => setHrManagerName(e.target.value)}
+                    placeholder="مسؤول الموارد البشرية"
+                  />
+                </div>
+              )}
+
+              {/* Disciplinary Action specific fields */}
+              {selectedTemplateId === "disciplinary_action" && (
+                <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="المسمى الوظيفي"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      placeholder="الوظيفة..."
+                    />
+                    <Input
+                      label="الإدارة / القسم"
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      placeholder="الإدارة..."
+                    />
+                  </div>
+                  <Input
+                    label="المخالفة المرتكبة"
+                    value={violation}
+                    onChange={(e) => setViolation(e.target.value)}
+                    placeholder="أدخل نص المخالفة..."
+                  />
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                      الأسباب (المبررات إن وجدت)
+                    </label>
+                    <textarea
+                      value={violationReasons}
+                      onChange={(e) => setViolationReasons(e.target.value)}
+                      placeholder="أدخل الأسباب أو المبررات..."
+                      className="w-full p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm text-[var(--foreground)] outline-none focus:border-[#1167c9] min-h-[60px]"
+                    />
+                  </div>
+                  <Input
+                    label="الإجراء الجزائي المتخذ"
+                    value={actionTaken}
+                    onChange={(e) => setActionTaken(e.target.value)}
+                    placeholder="خصم أجر يوم / لفت نظر..."
+                  />
+                  <Input
+                    label="رأي المدير المباشر"
+                    value={directManagerOpinion}
+                    onChange={(e) => setDirectManagerOpinion(e.target.value)}
+                    placeholder="رأي المدير المباشر..."
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="مسؤول الموارد البشرية"
+                      value={hrManagerName}
+                      onChange={(e) => setHrManagerName(e.target.value)}
+                    />
+                    <Input
+                      label="المدير العام"
+                      value={generalManagerName}
+                      onChange={(e) => setGeneralManagerName(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Annual Entitlements Receipt specific fields */}
+              {selectedTemplateId === "annual_entitlements_receipt" && (
+                <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+                  <Input
+                    label="المسمى الوظيفي"
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    placeholder="سائق مندوب توصيل"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="عن الفترة من تاريخ"
+                      value={periodFrom}
+                      onChange={(e) => setPeriodFrom(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                    <Input
+                      label="إلى تاريخ"
+                      value={periodTo}
+                      onChange={(e) => setPeriodTo(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="مسؤول الموارد البشرية"
+                      value={hrManagerName}
+                      onChange={(e) => setHrManagerName(e.target.value)}
+                    />
+                    <Input
+                      label="المدير العام"
+                      value={generalManagerName}
+                      onChange={(e) => setGeneralManagerName(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* City for templates requiring city */}
+              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
                 <Input
                   label="المدينة / الفرع"
                   value={issueCity}
@@ -861,7 +1028,7 @@ export default function HrFormsPage() {
               )}
 
               {/* Generic Document notes */}
-              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
+              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
                 <div className="pt-2 border-t border-[var(--border)]">
                   <label className="block text-xs font-bold text-[var(--muted)] mb-1">
                     ملاحظات إضافية (اختياري)
@@ -1038,7 +1205,63 @@ export default function HrFormsPage() {
               />
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && (
+            {selectedTemplateId === "work_commencement" && (
+              <WorkCommencementView
+                data={{
+                  companyName,
+                  date,
+                  employeeName: riderName,
+                  nationality,
+                  iqamaNo,
+                  jobTitle,
+                  department,
+                  workplace,
+                  contractStartDate,
+                  actualStartDate,
+                  hrManagerName,
+                }}
+              />
+            )}
+
+            {selectedTemplateId === "disciplinary_action" && (
+              <DisciplinaryActionView
+                data={{
+                  companyName,
+                  date,
+                  employeeName: riderName,
+                  jobTitle,
+                  iqamaNo,
+                  department,
+                  violation,
+                  reasons: violationReasons,
+                  actionTaken,
+                  directManagerOpinion,
+                  hrManagerName,
+                  generalManagerName,
+                }}
+              />
+            )}
+
+            {selectedTemplateId === "annual_entitlements_receipt" && (
+              <AnnualEntitlementsReceiptView
+                data={{
+                  companyName,
+                  date,
+                  employeeName: riderName,
+                  nationality,
+                  iqamaNo,
+                  jobTitle,
+                  periodFrom,
+                  periodTo,
+                  amountReceived: amount,
+                  amountInWords,
+                  hrManagerName,
+                  generalManagerName,
+                }}
+              />
+            )}
+
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{
