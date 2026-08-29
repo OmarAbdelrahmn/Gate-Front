@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { switchVehicle, getVehicleDetail, getVehiclesLookup, getVehicleAssignment, getRiderVehicleTimeline } from "@/lib/fleet/api";
-import { VehicleCondition, type VehicleSummaryResponse } from "@/lib/fleet/types";
+import { VehicleCondition, VehicleOperationalStatus, type VehicleSummaryResponse } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -88,19 +88,25 @@ export function SwitchVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
     }
   }, [isOpen, preselectedVehicle]);
 
-  // Debounced search for new vehicles
+  // Load available vehicles when modal opens or search changes
   useEffect(() => {
-    if (vehicleSearch.length >= 2) {
+    if (isOpen) {
       const timer = setTimeout(() => {
         getVehiclesLookup(vehicleSearch).then(res => {
-          // Exclude the current vehicle
-          const filtered = res.filter(v => v.id !== preselectedVehicle?.id);
+          // Exclude the current vehicle and only include available vehicles
+          const filtered = res.filter(
+            v =>
+              v.id !== preselectedVehicle?.id &&
+              (Number(v.status) === VehicleOperationalStatus.Available ||
+                String(v.status) === "Available" ||
+                String(v.status) === "1")
+          );
           setAvailableVehicles(filtered.map(v => ({ value: v.id, label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}` })));
         });
-      }, 500);
+      }, 300);
       return () => clearTimeout(timer);
     }
-  }, [vehicleSearch, preselectedVehicle]);
+  }, [isOpen, vehicleSearch, preselectedVehicle]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

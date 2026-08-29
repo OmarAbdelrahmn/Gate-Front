@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { takeVehicle, getVehiclesLookup, getVehicleDetail } from "@/lib/fleet/api";
+import { takeVehicle, getVehiclesLookup, getVehicleDetail, getVehicles, getRiderPromissoryFiles } from "@/lib/fleet/api";
 import { listExternalRiders } from "@/lib/workforce/external-riders-api";
 import { listRiders, listEmployees } from "@/lib/workforce/api";
-import { VehicleCondition, type VehicleSummaryResponse, type TakeVehicleRequest } from "@/lib/fleet/types";
+import { VehicleCondition, VehicleOperationalStatus, type VehicleSummaryResponse, type TakeVehicleRequest } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -33,6 +33,8 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
   const [lookupVehicleMap, setLookupVehicleMap] = useState<Map<string, { currentOdometer: number }>>(new Map());
 
   const [minOdometer, setMinOdometer] = useState<number>(0);
+  const [existingPromissoryCount, setExistingPromissoryCount] = useState<number>(0);
+  const [loadingPromissory, setLoadingPromissory] = useState<boolean>(false);
 
   const [formData, setFormData] = useState({
     riderProfileId: "",
@@ -49,25 +51,71 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
   const [files, setFiles] = useState<File[]>([]);
 
   useEffect(() => {
+    if (!formData.riderProfileId) {
+      setExistingPromissoryCount(0);
+      return;
+    }
+
+    setLoadingPromissory(true);
+    getRiderPromissoryFiles(formData.riderProfileId)
+      .then((res) => {
+        setExistingPromissoryCount(res?.length || 0);
+      })
+      .catch((err) => {
+        console.error("Failed to load rider promissory files:", err);
+        setExistingPromissoryCount(0);
+      })
+      .finally(() => {
+        setLoadingPromissory(false);
+      });
+  }, [formData.riderProfileId]);
+
+  useEffect(() => {
     if (isOpen) {
       Promise.all([
         listRiders().catch(() => []),
         listExternalRiders().catch(() => []),
         listEmployees().catch(() => []),
-      ]).then(([ridersRes, externalRes, employeesRes]) => {
+        getVehicles({ status: VehicleOperationalStatus.Assigned.toString(), pageSize: 500 }).catch(() => null),
+      ]).then(([ridersRes, externalRes, employeesRes, assignedVehiclesRes]) => {
+        const assignedRiderIds = new Set<string>();
+        if (assignedVehiclesRes && assignedVehiclesRes.items) {
+          assignedVehiclesRes.items.forEach((v) => {
+            if (v.currentRiderProfileId) {
+              assignedRiderIds.add(v.currentRiderProfileId);
+            }
+          });
+        }
+
         const map = new Map<string, { value: string; label: string }>();
 
         ridersRes.forEach((r) => {
           const id = r.id || r.employeeId;
+          const riderId = r.id;
+          const empId = r.employeeId;
           if (id && !map.has(id)) {
+            if (
+              (riderId && assignedRiderIds.has(riderId)) ||
+              (empId && assignedRiderIds.has(empId))
+            ) {
+              return;
+            }
             const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
             map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
           }
         });
 
-        externalRes.forEach((r) => {
-          const id = r.riderProfileId || r.employeeId;
+        externalRes.forEach((r: any) => {
+          const id = r.riderProfileId || r.employeeId || r.id;
+          const riderId = r.riderProfileId || r.id;
+          const empId = r.employeeId;
           if (id && !map.has(id)) {
+            if (
+              (riderId && assignedRiderIds.has(riderId)) ||
+              (empId && assignedRiderIds.has(empId))
+            ) {
+              return;
+            }
             const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
             map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
           }
@@ -75,7 +123,16 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
         employeesRes.forEach((e) => {
           const id = e.riderProfileId || e.id;
+          const riderId = e.riderProfileId || e.rider?.id;
+          const empId = e.id;
           if (id && !map.has(id)) {
+            if (
+              (riderId && assignedRiderIds.has(riderId)) ||
+              (empId && assignedRiderIds.has(empId)) ||
+              assignedRiderIds.has(id)
+            ) {
+              return;
+            }
             const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
             map.set(id, { value: id, label: `${e.fullNameAr}${iqamaStr}` });
           }
@@ -118,10 +175,12 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         setMinOdometer(0);
         getVehiclesLookup("").then((res) => {
           setVehicles(
-            res.map((v) => ({
-              value: v.id,
-              label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}`,
-            }))
+            res
+              .filter((v) => v.status === VehicleOperationalStatus.Available)
+              .map((v) => ({
+                value: v.id,
+                label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}`,
+              }))
           );
         });
       }
@@ -151,12 +210,25 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
   const handleAddFiles = (newFilesList: FileList | null) => {
     if (!newFilesList) return;
-    const selected = Array.from(newFilesList);
+    const maxNewAllowed = Math.max(0, 3 - existingPromissoryCount);
 
+    if (existingPromissoryCount >= 3) {
+      toast.error("تنبيه", "المندوب يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى)، لا يمكن إرفاق سندات جديدة.");
+      return;
+    }
+
+    const slotsLeft = maxNewAllowed - files.length;
+    if (slotsLeft <= 0) {
+      toast.error("تنبيه", `المجموع الكلي المسموح به هو 3 سندات فقط. (المندوب يمتلك ${existingPromissoryCount} سندات وقمت بإرفاق ${files.length}).`);
+      return;
+    }
+
+    const selected = Array.from(newFilesList);
     const validFiles: File[] = [];
+
     for (const file of selected) {
-      if (files.length + validFiles.length >= 3) {
-        toast.error("تنبيه", "يمكن رفع 3 ملفات كحد أقصى لسندات الأمر.");
+      if (files.length + validFiles.length >= maxNewAllowed) {
+        toast.error("تنبيه", `تم الوصول للحد الأقصى الإجمالي وهو 3 سندات أمر للمندوب.`);
         break;
       }
       if (file.size > 10 * 1024 * 1024) {
@@ -392,14 +464,32 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
               <FileText className="h-4 w-4 text-[#1167c9]" />
               سندات الأمر / Promissory Notes
             </label>
-            <span className="text-xs text-slate-500 font-mono">{files.length} / 3 ملفات</span>
+            <div className="flex items-center gap-2">
+              {loadingPromissory ? (
+                <span className="text-xs text-slate-400">جارٍ فحص السندات...</span>
+              ) : (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded border ${existingPromissoryCount >= 3
+                    ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300"
+                    : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+                  }`}>
+                  سندات المندوب الحالية: {existingPromissoryCount} / 3
+                </span>
+              )}
+            </div>
           </div>
 
-          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            يجب أن يمتلك المندوب إما سندات أمل نشطة مسجلة مسبقاً، أو رفع ملفات جديدة عبر النموذج. (الحد الأقصى: 3 ملفات بصيغة PDF أو صورة، بحجم حتى 10 ميجابايت لكل ملف).
-          </p>
+          {existingPromissoryCount >= 3 ? (
+            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+              <span>المندوب يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى). لا يمكنك إضافة المزيد من السندات.</span>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              المندوب يمتلك {existingPromissoryCount} {existingPromissoryCount === 1 ? "سند" : "سندات"} حالياً. يمكنك رفع حتى {Math.max(0, 3 - existingPromissoryCount)} {3 - existingPromissoryCount === 1 ? "سند جديد" : "سندات جديدة"} (الحد الأقصى الإجمالي: 3).
+            </p>
+          )}
 
-          {files.length < 3 && (
+          {existingPromissoryCount < 3 && files.length < (3 - existingPromissoryCount) && (
             <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition-colors hover:border-[#1167c9] dark:border-slate-700 dark:bg-slate-800">
               <Upload className="h-6 w-6 text-slate-400 mb-1" />
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicleComplianceDue } from "@/lib/fleet/api";
 import { VehicleComplianceDueStatus, type VehicleComplianceDueResponse } from "@/lib/fleet/types";
@@ -34,6 +34,7 @@ export default function CompliancePage() {
     setError(null);
     try {
       const res = await getVehicleComplianceDue(checkDate || undefined);
+      console.log("Compliance Due API Response:", res);
       setData(res || []);
     } catch (e: any) {
       console.error("Failed to load compliance data:", e);
@@ -47,6 +48,78 @@ export default function CompliancePage() {
     loadData();
   }, [checkDate]);
 
+  const displayItems = useMemo(() => {
+    const list: VehicleComplianceDueResponse[] = [];
+    const seenPermitVehicles = new Set<string>();
+
+    for (const item of data) {
+      list.push(item);
+      if (
+        item.type === "Permit" ||
+        item.type === "Permission" ||
+        item.type === "VehiclePermit" ||
+        item.type === "RiderPermit"
+      ) {
+        seenPermitVehicles.add(item.vehicleId);
+      }
+    }
+
+    for (const item of data) {
+      if (
+        (item.permitEndDate || (item.permitStatus !== undefined && item.permitStatus !== null)) &&
+        !seenPermitVehicles.has(item.vehicleId)
+      ) {
+        seenPermitVehicles.add(item.vehicleId);
+        list.push({
+          vehicleId: item.vehicleId,
+          assetNumber: item.assetNumber,
+          plateNumber: item.plateNumber,
+          plateNumberAr: item.plateNumberAr,
+          plateNumberEn: item.plateNumberEn,
+          type: "Permit",
+          expiryDate: item.permitEndDate || "",
+          status: item.permitStatus ?? VehicleComplianceDueStatus.Missing,
+          permitEndDate: item.permitEndDate,
+          permitStatus: item.permitStatus,
+        });
+      }
+    }
+
+    return list;
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    return displayItems.filter((item) => {
+      if (!search) return true;
+      const searchLower = search.toLowerCase();
+      const plate = (item.plateNumberAr || item.plateNumber || item.plateNumberEn || "").toLowerCase();
+      return (
+        item.assetNumber.toLowerCase().includes(searchLower) ||
+        plate.includes(searchLower)
+      );
+    });
+  }, [displayItems, search]);
+
+  const expiredOrMissingCount = useMemo(() => {
+    return displayItems.filter(
+      (i) =>
+        (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.Expired ||
+        (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.Missing
+    ).length;
+  }, [displayItems]);
+
+  const dueTodayCount = useMemo(() => {
+    return displayItems.filter(
+      (i) => (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.DueToday
+    ).length;
+  }, [displayItems]);
+
+  const upcomingCount = useMemo(() => {
+    return displayItems.filter(
+      (i) => (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.Upcoming
+    ).length;
+  }, [displayItems]);
+
   if (!can("fleet.compliance.read")) {
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-3 text-center">
@@ -58,30 +131,43 @@ export default function CompliancePage() {
 
   const renderStatus = (status: VehicleComplianceDueStatus) => {
     switch (status) {
-      case VehicleComplianceDueStatus.Valid: return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">ساري</Badge>;
-      case VehicleComplianceDueStatus.Upcoming: return <Badge className="bg-blue-50 text-blue-700 border-blue-200">قريب الانتهاء</Badge>;
-      case VehicleComplianceDueStatus.DueToday: return <Badge className="bg-orange-50 text-orange-700 border-orange-200">ينتهي اليوم</Badge>;
-      case VehicleComplianceDueStatus.Expired: return <Badge className="bg-red-50 text-red-700 border-red-200">منتهي</Badge>;
-      case VehicleComplianceDueStatus.Missing: return <Badge className="bg-slate-100 text-slate-700 border-slate-300">مفقود (غير مسجل)</Badge>;
-      default: return <Badge>{status}</Badge>;
+      case VehicleComplianceDueStatus.Valid:
+        return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">ساري</Badge>;
+      case VehicleComplianceDueStatus.Upcoming:
+        return <Badge className="bg-blue-50 text-blue-700 border-blue-200">قريب الانتهاء</Badge>;
+      case VehicleComplianceDueStatus.DueToday:
+        return <Badge className="bg-orange-50 text-orange-700 border-orange-200">ينتهي اليوم</Badge>;
+      case VehicleComplianceDueStatus.Expired:
+        return <Badge className="bg-red-50 text-red-700 border-red-200">منتهي</Badge>;
+      case VehicleComplianceDueStatus.Missing:
+        return <Badge className="bg-slate-100 text-slate-700 border-slate-300">مفقود (غير مسجل)</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
     }
   };
 
   const getDocTypeName = (type: string) => {
     switch (type) {
-      case "Registration": return "استمارة سير";
-      case "InsurancePolicy": return "بوليصة تأمين";
-      case "Inspection": return "فحص دوري";
-      case "OperationCard": return "كرت تشغيل";
-      default: return type;
+      case "Registration":
+      case "Istimara":
+        return "استمارة سير";
+      case "InsurancePolicy":
+      case "Insurance":
+        return "بوليصة تأمين";
+      case "Inspection":
+      case "Fahs":
+        return "فحص دوري";
+      case "OperationCard":
+        return "كرت تشغيل";
+      case "Permit":
+      case "Permission":
+      case "VehiclePermit":
+      case "RiderPermit":
+        return "تصريح / تفويض";
+      default:
+        return type;
     }
   };
-
-  const filtered = data.filter(item =>
-    !search ||
-    item.assetNumber.toLowerCase().includes(search.toLowerCase()) ||
-    (item.plateNumber && item.plateNumber.includes(search))
-  );
 
   return (
     <div className="space-y-6">
@@ -138,21 +224,15 @@ export default function CompliancePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="rounded-xl border border-red-200 bg-red-50/50 p-4 shadow-sm">
           <div className="text-sm font-bold text-red-800">منتهي أو مفقود</div>
-          <div className="text-3xl font-bold text-red-600 mt-2">
-            {data.filter(i => i.status === VehicleComplianceDueStatus.Expired || i.status === VehicleComplianceDueStatus.Missing).length}
-          </div>
+          <div className="text-3xl font-bold text-red-600 mt-2">{expiredOrMissingCount}</div>
         </div>
         <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-4 shadow-sm">
           <div className="text-sm font-bold text-orange-800">ينتهي اليوم</div>
-          <div className="text-3xl font-bold text-orange-600 mt-2">
-            {data.filter(i => i.status === VehicleComplianceDueStatus.DueToday).length}
-          </div>
+          <div className="text-3xl font-bold text-orange-600 mt-2">{dueTodayCount}</div>
         </div>
         <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 shadow-sm">
           <div className="text-sm font-bold text-blue-800">قريب الانتهاء (30 يوم)</div>
-          <div className="text-3xl font-bold text-blue-600 mt-2">
-            {data.filter(i => i.status === VehicleComplianceDueStatus.Upcoming).length}
-          </div>
+          <div className="text-3xl font-bold text-blue-600 mt-2">{upcomingCount}</div>
         </div>
       </div>
 
@@ -178,24 +258,40 @@ export default function CompliancePage() {
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {filtered.map((item, idx) => (
-                  <tr key={`${item.vehicleId}-${item.type}-${idx}`} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <tr
+                    key={`${item.vehicleId}-${item.type}-${idx}`}
+                    className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  >
                     <td className="px-6 py-4">
                       <div className="font-mono font-bold text-[#1167c9]">
-                        <Link href={`/dashboard/fleet/vehicles/${item.vehicleId}`}>{item.assetNumber}</Link>
+                        <Link href={`/dashboard/fleet/vehicles/${item.vehicleId}`}>
+                          {item.assetNumber}
+                        </Link>
                       </div>
-                      <div className="text-xs text-[var(--muted)] mt-1">{item.plateNumber || "بدون لوحة"}</div>
+                      <div className="mt-1">
+                        {item.plateNumberAr || item.plateNumber || item.plateNumberEn ? (
+                          <span className="font-bold border border-slate-300 rounded px-2 py-0.5 text-xs shadow-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                            {item.plateNumberAr || item.plateNumber || item.plateNumberEn}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-[var(--muted)]">بدون لوحة</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">
                       {getDocTypeName(item.type)}
                     </td>
                     <td className="px-6 py-4 font-mono">
-                      {formatDate(item.expiryDate)}
+                      {formatDate(item.expiryDate || item.permitEndDate)}
                     </td>
                     <td className="px-6 py-4">
-                      {renderStatus(item.status)}
+                      {renderStatus(item.status ?? item.permitStatus!)}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <Link href={`/dashboard/fleet/vehicles/${item.vehicleId}`} className="text-sm font-bold text-[#1167c9] hover:underline">
+                      <Link
+                        href={`/dashboard/fleet/vehicles/${item.vehicleId}`}
+                        className="text-sm font-bold text-[#1167c9] hover:underline"
+                      >
                         تحديث البيانات
                       </Link>
                     </td>

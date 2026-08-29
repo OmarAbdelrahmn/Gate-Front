@@ -253,7 +253,7 @@ export default function PlatformAccountsPage() {
       const totalActive = Math.max(infoR?.total || 0, infoE?.total || 0);
       const salaryActive = Math.max(infoR?.salary || 0, infoE?.salary || 0);
 
-      if (totalActive >= 2) return;
+      if (totalActive >= 1) return;
       if (targetIsSalary && salaryActive >= 1) return;
 
       let activeTag = "";
@@ -277,7 +277,7 @@ export default function PlatformAccountsPage() {
       const totalActive = info?.total || 0;
       const salaryActive = info?.salary || 0;
 
-      if (totalActive >= 2) return;
+      if (totalActive >= 1) return;
       if (targetIsSalary && salaryActive >= 1) return;
 
       let activeTag = "";
@@ -497,8 +497,8 @@ export default function PlatformAccountsPage() {
     const riderActiveAccounts = accounts.filter(
       (a) => a.status === "Assigned" && (a.currentAssignment?.actualRiderProfileId === selRiderId || a.currentAssignment?.actualEmployeeId === selRiderId)
     );
-    if (riderActiveAccounts.length >= 2) {
-      toast.error("تنبيه القيود", "المندوب لديه حسابان نشطان بالفعل. (platform.rider_account_limit_reached)");
+    if (riderActiveAccounts.length >= 1) {
+      toast.error("تنبيه القيود", "المندوب لديه حساب نشط بالفعل. لا يُسمح بتعيين أكثر من حساب واحد لكل مندوب. (platform.rider_account_limit_reached)");
       return;
     }
     const targetIsSalary = assigningAccount.paymentModel === "Salary";
@@ -1144,13 +1144,13 @@ export default function PlatformAccountsPage() {
               ).length;
 
               const targetIsSalary = assigningAccount?.paymentModel === "Salary";
-              const isLimitReached = totalActive >= 2;
+              const isLimitReached = totalActive >= 1;
               const isSalaryLimitReached = targetIsSalary && salaryActive >= 1;
 
               if (isLimitReached) {
                 return (
                   <div className="mt-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-800 border border-red-200">
-                    🛑 <strong>تنبيه:</strong> المندوب المختار يملك حالياً حسابين نشطين ({totalActive}/2). يتسبب هذا في خطأ النظام (<code>platform.rider_account_limit_reached</code>).
+                    🛑 <strong>تنبيه:</strong> المندوب المختار يملك حالياً حساباً نشطاً ({totalActive}/1). يتسبب هذا في خطأ النظام (<code>platform.rider_account_limit_reached</code>).
                   </div>
                 );
               }
@@ -1165,7 +1165,7 @@ export default function PlatformAccountsPage() {
 
               return (
                 <div className="mt-2 rounded-xl bg-emerald-50 p-2 text-xs text-emerald-800 border border-emerald-200">
-                  ✓ المندوب متاح للتعيين (الحسابات النشطة الحالية: {totalActive}/2 | حسابات الراتب: {salaryActive}/1)
+                  ✓ المندوب متاح للتعيين (الحسابات النشطة الحالية: {totalActive}/1 | حسابات الراتب: {salaryActive}/1)
                 </div>
               );
             })()}

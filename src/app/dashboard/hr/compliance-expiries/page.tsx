@@ -154,8 +154,8 @@ export default function ExpiryCompliancePage() {
   const [cities, setCities] = useState<HrRow[]>([]);
 
   useEffect(() => {
-    void listSponsors().then(setSponsors).catch(() => {});
-    void hrCatalogApi.list("operating-cities").then(setCities).catch(() => {});
+    void listSponsors().then(setSponsors).catch(() => { });
+    void hrCatalogApi.list("operating-cities").then(setCities).catch(() => { });
   }, []);
 
   const loadData = async () => {
@@ -274,7 +274,7 @@ export default function ExpiryCompliancePage() {
             <p className="mt-1 text-sm text-[var(--muted)]">
               {locale === "en"
                 ? "Monitor residency permits, driver licenses, rider cards, health cards, and medical insurance."
-                : "متابعة وتقييم صلاحيات الإقامات ورخص القيادة وبطاقات المناديب والتأمين الطبي."}
+                : "متابعة وتقييم صلاحيات الإقامات ورخص القيادة وبطاقة السائق والتأمين الطبي."}
             </p>
           </div>
         </div>
@@ -308,11 +308,10 @@ export default function ExpiryCompliancePage() {
             setDueStatus("Valid");
             setPage(1);
           }}
-          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${
-            dueStatus === "Valid"
+          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Valid"
               ? "border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-400"
               : "border-[var(--border)] bg-[var(--surface)] hover:bg-slate-50"
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-700">
@@ -332,11 +331,10 @@ export default function ExpiryCompliancePage() {
             setDueStatus("Upcoming");
             setPage(1);
           }}
-          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${
-            dueStatus === "Upcoming"
+          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Upcoming"
               ? "border-amber-500 bg-amber-50/80 shadow-md ring-2 ring-amber-400"
               : "border-[var(--border)] bg-[var(--surface)] hover:bg-slate-50"
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-700">
@@ -356,11 +354,10 @@ export default function ExpiryCompliancePage() {
             setDueStatus("DueToday");
             setPage(1);
           }}
-          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${
-            dueStatus === "DueToday"
+          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "DueToday"
               ? "border-orange-500 bg-orange-50/80 shadow-md ring-2 ring-orange-400"
               : "border-[var(--border)] bg-[var(--surface)] hover:bg-slate-50"
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-orange-700">
@@ -380,11 +377,10 @@ export default function ExpiryCompliancePage() {
             setDueStatus("Expired");
             setPage(1);
           }}
-          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${
-            dueStatus === "Expired"
+          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Expired"
               ? "border-red-500 bg-red-50/80 shadow-md ring-2 ring-red-400"
               : "border-[var(--border)] bg-[var(--surface)] hover:bg-slate-50"
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-red-700">
@@ -404,11 +400,10 @@ export default function ExpiryCompliancePage() {
             setDueStatus("Missing");
             setPage(1);
           }}
-          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${
-            dueStatus === "Missing"
+          className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Missing"
               ? "border-slate-500 bg-slate-100 shadow-md ring-2 ring-slate-400"
               : "border-[var(--border)] bg-[var(--surface)] hover:bg-slate-50"
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-700">
@@ -643,15 +638,14 @@ export default function ExpiryCompliancePage() {
                       <td className="px-4 py-3.5">
                         {item.daysRemaining !== null ? (
                           <span
-                            className={`inline-flex items-center gap-1 font-mono text-xs font-bold ${
-                              item.daysRemaining < 0
+                            className={`inline-flex items-center gap-1 font-mono text-xs font-bold ${item.daysRemaining < 0
                                 ? "text-red-700"
                                 : item.daysRemaining === 0
                                   ? "text-orange-700"
                                   : item.daysRemaining <= 30
                                     ? "text-amber-700"
                                     : "text-emerald-700"
-                            }`}
+                              }`}
                           >
                             {item.daysRemaining > 0
                               ? `${item.daysRemaining} ${locale === "en" ? "days" : "يوم"}`

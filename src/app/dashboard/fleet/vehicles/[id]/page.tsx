@@ -306,7 +306,7 @@ export default function VehicleDetailPage() {
                       <User className="h-5 w-5" />
                     </div>
                     <div>
-                      <Link href={`/dashboard/hr/external-riders/${summary.currentRiderProfileId}`} className="font-bold text-slate-900 dark:text-slate-100 hover:text-[#1167c9] hover:underline">
+                      <Link href={`/dashboard/employees/${summary.currentRiderProfileId}`} className="font-bold text-slate-900 dark:text-slate-100 hover:text-[#1167c9] hover:underline">
                         {summary.currentRiderName || `المندوب (${summary.currentRiderProfileId})`}
                       </Link>
                     </div>

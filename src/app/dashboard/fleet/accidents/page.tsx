@@ -152,7 +152,7 @@ export default function AccidentsPage() {
                       </Link>
                     </td>
                     <td className="px-6 py-4 font-mono">
-                      <Link href={`/dashboard/hr/external-riders/${item.riderProfileId}`} className="hover:underline hover:text-[#1167c9]">
+                      <Link href={`/dashboard/employees/${item.riderProfileId}`} className="hover:underline hover:text-[#1167c9]">
                         {item.riderProfileId}
                       </Link>
                     </td>

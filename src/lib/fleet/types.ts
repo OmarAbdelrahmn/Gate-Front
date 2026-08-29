@@ -267,6 +267,8 @@ export interface VehicleSummaryResponse {
   inspectionStatus?: VehicleComplianceDueStatus | null;
   operationCardExpiryDate?: string | null;
   operationCardStatus?: VehicleComplianceDueStatus | null;
+  permitEndDate?: string | null;
+  permitStatus?: VehicleComplianceDueStatus | null;
   isReadyForAssignment: boolean;
   rowVersion: string;
 }
@@ -488,6 +490,8 @@ export interface RiderVehicleAssignmentResponse {
   endOdometer?: number | null;
   permissionReference?: string | null;
   permissionStartsOn?: string | null;
+  permitEndDate?: string | null;
+  permitStatus?: VehicleComplianceDueStatus | null;
   status: RiderVehicleAssignmentStatus;
   startReason?: string | null;
   endReason?: string | null;
@@ -639,9 +643,13 @@ export interface VehicleComplianceDueResponse {
   vehicleId: string;
   assetNumber: string;
   plateNumber?: string | null;
+  plateNumberAr?: string | null;
+  plateNumberEn?: string | null;
   type: string;
   expiryDate: string;
   status: VehicleComplianceDueStatus;
+  permitEndDate?: string | null;
+  permitStatus?: VehicleComplianceDueStatus | null;
 }
 
 // ---------------------------
