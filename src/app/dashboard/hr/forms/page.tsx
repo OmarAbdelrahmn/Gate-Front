@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import {
   Printer,
   RotateCcw,
@@ -9,6 +10,7 @@ import {
   CheckCircle2,
   Sparkles,
   Layers,
+  Palette,
 } from "lucide-react";
 
 import { listEmployees } from "@/lib/workforce/api";
@@ -280,6 +282,12 @@ export default function HrFormsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/dashboard/hr/template-designer">
+            <Button variant="secondary">
+              <Palette size={17} />
+              مصمم النماذج (Designer)
+            </Button>
+          </Link>
           <Button variant="secondary" onClick={handleReset}>
             <RotateCcw size={17} />
             إعادة ضبط

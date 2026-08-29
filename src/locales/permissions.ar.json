@@ -80,5 +80,7 @@
   "absence_cases.manage": "إدارة حالات الغياب",
   "employee_status_changes.read": "عرض تغييرات حالة الموظف",
   "employee_status_changes.manage": "إدارة تغييرات حالة الموظف",
-  "employee_status_changes.approve": "اعتماد تغييرات حالة الموظف"
+  "employee_status_changes.approve": "اعتماد تغييرات حالة الموظف",
+  "hr_forms.templates.read": "عرض نماذج ومصمم الموارد البشرية",
+  "hr_forms.templates.manage": "إدارة ونشر نماذج ومصمم الموارد البشرية"
 }

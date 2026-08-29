@@ -77,6 +77,7 @@
     "userManagement": "User Management",
     "users": "Users",
     "roles": "Roles",
+    "rolesAndPermissions": "Roles & Permissions",
     "profile": "My Profile",
     "collapseMenu": "Collapse Menu",
     "expandMenu": "Expand Menu"
@@ -254,8 +255,10 @@
   "roles": {
     "title": "Roles & Permissions",
     "newRole": "Add New Role",
+    "addRole": "Add Role",
     "editRole": "Edit Role",
     "roleName": "Role Name",
+    "code": "Role Code",
     "description": "Description",
     "permissions": "Available Permissions",
     "permissionCount": "Permission Count",
