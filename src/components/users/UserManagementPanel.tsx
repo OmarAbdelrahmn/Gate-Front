@@ -8,6 +8,7 @@ import {
   Save,
   ShieldCheck,
 } from "lucide-react";
+import { extractErrorMessageFromBody } from "../../lib/auth/api";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { getUserAuthorization } from "../../lib/auth/authorization-api";
 import { permissionLabel } from "../../lib/permission-labels";
@@ -245,6 +246,7 @@ export function UserManagementPanel({ user, onChanged }: Props) {
       );
     } catch (err: any) {
       const msg =
+        extractErrorMessageFromBody(err?.details) ||
         err?.message ||
         (locale === "en"
           ? "Operation failed. Check inputs and permissions."
@@ -377,12 +379,11 @@ export function UserManagementPanel({ user, onChanged }: Props) {
                 {locale === "en" ? "Update Status" : "تحديث الحالة"}
               </Button>
             )}
-            <input
+            <Input
               value={password}
               type="password"
               onChange={(e) => setPassword(e.target.value)}
               placeholder={locale === "en" ? "New strong password" : "كلمة مرور جديدة قوية"}
-              className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
             />
             {can("users.update") && (
               <div className="flex flex-wrap gap-2">

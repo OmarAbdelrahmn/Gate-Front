@@ -19,11 +19,12 @@ export function listUsers(search = "") {
 export function getUser(userId: string) {
   return authFetch<ManagedUser>(`/api/users/${encodeURIComponent(userId)}`);
 }
-export function createUser(payload: CreateManagedUserRequest) {
-  return authFetch<ManagedUser>("/api/users", {
+export async function createUser(payload: CreateManagedUserRequest): Promise<ManagedUser> {
+  const res = await authFetch<{ user: ManagedUser } | ManagedUser>("/api/users", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+  return "user" in res ? res.user : res;
 }
 export function updateUser(userId: string, payload: UpdateManagedUserRequest) {
   return authFetch<ManagedUser>(`/api/users/${encodeURIComponent(userId)}`, {

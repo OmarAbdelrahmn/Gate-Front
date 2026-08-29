@@ -133,7 +133,7 @@ export default function ProfilePage() {
                 <h2 className="text-xl font-black">
                   {locale === "en" ? profile.displayNameEn || profile.displayNameAr : profile.displayNameAr || profile.displayNameEn}
                 </h2>
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="mt-1 text-sm text-[var(--muted)]" dir="ltr">
                   @{profile.userName}
                 </p>
                 <span className="mt-3 inline-flex rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700">
@@ -146,7 +146,7 @@ export default function ProfilePage() {
               <Info
                 label={t("users.phone")}
                 value={profile.phoneNumber || (locale === "en" ? "Not registered" : "غير مسجل")}
-                dir="ltr"
+                dir={profile.phoneNumber ? "ltr" : undefined}
               />
               <Info
                 label={locale === "en" ? "Last Login" : "آخر دخول"}
@@ -268,7 +268,7 @@ export default function ProfilePage() {
           <Card className="h-fit p-5 sm:p-7">
             <h2 className="text-lg font-black">{locale === "en" ? "Display Preferences" : "تفضيلات العرض"}</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              {locale === "en" ? "Choose language, theme, and data density." : "اختر اللغة والمظهر وكثافة البيانات المناسبة لك."}
+              {locale === "en" ? "Choose language and theme." : "اختر اللغة والمظهر المناسبين لك."}
             </p>
             <form onSubmit={save} className="mt-6 space-y-5">
               <fieldset>
@@ -286,34 +286,6 @@ export default function ProfilePage() {
                     active={preferences.locale === "en"}
                     onClick={() =>
                       setLocalPreferences({ ...preferences, locale: "en" })
-                    }
-                  />
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend className="mb-2 flex items-center gap-2 text-sm font-bold">
-                  <Globe2 size={16} />
-                  {locale === "en" ? "Display Density" : "كثافة العرض"}
-                </legend>
-                <div className="grid grid-cols-2 gap-2">
-                  <Option
-                    label={locale === "en" ? "Comfortable" : "مريح"}
-                    active={preferences.density === "comfortable"}
-                    onClick={() =>
-                      setLocalPreferences({
-                        ...preferences,
-                        density: "comfortable",
-                      })
-                    }
-                  />
-                  <Option
-                    label={locale === "en" ? "Compact" : "مضغوط"}
-                    active={preferences.density === "compact"}
-                    onClick={() =>
-                      setLocalPreferences({
-                        ...preferences,
-                        density: "compact",
-                      })
                     }
                   />
                 </div>
@@ -375,8 +347,8 @@ function Info({
   return (
     <div>
       <dt className="text-xs font-bold text-[var(--muted)]">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-bold" dir={dir}>
-        {value}
+      <dd className="mt-1 break-words text-sm font-bold">
+        {dir ? <span dir={dir}>{value}</span> : value}
       </dd>
     </div>
   );

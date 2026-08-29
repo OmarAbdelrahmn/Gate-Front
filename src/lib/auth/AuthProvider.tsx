@@ -109,9 +109,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthorization(null);
       setLoading(false);
     };
+    const handleFocus = async () => {
+      const existing = readAuth();
+      if (existing && isAccessTokenExpired(existing)) {
+        try {
+          await refreshAccessToken();
+        } catch {
+          clearAuth();
+          setUser(null);
+          setAuthorization(null);
+        }
+      }
+    };
     window.addEventListener("future-gateway:auth-cleared", handleExpired);
-    return () =>
+    window.addEventListener("focus", handleFocus);
+    return () => {
       window.removeEventListener("future-gateway:auth-cleared", handleExpired);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
   const value = useMemo<AuthContextValue>(
     () => ({

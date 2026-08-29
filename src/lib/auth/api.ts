@@ -18,6 +18,73 @@ export type CustomRequestInit = RequestInit & {
   suppressErrorToast?: boolean;
 };
 
+export function extractErrorMessageFromBody(body: any): string | null {
+  if (!body) return null;
+  if (typeof body === "string") return body.trim() || null;
+
+  const subErrors: string[] = [];
+
+  // 1. Check identityErrors array (e.g. ASP.NET Identity / UserManagement)
+  if (Array.isArray(body.identityErrors) && body.identityErrors.length > 0) {
+    for (const err of body.identityErrors) {
+      if (typeof err === "string" && err.trim()) {
+        subErrors.push(err.trim());
+      } else if (err && typeof err === "object") {
+        const msg = err.description || err.message || err.detail || err.code;
+        if (msg && typeof msg === "string" && msg.trim()) {
+          subErrors.push(msg.trim());
+        }
+      }
+    }
+  }
+
+  // 2. Check errors property (dictionary or array)
+  if (body.errors) {
+    if (Array.isArray(body.errors) && body.errors.length > 0) {
+      for (const err of body.errors) {
+        if (typeof err === "string" && err.trim()) {
+          subErrors.push(err.trim());
+        } else if (err && typeof err === "object") {
+          const msg = err.description || err.message || err.detail || err.code;
+          if (msg && typeof msg === "string" && msg.trim()) {
+            subErrors.push(msg.trim());
+          }
+        }
+      }
+    } else if (typeof body.errors === "object") {
+      for (const [field, errs] of Object.entries(body.errors)) {
+        if (!errs) continue;
+        const fieldStr = Array.isArray(errs)
+          ? errs.filter(Boolean).join(", ")
+          : String(errs);
+        if (fieldStr.trim()) {
+          subErrors.push(`${field}: ${fieldStr.trim()}`);
+        }
+      }
+    }
+  }
+
+  const mainDetail =
+    (typeof body.detail === "string" && body.detail.trim()) ||
+    (typeof body.message === "string" && body.message.trim()) ||
+    (typeof body.error === "string" && body.error.trim()) ||
+    null;
+
+  if (subErrors.length > 0) {
+    const formattedSub = subErrors.join(" | ");
+    if (mainDetail && !formattedSub.includes(mainDetail)) {
+      return `${mainDetail} (${formattedSub})`;
+    }
+    return formattedSub;
+  }
+
+  return (
+    mainDetail ||
+    (typeof body.title === "string" && body.title.trim()) ||
+    null
+  );
+}
+
 export function getFriendlyErrorMessage(
   status: number,
   rawMessage?: string | null,
@@ -60,6 +127,15 @@ export function getFriendlyErrorMessage(
     case 400:
       return "البيانات المدخلة غير صحيحة، يرجى التأكد من صحة المدخلات وإعادة المحاولة.";
     case 401:
+      if (
+        rawMessage &&
+        typeof rawMessage === "string" &&
+        (rawMessage.toLowerCase().includes("another device") ||
+          rawMessage.toLowerCase().includes("signed out") ||
+          rawMessage.toLowerCase().includes("session"))
+      ) {
+        return "تم تسجيل الخروج لأن الحساب تم استخدامه لتسجيل الدخول من جهاز آخر (يُسمح بجلسة نشطة واحدة فقط لكل حساب).";
+      }
       return "انتهت جلسة العمل الخاصة بك، يرجى إعادة تسجيل الدخول للاستمرار.";
     case 403:
       return "عفواً، لا تملك الصلاحيات المطلوبة لتنفيذ هذا الإجراء.";
@@ -79,6 +155,16 @@ export function getFriendlyErrorMessage(
   }
 }
 
+export function getDefaultDeviceLabel(): string {
+  if (typeof window === "undefined") return "Web Browser";
+  const ua = window.navigator.userAgent;
+  if (/mobile|android|iphone|ipad/i.test(ua)) return "Mobile Browser";
+  if (/macintosh|mac os x/i.test(ua)) return "Mac PC";
+  if (/windows/i.test(ua)) return "Windows PC";
+  if (/linux/i.test(ua)) return "Linux PC";
+  return "Web Browser";
+}
+
 async function parseResponse<T>(
   response: Response,
   options?: { notifySuccess?: boolean | string; suppressErrorToast?: boolean; method?: string }
@@ -94,22 +180,7 @@ async function parseResponse<T>(
   const body = await response.json().catch(() => null);
 
   if (!response.ok) {
-    let rawMsg: string | null = null;
-    if (body?.errors && typeof body.errors === "object" && !Array.isArray(body.errors)) {
-      const errMsgs = Object.entries(body.errors)
-        .map(([field, errs]) => `${field}: ${Array.isArray(errs) ? errs.join(", ") : errs}`)
-        .join(" | ");
-      if (errMsgs) rawMsg = errMsgs;
-    }
-    if (!rawMsg) {
-      rawMsg =
-        body?.detail ||
-        body?.message ||
-        body?.error ||
-        body?.title ||
-        (typeof body === "string" ? body : null);
-    }
-
+    const rawMsg = extractErrorMessageFromBody(body);
     const errorCode = body?.errorCode || body?.code;
     const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg, errorCode);
 
@@ -165,8 +236,12 @@ async function request<T>(
     retry &&
     readAuth()?.refreshToken
   ) {
-    await refreshAccessToken();
-    return request<T>(path, init, true, false);
+    try {
+      await refreshAccessToken();
+      return request<T>(path, init, true, false);
+    } catch {
+      clearAuth();
+    }
   }
   if (response.status === 401 && includeAccessToken) clearAuth();
   return parseResponse<T>(response, {
@@ -176,9 +251,15 @@ async function request<T>(
   });
 }
 export async function login(payload: LoginRequest) {
+  const label = payload.deviceLabel?.trim() || getDefaultDeviceLabel();
+  const bodyPayload = {
+    login: payload.login.trim(),
+    password: payload.password,
+    deviceLabel: label.slice(0, 200),
+  };
   const auth = await request<AuthenticationTokenResponse>("/login", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(bodyPayload),
   });
   writeAuth(auth);
   return auth;
@@ -241,9 +322,14 @@ export async function authDownload(path: string) {
   const url = path.startsWith("/api/") ? `${API_BASE_URL}${path}` : `${AUTH_ROUTE}${path}`;
   let response = await fetch(url, { headers, cache: "no-store" });
   if (response.status === 401 && auth?.refreshToken) {
-    const refreshed = await refreshAccessToken();
-    headers.set("Authorization", `${refreshed.tokenType} ${refreshed.accessToken}`);
-    response = await fetch(url, { headers, cache: "no-store" });
+    try {
+      const refreshed = await refreshAccessToken();
+      headers.set("Authorization", `${refreshed.tokenType} ${refreshed.accessToken}`);
+      response = await fetch(url, { headers, cache: "no-store" });
+    } catch {
+      clearAuth();
+      throw new Error("انتهت الجلسة، يرجى إعادة تسجيل الدخول.");
+    }
   }
   if (!response.ok) throw new Error("تعذر تنزيل الملف");
   return { blob: await response.blob(), fileName: response.headers.get("content-disposition")?.match(/filename\*?=(?:UTF-8'')?[\"']?([^\"';]+)/i)?.[1] ?? "document" };
@@ -255,9 +341,14 @@ export async function authPreviewBlob(path: string) {
   const url = path.startsWith("/api/") ? `${API_BASE_URL}${path}` : `${AUTH_ROUTE}${path}`;
   let response = await fetch(url, { headers, cache: "no-store" });
   if (response.status === 401 && auth?.refreshToken) {
-    const refreshed = await refreshAccessToken();
-    headers.set("Authorization", `${refreshed.tokenType} ${refreshed.accessToken}`);
-    response = await fetch(url, { headers, cache: "no-store" });
+    try {
+      const refreshed = await refreshAccessToken();
+      headers.set("Authorization", `${refreshed.tokenType} ${refreshed.accessToken}`);
+      response = await fetch(url, { headers, cache: "no-store" });
+    } catch {
+      clearAuth();
+      throw new Error("انتهت الجلسة، يرجى إعادة تسجيل الدخول.");
+    }
   }
   if (!response.ok) throw new Error("تعذر عرض الوثيقة");
   const blob = await response.blob();

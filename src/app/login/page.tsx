@@ -6,6 +6,9 @@ import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { useAuth } from "../../lib/auth/AuthProvider";
 
+import { getDefaultDeviceLabel } from "../../lib/auth/api";
+import type { AuthApiError } from "../../lib/auth/types";
+
 export default function LoginPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, login } = useAuth();
@@ -27,12 +30,17 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const loggedUser = await login({ ...form, deviceLabel: "Web Browser" });
+      const loggedUser = await login({
+        login: form.login,
+        password: form.password,
+        deviceLabel: getDefaultDeviceLabel(),
+      });
       router.replace(
         loggedUser.requiresPasswordChange ? "/change-password" : "/dashboard",
       );
-    } catch {
-      setError("اسم المستخدم أو كلمة المرور غير صحيحة، أو أن الحساب غير متاح.");
+    } catch (err: unknown) {
+      const apiErr = err as AuthApiError;
+      setError(apiErr?.message || "اسم المستخدم أو كلمة المرور غير صحيحة، أو أن الحساب غير متاح.");
     } finally {
       setLoading(false);
     }
@@ -127,9 +135,11 @@ export default function LoginPage() {
             تسجيل الدخول <LockKeyhole size={17} />
           </Button>
         </form>
-        <footer className="mt-7 flex items-center justify-center gap-2 border-t border-slate-100 pt-5 text-xs font-medium text-slate-500">
-          <ShieldCheck size={15} className="text-[#1167c9]" />
-          دخول آمن ومشفر
+        <footer className="mt-7 flex flex-col items-center gap-2 border-t border-slate-100 pt-5 text-center text-xs font-medium text-slate-500">
+          <div className="flex items-center justify-center gap-2">
+            <ShieldCheck size={15} className="text-[#1167c9]" />
+            <span>دخول آمن ومشفر (جلسة نشطة واحدة لكل حساب)</span>
+          </div>
         </footer>
       </section>
     </main>

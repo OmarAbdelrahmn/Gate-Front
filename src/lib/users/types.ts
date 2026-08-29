@@ -23,10 +23,12 @@ export type CreateManagedUserRequest = {
   email: string;
   phoneNumber: string;
   employeeId: string | null;
+  roleAssignments?: ManagedRoleAssignmentRequest[];
+  directPermissionAssignments?: ManagedDirectPermissionAssignmentRequest[];
 };
 export type UpdateManagedUserRequest = Omit<
   CreateManagedUserRequest,
-  "initialPassword"
+  "initialPassword" | "roleAssignments" | "directPermissionAssignments"
 > & { rowVersion: string };
 export type Role = {
   id: string;
@@ -81,7 +83,7 @@ export type ManagedRoleAssignmentRequest = {
 };
 export type ManagedDirectPermissionAssignmentRequest = {
   permissionKey: string;
-  effect: "Grant" | "Deny";
+  effect: "Allow" | "Deny" | "Grant";
   startsAtUtc: string | null;
   expiresAtUtc: string | null;
   reason: string | null;

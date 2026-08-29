@@ -47,6 +47,12 @@ export default function SessionsPage() {
           راجع الأجهزة المسجلة بحسابك وأنهِ أي جلسة غير معروفة.
         </p>
       </div>
+      <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 text-xs leading-5 text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+        <p className="font-bold text-blue-950 dark:text-blue-100">سياسة أمان الجلسات (جلسة واحدة فقط):</p>
+        <p className="mt-1">
+          يسمح النظام بجلسة نشطة واحدة فقط لكل حساب. عند تسجيل الدخول من جهاز جديد يتم إلغاء الجلسة السابقة وزيادة إصدار التفويض تلقائياً.
+        </p>
+      </div>
       {error && (
         <Card className="p-5">
           <p role="alert" className="text-red-700">

@@ -105,6 +105,15 @@ export default function RolesPage() {
     () => groupPermissions(permissions),
     [permissions],
   );
+  const toggleRoleGroupPermissions = (groupItems: PermissionCatalogItem[]) => {
+    const groupKeys = groupItems.map((item) => item.key);
+    const allSelected = groupKeys.every((key) => selectedKeys.includes(key));
+    if (allSelected) {
+      setSelectedKeys((prev) => prev.filter((key) => !groupKeys.includes(key)));
+    } else {
+      setSelectedKeys((prev) => Array.from(new Set([...prev, ...groupKeys])));
+    }
+  };
   function choose(role: Role) {
     setSelected(role);
     setForm(requestFrom(role));
@@ -410,11 +419,33 @@ export default function RolesPage() {
                       />
                     </label>
                     <div className="mt-4 max-h-[520px] space-y-5 overflow-y-auto pr-1">
-                      {groupedPermissions.map(([group, items]) => (
-                        <section key={group}>
-                          <h3 className={`mb-2 pr-2 text-sm font-black text-[#1167c9] ${locale === "en" ? "border-l-2 pl-2" : "border-r-2 pr-2"}`}>
-                            {permissionGroupLabel(group, locale)}
-                          </h3>
+                      {groupedPermissions.map(([group, items]) => {
+                        const isAllGroupSelected =
+                          items.length > 0 &&
+                          items.every((item) => selectedKeys.includes(item.key));
+                        return (
+                          <section key={group}>
+                            <div className="mb-2 flex items-center justify-between border-b border-[var(--border)] pb-1.5">
+                              <h3 className={`text-sm font-black text-[#1167c9] ${locale === "en" ? "border-l-2 pl-2" : "border-r-2 pr-2"}`}>
+                                {permissionGroupLabel(group, locale)} ({items.length})
+                              </h3>
+                              {canManage && !protectedRole && (
+                                <label className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-50/80 px-2.5 py-1 text-xs font-bold text-[#1167c9] hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    disabled={!canManage || protectedRole}
+                                    checked={isAllGroupSelected}
+                                    onChange={() => toggleRoleGroupPermissions(items)}
+                                    className="h-3.5 w-3.5 rounded border-blue-400 text-[#1167c9] focus:ring-[#1167c9]"
+                                  />
+                                  <span>
+                                    {isAllGroupSelected
+                                      ? (locale === "en" ? "Deselect All" : "إلغاء تحديد الكل")
+                                      : (locale === "en" ? "Select All" : "تحديد الكل")}
+                                  </span>
+                                </label>
+                              )}
+                            </div>
                           <div className="grid gap-2 sm:grid-cols-2">
                             {items.map((item) => {
                               const checked = selectedKeys.includes(item.key);
@@ -451,7 +482,8 @@ export default function RolesPage() {
                             })}
                           </div>
                         </section>
-                      ))}
+                      );
+                    })}
                     </div>
                   </>
                 )}
