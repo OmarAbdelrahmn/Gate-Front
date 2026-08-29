@@ -88,7 +88,9 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
 
   const isPublicTransport =
     registrationType === VehicleRegistrationType.PublicTransport ||
-    registrationType === VehicleRegistrationType.PublicBus;
+    registrationType === VehicleRegistrationType.PublicBus ||
+    Number(registrationType) === VehicleRegistrationType.PublicTransport ||
+    Number(registrationType) === VehicleRegistrationType.PublicBus;
 
   const loadFiles = async () => {
     if (!can("fleet.files.read")) return;

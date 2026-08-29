@@ -338,7 +338,11 @@ export const getRiderPlatformHistory = async (riderProfileId: string) => {
     }
     return res;
   } catch (err: any) {
-    console.error(`=== API Error: GET /api/riders/${riderProfileId}/platform-history ===`, err?.status, err?.message);
+    if (err?.status === 429) {
+      console.warn(`=== API Rate Limit (429): GET /api/riders/${riderProfileId}/platform-history ===`);
+    } else {
+      console.error(`=== API Error: GET /api/riders/${riderProfileId}/platform-history ===`, err?.status, err?.message);
+    }
     return null;
   }
 };

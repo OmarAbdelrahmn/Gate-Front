@@ -19,14 +19,36 @@ export type ResidencyPermit = ExpiringRecord & {
 };
 
 export type DriverLicense = ExpiringRecord & {
+  employeeId?: string;
   driverLicenseCategoryId: string;
   categoryAr: string;
+  categoryEn?: string | null;
   licenseNumberMasked: string | null;
   issueDate: string | null;
+  expiryDate: string | null;
   bookingStatus: string;
   issuanceStatus: string;
   licenseStatus: string;
   isCurrent: boolean;
+  previousLicenseId?: string | null;
+  employeeDocumentId?: string | null;
+  notes?: string | null;
+  rowVersion: string;
+};
+
+export type DriverLicenseInput = {
+  driverLicenseCategoryId: string;
+  licenseNumber: string;
+  issueDate?: string | null;
+  expiryDate?: string | null;
+  bookingStatus: string;
+  issuanceStatus: string;
+  licenseStatus: string;
+  isCurrent: boolean;
+  previousLicenseId?: string | null;
+  employeeDocumentId?: string | null;
+  notes?: string | null;
+  rowVersion?: string | null;
 };
 
 export type RiderCard = ExpiringRecord & {
@@ -120,14 +142,35 @@ export function updateResidencyPermit(
   );
 }
 
+export function createDriverLicense(
+  employeeId: string,
+  payload: DriverLicenseInput,
+) {
+  return authFetch<DriverLicense>(
+    `/api/compliance/employees/${encodeURIComponent(employeeId)}/driver-licenses`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
 export function updateDriverLicense(
   employeeId: string,
   id: string,
-  payload: Record<string, unknown>,
+  payload: DriverLicenseInput | Record<string, unknown>,
 ) {
   return authFetch<DriverLicense>(
     `/api/compliance/employees/${encodeURIComponent(employeeId)}/driver-licenses/${encodeURIComponent(id)}`,
     { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export function archiveDriverLicense(
+  id: string,
+  reason: string,
+  rowVersion: string,
+) {
+  return authFetch<void>(
+    `/api/compliance/driver-licenses/${encodeURIComponent(id)}/archive`,
+    { method: "PATCH", body: JSON.stringify({ reason, rowVersion }) },
   );
 }
 

@@ -152,7 +152,10 @@ export default function EmployeesPage() {
         setLoading(true);
         setError("");
         Promise.all([
-            listEmployees().then(setEmployees),
+            listEmployees().then((data) => {
+                console.log("Employees:", data);
+                setEmployees(data);
+            }),
             hrCatalogApi.list("operating-cities").then(setCities).catch(() => []),
             hrCatalogApi.list("operational-work-types").then(setWorkTypes).catch(() => []),
             hrCatalogApi.list("sponsors").then(setSponsors).catch(() => []),

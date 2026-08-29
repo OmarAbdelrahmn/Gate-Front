@@ -48,6 +48,7 @@ import { EmployeeComplianceTabs } from "../../../../components/employees/Employe
 import { EmployeeDocumentsInsurance } from "../../../../components/employees/EmployeeDocumentsInsurance";
 import { EmployeePlatformAccounts } from "../../../../components/employees/EmployeePlatformAccounts";
 import { EmployeeRiderHistoryModal } from "../../../../components/employees/EmployeeRiderHistoryModal";
+import { DriverLicensesView } from "../../../../components/employees/DriverLicensesView";
 import { AssignmentPromissoryFiles } from "../../../../components/fleet/AssignmentPromissoryFiles";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
@@ -1018,66 +1019,7 @@ export default function EmployeeDetailsPage({
         </Card>
 
         <Card className="p-5">
-          <h2 className="flex items-center gap-2 font-black">
-            <ContactRound size={18} />
-            {locale === "en" ? "Rider Profile" : "ملف المندوب"}
-          </h2>
-          {rider ? (
-            <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-xs text-[var(--muted)]">{t("common.status")}</dt>
-                <dd className="font-bold">{riderStText}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-xs text-[var(--muted)]">
-                  {locale === "en" ? "Preferred City" : "مدينة التفضيل"}
-                </dt>
-                <dd className="font-bold">{preferredCity}</dd>
-              </div>
-              {rider.nationality && (
-                <div className="flex justify-between">
-                  <dt className="text-xs text-[var(--muted)]">
-                    {locale === "en" ? "Nationality" : "الجنسية"}
-                  </dt>
-                  <dd className="font-bold">{rider.nationality}</dd>
-                </div>
-              )}
-              {rider.iban && (
-                <div className="flex justify-between">
-                  <dt className="text-xs text-[var(--muted)]">
-                    {locale === "en" ? "IBAN" : "الآيبان"}
-                  </dt>
-                  <dd className="font-bold font-mono text-xs" dir="ltr">{rider.iban}</dd>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <dt className="text-xs text-[var(--muted)]">
-                  {locale === "en" ? "Start Date" : "بداية الملف"}
-                </dt>
-                <dd className="font-bold">
-                  {formatDate(rider.riderStartDate, locale)}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="mt-4 text-sm text-[var(--muted)]">
-              {locale === "en"
-                ? "No rider profile associated with this employee."
-                : "لا يوجد ملف رايدر مرتبط بهذا الموظف."}
-            </p>
-          )}
-          {can("platform_assignments.read") && (
-            <div className="mt-4 pt-3 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setOpenRiderHistoryModal(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1167c9] hover:underline"
-              >
-                <History size={14} />
-                {locale === "en" ? "View Full Platform History" : "عرض سجل تشغيل المنصات"}
-              </button>
-            </div>
-          )}
+          <DriverLicensesView employeeId={employee.id} compact={true} />
         </Card>
 
         <Card className="p-5">

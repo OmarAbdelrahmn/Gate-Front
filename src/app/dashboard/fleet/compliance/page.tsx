@@ -72,6 +72,7 @@ export default function CompliancePage() {
       case "Registration": return "استمارة سير";
       case "InsurancePolicy": return "بوليصة تأمين";
       case "Inspection": return "فحص دوري";
+      case "OperationCard": return "كرت تشغيل";
       default: return type;
     }
   };

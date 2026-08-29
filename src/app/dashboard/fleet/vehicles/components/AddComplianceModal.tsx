@@ -5,22 +5,25 @@ import {
   addVehicleRegistration,
   addVehicleInsurance,
   addVehicleInspection,
+  renewVehicleOperationCard,
   uploadVehicleFile,
 } from "@/lib/fleet/api";
 import {
   VehicleInspectionResult,
+  VehicleRegistrationType,
   type VehicleRegistrationRequest,
   type VehicleInsuranceRequest,
   type VehicleInspectionRequest,
+  type VehicleOperationCardRequest,
 } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
-import { FileText, ShieldCheck, Wrench, UploadCloud, X } from "lucide-react";
+import { FileText, ShieldCheck, Wrench, CreditCard, UploadCloud, X } from "lucide-react";
 
-export type ComplianceTabType = "Registration" | "InsurancePolicy" | "Inspection";
+export type ComplianceTabType = "Registration" | "InsurancePolicy" | "Inspection" | "OperationCard";
 
 interface Props {
   isOpen: boolean;
@@ -28,6 +31,7 @@ interface Props {
   onSuccess: () => void;
   vehicleId: string;
   initialType?: ComplianceTabType;
+  registrationType?: VehicleRegistrationType | number | null;
 }
 
 export function AddComplianceModal({
@@ -36,9 +40,14 @@ export function AddComplianceModal({
   onSuccess,
   vehicleId,
   initialType = "Registration",
+  registrationType,
 }: Props) {
   const [activeTab, setActiveTab] = useState<ComplianceTabType>(initialType);
   const [isPending, startTransition] = useTransition();
+
+  const isPublicTransport =
+    registrationType === VehicleRegistrationType.PublicTransport ||
+    registrationType === VehicleRegistrationType.PublicBus;
 
   useEffect(() => {
     if (isOpen) {
@@ -80,6 +89,15 @@ export function AddComplianceModal({
     result: VehicleInspectionResult.Passed,
     odometer: 0,
     failureNotes: "",
+    notes: "",
+  });
+
+  // Operation Card Form State
+  const [opCardForm, setOpCardForm] = useState<VehicleOperationCardRequest>({
+    cardNumber: "",
+    issuingAuthority: "الهيئة العامة للنقل",
+    issueDate: new Date().toISOString().split("T")[0],
+    expiryDate: "",
     notes: "",
   });
 
@@ -156,6 +174,32 @@ export function AddComplianceModal({
             failureNotes: inspForm.failureNotes?.trim() || null,
             notes: inspForm.notes?.trim() || null,
           });
+        } else if (activeTab === "OperationCard") {
+          if (!opCardForm.cardNumber.trim()) {
+            toast.error("خطأ في البيانات", "يرجى إدخال رقم كرت التشغيل");
+            return;
+          }
+          if (!opCardForm.issueDate || !opCardForm.expiryDate) {
+            toast.error("خطأ في البيانات", "يرجى اختيار تاريخ الإصدار وتاريخ الانتهاء");
+            return;
+          }
+          await renewVehicleOperationCard(vehicleId, {
+            cardNumber: opCardForm.cardNumber.trim(),
+            issuingAuthority: opCardForm.issuingAuthority?.trim() || null,
+            issueDate: opCardForm.issueDate,
+            expiryDate: opCardForm.expiryDate,
+            notes: opCardForm.notes?.trim() || null,
+          });
+
+          if (selectedFile) {
+            if (selectedFile.size > 10 * 1024 * 1024) {
+              toast.error("حجم الملف كبير", "حجم ملف كرت التشغيل يتجاوز 10 ميجابايت.");
+            } else {
+              const formData = new FormData();
+              formData.append("file", selectedFile);
+              await uploadVehicleFile(vehicleId, "OperationCard", formData);
+            }
+          }
         }
 
         onSuccess();
@@ -174,11 +218,11 @@ export function AddComplianceModal({
     >
       <div className="space-y-6 pt-2">
         {/* Type Selector Tabs */}
-        <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+        <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab("Registration")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
               activeTab === "Registration"
                 ? "bg-white dark:bg-slate-900 text-[#1167c9] shadow-sm"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -190,7 +234,7 @@ export function AddComplianceModal({
           <button
             type="button"
             onClick={() => setActiveTab("InsurancePolicy")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
               activeTab === "InsurancePolicy"
                 ? "bg-white dark:bg-slate-900 text-[#1167c9] shadow-sm"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -202,7 +246,7 @@ export function AddComplianceModal({
           <button
             type="button"
             onClick={() => setActiveTab("Inspection")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
               activeTab === "Inspection"
                 ? "bg-white dark:bg-slate-900 text-[#1167c9] shadow-sm"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -211,6 +255,20 @@ export function AddComplianceModal({
             <Wrench className="h-4 w-4 text-orange-500" />
             <span>الفحص الدوري</span>
           </button>
+          {isPublicTransport && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("OperationCard")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
+                activeTab === "OperationCard"
+                  ? "bg-white dark:bg-slate-900 text-[#1167c9] shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+            >
+              <CreditCard className="h-4 w-4 text-indigo-600" />
+              <span>كرت التشغيل</span>
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -492,6 +550,111 @@ export function AddComplianceModal({
                   value={inspForm.notes || ""}
                   onChange={(e) => setInspForm({ ...inspForm, notes: e.target.value })}
                   placeholder="ملاحظات إضافية..."
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Operation Card Form */}
+          {activeTab === "OperationCard" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    رقم كرت التشغيل <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={opCardForm.cardNumber}
+                    onChange={(e) => setOpCardForm({ ...opCardForm, cardNumber: e.target.value })}
+                    placeholder="مثال: OPC-998877"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    جهة الإصدار
+                  </label>
+                  <Input
+                    value={opCardForm.issuingAuthority || ""}
+                    onChange={(e) => setOpCardForm({ ...opCardForm, issuingAuthority: e.target.value })}
+                    placeholder="مثال: الهيئة العامة للنقل"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    تاريخ الإصدار <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={opCardForm.issueDate}
+                    onChange={(e) => setOpCardForm({ ...opCardForm, issueDate: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    تاريخ الانتهاء <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={opCardForm.expiryDate}
+                    onChange={(e) => setOpCardForm({ ...opCardForm, expiryDate: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  إرفاق ملف كرت التشغيل (اختياري)
+                </label>
+                {!selectedFile ? (
+                  <label className="relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 p-4 text-center cursor-pointer hover:border-[#1167c9] hover:bg-blue-50/30 transition-all">
+                    <UploadCloud className="h-6 w-6 text-[#1167c9] mb-1" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      اضغط لاختيار ملف كرت التشغيل
+                    </span>
+                    <span className="text-[11px] text-slate-400 mt-0.5">
+                      (PDF, JPG, PNG - بحجم أقصى 10MB)
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                ) : (
+                  <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20 p-3">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <FileText className="h-5 w-5 text-emerald-600 shrink-0" />
+                      <div className="truncate text-right">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {selectedFile.name}
+                        </div>
+                        <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">
+                          {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(null)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                      title="إزالة الملف"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">ملاحظات</label>
+                <Input
+                  value={opCardForm.notes || ""}
+                  onChange={(e) => setOpCardForm({ ...opCardForm, notes: e.target.value })}
+                  placeholder="ملاحظات حول كرت التشغيل..."
                 />
               </div>
             </div>

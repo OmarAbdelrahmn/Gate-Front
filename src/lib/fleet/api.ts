@@ -290,6 +290,16 @@ export const addVehicleInspection = (vehicleId: string, payload: T.VehicleInspec
     notifySuccess: "تمت إضافة الفحص الدوري بنجاح",
   });
 
+export const getVehicleOperationCards = (vehicleId: string) =>
+  authFetch<T.VehicleOperationCardResponse[]>(`/api/vehicles/${vehicleId}/operation-cards`);
+
+export const renewVehicleOperationCard = (vehicleId: string, payload: T.VehicleOperationCardRequest) =>
+  authFetch<T.VehicleOperationCardResponse>(`/api/vehicles/${vehicleId}/operation-cards`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تحديث كرت التشغيل بنجاح",
+  });
+
 export const getVehicleComplianceDue = (checkDate?: string) => {
   const query = checkDate ? `?checkDate=${checkDate}` : "";
   return authFetch<T.VehicleComplianceDueResponse[]>(`/api/vehicle-compliance/due${query}`);

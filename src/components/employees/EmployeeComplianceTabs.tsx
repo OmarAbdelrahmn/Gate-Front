@@ -27,6 +27,7 @@ import {
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { Card } from "../ui/Card";
 import { Button } from "../ui/Button";
+import { DriverLicensesView } from "./DriverLicensesView";
 
 type Tab =
   | "residency"
@@ -486,15 +487,19 @@ export function EmployeeComplianceTabs({
         </div>
       </div>
       <div className="p-5 sm:p-6">
-        {error ? (
+        {active === "licenses" ? (
+          <DriverLicensesView
+            employeeId={employeeId}
+            onPreviewDocument={(docId, title) => void handlePreview(docId, title)}
+          />
+        ) : error ? (
           <p
             role="alert"
             className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
           >
             {error}
           </p>
-        ) : null}
-        {loading ? (
+        ) : loading ? (
           <p className="py-8 text-center text-sm text-[var(--muted)]">
             {locale === "en"
               ? "Loading compliance data…"

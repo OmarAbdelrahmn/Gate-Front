@@ -22,6 +22,7 @@ import { Card } from "@/components/ui/Card";
 import { VehicleUpsertModal } from "../components/VehicleUpsertModal";
 import { AddComplianceModal, type ComplianceTabType } from "../components/AddComplianceModal";
 import { PrivateToPublicTransitionModal } from "../components/PrivateToPublicTransitionModal";
+import { OperationCardHistoryModal } from "../components/OperationCardHistoryModal";
 import { VehicleFilesCard } from "../components/VehicleFilesCard";
 import { AssignmentPromissoryFiles } from "@/components/fleet/AssignmentPromissoryFiles";
 import {
@@ -36,6 +37,8 @@ import {
   User,
   Plus,
   ArrowRightLeft,
+  CreditCard,
+  History,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -62,6 +65,7 @@ export default function VehicleDetailPage() {
   const [isUpsertOpen, setIsUpsertOpen] = useState(false);
   const [isComplianceOpen, setIsComplianceOpen] = useState(false);
   const [isTransitionOpen, setIsTransitionOpen] = useState(false);
+  const [isOpCardHistoryOpen, setIsOpCardHistoryOpen] = useState(false);
   const [complianceType, setComplianceType] = useState<ComplianceTabType>("Registration");
 
   const loadData = async () => {
@@ -129,11 +133,27 @@ export default function VehicleDetailPage() {
     }
   };
 
+  const regType = vehicle.registrationType ?? summary.registrationType;
+  const isPublicTransport =
+    regType === VehicleRegistrationType.PublicTransport ||
+    regType === VehicleRegistrationType.PublicBus ||
+    Number(regType) === VehicleRegistrationType.PublicTransport ||
+    Number(regType) === VehicleRegistrationType.PublicBus;
+
   const complianceItems: { label: string; type: ComplianceTabType; date?: string | null; status?: any }[] = [
     { label: "استمارة السير", type: "Registration", date: summary.registrationExpiryDate, status: summary.registrationStatus },
     { label: "بوليصة التأمين", type: "InsurancePolicy", date: summary.insuranceExpiryDate, status: summary.insuranceStatus },
     { label: "الفحص الدوري", type: "Inspection", date: summary.inspectionExpiryDate, status: summary.inspectionStatus },
   ];
+
+  if (isPublicTransport) {
+    complianceItems.push({
+      label: "كرت التشغيل (النقل العام)",
+      type: "OperationCard",
+      date: summary.operationCardExpiryDate,
+      status: summary.operationCardStatus,
+    });
+  }
 
   return (
     <div className="space-y-6 pb-12">
@@ -309,6 +329,16 @@ export default function VehicleDetailPage() {
                 <ShieldCheck className="h-5 w-5 text-emerald-500" />
                 <h3 className="font-bold text-slate-800 dark:text-slate-200">الالتزام والتراخيص</h3>
               </div>
+              {isPublicTransport && (
+                <Button
+                  variant="ghost"
+                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 gap-1 px-2 py-1 h-auto"
+                  onClick={() => setIsOpCardHistoryOpen(true)}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span>سجل كروت التشغيل</span>
+                </Button>
+              )}
             </div>
             <div className="p-0 divide-y divide-slate-100 dark:divide-slate-800">
               {complianceItems.map((item, idx) => (
@@ -382,6 +412,13 @@ export default function VehicleDetailPage() {
         onSuccess={() => { setIsComplianceOpen(false); loadData(); }}
         vehicleId={id}
         initialType={complianceType}
+        registrationType={vehicle.registrationType || summary.registrationType}
+      />
+
+      <OperationCardHistoryModal
+        isOpen={isOpCardHistoryOpen}
+        onClose={() => setIsOpCardHistoryOpen(false)}
+        vehicleId={id}
       />
 
       {vehicle && (

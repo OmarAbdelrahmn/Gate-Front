@@ -265,6 +265,8 @@ export interface VehicleSummaryResponse {
   insuranceStatus?: VehicleComplianceDueStatus | null;
   inspectionExpiryDate?: string | null;
   inspectionStatus?: VehicleComplianceDueStatus | null;
+  operationCardExpiryDate?: string | null;
+  operationCardStatus?: VehicleComplianceDueStatus | null;
   isReadyForAssignment: boolean;
   rowVersion: string;
 }
@@ -272,6 +274,9 @@ export interface VehicleSummaryResponse {
 export interface VehicleDetailResponse {
   summary: VehicleSummaryResponse;
   serialNumber?: string | null;
+  plateLettersAr?: string | null;
+  plateLettersEn?: string | null;
+  plateDigits?: string | null;
   vin?: string | null;
   chassisNumber?: string | null;
   engineNumber?: string | null;
@@ -605,6 +610,28 @@ export interface VehicleInspectionRequest {
   result: VehicleInspectionResult;
   odometer: number;
   failureNotes?: string | null;
+  notes?: string | null;
+}
+
+export interface VehicleOperationCardResponse {
+  id: string;
+  vehicleId: string;
+  cardNumber: string;
+  issuingAuthority?: string | null;
+  issueDate: string;
+  expiryDate: string;
+  status?: VehicleComplianceDueStatus;
+  isCurrent: boolean;
+  notes?: string | null;
+  rowVersion?: string;
+  createdAtUtc?: string;
+}
+
+export interface VehicleOperationCardRequest {
+  cardNumber: string;
+  issuingAuthority?: string | null;
+  issueDate: string;
+  expiryDate: string;
   notes?: string | null;
 }
 
