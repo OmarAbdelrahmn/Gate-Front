@@ -11,7 +11,16 @@ import {
   Sparkles,
   Layers,
   Palette,
+  FileDown,
+  FileCheck,
 } from "lucide-react";
+import {
+  LetterheadHeader,
+  LetterheadFooter,
+  LetterheadFrame,
+  LETTERHEAD_TEMPLATES,
+  type LetterheadId,
+} from "@/components/hr/forms/LetterheadHeader";
 
 import { listEmployees } from "@/lib/workforce/api";
 import { listExternalRiders } from "@/lib/workforce/external-riders-api";
@@ -59,6 +68,17 @@ export default function HrFormsPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("cash_disbursement");
   const [templateSearchQuery, setTemplateSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<FormCategory | "all">("all");
+
+  // Letterhead Selection State
+  const [selectedLetterhead, setSelectedLetterhead] = useState<LetterheadId>("express");
+
+  const handleSelectLetterhead = (lhId: LetterheadId) => {
+    setSelectedLetterhead(lhId);
+    const found = LETTERHEAD_TEMPLATES.find((t) => t.id === lhId);
+    if (found) {
+      setCompanyName(found.companyName);
+    }
+  };
 
   // Form Fields State
   const [riderName, setRiderName] = useState<string>("");
@@ -384,6 +404,54 @@ export default function HrFormsPage() {
                   </span>
                 )}
               </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* 2. Official Letterhead Background Selection Card */}
+      <Card className="p-3.5 space-y-2.5 print:hidden">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileCheck size={16} className="text-[#1167c9]" />
+            <h2 className="font-bold text-xs text-[var(--foreground)]">خلفية ورقة المروس (Letterhead Background)</h2>
+          </div>
+          <span className="text-[11px] text-[var(--muted)] font-medium">اختر قالب المروس للطباعة أو تحميل Word</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {LETTERHEAD_TEMPLATES.map((lh) => {
+            const isSelected = selectedLetterhead === lh.id;
+            return (
+              <div
+                key={lh.id}
+                onClick={() => handleSelectLetterhead(lh.id)}
+                className={`cursor-pointer p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 text-right ${
+                  isSelected
+                    ? "border-[#1167c9] bg-blue-500/10 text-[var(--foreground)] ring-1 ring-[#1167c9]/40"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[#1167c9]/40"
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full bg-gradient-to-r ${lh.colorGradient}`} />
+                  <div className="min-w-0">
+                    <p className="font-bold text-xs truncate leading-tight">{lh.titleAr}</p>
+                    <p className="text-[10px] text-[var(--muted)] truncate">{lh.companyName}</p>
+                  </div>
+                </div>
+
+                {lh.fileName && (
+                  <a
+                    href={encodeURI(`/${lh.fileName}`)}
+                    download
+                    onClick={(e) => e.stopPropagation()}
+                    title="تحميل ملف Word (.docx)"
+                    className="p-1 rounded-lg hover:bg-blue-500/10 text-[#1167c9] transition shrink-0"
+                  >
+                    <FileDown size={14} />
+                  </a>
+                )}
+              </div>
             );
           })}
         </div>
@@ -1075,6 +1143,7 @@ export default function HrFormsPage() {
                   date,
                   showDoubleVoucher,
                   companyName,
+                  letterheadId: selectedLetterhead,
                 }}
               />
             )}
@@ -1093,28 +1162,31 @@ export default function HrFormsPage() {
                   companyName,
                   companyCr,
                   dueDate,
+                  letterheadId: selectedLetterhead,
                 }}
               />
             )}
 
             {selectedTemplateId === "leave_request" && (
-              <VacationFormView
-                data={{
-                  applicantName: riderName,
-                  employeeNo: iqamaNo,
-                  date,
-                  jobTitle,
-                  department,
-                  startDate: vacationStartDate,
-                  endDate: vacationEndDate,
-                  vacationDays,
-                  vacationType,
-                  otherReasonText,
-                  joiningDate,
-                  telExt,
-                  companyName,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <VacationFormView
+                  data={{
+                    applicantName: riderName,
+                    employeeNo: iqamaNo,
+                    date,
+                    jobTitle,
+                    department,
+                    startDate: vacationStartDate,
+                    endDate: vacationEndDate,
+                    vacationDays,
+                    vacationType,
+                    otherReasonText,
+                    joiningDate,
+                    telExt,
+                    companyName,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "salary_certificate" && (
@@ -1128,145 +1200,162 @@ export default function HrFormsPage() {
                   companyName,
                   date,
                   allowancesDetail,
+                  letterheadId: selectedLetterhead,
                 }}
               />
             )}
 
             {selectedTemplateId === "clearance_form" && (
-              <ClearanceFormView
-                data={{
-                  employeeName: riderName,
-                  iqamaNo,
-                  jobTitle,
-                  department,
-                  decisionNo,
-                  decisionDate,
-                  reason: clearanceReason,
-                  otherReason: otherReasonText,
-                  companyName,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <ClearanceFormView
+                  data={{
+                    employeeName: riderName,
+                    iqamaNo,
+                    jobTitle,
+                    department,
+                    decisionNo,
+                    decisionDate,
+                    reason: clearanceReason,
+                    otherReason: otherReasonText,
+                    companyName,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "resignation_form" && (
-              <ResignationFormView
-                data={{
-                  employeeName: riderName,
-                  iqamaNo,
-                  nationality,
-                  mobile,
-                  employeeNo: iqamaNo ? iqamaNo.slice(-5) : "",
-                  city: issueCity,
-                  effectiveDay,
-                  effectiveDate,
-                  reasonText: reason,
-                  companyName,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <ResignationFormView
+                  data={{
+                    employeeName: riderName,
+                    iqamaNo,
+                    nationality,
+                    mobile,
+                    employeeNo: iqamaNo ? iqamaNo.slice(-5) : "",
+                    city: issueCity,
+                    effectiveDay,
+                    effectiveDate,
+                    reasonText: reason,
+                    companyName,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "final_settlement" && (
-              <FinalSettlementView
-                data={{
-                  employeeName: riderName,
-                  iqamaNo,
-                  nationality,
-                  jobTitle,
-                  companyName,
-                  endDate: vacationEndDate,
-                  date,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <FinalSettlementView
+                  data={{
+                    employeeName: riderName,
+                    iqamaNo,
+                    nationality,
+                    jobTitle,
+                    companyName,
+                    endDate: vacationEndDate,
+                    date,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "financial_advance" && (
-              <CashAdvanceView
-                data={{
-                  riderName,
-                  iqamaNo,
-                  nationality,
-                  amount,
-                  amountInWords,
-                  date,
-                  companyName,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <CashAdvanceView
+                  data={{
+                    riderName,
+                    iqamaNo,
+                    nationality,
+                    amount,
+                    amountInWords,
+                    date,
+                    companyName,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "cash_custody_promissory" && (
-              <CashCustodyPromissoryView
-                data={{
-                  riderName,
-                  iqamaNo,
-                  jobTitle,
-                  department,
-                  companyName,
-                  date,
-                  custodyType,
-                  amount,
-                  amountInWords,
-                  promissoryDate: date,
-                  promissoryNo,
-                  deliveryMethod,
-                  bankAccountNo,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <CashCustodyPromissoryView
+                  data={{
+                    riderName,
+                    iqamaNo,
+                    jobTitle,
+                    department,
+                    companyName,
+                    date,
+                    custodyType,
+                    amount,
+                    amountInWords,
+                    promissoryDate: date,
+                    promissoryNo,
+                    deliveryMethod,
+                    bankAccountNo,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "work_commencement" && (
-              <WorkCommencementView
-                data={{
-                  companyName,
-                  date,
-                  employeeName: riderName,
-                  nationality,
-                  iqamaNo,
-                  jobTitle,
-                  department,
-                  workplace,
-                  contractStartDate,
-                  actualStartDate,
-                  hrManagerName,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <WorkCommencementView
+                  data={{
+                    companyName,
+                    date,
+                    employeeName: riderName,
+                    nationality,
+                    iqamaNo,
+                    jobTitle,
+                    department,
+                    workplace,
+                    contractStartDate,
+                    actualStartDate,
+                    hrManagerName,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "disciplinary_action" && (
-              <DisciplinaryActionView
-                data={{
-                  companyName,
-                  date,
-                  employeeName: riderName,
-                  jobTitle,
-                  iqamaNo,
-                  department,
-                  violation,
-                  reasons: violationReasons,
-                  actionTaken,
-                  directManagerOpinion,
-                  hrManagerName,
-                  generalManagerName,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <DisciplinaryActionView
+                  data={{
+                    companyName,
+                    date,
+                    employeeName: riderName,
+                    jobTitle,
+                    iqamaNo,
+                    department,
+                    violation,
+                    reasons: violationReasons,
+                    actionTaken,
+                    directManagerOpinion,
+                    hrManagerName,
+                    generalManagerName,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId === "annual_entitlements_receipt" && (
-              <AnnualEntitlementsReceiptView
-                data={{
-                  companyName,
-                  date,
-                  employeeName: riderName,
-                  nationality,
-                  iqamaNo,
-                  jobTitle,
-                  periodFrom,
-                  periodTo,
-                  amountReceived: amount,
-                  amountInWords,
-                  hrManagerName,
-                  generalManagerName,
-                }}
-              />
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <AnnualEntitlementsReceiptView
+                  data={{
+                    companyName,
+                    date,
+                    employeeName: riderName,
+                    nationality,
+                    iqamaNo,
+                    jobTitle,
+                    periodFrom,
+                    periodTo,
+                    amountReceived: amount,
+                    amountInWords,
+                    hrManagerName,
+                    generalManagerName,
+                  }}
+                />
+              </LetterheadFrame>
             )}
 
             {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
@@ -1283,6 +1372,7 @@ export default function HrFormsPage() {
                   city: issueCity,
                   notes,
                   companyName,
+                  letterheadId: selectedLetterhead,
                 }}
               />
             )}
