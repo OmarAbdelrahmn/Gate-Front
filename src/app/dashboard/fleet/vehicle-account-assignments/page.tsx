@@ -567,7 +567,7 @@ export default function VehicleAccountAssignmentsPage() {
   const formatAssignmentStartDate = (item?: any) => {
     if (!item) return "—";
     let dateStr = item.effectiveFromUtc || item.effectiveFrom || item.startDate || item.createdAtUtc || item.createdDate;
-    
+
     if (!dateStr && item.platformRiderAccountId) {
       const accList = Array.isArray(platformAccounts) ? platformAccounts : [];
       const acc = accList.find((a: any) => a.id === item.platformRiderAccountId);
@@ -608,8 +608,8 @@ export default function VehicleAccountAssignmentsPage() {
       role === "source"
         ? item.sourceVehicleRegistrationNumber
         : role === "target"
-        ? item.targetVehicleRegistrationNumber
-        : item.vehicleRegistrationNumber;
+          ? item.targetVehicleRegistrationNumber
+          : item.vehicleRegistrationNumber;
 
     if (directReg) return directReg;
 
@@ -617,8 +617,8 @@ export default function VehicleAccountAssignmentsPage() {
       role === "source"
         ? item.sourceVehicleAssetNumber
         : role === "target"
-        ? item.targetVehicleAssetNumber
-        : item.vehicleAssetNumber;
+          ? item.targetVehicleAssetNumber
+          : item.vehicleAssetNumber;
 
     const vId = role === "source" ? item.sourceVehicleId : role === "target" ? item.targetVehicleId : item.vehicleId;
     if (!vId) return fallbackAsset || "—";
@@ -633,8 +633,8 @@ export default function VehicleAccountAssignmentsPage() {
       role === "source"
         ? item.sourceVehicleSerialNumber
         : role === "target"
-        ? item.targetVehicleSerialNumber
-        : item.vehicleSerialNumber;
+          ? item.targetVehicleSerialNumber
+          : item.vehicleSerialNumber;
 
     if (directSerial) return directSerial;
 
@@ -756,15 +756,15 @@ export default function VehicleAccountAssignmentsPage() {
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">
             <span>إدارة الأسطول والتشغيل</span>
             <ChevronRight className="h-3 w-3 rtl:rotate-180" />
-            <span className="text-[#1167c9] dark:text-blue-400">ربط المركبات بحسابات المنصات</span>
+            <span className="text-[#1167c9] dark:text-blue-400">المركبات فى التشغبل</span>
           </div>
           <h1 className="mt-1 text-2xl font-black text-[var(--foreground)] flex items-center gap-2">
             <Link2 className="h-7 w-7 text-[#1167c9] dark:text-blue-400" />
             {activeTab === "switches"
               ? "طلبات التبديل المعلقة"
               : activeTab === "problems"
-              ? "التحذيرات التشغيلية"
-              : "جميع الربطات النشطة"}
+                ? "التحذيرات التشغيلية"
+                : "جميع الربطات النشطة"}
           </h1>
           <p className="text-xs text-[var(--muted)] mt-0.5">
             إسناد المركبات لحسابات المنصات ومتابعة التنبيهات والتحذيرات التشغيلية دون التعطيل غير الضروري.
@@ -1303,11 +1303,10 @@ export default function VehicleAccountAssignmentsPage() {
               <button
                 type="button"
                 onClick={() => setSwitchFormData({ ...switchFormData, mode: "Immediate" })}
-                className={`p-3 rounded-xl border text-right transition-all flex flex-col gap-1 ${
-                  switchFormData.mode === "Immediate"
+                className={`p-3 rounded-xl border text-right transition-all flex flex-col gap-1 ${switchFormData.mode === "Immediate"
                     ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/20"
                     : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
-                }`}
+                  }`}
               >
                 <div className="font-bold text-xs text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
                   <CheckCircle2 className={`h-4 w-4 ${switchFormData.mode === "Immediate" ? "text-indigo-600" : "text-slate-400"}`} />
@@ -1321,11 +1320,10 @@ export default function VehicleAccountAssignmentsPage() {
               <button
                 type="button"
                 onClick={() => setSwitchFormData({ ...switchFormData, mode: "Pending" })}
-                className={`p-3 rounded-xl border text-right transition-all flex flex-col gap-1 ${
-                  switchFormData.mode === "Pending"
+                className={`p-3 rounded-xl border text-right transition-all flex flex-col gap-1 ${switchFormData.mode === "Pending"
                     ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/20"
                     : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
-                }`}
+                  }`}
               >
                 <div className="font-bold text-xs text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
                   <Clock className={`h-4 w-4 ${switchFormData.mode === "Pending" ? "text-indigo-600" : "text-slate-400"}`} />
