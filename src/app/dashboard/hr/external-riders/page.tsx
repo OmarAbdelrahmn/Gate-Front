@@ -59,6 +59,12 @@ export default function ExternalRidersPage() {
     primaryPhone: "",
     operatingCityId: "",
     operationalWorkTypeId: "",
+    buildingNumber: "",
+    street: "",
+    district: "",
+    city: "",
+    postalCode: "",
+    additionalNumber: "",
   });
   const [formErrors, setFormErrors] = useState<{
     iqamaNo?: string;
@@ -97,8 +103,8 @@ export default function ExternalRidersPage() {
             ? "You do not have permission to view external riders."
             : "ليس لديك صلاحية لعرض المناديب الخارجيين."
           : locale === "en"
-          ? "Unable to load external riders data."
-          : "تعذر تحميل بيانات المناديب الخارجيين.";
+            ? "Unable to load external riders data."
+            : "تعذر تحميل بيانات المناديب الخارجيين.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -276,6 +282,12 @@ export default function ExternalRidersPage() {
       primaryPhone: "",
       operatingCityId: "",
       operationalWorkTypeId: "",
+      buildingNumber: "",
+      street: "",
+      district: "",
+      city: "",
+      postalCode: "",
+      additionalNumber: "",
     });
     setFormErrors({});
     setShowCreateModal(true);
@@ -291,6 +303,12 @@ export default function ExternalRidersPage() {
       primaryPhone: rider.primaryPhone || "",
       operatingCityId: rider.operatingCityId || "",
       operationalWorkTypeId: rider.operationalWorkTypeId || "",
+      buildingNumber: rider.address?.buildingNumber || "",
+      street: rider.address?.street || "",
+      district: rider.address?.district || "",
+      city: rider.address?.city || "",
+      postalCode: rider.address?.postalCode || "",
+      additionalNumber: rider.address?.additionalNumber || "",
     });
     setFormErrors({});
   };
@@ -306,8 +324,34 @@ export default function ExternalRidersPage() {
       primaryPhone: "",
       operatingCityId: "",
       operationalWorkTypeId: "",
+      buildingNumber: "",
+      street: "",
+      district: "",
+      city: "",
+      postalCode: "",
+      additionalNumber: "",
     });
     setFormErrors({});
+  };
+
+  const getAddressPayload = () => {
+    const b = formData.buildingNumber.trim();
+    const s = formData.street.trim();
+    const d = formData.district.trim();
+    const c = formData.city.trim();
+    const p = formData.postalCode.trim();
+    const a = formData.additionalNumber.trim();
+    const hasAddr = b || s || d || c || p || a;
+    return hasAddr
+      ? {
+        buildingNumber: b || null,
+        street: s || null,
+        district: d || null,
+        city: c || null,
+        postalCode: p || null,
+        additionalNumber: a || null,
+      }
+      : null;
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -321,6 +365,7 @@ export default function ExternalRidersPage() {
         fullNameAr: formData.fullNameAr.trim(),
         nationality: formData.nationality.trim() || null,
         iban: formData.iban.trim() || null,
+        address: getAddressPayload(),
         primaryPhone: formData.primaryPhone.trim(),
         operatingCityId: formData.operatingCityId,
         operationalWorkTypeId: formData.operationalWorkTypeId,
@@ -372,6 +417,7 @@ export default function ExternalRidersPage() {
         fullNameAr: formData.fullNameAr.trim(),
         nationality: formData.nationality.trim(),
         iban: formData.iban.trim(),
+        address: getAddressPayload(),
         rowVersion: editingRider.rowVersion,
       });
       toast.success(
@@ -483,9 +529,8 @@ export default function ExternalRidersPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] p-4">
           <div className="relative w-full max-w-xl">
             <Search
-              className={`pointer-events-none absolute top-3 text-[var(--muted)] ${
-                locale === "en" ? "left-3" : "right-3"
-              }`}
+              className={`pointer-events-none absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"
+                }`}
               size={18}
             />
             <input
@@ -496,9 +541,8 @@ export default function ExternalRidersPage() {
                   ? "Search by name, Iqama #, phone, or ID..."
                   : "ابحث بالاسم، رقم الإقامة، الهاتف، أو المعرف..."
               }
-              className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${
-                locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"
-              }`}
+              className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"
+                }`}
             />
           </div>
         </div>
@@ -515,9 +559,8 @@ export default function ExternalRidersPage() {
         ) : (
           <div className="overflow-x-auto">
             <table
-              className={`min-w-[900px] w-full ${
-                locale === "en" ? "text-left" : "text-right"
-              }`}
+              className={`min-w-[900px] w-full ${locale === "en" ? "text-left" : "text-right"
+                }`}
             >
               <thead className="bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                 <tr>
@@ -654,7 +697,7 @@ export default function ExternalRidersPage() {
           onClick={handleCloseModals}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 shadow-2xl space-y-5"
+            className="w-full max-w-3xl rounded-2xl bg-[var(--surface)] p-6 shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div>
@@ -669,139 +712,187 @@ export default function ExternalRidersPage() {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
-              {/* 1. Iqama No */}
-              <div>
-                <Input
-                  label={locale === "en" ? "Iqama / National ID *" : "رقم الإقامة *"}
-                  value={formData.iqamaNo}
-                  onChange={(e) =>
-                    setFormData({ ...formData, iqamaNo: e.target.value })
-                  }
-                  placeholder="1234567890"
-                  maxLength={10}
-                  required
-                />
-                {formErrors.iqamaNo ? (
-                  <p className="mt-1 text-xs font-bold text-red-600">
-                    {formErrors.iqamaNo}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Column 1: Current Main Fields */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-[#1167c9] dark:text-blue-400 border-b border-[var(--border)] pb-1.5">
+                    {locale === "en" ? "Rider Details" : "البيانات الأساسية والتشغيلية"}
                   </p>
-                ) : (
-                  <p className="mt-1 text-[11px] text-[var(--muted)]">
-                    {locale === "en"
-                      ? "Must contain exactly 10 digits."
-                      : "يجب أن يتكون من 10 أرقام بالضبط."}
-                  </p>
-                )}
-              </div>
 
-              {/* 2. Full Name Arabic */}
-              <div>
-                <Input
-                  label={locale === "en" ? "Arabic Full Name *" : "الاسم الكامل بالعربية *"}
-                  value={formData.fullNameAr}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fullNameAr: e.target.value })
-                  }
-                  placeholder={locale === "en" ? "Ahmed Mohamed" : "أحمد محمد"}
-                  maxLength={200}
-                  required
-                />
-                {formErrors.fullNameAr ? (
-                  <p className="mt-1 text-xs font-bold text-red-600">
-                    {formErrors.fullNameAr}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-[11px] text-[var(--muted)]">
-                    {locale === "en"
-                      ? "Required. Maximum 200 characters."
-                      : "مطلوب ولا يتجاوز 200 حرف."}
-                  </p>
-                )}
-              </div>
+                  {/* 1. Iqama No */}
+                  <div>
+                    <Input
+                      label={locale === "en" ? "Iqama / National ID *" : "رقم الإقامة *"}
+                      value={formData.iqamaNo}
+                      onChange={(e) =>
+                        setFormData({ ...formData, iqamaNo: e.target.value })
+                      }
+                      placeholder="1234567890"
+                      maxLength={10}
+                      required
+                    />
+                    {formErrors.iqamaNo ? (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.iqamaNo}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-[var(--muted)]">
+                        {locale === "en"
+                          ? "Must contain exactly 10 digits."
+                          : "يجب أن يتكون من 10 أرقام بالضبط."}
+                      </p>
+                    )}
+                  </div>
 
-              {/* 3. Nationality */}
-              <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">
-                  {locale === "en" ? "Nationality" : "الجنسية"}
-                </label>
-                <SearchableSelect
-                  value={formData.nationality}
-                  onChange={(val) => setFormData({ ...formData, nationality: val })}
-                  options={getNationalityOptions(locale, formData.nationality)}
-                  placeholder={locale === "en" ? "Select nationality..." : "اختر الجنسية..."}
-                  searchPlaceholder={locale === "en" ? "Search nationalities..." : "ابحث عن جنسية..."}
-                />
-              </div>
+                  {/* 2. Full Name Arabic */}
+                  <div>
+                    <Input
+                      label={locale === "en" ? "Arabic Full Name *" : "الاسم الكامل بالعربية *"}
+                      value={formData.fullNameAr}
+                      onChange={(e) =>
+                        setFormData({ ...formData, fullNameAr: e.target.value })
+                      }
+                      placeholder={locale === "en" ? "Ahmed Mohamed" : "أحمد محمد"}
+                      maxLength={200}
+                      required
+                    />
+                    {formErrors.fullNameAr ? (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.fullNameAr}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-[var(--muted)]">
+                        {locale === "en"
+                          ? "Required. Maximum 200 characters."
+                          : "مطلوب ولا يتجاوز 200 حرف."}
+                      </p>
+                    )}
+                  </div>
 
-              {/* 4. IBAN */}
-              <div>
-                <Input
-                  label={locale === "en" ? "IBAN" : "رقم الآيبان"}
-                  value={formData.iban}
-                  onChange={(e) =>
-                    setFormData({ ...formData, iban: e.target.value })
-                  }
-                  placeholder="SA0380000000608010167519"
-                  dir="ltr"
-                />
-              </div>
+                  {/* 3. Nationality */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      {locale === "en" ? "Nationality" : "الجنسية"}
+                    </label>
+                    <SearchableSelect
+                      value={formData.nationality}
+                      onChange={(val) => setFormData({ ...formData, nationality: val })}
+                      options={getNationalityOptions(locale, formData.nationality)}
+                      placeholder={locale === "en" ? "Select nationality..." : "اختر الجنسية..."}
+                      searchPlaceholder={locale === "en" ? "Search nationalities..." : "ابحث عن جنسية..."}
+                    />
+                  </div>
 
-              {/* 5. Primary Phone */}
-              <div>
-                <Input
-                  label={locale === "en" ? "Primary Phone *" : "رقم الجوال الرئيسي *"}
-                  value={formData.primaryPhone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, primaryPhone: e.target.value })
-                  }
-                  placeholder="0500000000"
-                  required
-                />
-                {formErrors.primaryPhone && (
-                  <p className="mt-1 text-xs font-bold text-red-600">
-                    {formErrors.primaryPhone}
+                  {/* 4. IBAN */}
+                  <div>
+                    <Input
+                      label={locale === "en" ? "IBAN" : "رقم الآيبان"}
+                      value={formData.iban}
+                      onChange={(e) =>
+                        setFormData({ ...formData, iban: e.target.value })
+                      }
+                      placeholder="SA0380000000608010167519"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  {/* 5. Primary Phone */}
+                  <div>
+                    <Input
+                      label={locale === "en" ? "Primary Phone *" : "رقم الجوال الرئيسي *"}
+                      value={formData.primaryPhone}
+                      onChange={(e) =>
+                        setFormData({ ...formData, primaryPhone: e.target.value })
+                      }
+                      placeholder="0500000000"
+                      required
+                    />
+                    {formErrors.primaryPhone && (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.primaryPhone}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 6. Operating City */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      {locale === "en" ? "Operating City *" : "المدينة التشغيلية *"}
+                    </label>
+                    <SearchableSelect
+                      value={formData.operatingCityId}
+                      onChange={(val) => setFormData({ ...formData, operatingCityId: val })}
+                      options={cityOptions}
+                      placeholder={locale === "en" ? "Select operating city..." : "اختر المدينة التشغيلية..."}
+                      searchPlaceholder={locale === "en" ? "Search cities..." : "ابحث عن مدينة..."}
+                      required
+                    />
+                    {formErrors.operatingCityId && (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.operatingCityId}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 7. Operational Role (Work Type) */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      {locale === "en" ? "Operational Role *" : "الدور التشغيلي (نوع العمل) *"}
+                    </label>
+                    <SearchableSelect
+                      value={formData.operationalWorkTypeId}
+                      onChange={(val) => setFormData({ ...formData, operationalWorkTypeId: val })}
+                      options={workTypeOptions}
+                      placeholder={locale === "en" ? "Select operational role..." : "اختر الدور التشغيلي..."}
+                      searchPlaceholder={locale === "en" ? "Search roles..." : "ابحث عن دور تشغيلي..."}
+                      required
+                    />
+                    {formErrors.operationalWorkTypeId && (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.operationalWorkTypeId}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Column 2: Address */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-[#1167c9] dark:text-blue-400 border-b border-[var(--border)] pb-1.5">
+                    {locale === "en" ? "Address (Optional)" : "العنوان (اختياري)"}
                   </p>
-                )}
-              </div>
-
-              {/* 6. Operating City */}
-              <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">
-                  {locale === "en" ? "Operating City *" : "المدينة التشغيلية *"}
-                </label>
-                <SearchableSelect
-                  value={formData.operatingCityId}
-                  onChange={(val) => setFormData({ ...formData, operatingCityId: val })}
-                  options={cityOptions}
-                  placeholder={locale === "en" ? "Select operating city..." : "اختر المدينة التشغيلية..."}
-                  searchPlaceholder={locale === "en" ? "Search cities..." : "ابحث عن مدينة..."}
-                  required
-                />
-                {formErrors.operatingCityId && (
-                  <p className="mt-1 text-xs font-bold text-red-600">
-                    {formErrors.operatingCityId}
-                  </p>
-                )}
-              </div>
-
-              {/* 7. Operational Role (Work Type) */}
-              <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">
-                  {locale === "en" ? "Operational Role *" : "الدور التشغيلي (نوع العمل) *"}
-                </label>
-                <SearchableSelect
-                  value={formData.operationalWorkTypeId}
-                  onChange={(val) => setFormData({ ...formData, operationalWorkTypeId: val })}
-                  options={workTypeOptions}
-                  placeholder={locale === "en" ? "Select operational role..." : "اختر الدور التشغيلي..."}
-                  searchPlaceholder={locale === "en" ? "Search roles..." : "ابحث عن دور تشغيلي..."}
-                  required
-                />
-                {formErrors.operationalWorkTypeId && (
-                  <p className="mt-1 text-xs font-bold text-red-600">
-                    {formErrors.operationalWorkTypeId}
-                  </p>
-                )}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <Input
+                      label={locale === "en" ? "Building No." : "رقم المبنى"}
+                      value={formData.buildingNumber}
+                      onChange={(e) => setFormData({ ...formData, buildingNumber: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "Street" : "اسم الشارع"}
+                      value={formData.street}
+                      onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "District" : "الحي"}
+                      value={formData.district}
+                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "City" : "المدينة"}
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "Postal Code" : "الرمز البريدي"}
+                      value={formData.postalCode}
+                      onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "Additional No." : "الرقم الإضافي"}
+                      value={formData.additionalNumber}
+                      onChange={(e) => setFormData({ ...formData, additionalNumber: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-[var(--border)]">
@@ -829,7 +920,7 @@ export default function ExternalRidersPage() {
           onClick={handleCloseModals}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 shadow-2xl space-y-5"
+            className="w-full max-w-3xl rounded-2xl bg-[var(--surface)] p-6 shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div>
@@ -844,79 +935,127 @@ export default function ExternalRidersPage() {
             </div>
 
             <form onSubmit={handleUpdateSubmit} className="space-y-4">
-              <div>
-                <Input
-                  label={locale === "en" ? "Iqama / National ID" : "رقم الإقامة"}
-                  value={formData.iqamaNo}
-                  onChange={(e) =>
-                    setFormData({ ...formData, iqamaNo: e.target.value })
-                  }
-                  placeholder="1234567890"
-                  maxLength={10}
-                  required
-                />
-                {formErrors.iqamaNo ? (
-                  <p className="mt-1 text-xs font-bold text-red-600">
-                    {formErrors.iqamaNo}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Column 1: Current Main Fields */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-[#1167c9] dark:text-blue-400 border-b border-[var(--border)] pb-1.5">
+                    {locale === "en" ? "Rider Details" : "البيانات الأساسية"}
                   </p>
-                ) : (
-                  <p className="mt-1 text-[11px] text-[var(--muted)]">
-                    {locale === "en"
-                      ? "Must contain exactly 10 digits."
-                      : "يجب أن يتكون من 10 أرقام بالضبط."}
-                  </p>
-                )}
-              </div>
 
-              <div>
-                <Input
-                  label={locale === "en" ? "Arabic Full Name" : "الاسم الكامل بالعربية"}
-                  value={formData.fullNameAr}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fullNameAr: e.target.value })
-                  }
-                  placeholder={locale === "en" ? "Ahmed Mohamed" : "أحمد محمد"}
-                  maxLength={200}
-                  required
-                />
-                {formErrors.fullNameAr ? (
-                  <p className="mt-1 text-xs font-bold text-red-600">
-                    {formErrors.fullNameAr}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-[11px] text-[var(--muted)]">
-                    {locale === "en"
-                      ? "Required. Maximum 200 characters."
-                      : "مطلوب ولا يتجاوز 200 حرف."}
-                  </p>
-                )}
-              </div>
+                  <div>
+                    <Input
+                      label={locale === "en" ? "Iqama / National ID" : "رقم الإقامة"}
+                      value={formData.iqamaNo}
+                      onChange={(e) =>
+                        setFormData({ ...formData, iqamaNo: e.target.value })
+                      }
+                      placeholder="1234567890"
+                      maxLength={10}
+                      required
+                    />
+                    {formErrors.iqamaNo ? (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.iqamaNo}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-[var(--muted)]">
+                        {locale === "en"
+                          ? "Must contain exactly 10 digits."
+                          : "يجب أن يتكون من 10 أرقام بالضبط."}
+                      </p>
+                    )}
+                  </div>
 
-              {/* Nationality */}
-              <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">
-                  {locale === "en" ? "Nationality" : "الجنسية"}
-                </label>
-                <SearchableSelect
-                  value={formData.nationality}
-                  onChange={(val) => setFormData({ ...formData, nationality: val })}
-                  options={getNationalityOptions(locale, formData.nationality)}
-                  placeholder={locale === "en" ? "Select nationality..." : "اختر الجنسية..."}
-                  searchPlaceholder={locale === "en" ? "Search nationalities..." : "ابحث عن جنسية..."}
-                />
-              </div>
+                  <div>
+                    <Input
+                      label={locale === "en" ? "Arabic Full Name" : "الاسم الكامل بالعربية"}
+                      value={formData.fullNameAr}
+                      onChange={(e) =>
+                        setFormData({ ...formData, fullNameAr: e.target.value })
+                      }
+                      placeholder={locale === "en" ? "Ahmed Mohamed" : "أحمد محمد"}
+                      maxLength={200}
+                      required
+                    />
+                    {formErrors.fullNameAr ? (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.fullNameAr}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-[var(--muted)]">
+                        {locale === "en"
+                          ? "Required. Maximum 200 characters."
+                          : "مطلوب ولا يتجاوز 200 حرف."}
+                      </p>
+                    )}
+                  </div>
 
-              {/* IBAN */}
-              <div>
-                <Input
-                  label={locale === "en" ? "IBAN" : "رقم الآيبان"}
-                  value={formData.iban}
-                  onChange={(e) =>
-                    setFormData({ ...formData, iban: e.target.value })
-                  }
-                  placeholder="SA0380000000608010167519"
-                  dir="ltr"
-                />
+                  {/* Nationality */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      {locale === "en" ? "Nationality" : "الجنسية"}
+                    </label>
+                    <SearchableSelect
+                      value={formData.nationality}
+                      onChange={(val) => setFormData({ ...formData, nationality: val })}
+                      options={getNationalityOptions(locale, formData.nationality)}
+                      placeholder={locale === "en" ? "Select nationality..." : "اختر الجنسية..."}
+                      searchPlaceholder={locale === "en" ? "Search nationalities..." : "ابحث عن جنسية..."}
+                    />
+                  </div>
+
+                  {/* IBAN */}
+                  <div>
+                    <Input
+                      label={locale === "en" ? "IBAN" : "رقم الآيبان"}
+                      value={formData.iban}
+                      onChange={(e) =>
+                        setFormData({ ...formData, iban: e.target.value })
+                      }
+                      placeholder="SA0380000000608010167519"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Column 2: Address */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-[#1167c9] dark:text-blue-400 border-b border-[var(--border)] pb-1.5">
+                    {locale === "en" ? "Address (Optional)" : "العنوان (اختياري)"}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <Input
+                      label={locale === "en" ? "Building No." : "رقم المبنى"}
+                      value={formData.buildingNumber}
+                      onChange={(e) => setFormData({ ...formData, buildingNumber: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "Street" : "اسم الشارع"}
+                      value={formData.street}
+                      onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "District" : "الحي"}
+                      value={formData.district}
+                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "City" : "المدينة"}
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "Postal Code" : "الرمز البريدي"}
+                      value={formData.postalCode}
+                      onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                    />
+                    <Input
+                      label={locale === "en" ? "Additional No." : "الرقم الإضافي"}
+                      value={formData.additionalNumber}
+                      onChange={(e) => setFormData({ ...formData, additionalNumber: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-[var(--border)]">

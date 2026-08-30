@@ -195,6 +195,14 @@ export const navigation: NavItem[] = [
         permission: "fleet.assignments.read",
       },
       {
+        label: "ربط المركبات بالمنصات",
+        labelKey: "nav.vehicleAccountAssignments",
+        href: "/dashboard/fleet/vehicle-account-assignments",
+        icon: Server,
+        roles: ["admin", "member"],
+        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+      },
+      {
         label: "الأعطال والمشاكل",
         labelKey: "nav.vehicleIssues",
         href: "/dashboard/fleet/issues",

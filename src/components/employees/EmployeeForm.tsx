@@ -119,29 +119,60 @@ export function EmployeeForm({
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const effectiveIsEmployee = engagement === "OutsideRider" ? false : isEmployee;
-    const status = String(form.get("status") ?? "");
+
+    const getFieldVal = (name: string) => {
+      const val = form.get(name);
+      if (val !== null && val !== undefined && String(val).trim() !== "") {
+        return String(val).trim();
+      }
+      if (initial[name] !== undefined && initial[name] !== null) {
+        return String(initial[name]).trim();
+      }
+      return null;
+    };
+
+    const status = getFieldVal("status") || String(initial.status ?? "Draft");
 
     const payload: Record<string, unknown> = {
       rowVersion: initial.rowVersion ?? null,
       rider: effectiveIsEmployee
         ? null
         : {
-            tShirtSize: blank(form.get("tShirtSize")) ?? (initial.tShirtSize ? String(initial.tShirtSize) : null),
-            operationalNotes: blank(form.get("operationalNotes")) ?? (initial.operationalNotes ? String(initial.operationalNotes) : null),
-            rowVersion: initial.riderRowVersion ?? (initial.rider as { rowVersion?: string })?.rowVersion ?? null,
-          },
+          tShirtSize: blank(form.get("tShirtSize")) ?? (initial.tShirtSize ? String(initial.tShirtSize) : null),
+          operationalNotes: blank(form.get("operationalNotes")) ?? (initial.operationalNotes ? String(initial.operationalNotes) : null),
+          rowVersion: initial.riderRowVersion ?? (initial.rider as { rowVersion?: string })?.rowVersion ?? null,
+        },
     };
-    allFields.forEach(([key]) => (payload[key] = blank(form.get(key))));
+
+    // Populate all fields from allFields definition into payload with fallback to initial data
+    for (const [key] of allFields) {
+      payload[key] = getFieldVal(key);
+    }
+
+    const buildingNumber = blank(form.get("addressBuildingNumber")) ?? ((initial.address as any)?.buildingNumber || null);
+    const street = blank(form.get("addressStreet")) ?? ((initial.address as any)?.street || null);
+    const district = blank(form.get("addressDistrict")) ?? ((initial.address as any)?.district || null);
+    const city = blank(form.get("addressCity")) ?? ((initial.address as any)?.city || null);
+    const postalCode = blank(form.get("addressPostalCode")) ?? ((initial.address as any)?.postalCode || null);
+    const additionalNumber = blank(form.get("addressAdditionalNumber")) ?? ((initial.address as any)?.additionalNumber || null);
+
+    const hasAddress = buildingNumber || street || district || city || postalCode || additionalNumber;
+    payload.address = hasAddress
+      ? { buildingNumber, street, district, city, postalCode, additionalNumber }
+      : null;
+
     payload.isEmployee = effectiveIsEmployee;
-    payload.engagementType = engagement;
+    payload.engagementType = engagement || String(initial.engagementType ?? "SponsoredInternal");
     payload.status = status;
-    payload.statusReason = blank(form.get("statusReason"));
-    payload.gender = blank(form.get("gender"));
-    payload.maritalStatus = blank(form.get("maritalStatus"));
-    payload.notes = blank(form.get("notes"));
-    payload.operationalWorkTypeId = blank(form.get("operationalWorkTypeId"));
-    payload.operatingCityId = blank(form.get("operatingCityId"));
-    payload.sponsorId = engagement === "SponsoredInternal" ? blank(form.get("sponsorId")) : null;
+    payload.gender = getFieldVal("gender");
+    payload.maritalStatus = getFieldVal("maritalStatus");
+    payload.notes = getFieldVal("notes");
+    payload.operationalWorkTypeId = getFieldVal("operationalWorkTypeId");
+    payload.operatingCityId = getFieldVal("operatingCityId");
+    payload.sponsorId = engagement === "SponsoredInternal" ? getFieldVal("sponsorId") : null;
+    payload.residencyProfession = getFieldVal("residencyProfession");
+    payload.workingForMeAs = getFieldVal("workingForMeAs");
+    payload.nationality = getFieldVal("nationality");
 
     // Validation Rules matching API Spec
     if (!payload.fullNameAr || !payload.engagementType || !payload.status) {
@@ -228,12 +259,12 @@ export function EmployeeForm({
     },
     ...(!isEmployee
       ? [
-          {
-            key: "rider" as const,
-            label: locale === "en" ? "Delegate Details" : "بيانات المندوب",
-            icon: Bike,
-          },
-        ]
+        {
+          key: "rider" as const,
+          label: locale === "en" ? "Delegate Details" : "بيانات المندوب",
+          icon: Bike,
+        },
+      ]
       : []),
   ];
 
@@ -350,13 +381,62 @@ export function EmployeeForm({
             />
           </section>
 
-          <section role="tabpanel" hidden={active !== "contact"} className="grid gap-4 sm:grid-cols-2">
-            <h2 className="col-span-full text-lg font-black">
-              {locale === "en" ? "Contact & Emergency Details" : "بيانات التواصل والطوارئ"}
-            </h2>
-            {renderFields(contact)}
-            {engagement === "OutsideRider" &&
-              renderFields(["alternateContactName", "alternateContactPhone"])}
+          <section role="tabpanel" hidden={active !== "contact"} className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-4">
+              <h2 className="text-lg font-black text-[#1167c9] dark:text-blue-400 border-b border-[var(--border)] pb-2">
+                {locale === "en" ? "Contact & Emergency Details" : "بيانات التواصل والطوارئ"}
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-1">
+                {renderFields(contact)}
+                {engagement === "OutsideRider" &&
+                  renderFields(["alternateContactName", "alternateContactPhone"])}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h2 className="text-lg font-black text-[#1167c9] dark:text-blue-400 border-b border-[var(--border)] pb-2">
+                {locale === "en" ? "Address (Optional)" : "العنوان (اختياري)"}
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(() => {
+                  const addr = (initial.address as any) || {};
+                  return (
+                    <>
+                      <Input
+                        label={locale === "en" ? "Building Number" : "رقم المبنى"}
+                        name="addressBuildingNumber"
+                        defaultValue={addr.buildingNumber || ""}
+                      />
+                      <Input
+                        label={locale === "en" ? "Street Name" : "اسم الشارع"}
+                        name="addressStreet"
+                        defaultValue={addr.street || ""}
+                      />
+                      <Input
+                        label={locale === "en" ? "District" : "الحي"}
+                        name="addressDistrict"
+                        defaultValue={addr.district || ""}
+                      />
+                      <Input
+                        label={locale === "en" ? "City" : "المدينة"}
+                        name="addressCity"
+                        defaultValue={addr.city || ""}
+                      />
+                      <Input
+                        label={locale === "en" ? "Postal Code" : "الرمز البريدي"}
+                        name="addressPostalCode"
+                        defaultValue={addr.postalCode || ""}
+                      />
+                      <Input
+                        label={locale === "en" ? "Additional Number" : "الرقم الإضافي"}
+                        name="addressAdditionalNumber"
+                        defaultValue={addr.additionalNumber || ""}
+                      />
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
           </section>
 
           <section role="tabpanel" hidden={active !== "work"} className="grid gap-4 sm:grid-cols-2">

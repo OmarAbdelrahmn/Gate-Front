@@ -1,4 +1,5 @@
 import { authFetch } from "../auth/api";
+import type { AddressDto } from "./types";
 
 export type ExternalRider = {
   employeeId: string;
@@ -7,6 +8,7 @@ export type ExternalRider = {
   fullNameAr: string;
   nationality?: string | null;
   iban?: string | null;
+  address?: AddressDto | null;
   primaryPhone?: string;
   operatingCityId?: string;
   operationalWorkTypeId?: string;
@@ -19,6 +21,7 @@ export type CreateExternalRiderRequest = {
   fullNameAr: string;
   nationality?: string | null;
   iban?: string | null;
+  address?: AddressDto | null;
   primaryPhone: string;
   operatingCityId: string;
   operationalWorkTypeId: string;
@@ -29,6 +32,7 @@ export type UpdateExternalRiderRequest = {
   fullNameAr?: string;
   nationality?: string | null;
   iban?: string | null;
+  address?: AddressDto | null;
   primaryPhone?: string;
   operatingCityId?: string;
   operationalWorkTypeId?: string;

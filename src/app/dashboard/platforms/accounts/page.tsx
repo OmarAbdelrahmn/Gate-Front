@@ -23,7 +23,7 @@ import {
   type PlatformResponse,
   type AccountStatus,
 } from "@/lib/platforms/api";
-import { listEmployees, listOperatingCities, listRiders, type OperatingCity } from "@/lib/workforce/api";
+import { listEmployees, listOperatingCities, listRiders, listSponsors, type OperatingCity, type Sponsor } from "@/lib/workforce/api";
 import type { Employee, Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -55,6 +55,7 @@ export default function PlatformAccountsPage() {
   const [accounts, setAccounts] = useState<AccountResponse[]>([]);
   const [platforms, setPlatforms] = useState<PlatformResponse[]>([]);
   const [cities, setCities] = useState<OperatingCity[]>([]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
 
@@ -64,6 +65,7 @@ export default function PlatformAccountsPage() {
   // Filters
   const [filterPlatformId, setFilterPlatformId] = useState("");
   const [filterCityId, setFilterCityId] = useState("");
+  const [filterSponsorId, setFilterSponsorId] = useState("");
   const [filterPaymentModel, setFilterPaymentModel] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterOwnerId, setFilterOwnerId] = useState("");
@@ -96,6 +98,7 @@ export default function PlatformAccountsPage() {
   const [accountFormData, setAccountFormData] = useState<AccountUpsertRequest>({
     platformId: "",
     operatingCityId: "",
+    sponsorId: "",
     ownerRiderProfileId: "",
     code: "",
     externalAccountId: "",
@@ -133,10 +136,11 @@ export default function PlatformAccountsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [accRes, platRes, cityRes, empRes, riderRes] = await Promise.allSettled([
+      const [accRes, platRes, cityRes, sponsorRes, empRes, riderRes] = await Promise.allSettled([
         getPlatformAccounts({
           platformId: filterPlatformId || undefined,
           operatingCityId: filterCityId || undefined,
+          sponsorId: filterSponsorId || undefined,
           paymentModel: (filterPaymentModel as any) || undefined,
           status: filterStatus || undefined,
           ownerRiderProfileId: filterOwnerId || undefined,
@@ -145,6 +149,7 @@ export default function PlatformAccountsPage() {
         }),
         getPlatforms(true),
         listOperatingCities(),
+        listSponsors(),
         listEmployees(),
         listRiders(),
       ]);
@@ -161,6 +166,7 @@ export default function PlatformAccountsPage() {
         setPlatforms(platRes.value);
       }
       if (cityRes.status === "fulfilled") setCities(cityRes.value);
+      if (sponsorRes.status === "fulfilled") setSponsors(sponsorRes.value);
       if (empRes.status === "fulfilled") setEmployees(empRes.value);
       if (riderRes.status === "fulfilled") setRiders(riderRes.value);
     } catch (err: any) {
@@ -174,7 +180,7 @@ export default function PlatformAccountsPage() {
     if (can("platform_accounts.read")) {
       loadData();
     }
-  }, [filterPlatformId, filterCityId, filterPaymentModel, filterStatus, filterOwnerId, currentOnly, includeArchived]);
+  }, [filterPlatformId, filterCityId, filterSponsorId, filterPaymentModel, filterStatus, filterOwnerId, currentOnly, includeArchived]);
 
   if (!can("platform_accounts.read")) {
     return (
@@ -195,6 +201,11 @@ export default function PlatformAccountsPage() {
   const cityOptions = cities.map((c) => ({
     value: c.id,
     label: c.globalCityAr || c.code,
+  }));
+
+  const sponsorOptions = sponsors.map((s) => ({
+    value: s.id,
+    label: locale === "en" ? (s.registryNameEn || s.registryNameAr) : s.registryNameAr,
   }));
 
   const employeeOptions = employees.map((e) => ({
@@ -304,7 +315,8 @@ export default function PlatformAccountsPage() {
       acc.externalAccountId?.toLowerCase().includes(term) ||
       acc.userName?.toLowerCase().includes(term) ||
       acc.ownerRiderNameAr?.toLowerCase().includes(term) ||
-      acc.platformNameAr?.toLowerCase().includes(term)
+      acc.platformNameAr?.toLowerCase().includes(term) ||
+      acc.sponsorNameAr?.toLowerCase().includes(term)
     );
   });
 
@@ -317,6 +329,7 @@ export default function PlatformAccountsPage() {
     setAccountFormData({
       platformId: initialPlatId,
       operatingCityId: cities[0]?.id || "",
+      sponsorId: sponsors[0]?.id || "",
       ownerRiderProfileId: "",
       code: "",
       externalAccountId: "",
@@ -337,6 +350,7 @@ export default function PlatformAccountsPage() {
     setAccountFormData({
       platformId: acc.platformId,
       operatingCityId: acc.operatingCityId,
+      sponsorId: acc.sponsorId || "",
       ownerRiderProfileId: acc.ownerRiderProfileId,
       code: acc.code,
       externalAccountId: acc.externalAccountId || "",
@@ -457,8 +471,8 @@ export default function PlatformAccountsPage() {
   // Submit Handlers
   const handleSubmitAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accountFormData.platformId || !accountFormData.operatingCityId || !accountFormData.ownerRiderProfileId || !accountFormData.code || !accountFormData.paymentModel) {
-      toast.error("خطأ في المدخلات", "يرجى تعبئة المنصة، المدينة، صاحب الحساب، نموذج الدفع، ورمز الحساب.");
+    if (!accountFormData.platformId || !accountFormData.operatingCityId || !accountFormData.sponsorId || !accountFormData.ownerRiderProfileId || !accountFormData.code || !accountFormData.paymentModel) {
+      toast.error("خطأ في المدخلات", "يرجى تعبئة المنصة، المدينة، الكفيل، صاحب الحساب، نموذج الدفع، ورمز الحساب.");
       return;
     }
 
@@ -621,7 +635,7 @@ export default function PlatformAccountsPage() {
 
       {/* Filter Bar */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <label className="mb-1 block text-xs font-bold text-[var(--muted)]">المنصة</label>
             <SearchableSelect
@@ -639,6 +653,16 @@ export default function PlatformAccountsPage() {
               value={filterCityId}
               onChange={setFilterCityId}
               placeholder="تصفية حسب المدينة..."
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">الكفيل</label>
+            <SearchableSelect
+              options={[{ value: "", label: "جميع الكفلاء" }, ...sponsorOptions]}
+              value={filterSponsorId}
+              onChange={setFilterSponsorId}
+              placeholder="تصفية حسب الكفيل..."
             />
           </div>
 
@@ -743,7 +767,7 @@ export default function PlatformAccountsPage() {
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
                   <th className="px-6 py-4">{t("platforms.accountCode")}</th>
-                  <th className="px-6 py-4">المنصة والمدينة</th>
+                  <th className="px-6 py-4">المنصة والمدينة والكفيل</th>
                   <th className="px-6 py-4">{t("platforms.paymentModel")}</th>
                   <th className="px-6 py-4">{t("platforms.ownerRider")}</th>
                   <th className="px-6 py-4">{t("platforms.actualRider")} (التعيين الحالى)</th>
@@ -775,6 +799,7 @@ export default function PlatformAccountsPage() {
                       </div>
                       <div className="text-xs text-[var(--muted)]">
                         {acc.operatingCityNameAr || "—"}
+                        {acc.sponsorNameAr ? ` · ${acc.sponsorNameAr}` : ""}
                       </div>
                     </td>
 
@@ -898,7 +923,7 @@ export default function PlatformAccountsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-bold text-slate-700">
                 المنصة <span className="text-red-500">*</span>
@@ -931,6 +956,18 @@ export default function PlatformAccountsPage() {
                 onChange={(val) => setAccountFormData({ ...accountFormData, operatingCityId: val })}
                 placeholder="اختر المدينة..."
                 disabled={Boolean(editingAccount && editingAccount.status === "Assigned")}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">
+                الكفيل <span className="text-red-500">*</span>
+              </label>
+              <SearchableSelect
+                options={sponsorOptions}
+                value={accountFormData.sponsorId}
+                onChange={(val) => setAccountFormData({ ...accountFormData, sponsorId: val })}
+                placeholder="اختر الكفيل..."
               />
             </div>
           </div>

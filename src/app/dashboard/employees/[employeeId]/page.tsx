@@ -13,6 +13,7 @@ import {
   ContactRound,
   FileText,
   History,
+  MapPin,
   Pencil,
   Plus,
   ShieldCheck,
@@ -957,7 +958,7 @@ export default function EmployeeDetailsPage({
         );
       })()}
 
-      <div className="grid gap-6 sm:grid-cols-3">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-5">
           <div className="flex items-center justify-between gap-2 border-b pb-3 mb-3">
             <h2 className="flex items-center gap-2 font-black">
@@ -1016,6 +1017,67 @@ export default function EmployeeDetailsPage({
               )}
             </div>
           )}
+        </Card>
+
+        {/* National Address Card */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-3 mb-3">
+            <h2 className="flex items-center gap-2 font-black">
+              <MapPin size={18} className="text-[#1167c9]" />
+              {locale === "en" ? "Address" : "العنوان"}
+            </h2>
+          </div>
+          {(() => {
+            const addr = (employee.address || rider?.address || (empRec.address as any)) || {};
+            const hasAddress = addr.buildingNumber || addr.street || addr.district || addr.city || addr.postalCode || addr.additionalNumber;
+            if (!hasAddress) {
+              return (
+                <p className="text-sm text-[var(--muted)] font-medium">
+                  {locale === "en" ? "No national address registered." : "لا يوجد عنوان وطني مسجل."}
+                </p>
+              );
+            }
+            return (
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {addr.buildingNumber && (
+                  <div>
+                    <span className="font-bold text-[var(--muted)] block">{locale === "en" ? "Building No." : "رقم المبنى"}</span>
+                    <span className="font-extrabold">{addr.buildingNumber}</span>
+                  </div>
+                )}
+                {addr.street && (
+                  <div>
+                    <span className="font-bold text-[var(--muted)] block">{locale === "en" ? "Street" : "اسم الشارع"}</span>
+                    <span className="font-extrabold">{addr.street}</span>
+                  </div>
+                )}
+                {addr.district && (
+                  <div>
+                    <span className="font-bold text-[var(--muted)] block">{locale === "en" ? "District" : "الحي"}</span>
+                    <span className="font-extrabold">{addr.district}</span>
+                  </div>
+                )}
+                {addr.city && (
+                  <div>
+                    <span className="font-bold text-[var(--muted)] block">{locale === "en" ? "City" : "المدينة"}</span>
+                    <span className="font-extrabold">{addr.city}</span>
+                  </div>
+                )}
+                {addr.postalCode && (
+                  <div>
+                    <span className="font-bold text-[var(--muted)] block">{locale === "en" ? "Postal Code" : "الرمز البريدي"}</span>
+                    <span className="font-extrabold font-mono">{addr.postalCode}</span>
+                  </div>
+                )}
+                {addr.additionalNumber && (
+                  <div>
+                    <span className="font-bold text-[var(--muted)] block">{locale === "en" ? "Additional No." : "الرقم الإضافي"}</span>
+                    <span className="font-extrabold font-mono">{addr.additionalNumber}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </Card>
 
         <Card className="p-5">

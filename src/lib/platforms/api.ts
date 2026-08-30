@@ -58,6 +58,9 @@ export interface AccountResponse {
   operatingCityId: string;
   operatingCityNameAr?: string | null;
   operatingCityNameEn?: string | null;
+  sponsorId: string;
+  sponsorNameAr?: string | null;
+  sponsorNameEn?: string | null;
   ownerRiderProfileId: string;
   ownerEmployeeId?: string | null;
   ownerRiderNameAr?: string | null;
@@ -79,6 +82,7 @@ export interface AccountResponse {
 export interface AccountUpsertRequest {
   platformId: string;
   operatingCityId: string;
+  sponsorId: string;
   ownerRiderProfileId: string;
   code: string;
   externalAccountId?: string | null;
@@ -157,6 +161,7 @@ export interface AccountFilterParams {
   accountId?: string;
   platformId?: string;
   operatingCityId?: string;
+  sponsorId?: string;
   ownerRiderProfileId?: string;
   actualRiderProfileId?: string;
   paymentModel?: PaymentModel | string;
@@ -199,6 +204,7 @@ export const getPlatformAccounts = async (filters?: AccountFilterParams) => {
   if (filters?.accountId) query.set("accountId", filters.accountId);
   if (filters?.platformId) query.set("platformId", filters.platformId);
   if (filters?.operatingCityId) query.set("operatingCityId", filters.operatingCityId);
+  if (filters?.sponsorId) query.set("sponsorId", filters.sponsorId);
   if (filters?.ownerRiderProfileId) query.set("ownerRiderProfileId", filters.ownerRiderProfileId);
   if (filters?.actualRiderProfileId) query.set("actualRiderProfileId", filters.actualRiderProfileId);
   if (filters?.paymentModel) query.set("paymentModel", filters.paymentModel);

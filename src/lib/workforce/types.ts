@@ -10,6 +10,15 @@ export type EmployeeStatus =
   | "Accident"
   | "Sick";
 
+export interface AddressDto {
+  buildingNumber?: string | null;
+  street?: string | null;
+  district?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  additionalNumber?: string | null;
+}
+
 export type CurrentWorkPlatform = {
   id: string;
   code?: string | null;
@@ -27,6 +36,7 @@ export type Employee = {
   fullNameEn: string | null;
   nationality: string | null;
   iban?: string | null;
+  address?: AddressDto | null;
   birthDate?: string | null;
   gender?: string | null;
   primaryPhone: string | null;
@@ -104,6 +114,7 @@ export type Rider = {
   fullNameEn: string | null;
   nationality?: string | null;
   iban?: string | null;
+  address?: AddressDto | null;
   engagementType: string;
   status: EmployeeStatus | string;
   tShirtSize: string | null;
@@ -185,6 +196,7 @@ export type EmployeeUpsertPayload = {
   fullNameEn: string | null;
   nationality: string | null;
   iban: string | null;
+  address?: AddressDto | null;
   birthDate: string | null;
   gender: string | null;
   primaryPhone: string | null;
