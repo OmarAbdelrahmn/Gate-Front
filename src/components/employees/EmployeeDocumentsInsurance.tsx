@@ -7,6 +7,9 @@ import {
   Download,
   Eye,
   FilePlus,
+  History,
+  Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -43,6 +46,43 @@ import { systemPrompt } from "../ui/SystemDialog";
 import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
 
+function getExpiryBadge(expiryDate: string | null, locale: "ar" | "en" = "ar") {
+  if (!expiryDate) {
+    return {
+      label: locale === "en" ? "No Expiry" : "بلا تاريخ انتهاء",
+      classes: "bg-slate-100 text-slate-700 border border-slate-200 font-bold",
+    };
+  }
+  const days = Math.ceil((new Date(expiryDate).getTime() - Date.now()) / 86_400_000);
+  if (days < 0) {
+    return {
+      label: locale === "en" ? "Expired" : "منتهية",
+      classes: "bg-rose-100 text-rose-950 border border-rose-300 font-black",
+    };
+  }
+  if (days <= 30) {
+    return {
+      label: locale === "en" ? "Expiring Soon" : "قريبة الانتهاء",
+      classes: "bg-amber-100 text-amber-950 border border-amber-300 font-black",
+    };
+  }
+  return {
+    label: locale === "en" ? "Valid" : "سارية",
+    classes: "bg-emerald-100 text-emerald-950 border border-emerald-300 font-black",
+  };
+}
+
+function formatDocDate(value: string | null, locale: "ar" | "en" = "ar") {
+  if (!value) return "—";
+  try {
+    return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-arab" : "en-US", {
+      dateStyle: "medium",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
 export function EmployeeDocumentsInsurance({
   employeeId,
   riderProfileId,
@@ -64,16 +104,19 @@ export function EmployeeDocumentsInsurance({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [versionTarget, setVersionTarget] = useState<EmployeeDocument | null>(null);
-  const [editingDocument, setEditingDocument] = useState<EmployeeDocument | null>(null);
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [versions, setVersions] = useState<Record<string, EmployeeDocumentVersion[]>>({});
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [selectedDocTypeId, setSelectedDocTypeId] = useState("");
   const [selectedRiderKind, setSelectedRiderKind] = useState("");
   const [showUploadForm, setShowUploadForm] = useState(false);
-  const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [showPolicyForm, setShowPolicyForm] = useState(false);
   const [openPolicyId, setOpenPolicyId] = useState<string | null>(null);
   const versionInput = useRef<HTMLInputElement>(null);
+
+  const [previews, setPreviews] = useState<
+    Record<string, { url: string; contentType: string; loading: boolean; error?: string }>
+  >({});
 
   const [previewModalData, setPreviewModalData] = useState<{
     title: string;
@@ -136,6 +179,36 @@ export function EmployeeDocumentsInsurance({
   useEffect(() => {
     void load();
   }, [employeeId]);
+
+  useEffect(() => {
+    if (!docs.length) return;
+    docs.forEach((doc) => {
+      if (doc.currentFileName && !previews[doc.id]) {
+        setPreviews((prev) => ({
+          ...prev,
+          [doc.id]: { url: "", contentType: "", loading: true },
+        }));
+        previewEmployeeDocument(employeeId, doc.id)
+          .then((res) => {
+            setPreviews((prev) => ({
+              ...prev,
+              [doc.id]: { url: res.url, contentType: res.contentType, loading: false },
+            }));
+          })
+          .catch((e) => {
+            setPreviews((prev) => ({
+              ...prev,
+              [doc.id]: {
+                url: "",
+                contentType: "",
+                loading: false,
+                error: e instanceof Error ? e.message : "Error",
+              },
+            }));
+          });
+      }
+    });
+  }, [docs, employeeId]);
 
   useEffect(() => {
     if (companyId) void getInsurancePlans(companyId).then(setPlans);
@@ -227,9 +300,8 @@ export function EmployeeDocumentsInsurance({
     return true;
   }
 
-  async function saveMetadata(e: FormEvent<HTMLFormElement>) {
+  async function saveMetadata(e: FormEvent<HTMLFormElement>, targetDoc: EmployeeDocument) {
     e.preventDefault();
-    if (!editingDocument) return;
     const f = new FormData(e.currentTarget);
     const docNumber = String(f.get("documentNumber") || "").trim();
     const issueDate = String(f.get("issueDate") || "").trim();
@@ -247,17 +319,17 @@ export function EmployeeDocumentsInsurance({
     await run(() =>
       updateEmployeeDocument(
         employeeId,
-        editingDocument.id,
+        targetDoc.id,
         {
           documentNumber: docNumber || null,
           issueDate: issueDate || null,
           expiryDate: expiryDate || null,
           notes: String(f.get("notes") || "") || null,
         },
-        editingDocument.rowVersion,
+        targetDoc.rowVersion,
       ),
     );
-    setEditingDocument(null);
+    setEditingDocId(null);
   }
 
   async function toggleHistory(doc: EmployeeDocument) {
@@ -544,250 +616,313 @@ export function EmployeeDocumentsInsurance({
               </p>
             </form>
           )}
-          {editingDocument && (
-            <form
-              onSubmit={saveMetadata}
-              className="mt-5 grid gap-3 rounded-xl border border-blue-200 bg-blue-50/50 p-4 sm:grid-cols-2"
-            >
-              <h3 className="col-span-full font-black">
-                {locale === "en"
-                  ? `Edit Metadata: ${((editingDocument as Record<string, unknown>).documentTypeNameEn as string | undefined) || editingDocument.documentTypeNameAr}`
-                  : `تعديل بيانات ${editingDocument.documentTypeNameAr}`}
-              </h3>
-              <label className="grid gap-2 text-sm font-bold">
-                {locale === "en" ? "Document Number" : "رقم الوثيقة"}
-                <input
-                  name="documentNumber"
-                  required
-                  defaultValue={editingDocument.documentNumber ?? ""}
-                  className={cls}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-bold">
-                {locale === "en" ? "Issue Date" : "تاريخ الإصدار"}
-                <input
-                  name="issueDate"
-                  type="date"
-                  required
-                  defaultValue={editingDocument.issueDate ?? ""}
-                  className={cls}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-bold">
-                {locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}
-                <input
-                  name="expiryDate"
-                  type="date"
-                  required
-                  defaultValue={editingDocument.expiryDate ?? ""}
-                  className={cls}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-bold">
-                {locale === "en" ? "Notes" : "ملاحظات"}
-                <input
-                  name="notes"
-                  defaultValue={editingDocument.notes ?? ""}
-                  className={cls}
-                />
-              </label>
-              <div className="col-span-full flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setEditingDocument(null)}
-                >
-                  {locale === "en" ? "Cancel" : "إلغاء"}
-                </Button>
-                <Button type="submit" loading={busy}>
-                  {locale === "en" ? "Save Changes" : "حفظ البيانات"}
-                </Button>
-              </div>
-            </form>
-          )}
-          <div className="mt-5 space-y-2">
+
+          <div className="mt-5 space-y-4">
             {docs.map((doc) => {
               const docRec = doc as Record<string, unknown>;
               const docTypeName =
                 locale === "en"
                   ? (docRec.documentTypeNameEn as string | undefined) || doc.documentTypeNameAr
                   : doc.documentTypeNameAr;
-              const isOpen = openDocId === doc.id;
+              const isEditing = editingDocId === doc.id;
+              const isHistoryExpanded = expandedHistory === doc.id;
+              const badge = getExpiryBadge(doc.expiryDate, locale);
+
               return (
                 <article
                   key={doc.id}
-                  className={`rounded-xl border transition-all ${isOpen ? "border-[#1167c9] bg-blue-50/20 ring-1 ring-[#1167c9]/30" : "border-[var(--border)] hover:border-blue-300"
-                    }`}
+                  className={`rounded-2xl border bg-[var(--surface)] p-5 shadow-sm space-y-4 transition-all ${
+                    isEditing
+                      ? "border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/10"
+                      : "border-[var(--border)] hover:border-blue-300"
+                  }`}
                 >
-                  <div
-                    onClick={() => setOpenDocId(isOpen ? null : doc.id)}
-                    className="flex cursor-pointer items-center justify-between gap-3 p-3.5"
-                  >
-                    <div className="flex-1">
-                      <p className="font-black text-sm text-[var(--foreground)]">{docTypeName}</p>
-                      <p className="text-xs text-[var(--muted)] mt-0.5">
-                        {doc.currentFileName ??
-                          (locale === "en" ? "No file" : "بدون ملف")}{" "}
-                        ·{" "}
-                        {doc.expiryDate ??
-                          (locale === "en" ? "No expiry" : "بلا انتهاء")}
-                      </p>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-[#1167c9]">
+                        <FilePlus size={20} />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-base text-[var(--foreground)]">{docTypeName}</h3>
+                        <p className="text-xs text-[var(--muted)] mt-0.5 font-mono">
+                          {doc.currentFileName
+                            ? `${doc.currentFileName} ${doc.currentFileSizeBytes ? `(${(doc.currentFileSizeBytes / 1024).toFixed(1)} KB)` : ""}`
+                            : (locale === "en" ? "No file uploaded" : "لا يوجد ملف مرفوع")}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-                        aria-label={isOpen ? "Collapse" : "Expand"}
-                      >
-                        {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      </button>
+                    <span className={`rounded-full px-3 py-1 text-xs font-black shadow-sm ${badge.classes}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+
+                  {/* Document Summary / Data Section */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs rounded-xl bg-[var(--subtle-bg)] p-3.5 border border-[var(--border)]">
+                    <div>
+                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Document No." : "رقم الوثيقة"}</span>
+                      <span className="font-mono font-extrabold text-[var(--foreground)]">{doc.documentNumber || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Issue Date" : "تاريخ الإصدار"}</span>
+                      <span className="font-extrabold text-[var(--foreground)]">{formatDocDate(doc.issueDate, locale)}</span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}</span>
+                      <span className="font-extrabold text-[var(--foreground)]">{formatDocDate(doc.expiryDate, locale)}</span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Notes" : "ملاحظات"}</span>
+                      <span className="font-extrabold text-[var(--foreground)]">{doc.notes || "—"}</span>
                     </div>
                   </div>
 
-                  {isOpen && (
-                    <div className="border-t border-[var(--border)] p-3.5 bg-[var(--surface)] rounded-b-xl space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
+                  {/* Inline Embedded Document File Preview */}
+                  <div className="relative rounded-xl border border-[var(--border)] bg-slate-950/5 dark:bg-slate-900/40 h-60 flex items-center justify-center overflow-hidden">
+                    {previews[doc.id]?.loading ? (
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#1167c9]" />
+                        <span>{locale === "en" ? "Loading document preview..." : "جارٍ تحميل معاينة المستند..."}</span>
+                      </div>
+                    ) : previews[doc.id]?.url ? (
+                      previews[doc.id].contentType?.startsWith("image/") ? (
+                        <img
+                          src={previews[doc.id].url}
+                          alt={docTypeName}
+                          className="max-h-full w-auto object-contain p-1 rounded-lg"
+                        />
+                      ) : previews[doc.id].contentType?.includes("pdf") ? (
+                        <iframe
+                          src={previews[doc.id].url}
+                          title={docTypeName}
+                          className="w-full h-full border-0 rounded-lg bg-white"
+                        />
+                      ) : (
+                        <div className="text-center p-4 text-xs text-slate-500 font-bold">
+                          <FilePlus className="h-8 w-8 mx-auto text-slate-400 mb-1" />
+                          {locale === "en" ? "Preview not supported for this file type." : "المعاينة غير مدعومة لهذا النوع من الملفات."}
+                        </div>
+                      )
+                    ) : (
+                      <div className="text-center p-4 text-xs text-slate-400 font-semibold">
+                        <FilePlus className="h-8 w-8 mx-auto text-slate-300 mb-1" />
+                        {locale === "en" ? "No file uploaded" : "لا يوجد ملف للمعاينة"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons Toolbar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border)]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void previewDoc(doc)}
+                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-50 text-blue-600 font-bold text-xs hover:bg-blue-100 transition-colors cursor-pointer"
+                        title={locale === "en" ? "Preview" : "معاينة"}
+                      >
+                        <Eye size={14} />
+                        {locale === "en" ? "Preview" : "معاينة"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void download(doc)}
+                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+                        title={locale === "en" ? "Download" : "تنزيل"}
+                      >
+                        <Download size={14} />
+                        {locale === "en" ? "Download" : "تنزيل"}
+                      </button>
+
+                      {can("documents.upload") && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void previewDoc(doc);
-                          }}
-                          className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                          aria-label={locale === "en" ? "Preview" : "معاينة"}
-                          title={locale === "en" ? "Preview" : "معاينة"}
+                          type="button"
+                          onClick={() => version(doc)}
+                          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+                          title={locale === "en" ? "New Version" : "نسخة جديدة"}
                         >
-                          <Eye size={16} />
+                          <RefreshCw size={14} />
+                          {locale === "en" ? "New Version" : "نسخة جديدة"}
                         </button>
+                      )}
+
+                      {can("documents.catalog.manage") && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void download(doc);
-                          }}
-                          className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                          aria-label={locale === "en" ? "Download" : "تنزيل"}
-                          title={locale === "en" ? "Download" : "تنزيل"}
+                          type="button"
+                          onClick={() => setEditingDocId(isEditing ? null : doc.id)}
+                          className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                            isEditing
+                              ? "bg-amber-600 text-white shadow-sm"
+                              : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
+                          }`}
                         >
-                          <Download size={16} />
+                          <Pencil size={14} />
+                          {locale === "en" ? "Edit" : "تعديل"}
                         </button>
-                        {can("documents.upload") && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              version(doc);
-                            }}
-                            className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                            aria-label={
-                              locale === "en" ? "New Version" : "نسخة جديدة"
-                            }
-                            title={locale === "en" ? "New Version" : "نسخة جديدة"}
-                          >
-                            <RefreshCw size={16} />
-                          </button>
-                        )}
-                        {can("documents.catalog.manage") && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingDocument(doc);
-                            }}
-                            className="h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
-                          >
-                            {locale === "en" ? "Edit" : "تعديل"}
-                          </button>
-                        )}
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => void toggleHistory(doc)}
+                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+                      >
+                        <History size={14} />
+                        {isHistoryExpanded
+                          ? (locale === "en" ? "Hide History" : "إخفاء السجل")
+                          : (locale === "en" ? "Version History" : "سجل الوثائق")}
+                      </button>
+                    </div>
+
+                    {can("documents.catalog.manage") && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const reason = await systemPrompt(
+                            locale === "en" ? "Reason for archiving" : "سبب الأرشفة",
+                          );
+                          if (reason)
+                            void run(() =>
+                              archiveEmployeeDocument(employeeId, doc.id, reason, doc.rowVersion),
+                            );
+                        }}
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-red-50 text-red-600 font-bold text-xs hover:bg-red-100 transition-colors cursor-pointer"
+                        title={locale === "en" ? "Archive" : "أرشفة"}
+                      >
+                        <Archive size={14} />
+                        {locale === "en" ? "Archive" : "أرشفة"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Inline Edit Form for THIS document section only */}
+                  {isEditing && (
+                    <form
+                      onSubmit={(e) => saveMetadata(e, doc)}
+                      className="mt-3 grid gap-3 rounded-xl border border-amber-300 bg-amber-50/60 p-4 sm:grid-cols-2 animate-in fade-in duration-200"
+                    >
+                      <div className="col-span-full flex items-center justify-between border-b border-amber-200 pb-2">
+                        <h4 className="font-extrabold text-sm text-amber-950 flex items-center gap-2">
+                          <Pencil size={15} />
+                          {locale === "en" ? `Edit ${docTypeName} Details` : `تعديل بيانات ${docTypeName}`}
+                        </h4>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void toggleHistory(doc);
-                          }}
-                          className="h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
+                          type="button"
+                          onClick={() => setEditingDocId(null)}
+                          className="text-xs text-amber-800 hover:underline font-bold cursor-pointer"
                         >
-                          {expandedHistory === doc.id
-                            ? locale === "en"
-                              ? "Hide Versions"
-                              : "إخفاء النسخ"
-                            : locale === "en"
-                              ? "Version History"
-                              : "سجل الوثائق"}
+                          {locale === "en" ? "Cancel" : "إلغاء"}
                         </button>
-                        {can("documents.catalog.manage") && (
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const reason = await systemPrompt(
-                                locale === "en"
-                                  ? "Reason for archiving"
-                                  : "سبب الأرشفة",
-                              );
-                              if (reason)
-                                void run(() =>
-                                  archiveEmployeeDocument(
-                                    employeeId,
-                                    doc.id,
-                                    reason,
-                                    doc.rowVersion,
-                                  ),
-                                );
-                            }}
-                            className="grid h-9 w-9 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                            aria-label={locale === "en" ? "Archive" : "أرشفة"}
-                            title={locale === "en" ? "Archive" : "أرشفة"}
+                      </div>
+
+                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
+                        {locale === "en" ? "Document Number" : "رقم الوثيقة"} <span className="text-rose-500">*</span>
+                        <input
+                          name="documentNumber"
+                          required
+                          defaultValue={doc.documentNumber ?? ""}
+                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
+                        />
+                      </label>
+
+                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
+                        {locale === "en" ? "Issue Date" : "تاريخ الإصدار"} <span className="text-rose-500">*</span>
+                        <input
+                          name="issueDate"
+                          type="date"
+                          required
+                          defaultValue={doc.issueDate ?? ""}
+                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
+                        />
+                      </label>
+
+                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
+                        {locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"} <span className="text-rose-500">*</span>
+                        <input
+                          name="expiryDate"
+                          type="date"
+                          required
+                          defaultValue={doc.expiryDate ?? ""}
+                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
+                        />
+                      </label>
+
+                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
+                        {locale === "en" ? "Notes" : "ملاحظات"}
+                        <input
+                          name="notes"
+                          defaultValue={doc.notes ?? ""}
+                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
+                        />
+                      </label>
+
+                      <div className="col-span-full flex justify-end gap-2 pt-2 border-t border-amber-200">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 text-xs px-3"
+                          onClick={() => setEditingDocId(null)}
+                        >
+                          {locale === "en" ? "Cancel" : "إلغاء"}
+                        </Button>
+                        <Button type="submit" loading={busy} className="h-8 text-xs px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold">
+                          {locale === "en" ? "Save Changes" : "حفظ التعديلات"}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Version History Panel for THIS document */}
+                  {isHistoryExpanded && (
+                    <div className="border-t border-[var(--border)] pt-3 mt-3">
+                      <h4 className="mb-2 text-xs font-extrabold text-[var(--foreground)]">
+                        {locale === "en" ? "Saved Versions" : "النسخ المحفوظة"}
+                      </h4>
+                      <div className="space-y-2">
+                        {(versions[doc.id] ?? []).map((version) => (
+                          <div
+                            key={version.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-2.5 text-xs border border-slate-200"
                           >
-                            <Archive size={16} />
-                          </button>
+                            <span className="font-mono text-slate-700">
+                              {locale === "en" ? "Version" : "الإصدار"} {version.versionNumber} · {version.originalFileName} · {(version.fileSizeBytes / 1024).toFixed(1)} KB
+                            </span>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="h-7 text-[11px] px-2"
+                                onClick={() => void previewDoc(doc, version.id)}
+                              >
+                                {locale === "en" ? "Preview" : "معاينة"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="h-7 text-[11px] px-2"
+                                onClick={() => void downloadVersion(doc, version)}
+                              >
+                                {locale === "en" ? "Download Version" : "تنزيل النسخة"}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        {versions[doc.id]?.length === 0 && (
+                          <p className="text-xs text-[var(--muted)]">
+                            {locale === "en" ? "No saved versions." : "لا توجد نسخ محفوظة."}
+                          </p>
                         )}
                       </div>
-                      {expandedHistory === doc.id && (
-                        <div className="border-t pt-3">
-                          <h4 className="mb-2 text-sm font-black">
-                            {locale === "en" ? "Saved Versions" : "النسخ المحفوظة"}
-                          </h4>
-                          <div className="space-y-2">
-                            {(versions[doc.id] ?? []).map((version) => (
-                              <div
-                                key={version.id}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-xs"
-                              >
-                                <span>
-                                  {locale === "en" ? "Version" : "الإصدار"}{" "}
-                                  {version.versionNumber} · {version.originalFileName}{" "}
-                                  · {(version.fileSizeBytes / 1024).toFixed(1)} KB
-                                </span>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => void previewDoc(doc, version.id)}
-                                  >
-                                    {locale === "en" ? "Preview" : "معاينة"}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => void downloadVersion(doc, version)}
-                                  >
-                                    {locale === "en"
-                                      ? "Download Version"
-                                      : "تنزيل النسخة"}
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                            {versions[doc.id]?.length === 0 && (
-                              <p className="text-xs text-[var(--muted)]">
-                                {locale === "en"
-                                  ? "No saved versions."
-                                  : "لا توجد نسخ محفوظة."}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </article>
               );
             })}
+            {docs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-[var(--border)] p-8 text-center">
+                <p className="font-bold text-sm text-[var(--muted)]">
+                  {locale === "en" ? "No documents uploaded yet." : "لا توجد وثائق مرفوعة حتى الآن."}
+                </p>
+              </div>
+            )}
           </div>
         </Card>
       )}

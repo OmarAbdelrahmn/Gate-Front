@@ -67,6 +67,11 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
   const [versions, setVersions] = useState<VehicleAttachmentVersionResponse[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
 
+  // Auto-loaded inline previews map
+  const [previews, setPreviews] = useState<
+    Record<string, { url: string; contentType: string; loading: boolean; error?: string }>
+  >({});
+
   // Preview Modal State
   const [previewState, setPreviewState] = useState<{
     isOpen: boolean;
@@ -109,6 +114,37 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
     if (vehicleId) loadFiles();
   }, [vehicleId]);
 
+  useEffect(() => {
+    if (!files || !files.length) return;
+    files.forEach((att) => {
+      if (att && !previews[att.id]) {
+        setPreviews((prev) => ({
+          ...prev,
+          [att.id]: { url: "", contentType: "", loading: true },
+        }));
+        const path = `/api/vehicles/${vehicleId}/files/${att.id}/download`;
+        authPreviewBlob(path)
+          .then((res) => {
+            setPreviews((prev) => ({
+              ...prev,
+              [att.id]: { url: res.url, contentType: res.contentType, loading: false },
+            }));
+          })
+          .catch((e: any) => {
+            setPreviews((prev) => ({
+              ...prev,
+              [att.id]: {
+                url: "",
+                contentType: "",
+                loading: false,
+                error: e?.message || "Error",
+              },
+            }));
+          });
+      }
+    });
+  }, [files, vehicleId]);
+
   const handleFileUpload = async (slot: SlotItem, file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       toast.error("الملف كبير جداً", "الحجم الأقصى المسموح به للملف هو 10 ميجابايت.");
@@ -125,6 +161,7 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
       const formData = new FormData();
       formData.append("file", file);
       await uploadVehicleFile(vehicleId, slot.kindName, formData);
+      setPreviews({});
       await loadFiles();
     } catch (e: any) {
       console.error(e);
@@ -281,6 +318,47 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
                 ) : (
                   <p className="text-xs text-slate-400 mt-2">لم يتم رفع هذا الملف بعد.</p>
                 )}
+
+                {/* Inline Embedded File Preview Container */}
+                {att ? (
+                  <div className="mt-3 relative rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-950/5 dark:bg-slate-900/40 h-52 flex items-center justify-center overflow-hidden">
+                    {previews[att.id]?.loading ? (
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#1167c9]" />
+                        <span>جارٍ تحميل المعاينة...</span>
+                      </div>
+                    ) : previews[att.id]?.url ? (
+                      previews[att.id].contentType?.startsWith("image/") ? (
+                        <img
+                          src={previews[att.id].url}
+                          alt={slot.label}
+                          className="max-h-full w-auto object-contain p-1 rounded-lg"
+                        />
+                      ) : previews[att.id].contentType?.includes("pdf") ? (
+                        <iframe
+                          src={previews[att.id].url}
+                          title={slot.label}
+                          className="w-full h-full border-0 rounded-lg bg-white"
+                        />
+                      ) : (
+                        <div className="text-center p-4 text-xs text-slate-500 font-bold">
+                          <FileText className="h-8 w-8 mx-auto text-slate-400 mb-1" />
+                          المعاينة غير مدعومة لهذا الملف
+                        </div>
+                      )
+                    ) : (
+                      <div className="text-center p-4 text-xs text-slate-400 font-semibold">
+                        <FileText className="h-8 w-8 mx-auto text-slate-300 mb-1" />
+                        تعذر تحميل المعاينة
+                      </div>
+                    )}
+                  </div>
+                ) : !isDisabledSlot ? (
+                  <div className="mt-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 h-28 flex flex-col items-center justify-center text-slate-400 text-xs gap-1">
+                    <UploadCloud className="h-6 w-6 text-slate-300 mb-0.5" />
+                    <span>لم يتم رفع الملف بعد</span>
+                  </div>
+                ) : null}
               </div>
 
               {/* Action Toolbar */}

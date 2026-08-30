@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, ShieldAlert, X } from "lucide-react";
 import { useState } from "react";
 import {
@@ -29,6 +29,7 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const path = usePathname();
+  const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = useState(false);
   const { can, isLoading, authorization, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
@@ -38,6 +39,8 @@ export function Sidebar({
     "الموارد البشرية": path.startsWith("/dashboard/hr") || path.startsWith("/dashboard/employees"),
     "إدارة السكن": path.startsWith("/dashboard/housing"),
     "إدارة المنصات": path.startsWith("/dashboard/platforms"),
+    "إدارة الأسطول والمركبات": path.startsWith("/dashboard/fleet") && !path.startsWith("/dashboard/fleet/vehicle-account-assignments"),
+    "ربط المركبات بالمنصات": path.startsWith("/dashboard/fleet/vehicle-account-assignments"),
   });
   const items =
     !authorization || isLoading
@@ -59,6 +62,9 @@ export function Sidebar({
   const isChildActive = (href?: string) => {
     if (!href) return false;
     if (path === href) return true;
+    if (href === "/dashboard/fleet/vehicle-account-assignments") {
+      return path === "/dashboard/fleet/vehicle-account-assignments";
+    }
     if (!path.startsWith(`${href}/`)) return false;
     return !allHrefs.some(
       (otherHref) =>
@@ -103,7 +109,7 @@ export function Sidebar({
             items.map((item) => {
               const Icon = item.icon;
               const children =
-                item.children?.filter((child) => permitted(child, role, can)) ??
+                item.children?.filter((child) => Boolean(child.href) && permitted(child, role, can)) ??
                 [];
               const active =
                 isChildActive(item.href) ||
@@ -156,14 +162,15 @@ export function Sidebar({
                     <div
                       className={`mt-1 space-y-1 border-r-2 rtl:border-r-2 ltr:border-l-2 ltr:border-r-0 border-blue-200/60 dark:border-blue-900/40 rtl:pr-2 ltr:pl-2 ${collapsed ? "md:hidden" : ""}`}
                     >
-                      {children.map((child) => {
+                      {children.map((child, idx) => {
+                        if (!child.href) return null;
                         const ChildIcon = child.icon;
                         const childActive = isChildActive(child.href);
                         const childLabel = child.labelKey ? t(child.labelKey) : child.label;
                         return (
                           <Link
-                            key={child.href}
-                            href={child.href!}
+                            key={`${child.label}-${child.href || idx}`}
+                            href={child.href}
                             onClick={onClose}
                             aria-current={childActive ? "page" : undefined}
                             className={`flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm font-bold transition-all ${childActive ? "bg-[#1167c9] text-white dark:bg-[#1167c9] dark:text-white shadow-sm" : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80"}`}

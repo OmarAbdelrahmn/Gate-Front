@@ -17,6 +17,7 @@ import {
   Wrench,
   AlertTriangle,
   BookOpen,
+  Repeat,
   type LucideIcon,
 } from "lucide-react";
 export type Role = "admin" | "member" | "accountant";
@@ -195,14 +196,6 @@ export const navigation: NavItem[] = [
         permission: "fleet.assignments.read",
       },
       {
-        label: "ربط المركبات بالمنصات",
-        labelKey: "nav.vehicleAccountAssignments",
-        href: "/dashboard/fleet/vehicle-account-assignments",
-        icon: Server,
-        roles: ["admin", "member"],
-        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
-      },
-      {
         label: "الأعطال والمشاكل",
         labelKey: "nav.vehicleIssues",
         href: "/dashboard/fleet/issues",
@@ -233,6 +226,36 @@ export const navigation: NavItem[] = [
         icon: BookOpen,
         roles: ["admin", "member"],
         permission: "fleet.vehicles.read",
+      },
+    ],
+  },
+  {
+    label: "ربط المركبات بالمنصات",
+    labelKey: "nav.vehicleAccountAssignments",
+    icon: Server,
+    roles: ["admin", "member"],
+    permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+    children: [
+      {
+        label: "جميع الربطات النشطة",
+        href: "/dashboard/fleet/vehicle-account-assignments",
+        icon: Server,
+        roles: ["admin", "member"],
+        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+      },
+      {
+        label: "طلبات التبديل المعلقة",
+        href: "/dashboard/fleet/vehicle-account-assignments/switches",
+        icon: Repeat,
+        roles: ["admin", "member"],
+        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+      },
+      {
+        label: "التحذيرات التشغيلية",
+        href: "/dashboard/fleet/vehicle-account-assignments/problems",
+        icon: AlertTriangle,
+        roles: ["admin", "member"],
+        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
       },
     ],
   },
