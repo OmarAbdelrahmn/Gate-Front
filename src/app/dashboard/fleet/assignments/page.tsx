@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicles } from "@/lib/fleet/api";
+import { listRiders, listEmployees } from "@/lib/workforce/api";
 import { VehicleOperationalStatus, type VehicleSummaryResponse } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -21,6 +23,7 @@ export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"assigned" | "available">("assigned");
+  const [riderToEmpMap, setRiderToEmpMap] = useState<Map<string, string>>(new Map());
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleSummaryResponse | null>(null);
@@ -28,11 +31,27 @@ export default function AssignmentsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await getVehicles({
-        search,
-        status: filterType === "assigned" ? VehicleOperationalStatus.Assigned.toString() : VehicleOperationalStatus.Available.toString(),
-        pageSize: 50,
+      const [res, ridersRes, empRes] = await Promise.all([
+        getVehicles({
+          search,
+          status: filterType === "assigned" ? VehicleOperationalStatus.Assigned.toString() : VehicleOperationalStatus.Available.toString(),
+          pageSize: 50,
+        }),
+        listRiders().catch(() => []),
+        listEmployees().catch(() => []),
+      ]);
+
+      const map = new Map<string, string>();
+      ridersRes.forEach((r) => {
+        if (r.id && r.employeeId) map.set(r.id, r.employeeId);
       });
+      empRes.forEach((e) => {
+        if (e.riderProfileId && e.id) map.set(e.riderProfileId, e.id);
+        if (e.rider?.id && e.id) map.set(e.rider.id, e.id);
+        if (e.id) map.set(e.id, e.id);
+      });
+      setRiderToEmpMap(map);
+
       // Filter out available vehicles that are not ready
       if (filterType === "available") {
         setData(res.items.filter(v => v.isReadyForAssignment));
@@ -144,31 +163,58 @@ export default function AssignmentsPage() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">المركبة</th>
+                  <th className="px-6 py-4">المركبة (الرقم التسلسلي)</th>
                   <th className="px-6 py-4">اللوحة</th>
+                  <th className="px-6 py-4">مدينة التشغيل</th>
                   {filterType === "assigned" && <th className="px-6 py-4">المندوب الحالي</th>}
+                  <th className="px-6 py-4">انتهاء التفويض</th>
                   <th className="px-6 py-4">العداد (كم)</th>
                   {can("fleet.assignments.manage") && <th className="px-6 py-4 text-center">الإجراءات السريعة</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {data.map((item) => (
-                  <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-6 py-4">
-                      <div className="font-bold font-mono text-[#1167c9]">{item.assetNumber}</div>
-                      <div className="text-xs text-[var(--muted)]">{item.manufacturer} {item.model}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold border border-slate-300 rounded px-2 py-0.5 w-fit bg-white dark:bg-slate-900 shadow-sm">
-                        {item.plateNumberAr || "بدون لوحة"}
-                      </div>
-                    </td>
-                    {filterType === "assigned" && (
+                {data.map((item) => {
+                  const empId =
+                    (item as any).employeeId ||
+                    (item as any).currentEmployeeId ||
+                    (item.currentRiderProfileId ? riderToEmpMap.get(item.currentRiderProfileId) || item.currentRiderProfileId : null);
+
+                  return (
+                    <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="px-6 py-4">
-                        <div className="font-bold">{item.currentRiderName || "—"}</div>
-                        <div className="text-xs text-[var(--muted)] font-mono">{item.currentRiderProfileId || "—"}</div>
+                        <Link
+                          href={`/dashboard/fleet/vehicles/${item.id}`}
+                          className="font-bold font-mono text-[#1167c9] hover:underline"
+                        >
+                          {item.serialNumber || "—"}
+                        </Link>
+                        <div className="text-xs text-[var(--muted)]">{item.manufacturer} {item.model}</div>
                       </td>
-                    )}
+                      <td className="px-6 py-4">
+                        <div className="font-bold border border-slate-300 rounded px-2 py-0.5 w-fit bg-white dark:bg-slate-900 shadow-sm">
+                          {item.plateNumberAr || "بدون لوحة"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">
+                        {item.operatingCity || "—"}
+                      </td>
+                      {filterType === "assigned" && (
+                        <td className="px-6 py-4">
+                          {empId ? (
+                            <Link
+                              href={`/dashboard/employees/${empId}`}
+                              className="font-bold text-[#1167c9] hover:underline"
+                            >
+                              {item.currentRiderName || "—"}
+                            </Link>
+                          ) : (
+                            <div className="font-bold">{item.currentRiderName || "—"}</div>
+                          )}
+                        </td>
+                      )}
+                    <td className="px-6 py-4 font-mono">
+                      {item.permitEndDate ? item.permitEndDate.split("T")[0] : "—"}
+                    </td>
                     <td className="px-6 py-4 font-mono">{item.currentOdometer.toLocaleString()}</td>
                     
                     {can("fleet.assignments.manage") && (
@@ -211,7 +257,8 @@ export default function AssignmentsPage() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
