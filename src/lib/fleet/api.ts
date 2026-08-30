@@ -214,7 +214,10 @@ export const takeVehicle = (formData: FormData) =>
       body: formData,
       notifySuccess: "تم تسليم المركبة بنجاح",
     })
-  );
+  ).then((res) => {
+    console.log("[API Response] POST /api/vehicle-assignments/take:", res);
+    return res;
+  });
 
 export const returnVehicle = (payload: T.ReturnVehicleRequest) =>
   authFetch<T.RiderVehicleAssignmentResponse>(
@@ -224,7 +227,10 @@ export const returnVehicle = (payload: T.ReturnVehicleRequest) =>
       body: JSON.stringify(payload),
       notifySuccess: "تم إرجاع المركبة بنجاح",
     })
-  );
+  ).then((res) => {
+    console.log("[API Response] POST /api/vehicle-assignments/return:", res);
+    return res;
+  });
 
 export const switchVehicle = (formData: FormData) =>
   authFetch<T.RiderVehicleAssignmentResponse>(
@@ -234,7 +240,10 @@ export const switchVehicle = (formData: FormData) =>
       body: formData,
       notifySuccess: "تم تبديل المركبة بنجاح",
     })
-  );
+  ).then((res) => {
+    console.log("[API Response] POST /api/vehicle-assignments/switch:", res);
+    return res;
+  });
 
 export const getVehicleAssignment = (assignmentId: string) =>
   authFetch<T.RiderVehicleAssignmentResponse>(`/api/vehicle-assignments/${assignmentId}`);
@@ -247,7 +256,10 @@ export const renewVehiclePermission = (assignmentId: string, payload: T.RenewPer
       body: JSON.stringify(payload),
       notifySuccess: "تم تجديد التفويض بنجاح",
     })
-  );
+  ).then((res) => {
+    console.log("[API Response] POST renew-permission:", res);
+    return res;
+  });
 
 // ---------------------------
 // Timeline & Promissory Files

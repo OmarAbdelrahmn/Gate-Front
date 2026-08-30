@@ -41,6 +41,8 @@ export default function AssignmentsPage() {
         listEmployees().catch(() => []),
       ]);
 
+      console.log("[Fleet Assignments API Response]:", res);
+
       const map = new Map<string, string>();
       ridersRes.forEach((r) => {
         if (r.id && r.employeeId) map.set(r.id, r.employeeId);
@@ -100,7 +102,7 @@ export default function AssignmentsPage() {
             إدارة تسليم واستلام وتبديل المركبات للمناديب
           </p>
         </div>
-        
+
         {can("fleet.assignments.manage") && (
           <div className="flex gap-2">
             <Button onClick={() => openModal("take")} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
@@ -115,14 +117,14 @@ export default function AssignmentsPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
         <div className="flex items-center gap-2">
-          <Button 
-            variant={filterType === "assigned" ? "primary" : "secondary"} 
+          <Button
+            variant={filterType === "assigned" ? "primary" : "secondary"}
             className={filterType === "assigned" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
             onClick={() => setFilterType("assigned")}
           >
             المركبات المسلمة
           </Button>
-          <Button 
+          <Button
             variant={filterType === "available" ? "primary" : "secondary"}
             className={filterType === "available" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
             onClick={() => setFilterType("available")}
@@ -166,7 +168,12 @@ export default function AssignmentsPage() {
                   <th className="px-6 py-4">المركبة (الرقم التسلسلي)</th>
                   <th className="px-6 py-4">اللوحة</th>
                   <th className="px-6 py-4">مدينة التشغيل</th>
-                  {filterType === "assigned" && <th className="px-6 py-4">المندوب الحالي</th>}
+                  {filterType === "assigned" && (
+                    <>
+                      <th className="px-6 py-4">المندوب المنسوب</th>
+                      <th className="px-6 py-4">المندوب الفعلي</th>
+                    </>
+                  )}
                   <th className="px-6 py-4">انتهاء التفويض</th>
                   <th className="px-6 py-4">العداد (كم)</th>
                   {can("fleet.assignments.manage") && <th className="px-6 py-4 text-center">الإجراءات السريعة</th>}
@@ -199,64 +206,116 @@ export default function AssignmentsPage() {
                         {item.operatingCity || "—"}
                       </td>
                       {filterType === "assigned" && (
-                        <td className="px-6 py-4">
-                          {empId ? (
-                            <Link
-                              href={`/dashboard/employees/${empId}`}
-                              className="font-bold text-[#1167c9] hover:underline"
-                            >
-                              {item.currentRiderName || "—"}
-                            </Link>
-                          ) : (
-                            <div className="font-bold">{item.currentRiderName || "—"}</div>
-                          )}
+                        <>
+                          <td className="px-6 py-4">
+                            {empId ? (
+                              <Link
+                                href={`/dashboard/employees/${empId}`}
+                                className="font-bold text-[#1167c9] hover:underline block"
+                              >
+                                {item.currentRiderName || "—"}
+                              </Link>
+                            ) : (
+                              <div className="font-bold">{item.currentRiderName || "—"}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            {(() => {
+                              const isNotReal = item.isRealRider === false || String(item.isRealRider) === "false";
+                              const realRiderObj = item.realRider || (item.actualRider && item.actualRider.isSelectedRiderTheActualRider === false ? {
+                                id: item.actualRider.selectedRiderEmployeeId || item.actualRider.selectedRiderProfileId,
+                                name: item.actualRider.actualRiderName,
+                                iqamaNo: item.actualRider.actualRiderIqamaNo,
+                                relationshipToAssignedRider: item.actualRider.relationshipToSelectedRider,
+                              } : null);
+
+                              if ((isNotReal || realRiderObj) && realRiderObj && (realRiderObj.name || realRiderObj.iqamaNo)) {
+                                const realEmpId = realRiderObj.id ? (riderToEmpMap.get(realRiderObj.id) || realRiderObj.id) : null;
+                                return (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {realEmpId && realEmpId !== "guid" && riderToEmpMap.has(realRiderObj.id || "") ? (
+                                        <Link
+                                          href={`/dashboard/employees/${realEmpId}`}
+                                          className="font-bold text-purple-700 dark:text-purple-300 hover:underline"
+                                        >
+                                          {realRiderObj.name || "—"}
+                                        </Link>
+                                      ) : (
+                                        <span className="font-bold text-purple-700 dark:text-purple-300">
+                                          {realRiderObj.name || "—"}
+                                        </span>
+                                      )}
+                                      {realRiderObj.relationshipToAssignedRider && (
+                                        <span className="inline-block rounded-md bg-purple-100 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300">
+                                          {realRiderObj.relationshipToAssignedRider}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {realRiderObj.iqamaNo && (
+                                      <div className="text-xs font-mono text-purple-600/90 dark:text-purple-400 font-medium">
+                                        إقامة: {realRiderObj.iqamaNo}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500/70" />
+                                  نفس المندوب المنسوب
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        </>
+                      )}
+                      <td className="px-6 py-4 font-mono">
+                        {item.permitEndDate ? item.permitEndDate.split("T")[0] : "—"}
+                      </td>
+                      <td className="px-6 py-4 font-mono">{item.currentOdometer.toLocaleString()}</td>
+
+                      {can("fleet.assignments.manage") && (
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {filterType === "available" ? (
+                              <button
+                                onClick={() => openModal("take", item)}
+                                className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 bg-emerald-50/50 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 transition-colors"
+                                title="تسليم هذه المركبة"
+                              >
+                                <Key className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => openModal("return", item)}
+                                  className="rounded-lg p-2 text-red-600 hover:bg-red-50 bg-red-50/50 dark:bg-red-950/30 dark:hover:bg-red-900/50 transition-colors"
+                                  title="استلام (إرجاع) المركبة"
+                                >
+                                  <ArrowLeftRight className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => openModal("switch", item)}
+                                  className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 bg-blue-50/50 dark:bg-blue-950/30 dark:hover:bg-blue-900/50 transition-colors"
+                                  title="تبديل المركبة"
+                                >
+                                  <Car className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => openModal("renew", item)}
+                                  className="rounded-lg p-2 text-orange-600 hover:bg-orange-50 bg-orange-50/50 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 transition-colors"
+                                  title="تجديد التفويض"
+                                >
+                                  <CalendarClock className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       )}
-                    <td className="px-6 py-4 font-mono">
-                      {item.permitEndDate ? item.permitEndDate.split("T")[0] : "—"}
-                    </td>
-                    <td className="px-6 py-4 font-mono">{item.currentOdometer.toLocaleString()}</td>
-                    
-                    {can("fleet.assignments.manage") && (
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          {filterType === "available" ? (
-                            <button
-                              onClick={() => openModal("take", item)}
-                              className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 bg-emerald-50/50 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 transition-colors"
-                              title="تسليم هذه المركبة"
-                            >
-                              <Key className="h-4 w-4" />
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => openModal("return", item)}
-                                className="rounded-lg p-2 text-red-600 hover:bg-red-50 bg-red-50/50 dark:bg-red-950/30 dark:hover:bg-red-900/50 transition-colors"
-                                title="استلام (إرجاع) المركبة"
-                              >
-                                <ArrowLeftRight className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => openModal("switch", item)}
-                                className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 bg-blue-50/50 dark:bg-blue-950/30 dark:hover:bg-blue-900/50 transition-colors"
-                                title="تبديل المركبة"
-                              >
-                                <Car className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => openModal("renew", item)}
-                                className="rounded-lg p-2 text-orange-600 hover:bg-orange-50 bg-orange-50/50 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 transition-colors"
-                                title="تجديد التفويض"
-                              >
-                                <CalendarClock className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
+                    </tr>
                   );
                 })}
               </tbody>

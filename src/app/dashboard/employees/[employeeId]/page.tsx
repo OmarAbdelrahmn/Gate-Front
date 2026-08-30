@@ -355,6 +355,20 @@ function VehicleTimelineCard({
                       )}
                     </div>
 
+                    {((assignment.isRealRider === false && assignment.realRider) || (assignment.actualRider && assignment.actualRider.isSelectedRiderTheActualRider === false)) && (
+                      <div className="mt-2 rounded-lg bg-purple-50 dark:bg-purple-950/30 p-2 border border-purple-200 dark:border-purple-900/50 text-xs text-purple-950 dark:text-purple-200">
+                        <span className="font-bold block text-purple-800 dark:text-purple-300">
+                          {isEn ? "Actual Rider: " : "السائق الفعلي: "}
+                          {assignment.realRider?.name || assignment.actualRider?.actualRiderName}
+                          {(assignment.realRider?.relationshipToAssignedRider || assignment.actualRider?.relationshipToSelectedRider) ? ` (${assignment.realRider?.relationshipToAssignedRider || assignment.actualRider?.relationshipToSelectedRider})` : ""}
+                        </span>
+                        <span className="text-[11px] opacity-80 block mt-0.5 font-mono">
+                          {isEn ? "Iqama No: " : "رقم الإقامة: "}
+                          {assignment.realRider?.iqamaNo || assignment.actualRider?.actualRiderIqamaNo}
+                        </span>
+                      </div>
+                    )}
+
                     {assignment.startReason && (
                       <p className="mt-1.5 text-xs text-[var(--muted)]">
                         <span className="font-bold text-[var(--foreground)]">{isEn ? "Start note: " : "سبب التسليم: "}</span>

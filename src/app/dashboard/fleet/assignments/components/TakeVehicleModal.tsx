@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
-import { Upload, X, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, X, FileText, AlertCircle, CheckCircle2, UserCheck } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -35,6 +35,13 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
   const [minOdometer, setMinOdometer] = useState<number>(0);
   const [existingPromissoryCount, setExistingPromissoryCount] = useState<number>(0);
   const [loadingPromissory, setLoadingPromissory] = useState<boolean>(false);
+
+  const [isRealRider, setIsRealRider] = useState<boolean>(true);
+  const [realRider, setRealRider] = useState({
+    name: "",
+    iqamaNo: "",
+    relationshipToAssignedRider: "",
+  });
 
   const [formData, setFormData] = useState({
     riderProfileId: "",
@@ -72,6 +79,13 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
   useEffect(() => {
     if (isOpen) {
+      setIsRealRider(true);
+      setRealRider({
+        name: "",
+        iqamaNo: "",
+        relationshipToAssignedRider: "",
+      });
+
       Promise.all([
         listRiders().catch(() => []),
         listExternalRiders().catch(() => []),
@@ -279,6 +293,30 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       return;
     }
 
+    if (!isRealRider) {
+      if (!realRider.name.trim()) {
+        toast.error("خطأ في البيانات", "يرجى إدخال اسم السائق الفعلي.");
+        return;
+      }
+      if (realRider.name.trim().length > 200) {
+        toast.error("خطأ في البيانات", "اسم السائق الفعلي يجب ألا يتجاوز 200 حرف.");
+        return;
+      }
+      const cleanIqama = realRider.iqamaNo.trim();
+      if (!/^\d{10}$/.test(cleanIqama)) {
+        toast.error("خطأ في البيانات", "رقم إقامة السائق الفعلي يجب أن يتكون من 10 أرقام بالضبط.");
+        return;
+      }
+      if (!realRider.relationshipToAssignedRider.trim()) {
+        toast.error("خطأ في البيانات", "يرجى إدخال صلة القرابة/العلاقة بالسائق المندوب.");
+        return;
+      }
+      if (realRider.relationshipToAssignedRider.trim().length > 200) {
+        toast.error("خطأ في البيانات", "صلة القرابة/العلاقة يجب ألا تتجاوز 200 حرف.");
+        return;
+      }
+    }
+
     const fuelVal = formData.startFuelLevelPercentage !== "" ? Number(formData.startFuelLevelPercentage) : undefined;
     if (fuelVal !== undefined && (fuelVal < 0 || fuelVal > 100)) {
       toast.error("خطأ في الوقود", "نسبة الوقود يجب أن تكون بين 0 و 100%.");
@@ -289,6 +327,14 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       try {
         const metadataJSON: TakeVehicleRequest = {
           riderProfileId: formData.riderProfileId,
+          isRealRider: isRealRider,
+          realRider: isRealRider
+            ? null
+            : {
+                name: realRider.name.trim(),
+                iqamaNo: realRider.iqamaNo.trim(),
+                relationshipToAssignedRider: realRider.relationshipToAssignedRider.trim(),
+              },
           vehicleId: formData.vehicleId,
           startedAtUtc: new Date(formData.startedAtUtc).toISOString(),
           startOdometer: Number(formData.startOdometer),
@@ -306,7 +352,8 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           payload.append("promissoryFiles", file);
         });
 
-        await takeVehicle(payload);
+        const response = await takeVehicle(payload);
+        console.log("Take Vehicle API Response:", response);
         onSuccess();
       } catch (err) {
         // Error toast handled by authFetch
@@ -350,6 +397,77 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
               onChange={(v) => setFormData({ ...formData, riderProfileId: v })}
             />
           </div>
+        </div>
+
+        {/* Real Rider Checkbox & Section */}
+        <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900/50 space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isRealRider}
+              onChange={(e) => setIsRealRider(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-[#1167c9] focus:ring-[#1167c9] dark:border-slate-700 dark:bg-slate-800"
+            />
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              المندوب المختار هو السائق الفعلي للمركبة
+            </span>
+          </label>
+
+          {!isRealRider && (
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 p-2 rounded-md border border-amber-200 dark:border-amber-900/50">
+                <UserCheck className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>يرجى إدخال بيانات السائق الفعلي للمركبة (يجب أن تتطابق الهوية والبيانات بدقة).</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    اسم السائق الفعلي <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={realRider.name}
+                    onChange={(e) => setRealRider({ ...realRider, name: e.target.value })}
+                    placeholder="الاسم الكامل"
+                    maxLength={200}
+                    required={!isRealRider}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    رقم إقامة السائق الفعلي <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={realRider.iqamaNo}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setRealRider({ ...realRider, iqamaNo: val });
+                    }}
+                    placeholder="10 أرقام"
+                    maxLength={10}
+                    required={!isRealRider}
+                  />
+                  {realRider.iqamaNo && realRider.iqamaNo.length !== 10 && (
+                    <p className="mt-1 text-[11px] text-red-500">يجب أن يتكون من 10 أرقام (الحالي: {realRider.iqamaNo.length})</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    صلة القرابة / العلاقة بالسائق المندوب <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={realRider.relationshipToAssignedRider}
+                    onChange={(e) => setRealRider({ ...realRider, relationshipToAssignedRider: e.target.value })}
+                    placeholder="مثال: أخ، ابن عم، صديق..."
+                    maxLength={200}
+                    required={!isRealRider}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Date, Odometer, Fuel */}

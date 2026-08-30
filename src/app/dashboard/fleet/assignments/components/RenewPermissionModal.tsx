@@ -106,6 +106,23 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
             <h4 className="font-bold text-orange-800 dark:text-orange-300 mb-2 text-sm">تفويض مركبة المندوب: {preselectedVehicle.currentRiderName}</h4>
             <div className="grid grid-cols-2 gap-2 text-sm text-orange-900 dark:text-orange-200">
               <div>المركبة: <span className="font-bold">{preselectedVehicle.assetNumber}</span></div>
+              {(() => {
+                const realInfo = preselectedVehicle.realRider;
+                const isNotRealRider = preselectedVehicle.isRealRider === false || !!realInfo?.name;
+
+                if (!isNotRealRider || !realInfo?.name) return null;
+
+                return (
+                  <div className="col-span-2 mt-1 pt-2 border-t border-orange-200/60 dark:border-orange-800/60 text-xs text-purple-900 dark:text-purple-200">
+                    <span className="font-bold text-purple-700 dark:text-purple-300">السائق الفعلي للمركبة: </span>
+                    <span>
+                      {realInfo.name}
+                      {realInfo.iqamaNo ? ` (رقم الإقامة: ${realInfo.iqamaNo})` : ""}
+                      {realInfo.relationshipToAssignedRider ? ` - صلة القرابة: ${realInfo.relationshipToAssignedRider}` : ""}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

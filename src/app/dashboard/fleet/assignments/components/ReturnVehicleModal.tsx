@@ -33,9 +33,15 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
     reason: "",
   });
 
+  const [activeAssignmentRealRider, setActiveAssignmentRealRider] = useState<{
+    isRealRider?: boolean;
+    realRider?: { name: string; iqamaNo: string; relationshipToAssignedRider: string } | null;
+  } | null>(null);
+
   useEffect(() => {
     if (isOpen && preselectedVehicle && preselectedVehicle.currentAssignmentId) {
       setLoadingDetails(true);
+      setActiveAssignmentRealRider(null);
       const activeAssignmentId = preselectedVehicle.currentAssignmentId;
       setAssignmentId(activeAssignmentId);
 
@@ -59,11 +65,19 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
 
           try {
             const assignment = await getVehicleAssignment(activeAssignmentId);
-            if (assignment && assignment.rowVersion) {
-              foundRowVersion = assignment.rowVersion;
+            if (assignment) {
+              if (assignment.rowVersion) {
+                foundRowVersion = assignment.rowVersion;
+              }
               foundStartedAt = assignment.startedAtUtc;
               if (assignment.startOdometer) {
                 setMinOdometer(assignment.startOdometer);
+              }
+              if (assignment.isRealRider !== undefined) {
+                setActiveAssignmentRealRider({
+                  isRealRider: assignment.isRealRider,
+                  realRider: assignment.realRider,
+                });
               }
             }
           } catch (e) {
@@ -76,9 +90,17 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
               const activeItem = timeline?.find(
                 (t) => t.assignment.id === activeAssignmentId || t.assignment.status === 1
               );
-              if (activeItem?.assignment?.rowVersion) {
-                foundRowVersion = activeItem.assignment.rowVersion;
+              if (activeItem?.assignment) {
+                if (activeItem.assignment.rowVersion) {
+                  foundRowVersion = activeItem.assignment.rowVersion;
+                }
                 foundStartedAt = activeItem.assignment.startedAtUtc;
+                if (activeItem.assignment.isRealRider !== undefined) {
+                  setActiveAssignmentRealRider({
+                    isRealRider: activeItem.assignment.isRealRider,
+                    realRider: activeItem.assignment.realRider,
+                  });
+                }
               }
             } catch (e) {
               console.error("Failed to fetch timeline:", e);
@@ -142,7 +164,7 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
 
     startTransition(async () => {
       try {
-        await returnVehicle({
+        const res = await returnVehicle({
           assignmentId,
           endedAtUtc: selectedEndedAt.toISOString(),
           endOdometer: formData.endOdometer,
@@ -151,6 +173,7 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
           reason: formData.reason.trim(),
           rowVersion, // Mandatory Assignment rowVersion
         });
+        console.log("Return Vehicle API Response:", res);
         onSuccess();
       } catch (err: any) {
         console.error("Return vehicle error:", err);
@@ -179,6 +202,23 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
               <div>
                 المندوب: <span className="font-bold">{preselectedVehicle.currentRiderName || "—"}</span>
               </div>
+              {(() => {
+                const realInfo = preselectedVehicle.realRider || activeAssignmentRealRider?.realRider;
+                const isNotRealRider = preselectedVehicle.isRealRider === false || activeAssignmentRealRider?.isRealRider === false || !!realInfo?.name;
+
+                if (!isNotRealRider || !realInfo?.name) return null;
+
+                return (
+                  <div className="col-span-2 mt-1 pt-2 border-t border-blue-200/60 dark:border-blue-800/60 text-xs text-purple-900 dark:text-purple-200">
+                    <span className="font-bold text-purple-700 dark:text-purple-300">السائق الفعلي للمركبة: </span>
+                    <span>
+                      {realInfo.name}
+                      {realInfo.iqamaNo ? ` (رقم الإقامة: ${realInfo.iqamaNo})` : ""}
+                      {realInfo.relationshipToAssignedRider ? ` - صلة القرابة: ${realInfo.relationshipToAssignedRider}` : ""}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

@@ -240,12 +240,26 @@ export interface ArchiveSupplierRequest {
 // ---------------------------
 // Vehicles
 // ---------------------------
+export interface ActualRiderDetail {
+  selectedRiderProfileId?: string | null;
+  selectedRiderEmployeeId?: string | null;
+  selectedRiderNameAr?: string | null;
+  isSelectedRiderTheActualRider?: boolean | null;
+  actualRiderName?: string | null;
+  actualRiderIqamaNo?: string | null;
+  relationshipToSelectedRider?: string | null;
+}
+
 export interface VehicleSummaryResponse {
   id: string;
-  assetNumber: string;
+  serialNumber?: string | null;
+  assetNumber?: string | null;
+  chassisNumber?: string | null;
   plateNumberAr?: string | null;
   plateNumberEn?: string | null;
-  serialNumber?: string | null;
+  plateLettersAr?: string | null;
+  plateLettersEn?: string | null;
+  plateDigits?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   vehicleType: VehicleType;
@@ -259,6 +273,9 @@ export interface VehicleSummaryResponse {
   currentAssignmentId?: string | null;
   currentRiderProfileId?: string | null;
   currentRiderName?: string | null;
+  isRealRider?: boolean;
+  realRider?: RealRiderInfo | null;
+  actualRider?: ActualRiderDetail | null;
   registrationExpiryDate?: string | null;
   registrationStatus?: VehicleComplianceDueStatus | null;
   insuranceExpiryDate?: string | null;
@@ -477,23 +494,38 @@ export interface VehicleAttachmentVersionResponse {
 // ---------------------------
 // Assignments
 // ---------------------------
+export interface RealRiderInfo {
+  id?: string | null;
+  name: string;
+  iqamaNo: string;
+  relationshipToAssignedRider: string;
+}
+
 export interface RiderVehicleAssignmentResponse {
   id: string;
   riderProfileId: string;
   employeeId?: string | null;
   riderName?: string | null;
+  isRealRider?: boolean;
+  realRider?: RealRiderInfo | null;
+  actualRider?: ActualRiderDetail | null;
   vehicleId: string;
   assetNumber: string;
   startedAtUtc: string;
   endedAtUtc?: string | null;
+  startLocationSnapshot?: string | null;
+  endLocationSnapshot?: string | null;
   startOdometer: number;
   endOdometer?: number | null;
   permissionReference?: string | null;
   permissionStartsOn?: string | null;
+  permissionEndsOn?: string | null;
   permitEndDate?: string | null;
   permitStatus?: VehicleComplianceDueStatus | null;
-  status: RiderVehicleAssignmentStatus;
+  status: RiderVehicleAssignmentStatus | number;
+  assignmentReason?: string | null;
   startReason?: string | null;
+  completionReason?: string | null;
   endReason?: string | null;
   operationId?: string | null;
   promissoryFileVersionIds: string[];
@@ -502,6 +534,12 @@ export interface RiderVehicleAssignmentResponse {
 
 export interface TakeVehicleRequest {
   riderProfileId: string;
+  isRealRider: boolean;
+  realRider?: {
+    name: string;
+    iqamaNo: string;
+    relationshipToAssignedRider: string;
+  } | null;
   vehicleId: string;
   startedAtUtc: string;
   startOdometer: number;

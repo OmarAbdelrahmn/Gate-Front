@@ -131,11 +131,19 @@ export function SwitchVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
         payload.append("rowVersion", rowVersion);
         if (formData.permissionReference) payload.append("permissionReference", formData.permissionReference);
         
+        if (preselectedVehicle?.isRealRider !== undefined) {
+          payload.append("isRealRider", String(preselectedVehicle.isRealRider));
+          if (!preselectedVehicle.isRealRider && preselectedVehicle.realRider) {
+            payload.append("realRider", JSON.stringify(preselectedVehicle.realRider));
+          }
+        }
+
         files.forEach((file) => {
           payload.append("promissoryFiles", file);
         });
 
-        await switchVehicle(payload);
+        const res = await switchVehicle(payload);
+        console.log("Switch Vehicle API Response:", res);
         onSuccess();
       } catch (err) {}
     });
@@ -158,6 +166,23 @@ export function SwitchVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
             <h4 className="font-bold text-blue-800 dark:text-blue-300 mb-2 text-sm">تبديل مركبة المندوب: {preselectedVehicle.currentRiderName}</h4>
             <div className="grid grid-cols-2 gap-2 text-sm text-blue-900 dark:text-blue-200">
               <div>المركبة الحالية: <span className="font-bold">{preselectedVehicle.assetNumber}</span></div>
+              {(() => {
+                const realInfo = preselectedVehicle.realRider;
+                const isNotRealRider = preselectedVehicle.isRealRider === false || !!realInfo?.name;
+
+                if (!isNotRealRider || !realInfo?.name) return null;
+
+                return (
+                  <div className="col-span-2 mt-1 pt-2 border-t border-blue-200/60 dark:border-blue-800/60 text-xs text-purple-900 dark:text-purple-200">
+                    <span className="font-bold text-purple-700 dark:text-purple-300">السائق الفعلي للمركبة: </span>
+                    <span>
+                      {realInfo.name}
+                      {realInfo.iqamaNo ? ` (رقم الإقامة: ${realInfo.iqamaNo})` : ""}
+                      {realInfo.relationshipToAssignedRider ? ` - صلة القرابة: ${realInfo.relationshipToAssignedRider}` : ""}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

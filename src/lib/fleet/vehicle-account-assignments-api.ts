@@ -10,6 +10,16 @@ export type VehicleAccountAssignmentProblem = {
   activeAccountCount?: number | null;
 };
 
+export type ActualRiderDetail = {
+  selectedRiderProfileId?: string | null;
+  selectedRiderEmployeeId?: string | null;
+  selectedRiderNameAr?: string | null;
+  isSelectedRiderTheActualRider?: boolean | null;
+  actualRiderName?: string | null;
+  actualRiderIqamaNo?: string | null;
+  relationshipToSelectedRider?: string | null;
+};
+
 export type VehiclePlatformAccountAssignment = {
   id: string;
   vehicleId: string;
@@ -34,6 +44,13 @@ export type VehiclePlatformAccountAssignment = {
   accountOperatingCityNameAr?: string | null;
   accountOwnerEmployeeId?: string | null;
   accountOwnerRiderNameAr?: string | null;
+  actualRider?: ActualRiderDetail | null;
+  isRealRider?: boolean | null;
+  realRider?: {
+    name?: string | null;
+    iqamaNo?: string | null;
+    relationshipToAssignedRider?: string | null;
+  } | null;
   approvalStatus: string;
   status: "Active" | "Ended" | "Closed" | string;
   hasProblems: boolean;

@@ -1304,8 +1304,8 @@ export default function VehicleAccountAssignmentsPage() {
                 type="button"
                 onClick={() => setSwitchFormData({ ...switchFormData, mode: "Immediate" })}
                 className={`p-3 rounded-xl border text-right transition-all flex flex-col gap-1 ${switchFormData.mode === "Immediate"
-                    ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/20"
-                    : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                  ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/20"
+                  : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
                   }`}
               >
                 <div className="font-bold text-xs text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
@@ -1321,8 +1321,8 @@ export default function VehicleAccountAssignmentsPage() {
                 type="button"
                 onClick={() => setSwitchFormData({ ...switchFormData, mode: "Pending" })}
                 className={`p-3 rounded-xl border text-right transition-all flex flex-col gap-1 ${switchFormData.mode === "Pending"
-                    ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/20"
-                    : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                  ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/20"
+                  : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
                   }`}
               >
                 <div className="font-bold text-xs text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
