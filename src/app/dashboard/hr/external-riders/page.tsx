@@ -15,6 +15,7 @@ import {
   Phone,
   Globe,
   CreditCard,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
@@ -665,6 +666,12 @@ export default function ExternalRidersPage() {
                             <Button variant="secondary" className="h-8 px-2.5 text-xs">
                               <Eye size={14} />
                               {locale === "en" ? "Profile" : "الملف"}
+                            </Button>
+                          </Link>
+                          <Link href={`/dashboard/hr/documents?riderProfileId=${rider.riderProfileId || rider.employeeId}`}>
+                            <Button variant="secondary" className="h-8 px-2.5 text-xs text-[#1167c9] border-blue-200 bg-blue-50/50 hover:bg-blue-100">
+                              <FileText size={14} />
+                              {locale === "en" ? "Documents" : "الوثائق"}
                             </Button>
                           </Link>
                         </div>

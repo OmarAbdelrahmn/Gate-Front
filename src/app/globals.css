@@ -225,20 +225,23 @@ form label:not(.field-shell):has(> :is(input, select, textarea):not([required]))
 form label:not(.field-shell):has(> select),
 form label:not(.field-shell):has(> textarea),
 form label:not(.field-shell):has(> input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])) {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: max-content auto;
   align-items: center;
+  gap: 0.5rem;
 }
 
 form label:not(.field-shell):has(> :is(input, select, textarea):not([required]))::after {
   content: "اختياري" !important;
   grid-column: 2;
   grid-row: 1;
+  justify-self: start;
 }
 
 form label:not(.field-shell):has(> :is(input, select, textarea)[required])::after {
   content: "مطلوب" !important;
   grid-column: 2;
   grid-row: 1;
+  justify-self: start;
 }
 
 form label:not(.field-shell)> :is(input, select, textarea) {

@@ -34,6 +34,8 @@ type AuthContextValue = {
   setPreferences: (
     preferences: Partial<{ locale: Locale; theme: Theme; density: Density }>,
   ) => Promise<void>;
+  updateProfileUser: (updatedProfile: { profileImageUrl?: string | null }) => void;
+  refreshProfile: () => Promise<void>;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 const localeOf = (value?: string): Locale => (value === "en" ? "en" : "ar");
@@ -62,6 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocale(localeOf(profile.preferredLocale));
       setTheme(themeOf(profile.preferredTheme));
       setDensity(densityOf(profile.preferredDensity));
+      if (profile.profileImageUrl !== undefined) {
+        setUser((prev) => (prev ? { ...prev, profileImageUrl: profile.profileImageUrl } : prev));
+      }
     } catch {
       /* Login response locale remains fallback. */
     }
@@ -174,6 +179,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLocale(localeOf(profile.preferredLocale));
         setTheme(themeOf(profile.preferredTheme));
         setDensity(densityOf(profile.preferredDensity));
+      },
+      updateProfileUser: (updatedProfile) => {
+        if (updatedProfile.profileImageUrl !== undefined) {
+          setUser((prev) => (prev ? { ...prev, profileImageUrl: updatedProfile.profileImageUrl } : prev));
+        }
+      },
+      refreshProfile: async () => {
+        await loadProfile();
       },
     }),
     [authorization, density, isLoading, locale, theme, user],

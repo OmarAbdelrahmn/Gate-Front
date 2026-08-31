@@ -17,7 +17,7 @@ export function Input({
   return (
     <label className="field-shell grid gap-2 text-sm font-bold text-inherit">
       {label && (
-        <span className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2">
           <span>{label}</span>
           <span className={required ? "field-required" : "field-optional"} aria-hidden="true">
             {required ? "مطلوب" : "اختياري"}

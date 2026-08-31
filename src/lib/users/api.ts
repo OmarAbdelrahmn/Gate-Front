@@ -154,3 +154,29 @@ export function updatePreferences(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+export function uploadProfileImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return authFetch<CurrentUserProfile>("/api/user-profile/me/profile-image", {
+    method: "PUT",
+    body: formData,
+  });
+}
+
+export function resolveProfileImageUrl(path?: string | null): string | null {
+  if (!path) return null;
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("data:")
+  ) {
+    return path;
+  }
+  const apiBase = (
+    process.env.NEXT_PUBLIC_API_URL || "https://gate.premiumasp.net"
+  ).replace(/\/$/, "");
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  return `${apiBase}${cleanPath}`;
+}
+

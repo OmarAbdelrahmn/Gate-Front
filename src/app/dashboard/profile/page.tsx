@@ -1,13 +1,17 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   BadgeCheck,
   BriefcaseBusiness,
+  Camera,
+  CheckCircle2,
   Eye,
   EyeOff,
   Globe2,
   KeyRound,
+  Loader2,
   Moon,
   ShieldCheck,
   Sun,
@@ -16,7 +20,11 @@ import {
 import { getMyAuthorization } from "../../../lib/auth/authorization-api";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { permissionLabel } from "../../../lib/permission-labels";
-import { getCurrentProfile } from "../../../lib/users/api";
+import {
+  getCurrentProfile,
+  resolveProfileImageUrl,
+  uploadProfileImage,
+} from "../../../lib/users/api";
 import type { CurrentUserProfile } from "../../../lib/users/types";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
@@ -46,7 +54,7 @@ const roleCode = (item: unknown) =>
         : "—";
 
 export default function ProfilePage() {
-  const { locale, theme, density, setPreferences, user } = useAuth();
+  const { locale, theme, density, setPreferences, user, updateProfileUser } = useAuth();
   const t = (key: string) => translate(locale, key);
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [authorization, setAuthorization] = useState<{
@@ -63,9 +71,78 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState("");
+  const [imageSuccess, setImageSuccess] = useState("");
+  const [avatarError, setAvatarError] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     setLocalPreferences({ locale, theme, density });
   }, [density, locale, theme]);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [profile?.profileImageUrl]);
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageError("");
+    setImageSuccess("");
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    const validExtensions = ["jpg", "jpeg", "png", "webp"];
+
+    if (
+      !validTypes.includes(file.type) &&
+      (!extension || !validExtensions.includes(extension))
+    ) {
+      setImageError(
+        locale === "en"
+          ? "Invalid file format. Only JPEG, PNG, or WebP images are allowed."
+          : "صيغة الملف غير مدعومة. يُسمح فقط بصور JPEG، PNG، أو WebP."
+      );
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError(
+        locale === "en"
+          ? "File size exceeds 5 MB limit."
+          : "حجم الملف يتجاوز الحد الأقصى المسموح به (5 ميجابايت)."
+      );
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const updatedProfile = await uploadProfileImage(file);
+      setProfile(updatedProfile);
+      if (updateProfileUser) {
+        updateProfileUser(updatedProfile);
+      }
+      setImageSuccess(
+        locale === "en"
+          ? "Profile picture updated successfully."
+          : "تم تحديث الصورة الشخصية بنجاح."
+      );
+    } catch (err: any) {
+      setImageError(
+        err?.message ||
+          (locale === "en"
+            ? "Failed to upload profile picture."
+            : "تعذر رفع الصورة الشخصية.")
+      );
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
   useEffect(() => {
     void Promise.allSettled([getCurrentProfile(), getMyAuthorization()]).then(
       ([profileResult, authorizationResult]) => {
@@ -125,22 +202,87 @@ export default function ProfilePage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
           <Card className="p-5 sm:p-7">
-            <div className="flex items-start gap-4">
-              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-blue-500/10 text-[#1167c9]">
-                <UserRound size={26} />
-              </div>
-              <div>
-                <h2 className="text-xl font-black">
-                  {locale === "en" ? profile.displayNameEn || profile.displayNameAr : profile.displayNameAr || profile.displayNameEn}
-                </h2>
-                <p className="mt-1 text-sm text-[var(--muted)]" dir="ltr">
-                  @{profile.userName}
-                </p>
-                <span className="mt-3 inline-flex rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700">
-                  {profile.status === "Active" ? t("common.active") : profile.status}
-                </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              <div className="flex items-center gap-5">
+                <div className="relative group shrink-0">
+                  <div className="relative grid h-20 w-20 place-items-center overflow-hidden rounded-2xl border-2 border-blue-500/20 bg-gradient-to-br from-blue-50 to-indigo-100 text-[#1167c9] shadow-inner dark:from-slate-800 dark:to-slate-900">
+                    {profile.profileImageUrl && !avatarError ? (
+                      <img
+                        src={resolveProfileImageUrl(profile.profileImageUrl) || ""}
+                        alt={profile.displayNameAr || profile.displayNameEn}
+                        onError={() => setAvatarError(true)}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <UserRound size={36} />
+                    )}
+                    {uploadingImage && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white backdrop-blur-xs">
+                        <Loader2 className="animate-spin" size={24} />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    aria-label={locale === "en" ? "Upload profile photo" : "تحديث الصورة الشخصية"}
+                    title={locale === "en" ? "Change photo (JPEG, PNG, WebP max 5MB)" : "تغيير الصورة (JPEG, PNG, WebP بحد أقصى 5 ميجابايت)"}
+                    className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-xl bg-[#1167c9] text-white shadow-md transition-transform hover:scale-110 active:scale-95 disabled:opacity-50"
+                  >
+                    <Camera size={16} />
+                  </button>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+
+                <div>
+                  <h2 className="text-xl font-black">
+                    {locale === "en"
+                      ? profile.displayNameEn || profile.displayNameAr
+                      : profile.displayNameAr || profile.displayNameEn}
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--muted)]" dir="ltr">
+                    @{profile.userName}
+                  </p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <span className="inline-flex rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700">
+                      {profile.status === "Active" ? t("common.active") : profile.status}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImage}
+                      className="text-xs font-bold text-[#1167c9] hover:underline"
+                    >
+                      {uploadingImage
+                        ? (locale === "en" ? "Uploading..." : "جارٍ التحميل...")
+                        : (locale === "en" ? "Change Photo" : "تغيير الصورة")}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+
+            {imageError && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-red-500/10 p-3 text-xs font-bold text-red-700">
+                <AlertCircle size={16} className="shrink-0" />
+                <span>{imageError}</span>
+              </div>
+            )}
+
+            {imageSuccess && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-500/10 p-3 text-xs font-bold text-emerald-700">
+                <CheckCircle2 size={16} className="shrink-0" />
+                <span>{imageSuccess}</span>
+              </div>
+            )}
             <dl className="mt-6 grid gap-4 border-t border-[var(--border)] pt-5 sm:grid-cols-2">
               <Info label={locale === "en" ? "Email" : "البريد الإلكتروني"} value={profile.email} dir="ltr" />
               <Info

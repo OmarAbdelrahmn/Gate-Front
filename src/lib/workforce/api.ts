@@ -18,6 +18,7 @@ export function getEmployee(employeeId: string) {
   );
 }
 export function createEmployee(payload: CreateEmployeeRequest) {
+  console.log("[CREATE EMPLOYEE API REQUEST PAYLOAD]:", payload);
   return authFetch<EmployeeDetails>("/api/employees", {
     method: "POST",
     body: JSON.stringify(payload),

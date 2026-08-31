@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { hrCatalogApi, type HrRow } from "../../lib/hr/api";
+import { StaffDocumentChecklistPanel } from "../documents/StaffDocumentChecklistPanel";
 import {
   archiveEmployeeDocument,
   archiveInsurancePolicy,
@@ -502,429 +503,324 @@ export function EmployeeDocumentsInsurance({
       )}
       {(activeTab === "all" || activeTab === "docs") && (
         <Card className={`p-5 ${activeTab === "docs" ? "xl:col-span-2" : ""}`}>
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-xl font-black">
-              <FilePlus size={20} />
-              {locale === "en" ? "Documents" : "الوثائق"}
-            </h2>
-            {can("documents.upload") && (
-              <button
-                type="button"
+          <div className="flex items-center justify-between border-b pb-4 mb-4">
+            <div>
+              <h3 className="flex items-center gap-2 text-lg font-black">
+                <FilePlus size={20} className="text-[#1167c9]" />
+                {locale === "en" ? "Employee Documents" : "وثائق ومستندات الموظف"}
+              </h3>
+              <p className="text-xs text-[var(--muted)] mt-0.5">
+                {locale === "en"
+                  ? "Manage uploaded employee documents, file versions, and validity dates."
+                  : "إدارة واستعراض المستندات والملفات المرفوعة للموظف وتواريخ الصلاحية."}
+              </p>
+            </div>
+            {can("documents.manage") && (
+              <Button
+                variant="secondary"
                 onClick={() => setShowUploadForm((prev) => !prev)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#1167c9] hover:bg-blue-100 transition-colors"
+                className="gap-1.5 text-xs font-bold"
               >
                 {showUploadForm ? <ChevronUp size={16} /> : <Plus size={16} />}
                 {locale === "en"
                   ? showUploadForm
                     ? "Hide Upload Form"
-                    : "Upload New Document"
+                    : "Upload File"
                   : showUploadForm
                     ? "إخفاء نموذج الرفع"
                     : "رفع وثيقة جديدة"}
-              </button>
+              </Button>
             )}
           </div>
-          {can("documents.upload") && showUploadForm && (
-            <form onSubmit={upload} className="mt-4 grid gap-3 sm:grid-cols-2">
-              {riderProfileId ? (
-                <label className="grid gap-2 text-sm font-bold">
-                  {locale === "en" ? "Delegate Document Type" : "نوع وثيقة المندوب"}
-                  <select
-                    name="riderDocumentKind"
-                    value={selectedRiderKind}
-                    onChange={(e) => setSelectedRiderKind(e.target.value)}
-                    required
-                    className={cls}
-                  >
-                    <option value="">
-                      {locale === "en" ? "Select Type" : "اختر النوع"}
-                    </option>
-                    {riderKinds.map((kind) => (
-                      <option key={kind.value} value={kind.value}>
-                        {locale === "en" ? kind.labelEn : kind.labelAr}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <label className="grid gap-2 text-sm font-bold">
-                  {locale === "en" ? "Document Type" : "نوع الوثيقة"}
-                  <select
-                    name="documentTypeId"
-                    value={selectedDocTypeId}
-                    onChange={(e) => setSelectedDocTypeId(e.target.value)}
-                    required
-                    className={cls}
-                  >
-                    <option value="">
-                      {locale === "en" ? "Select Type" : "اختر النوع"}
-                    </option>
-                    {types.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {String(
-                          (locale === "en" ? t.nameEn || t.nameAr : t.nameAr) ??
-                          t.code,
-                        )}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <label className="grid gap-2 text-sm font-bold">
-                {locale === "en" ? "File" : "الملف"}
-                <input
-                  name="file"
-                  type="file"
-                  accept="application/pdf,image/jpeg,image/png"
-                  required
-                  className={`${cls} py-2`}
-                />
-              </label>
-              {[
-                [
-                  "documentNumber",
-                  locale === "en" ? "Document Number" : "رقم الوثيقة",
-                  "text",
-                ],
-                [
-                  "issueDate",
-                  locale === "en" ? "Issue Date" : "تاريخ الإصدار",
-                  "date",
-                ],
-                [
-                  "expiryDate",
-                  locale === "en" ? "Expiry Date" : "تاريخ الانتهاء",
-                  "date",
-                ],
-                ["notes", locale === "en" ? "Notes" : "ملاحظات", "text"],
-              ].map(([n, l, t]) => {
-                const isReq = ["documentNumber", "issueDate", "expiryDate"].includes(n);
-                return (
-                  <label key={n} className="grid gap-2 text-sm font-bold">
-                    {l}
-                    <input name={n} type={t} required={isReq} className={cls} />
-                  </label>
-                );
-              })}
-              <Button type="submit" loading={busy}>
-                {locale === "en" ? "Upload Document" : "رفع الوثيقة"}
-              </Button>
-              <p className="self-center text-xs text-[var(--muted)]">
-                {locale === "en"
-                  ? "PDF, JPEG, or PNG, up to 11MB (specific document types may limit size further)."
-                  : "PDF أو JPEG أو PNG، بحد أقصى 11MB وقد يفرض نوع الوثيقة حدًا أقل."}
-              </p>
-            </form>
-          )}
 
-          <div className="mt-5 space-y-4">
-            {docs.map((doc) => {
-              const docRec = doc as Record<string, unknown>;
-              const docTypeName =
-                locale === "en"
-                  ? (docRec.documentTypeNameEn as string | undefined) || doc.documentTypeNameAr
-                  : doc.documentTypeNameAr;
-              const isEditing = editingDocId === doc.id;
-              const isHistoryExpanded = expandedHistory === doc.id;
-              const badge = getExpiryBadge(doc.expiryDate, locale);
-
-              return (
-                <article
-                  key={doc.id}
-                  className={`rounded-2xl border bg-[var(--surface)] p-5 shadow-sm space-y-4 transition-all ${
-                    isEditing
-                      ? "border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/10"
-                      : "border-[var(--border)] hover:border-blue-300"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-[#1167c9]">
-                        <FilePlus size={20} />
-                      </div>
-                      <div>
-                        <h3 className="font-black text-base text-[var(--foreground)]">{docTypeName}</h3>
-                        <p className="text-xs text-[var(--muted)] mt-0.5 font-mono">
-                          {doc.currentFileName
-                            ? `${doc.currentFileName} ${doc.currentFileSizeBytes ? `(${(doc.currentFileSizeBytes / 1024).toFixed(1)} KB)` : ""}`
-                            : (locale === "en" ? "No file uploaded" : "لا يوجد ملف مرفوع")}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-black shadow-sm ${badge.classes}`}>
-                      {badge.label}
-                    </span>
-                  </div>
-
-                  {/* Document Summary / Data Section */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs rounded-xl bg-[var(--subtle-bg)] p-3.5 border border-[var(--border)]">
-                    <div>
-                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Document No." : "رقم الوثيقة"}</span>
-                      <span className="font-mono font-extrabold text-[var(--foreground)]">{doc.documentNumber || "—"}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Issue Date" : "تاريخ الإصدار"}</span>
-                      <span className="font-extrabold text-[var(--foreground)]">{formatDocDate(doc.issueDate, locale)}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}</span>
-                      <span className="font-extrabold text-[var(--foreground)]">{formatDocDate(doc.expiryDate, locale)}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-[var(--muted)] block mb-0.5">{locale === "en" ? "Notes" : "ملاحظات"}</span>
-                      <span className="font-extrabold text-[var(--foreground)]">{doc.notes || "—"}</span>
-                    </div>
-                  </div>
-
-                  {/* Inline Embedded Document File Preview */}
-                  <div className="relative rounded-xl border border-[var(--border)] bg-slate-950/5 dark:bg-slate-900/40 h-60 flex items-center justify-center overflow-hidden">
-                    {previews[doc.id]?.loading ? (
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
-                        <Loader2 className="h-4 w-4 animate-spin text-[#1167c9]" />
-                        <span>{locale === "en" ? "Loading document preview..." : "جارٍ تحميل معاينة المستند..."}</span>
-                      </div>
-                    ) : previews[doc.id]?.url ? (
-                      previews[doc.id].contentType?.startsWith("image/") ? (
-                        <img
-                          src={previews[doc.id].url}
-                          alt={docTypeName}
-                          className="max-h-full w-auto object-contain p-1 rounded-lg"
-                        />
-                      ) : previews[doc.id].contentType?.includes("pdf") ? (
-                        <iframe
-                          src={previews[doc.id].url}
-                          title={docTypeName}
-                          className="w-full h-full border-0 rounded-lg bg-white"
-                        />
-                      ) : (
-                        <div className="text-center p-4 text-xs text-slate-500 font-bold">
-                          <FilePlus className="h-8 w-8 mx-auto text-slate-400 mb-1" />
-                          {locale === "en" ? "Preview not supported for this file type." : "المعاينة غير مدعومة لهذا النوع من الملفات."}
-                        </div>
-                      )
-                    ) : (
-                      <div className="text-center p-4 text-xs text-slate-400 font-semibold">
-                        <FilePlus className="h-8 w-8 mx-auto text-slate-300 mb-1" />
-                        {locale === "en" ? "No file uploaded" : "لا يوجد ملف للمعاينة"}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action Buttons Toolbar */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border)]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void previewDoc(doc)}
-                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-50 text-blue-600 font-bold text-xs hover:bg-blue-100 transition-colors cursor-pointer"
-                        title={locale === "en" ? "Preview" : "معاينة"}
+            {/* Upload Form */}
+            {can("documents.manage") && showUploadForm && (
+              <form onSubmit={upload} className="mb-6 rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
+                <h4 className="text-xs font-black text-[#1167c9]">
+                  {locale === "en" ? "Upload New Document" : "رفع وثيقة جديدة للموظف"}
+                </h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {riderProfileId ? (
+                    <label className="grid gap-1 text-xs font-bold">
+                      {locale === "en" ? "Document Kind *" : "نوع الوثيقة *"}
+                      <select
+                        name="riderDocumentKind"
+                        required
+                        value={selectedRiderKind}
+                        onChange={(e) => setSelectedRiderKind(e.target.value)}
+                        className={cls}
                       >
-                        <Eye size={14} />
-                        {locale === "en" ? "Preview" : "معاينة"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => void download(doc)}
-                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
-                        title={locale === "en" ? "Download" : "تنزيل"}
-                      >
-                        <Download size={14} />
-                        {locale === "en" ? "Download" : "تنزيل"}
-                      </button>
-
-                      {can("documents.upload") && (
-                        <button
-                          type="button"
-                          onClick={() => version(doc)}
-                          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
-                          title={locale === "en" ? "New Version" : "نسخة جديدة"}
-                        >
-                          <RefreshCw size={14} />
-                          {locale === "en" ? "New Version" : "نسخة جديدة"}
-                        </button>
-                      )}
-
-                      {can("documents.catalog.manage") && (
-                        <button
-                          type="button"
-                          onClick={() => setEditingDocId(isEditing ? null : doc.id)}
-                          className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-                            isEditing
-                              ? "bg-amber-600 text-white shadow-sm"
-                              : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
-                          }`}
-                        >
-                          <Pencil size={14} />
-                          {locale === "en" ? "Edit" : "تعديل"}
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => void toggleHistory(doc)}
-                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
-                      >
-                        <History size={14} />
-                        {isHistoryExpanded
-                          ? (locale === "en" ? "Hide History" : "إخفاء السجل")
-                          : (locale === "en" ? "Version History" : "سجل الوثائق")}
-                      </button>
-                    </div>
-
-                    {can("documents.catalog.manage") && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const reason = await systemPrompt(
-                            locale === "en" ? "Reason for archiving" : "سبب الأرشفة",
-                          );
-                          if (reason)
-                            void run(() =>
-                              archiveEmployeeDocument(employeeId, doc.id, reason, doc.rowVersion),
-                            );
-                        }}
-                        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-red-50 text-red-600 font-bold text-xs hover:bg-red-100 transition-colors cursor-pointer"
-                        title={locale === "en" ? "Archive" : "أرشفة"}
-                      >
-                        <Archive size={14} />
-                        {locale === "en" ? "Archive" : "أرشفة"}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Inline Edit Form for THIS document section only */}
-                  {isEditing && (
-                    <form
-                      onSubmit={(e) => saveMetadata(e, doc)}
-                      className="mt-3 grid gap-3 rounded-xl border border-amber-300 bg-amber-50/60 p-4 sm:grid-cols-2 animate-in fade-in duration-200"
-                    >
-                      <div className="col-span-full flex items-center justify-between border-b border-amber-200 pb-2">
-                        <h4 className="font-extrabold text-sm text-amber-950 flex items-center gap-2">
-                          <Pencil size={15} />
-                          {locale === "en" ? `Edit ${docTypeName} Details` : `تعديل بيانات ${docTypeName}`}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => setEditingDocId(null)}
-                          className="text-xs text-amber-800 hover:underline font-bold cursor-pointer"
-                        >
-                          {locale === "en" ? "Cancel" : "إلغاء"}
-                        </button>
-                      </div>
-
-                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
-                        {locale === "en" ? "Document Number" : "رقم الوثيقة"} <span className="text-rose-500">*</span>
-                        <input
-                          name="documentNumber"
-                          required
-                          defaultValue={doc.documentNumber ?? ""}
-                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
-                        />
-                      </label>
-
-                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
-                        {locale === "en" ? "Issue Date" : "تاريخ الإصدار"} <span className="text-rose-500">*</span>
-                        <input
-                          name="issueDate"
-                          type="date"
-                          required
-                          defaultValue={doc.issueDate ?? ""}
-                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
-                        />
-                      </label>
-
-                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
-                        {locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"} <span className="text-rose-500">*</span>
-                        <input
-                          name="expiryDate"
-                          type="date"
-                          required
-                          defaultValue={doc.expiryDate ?? ""}
-                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
-                        />
-                      </label>
-
-                      <label className="grid gap-1.5 text-xs font-bold text-slate-800">
-                        {locale === "en" ? "Notes" : "ملاحظات"}
-                        <input
-                          name="notes"
-                          defaultValue={doc.notes ?? ""}
-                          className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
-                        />
-                      </label>
-
-                      <div className="col-span-full flex justify-end gap-2 pt-2 border-t border-amber-200">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="h-8 text-xs px-3"
-                          onClick={() => setEditingDocId(null)}
-                        >
-                          {locale === "en" ? "Cancel" : "إلغاء"}
-                        </Button>
-                        <Button type="submit" loading={busy} className="h-8 text-xs px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold">
-                          {locale === "en" ? "Save Changes" : "حفظ التعديلات"}
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-
-                  {/* Version History Panel for THIS document */}
-                  {isHistoryExpanded && (
-                    <div className="border-t border-[var(--border)] pt-3 mt-3">
-                      <h4 className="mb-2 text-xs font-extrabold text-[var(--foreground)]">
-                        {locale === "en" ? "Saved Versions" : "النسخ المحفوظة"}
-                      </h4>
-                      <div className="space-y-2">
-                        {(versions[doc.id] ?? []).map((version) => (
-                          <div
-                            key={version.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-2.5 text-xs border border-slate-200"
-                          >
-                            <span className="font-mono text-slate-700">
-                              {locale === "en" ? "Version" : "الإصدار"} {version.versionNumber} · {version.originalFileName} · {(version.fileSizeBytes / 1024).toFixed(1)} KB
-                            </span>
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                className="h-7 text-[11px] px-2"
-                                onClick={() => void previewDoc(doc, version.id)}
-                              >
-                                {locale === "en" ? "Preview" : "معاينة"}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                className="h-7 text-[11px] px-2"
-                                onClick={() => void downloadVersion(doc, version)}
-                              >
-                                {locale === "en" ? "Download Version" : "تنزيل النسخة"}
-                              </Button>
-                            </div>
-                          </div>
+                        <option value="">{locale === "en" ? "Select Document Kind" : "اختر نوع الوثيقة"}</option>
+                        {riderKinds.map((k) => (
+                          <option key={k.value} value={k.value}>
+                            {locale === "en" ? k.labelEn : k.labelAr}
+                          </option>
                         ))}
-                        {versions[doc.id]?.length === 0 && (
-                          <p className="text-xs text-[var(--muted)]">
-                            {locale === "en" ? "No saved versions." : "لا توجد نسخ محفوظة."}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                      </select>
+                    </label>
+                  ) : (
+                    <label className="grid gap-1 text-xs font-bold">
+                      {locale === "en" ? "Document Type *" : "نوع الوثيقة *"}
+                      <SearchableSelect
+                        name="documentTypeId"
+                        required
+                        value={selectedDocTypeId}
+                        onChange={(val) => setSelectedDocTypeId(val)}
+                        options={types.map((t) => ({
+                          value: String(t.id),
+                          label: locale === "en" ? String(t.nameEn || t.nameAr) : String(t.nameAr),
+                          sublabel: String(t.code || ""),
+                        }))}
+                        placeholder={locale === "en" ? "Select Document Type" : "اختر نوع الوثيقة"}
+                        searchPlaceholder={locale === "en" ? "Search document type..." : "ابحث عن نوع الوثيقة..."}
+                      />
+                    </label>
                   )}
-                </article>
-              );
-            })}
-            {docs.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-[var(--border)] p-8 text-center">
-                <p className="font-bold text-sm text-[var(--muted)]">
-                  {locale === "en" ? "No documents uploaded yet." : "لا توجد وثائق مرفوعة حتى الآن."}
-                </p>
+
+                  <label className="grid gap-1 text-xs font-bold">
+                    {locale === "en" ? "Document Number *" : "رقم الوثيقة *"}
+                    <input name="documentNumber" type="text" required placeholder="1234567890" className={cls} />
+                  </label>
+
+                  <label className="grid gap-1 text-xs font-bold">
+                    {locale === "en" ? "Issue Date *" : "تاريخ الإصدار *"}
+                    <input name="issueDate" type="date" required className={cls} />
+                  </label>
+
+                  <label className="grid gap-1 text-xs font-bold">
+                    {locale === "en" ? "Expiry Date *" : "تاريخ الانتهاء *"}
+                    <input name="expiryDate" type="date" required className={cls} />
+                  </label>
+
+                  <label className="grid gap-1 text-xs font-bold sm:col-span-2">
+                    {locale === "en" ? "File (PDF, JPG, PNG - max 11MB) *" : "الملف (PDF, JPG, PNG - أقصى 11 ميجابايت) *"}
+                    <input name="file" type="file" required accept="application/pdf,image/jpeg,image/png" className={cls} />
+                  </label>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button type="button" variant="secondary" onClick={() => setShowUploadForm(false)}>
+                    {locale === "en" ? "Cancel" : "إلغاء"}
+                  </Button>
+                  <Button type="submit" loading={busy}>
+                    {locale === "en" ? "Upload Document" : "رفع الوثيقة"}
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* List of Uploaded Documents */}
+            {docs.length === 0 ? (
+              <div className="p-8 text-center text-xs font-bold text-[var(--muted)] border border-dashed rounded-xl">
+                {locale === "en" ? "No uploaded documents found." : "لا توجد وثائق مرفوعة سابقة لهذا الموظف."}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {docs.map((doc) => {
+                  const badge = getExpiryBadge(doc.expiryDate, locale);
+                  const isEditing = editingDocId === doc.id;
+                  const prevInfo = previews[doc.id];
+                  const docRec = doc as Record<string, unknown>;
+                  const name =
+                    locale === "en"
+                      ? (docRec.documentTypeNameEn as string | undefined) || doc.documentTypeNameAr
+                      : doc.documentTypeNameAr;
+
+                  return (
+                    <article
+                      key={doc.id}
+                      className="rounded-xl border border-[var(--border)] p-4 bg-[var(--surface)] hover:border-blue-300 transition-all space-y-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {/* File Preview Thumbnail */}
+                          {prevInfo?.url && prevInfo.contentType.startsWith("image/") ? (
+                            <img
+                              src={prevInfo.url}
+                              alt={name}
+                              className="h-12 w-12 rounded-lg object-cover border cursor-pointer"
+                              onClick={() => previewDoc(doc)}
+                            />
+                          ) : (
+                            <div className="grid h-12 w-12 place-items-center rounded-lg bg-blue-50 text-[#1167c9] border border-blue-200">
+                              <FilePlus size={22} />
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-extrabold text-sm text-slate-900">{name}</h4>
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] ${badge.classes}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                            <p className="text-xs font-mono font-bold text-[#1167c9] mt-0.5">
+                              {doc.documentNumber || "—"}
+                            </p>
+                            <p className="text-[11px] text-[var(--muted)] mt-0.5">
+                              {locale === "en" ? "Issue: " : "الإصدار: "}
+                              {formatDocDate(doc.issueDate, locale)} | {locale === "en" ? "Expiry: " : "الانتهاء: "}
+                              {formatDocDate(doc.expiryDate, locale)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Document Actions */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {doc.currentFileName && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => previewDoc(doc)}
+                                className="grid h-8 w-8 place-items-center rounded-lg border bg-slate-50 text-slate-700 hover:bg-slate-100"
+                                title={locale === "en" ? "Preview" : "معاينة"}
+                              >
+                                <Eye size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => download(doc)}
+                                className="grid h-8 w-8 place-items-center rounded-lg border bg-slate-50 text-slate-700 hover:bg-slate-100"
+                                title={locale === "en" ? "Download" : "تنزيل"}
+                              >
+                                <Download size={15} />
+                              </button>
+                            </>
+                          )}
+                          {can("documents.manage") && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => version(doc)}
+                                className="grid h-8 w-8 place-items-center rounded-lg border bg-blue-50 text-[#1167c9] hover:bg-blue-100"
+                                title={locale === "en" ? "Upload new version" : "رفع نسخة جديدة"}
+                              >
+                                <Plus size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingDocId(isEditing ? null : doc.id)}
+                                className="grid h-8 w-8 place-items-center rounded-lg border bg-slate-50 text-slate-700 hover:bg-slate-100"
+                                title={locale === "en" ? "Edit metadata" : "تعديل البيانات"}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const reason = await systemPrompt(
+                                    locale === "en" ? "Reason for archiving" : "سبب الأرشفة"
+                                  );
+                                  if (reason)
+                                    void run(() =>
+                                      archiveEmployeeDocument(employeeId, doc.id, reason, doc.rowVersion)
+                                    );
+                                }}
+                                className="grid h-8 w-8 place-items-center rounded-lg border bg-rose-50 text-rose-600 hover:bg-rose-100"
+                                title={locale === "en" ? "Archive document" : "أرشفة الوثيقة"}
+                              >
+                                <Archive size={15} />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleHistory(doc)}
+                            className="grid h-8 w-8 place-items-center rounded-lg border bg-slate-50 text-slate-700 hover:bg-slate-100"
+                            title={locale === "en" ? "Version history" : "سجل النسخ"}
+                          >
+                            <History size={15} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Edit Metadata Form */}
+                      {isEditing && (
+                        <form onSubmit={(e) => saveMetadata(e, doc)} className="mt-3 rounded-lg border bg-slate-50 p-3 space-y-3 text-xs">
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <label className="font-bold">
+                              {locale === "en" ? "Document Number" : "رقم الوثيقة"}
+                              <input
+                                name="documentNumber"
+                                defaultValue={doc.documentNumber || ""}
+                                required
+                                className="mt-1 h-9 w-full rounded-lg border bg-white px-2 font-mono"
+                              />
+                            </label>
+                            <label className="font-bold">
+                              {locale === "en" ? "Issue Date" : "تاريخ الإصدار"}
+                              <input
+                                name="issueDate"
+                                type="date"
+                                defaultValue={doc.issueDate ? doc.issueDate.slice(0, 10) : ""}
+                                required
+                                className="mt-1 h-9 w-full rounded-lg border bg-white px-2"
+                              />
+                            </label>
+                            <label className="font-bold">
+                              {locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}
+                              <input
+                                name="expiryDate"
+                                type="date"
+                                defaultValue={doc.expiryDate ? doc.expiryDate.slice(0, 10) : ""}
+                                required
+                                className="mt-1 h-9 w-full rounded-lg border bg-white px-2"
+                              />
+                            </label>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button type="button" variant="secondary" onClick={() => setEditingDocId(null)}>
+                              {locale === "en" ? "Cancel" : "إلغاء"}
+                            </Button>
+                            <Button type="submit" loading={busy}>
+                              {locale === "en" ? "Save Changes" : "حفظ التعديلات"}
+                            </Button>
+                          </div>
+                        </form>
+                      )}
+
+                      {/* Version History */}
+                      {expandedHistory === doc.id && (
+                        <div className="mt-3 rounded-lg border bg-slate-50 p-3 space-y-2 text-xs">
+                          <h5 className="font-black text-[#1167c9]">
+                            {locale === "en" ? "Version History" : "سجل النسخ المرفوعة"}
+                          </h5>
+                          {versions[doc.id] ? (
+                            versions[doc.id].length === 0 ? (
+                              <p className="text-[var(--muted)]">{locale === "en" ? "No previous versions found." : "لا توجد نسخ سابقة."}</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {versions[doc.id].map((ver) => (
+                                  <div key={ver.id} className="flex items-center justify-between rounded bg-white p-2 border text-[11px]">
+                                    <div>
+                                      <span className="font-bold text-slate-800">
+                                        v{ver.versionNumber}: {ver.originalFileName}
+                                      </span>
+                                      <span className="text-[var(--muted)] ms-2">
+                                        ({(ver.fileSizeBytes / 1024).toFixed(1)} KB)
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadVersion(doc, ver)}
+                                      className="flex items-center gap-1 font-bold text-[#1167c9] hover:underline"
+                                    >
+                                      <Download size={13} />
+                                      {locale === "en" ? "Download" : "تحميل"}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          ) : (
+                            <p className="text-[var(--muted)]">{locale === "en" ? "Loading versions..." : "جاري التحميل..."}</p>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             )}
-          </div>
-        </Card>
+          </Card>
       )}
       {(activeTab === "all" || activeTab === "insurance") && (
         <Card className={`p-5 ${activeTab === "insurance" ? "xl:col-span-2" : ""}`}>

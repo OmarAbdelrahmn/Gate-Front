@@ -95,7 +95,7 @@ export default function LoginPage() {
             onChange={(e) => setForm({ ...form, login: e.target.value })}
           />
           <label className="grid gap-2 text-sm font-bold text-slate-900">
-            <span className="flex items-center justify-between gap-3"><span>كلمة المرور</span><span className="field-required" aria-hidden="true">مطلوب</span></span>
+            <span className="flex items-center gap-2"><span>كلمة المرور</span><span className="field-required" aria-hidden="true">مطلوب</span></span>
             <span className="relative">
               <input
                 className={`h-11 w-full rounded-xl border px-11 py-0 pr-3 text-slate-950 outline-none ${controlClass}`}

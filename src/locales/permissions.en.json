@@ -82,5 +82,7 @@
   "employee_status_changes.manage": "Manage employee status changes",
   "employee_status_changes.approve": "Approve employee status changes",
   "hr_forms.templates.read": "View HR Form Templates",
-  "hr_forms.templates.manage": "Manage & Publish HR Form Templates"
+  "hr_forms.templates.manage": "Manage & Publish HR Form Templates",
+  "phone_sims.read": "View Phone SIMs",
+  "phone_sims.manage": "Manage Phone SIMs"
 }

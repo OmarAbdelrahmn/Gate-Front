@@ -39,8 +39,9 @@ export function Sidebar({
     "الموارد البشرية": path.startsWith("/dashboard/hr") || path.startsWith("/dashboard/employees"),
     "إدارة السكن": path.startsWith("/dashboard/housing"),
     "إدارة المنصات": path.startsWith("/dashboard/platforms"),
-    "إدارة الأسطول والمركبات": path.startsWith("/dashboard/fleet") && !path.startsWith("/dashboard/fleet/vehicle-account-assignments"),
+    "إدارة الأسطول والمركبات": path.startsWith("/dashboard/fleet") && !path.startsWith("/dashboard/fleet/vehicle-account-assignments") && !path.startsWith("/dashboard/fleet/phone-sims"),
     "ربط المركبات بالمنصات": path.startsWith("/dashboard/fleet/vehicle-account-assignments"),
+    "إدارة شرائح الاتصال (SIM)": path.startsWith("/dashboard/fleet/phone-sims"),
   });
   const items =
     !authorization || isLoading

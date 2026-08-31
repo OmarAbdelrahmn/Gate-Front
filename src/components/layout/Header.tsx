@@ -19,14 +19,21 @@ import { useAuth } from "../../lib/auth/AuthProvider";
 import { systemConfirm } from "../ui/SystemDialog";
 import { translate } from "../../lib/i18n";
 
+import { resolveProfileImageUrl } from "../../lib/users/api";
+
 export function Header({ onMenu }: { onMenu: () => void }) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { user, logout, logoutAll, locale, theme, setPreferences } = useAuth();
   const t = (key: string) => translate(locale, key);
   const router = useRouter();
+
+  useEffect(() => {
+    setImgError(false);
+  }, [user?.profileImageUrl]);
 
   useEffect(() => {
     if (!open) return;
@@ -46,6 +53,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
       ? (user?.displayNameEn ?? "System Administrator")
       : (user?.displayNameAr ?? "مدير النظام");
   const initials = name.trim().slice(0, 1);
+  const avatarUrl = resolveProfileImageUrl(user?.profileImageUrl);
   async function leave(all = false) {
     setLoggingOut(true);
     try {
@@ -127,9 +135,18 @@ export function Header({ onMenu }: { onMenu: () => void }) {
             aria-expanded={open}
             className="flex h-11 items-center gap-2 rounded-xl px-2 hover:bg-white/15"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#f28b35] text-sm font-black">
-              {initials}
-            </span>
+            {avatarUrl && !imgError ? (
+              <img
+                src={avatarUrl}
+                alt={name}
+                onError={() => setImgError(true)}
+                className="h-8 w-8 rounded-full object-cover ring-2 ring-white/30"
+              />
+            ) : (
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#f28b35] text-sm font-black">
+                {initials}
+              </span>
+            )}
             <span className="hidden text-right text-xs sm:block">
               <b className="block">{name}</b>
               <small className="text-blue-100">

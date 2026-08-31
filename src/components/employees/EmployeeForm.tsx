@@ -214,6 +214,8 @@ export function EmployeeForm({
       return;
     }
 
+    console.log("[CREATE/UPDATE EMPLOYEE PAYLOAD]:", payload);
+
     setSaving(true);
     setError("");
     try {
@@ -374,8 +376,10 @@ export function EmployeeForm({
               value={initial.maritalStatus}
               options={[
                 { value: "", label: locale === "en" ? "Unspecified" : "غير محددة" },
-                { value: "Single", label: locale === "en" ? "Single" : "أعزب" },
+                { value: "Unmarried", label: locale === "en" ? "Unmarried" : "أعزب" },
                 { value: "Married", label: locale === "en" ? "Married" : "متزوج" },
+                { value: "Divorced", label: locale === "en" ? "Divorced" : "مطلق" },
+                { value: "Widowed", label: locale === "en" ? "Widowed" : "أرمل" },
               ]}
               className={selectClass}
             />

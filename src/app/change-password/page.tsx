@@ -149,21 +149,27 @@ function PasswordField({
 }) {
   return (
     <label className="grid gap-2 text-sm font-bold">
-      <span className="flex items-center justify-between gap-3"><span>{label}</span><span className="field-required" aria-hidden="true">مطلوب</span></span>
-      <span className="relative">
+      <span className="flex items-center gap-2">
+        <span>{label}</span>
+        <span className="field-required" aria-hidden="true">
+          مطلوب
+        </span>
+      </span>
+      <span className="relative block w-full">
         <input
           required
           value={value}
           onChange={(event) => onChange(event.target.value)}
           type={show ? "text" : "password"}
           autoComplete={autoComplete}
-          className="h-11 w-full rounded-xl border border-slate-300 px-11 pr-3 text-slate-950 outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100"
+          dir="rtl"
+          className="h-11 w-full rounded-xl border border-slate-300 pl-11 pr-4 text-start font-medium text-slate-950 outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100"
         />
         <button
           type="button"
           onClick={onToggle}
           aria-label={show ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
-          className="absolute inset-y-0 left-0 grid w-11 place-items-center text-slate-500 hover:text-[#1167c9]"
+          className="absolute inset-y-0 left-0 flex w-11 items-center justify-center text-slate-500 hover:text-[#1167c9]"
         >
           {show ? <EyeOff size={19} /> : <Eye size={19} />}
         </button>

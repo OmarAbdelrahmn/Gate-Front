@@ -278,7 +278,17 @@ export default function UsersPage() {
     const trimmedPhone = form.phoneNumber.trim();
     const trimmedNameEn = form.displayNameEn.trim();
 
-    if (trimmedEmail && !/\S+@\S+\.\S+/.test(trimmedEmail)) {
+    if (!trimmedEmail) {
+      setFormError(
+        locale === "en"
+          ? "Email address is required."
+          : "البريد الإلكتروني مطلوب.",
+      );
+      setSubmitting(false);
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
       setFormError(
         locale === "en"
           ? "Please enter a valid email address."
@@ -516,8 +526,9 @@ export default function UsersPage() {
                   }
                 />
                 <Input
-                  label={locale === "en" ? "Email" : "البريد الإلكتروني"}
+                  label={locale === "en" ? "Email *" : "البريد الإلكتروني *"}
                   type="email"
+                  required
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />

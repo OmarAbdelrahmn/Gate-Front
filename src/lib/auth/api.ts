@@ -108,6 +108,32 @@ export function getFriendlyErrorMessage(
         return "حدث تعارض في التحديث بالتزامن. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
       case "hr.invalid_request":
         return "طلب غير صالح. يرجى التأكد من صحة البيانات والمدخلات.";
+      case "phone_sim.invalid_phone_number":
+        return "رقم الهاتف غير صحيح. يرجى إدخال رقم هاتف صالح بالصيغة المحلية أو الدولية.";
+      case "phone_sim.invalid_iccid":
+        return "رمز ICCID غير صحيح. يجب أن يتكون من 18 إلى 22 رقماً ويبدأ بـ 89.";
+      case "phone_sim.invalid_status":
+        return "حالة الشريحة المحددة غير صالحة لهذا الإجراء.";
+      case "phone_sim.invalid_date_range":
+        return "تاريخ التعيين غير صالح. يرجى التحقق من تواريخ البداية والنهاية.";
+      case "phone_sim.responsible_employee_not_found":
+        return "لم يتم العثور على الموظف المسؤول المحدد.";
+      case "phone_sim.responsible_employee_unavailable":
+        return "الموظف المسؤول غير متاح، يرجى اختيار موظف داخلي نشط.";
+      case "phone_sim.rider_not_found":
+        return "لم يتم العثور على ملف المندوب المحدد.";
+      case "phone_sim.rider_unavailable":
+        return "المندوب غير متاح حالياً للتعيين، يرجى اختيار مندوب نشط.";
+      case "phone_sim.duplicate_phone_number":
+        return "رقم الهاتف مستخدم بالفعل لشريحة أخرى في النظام.";
+      case "phone_sim.duplicate_iccid":
+        return "رمز ICCID مستخدم بالفعل لشريحة أخرى في النظام.";
+      case "phone_sim.active_assignment_conflict":
+        return "توجد عملية تعيين نشطة حالياً لهذه الشريحة. يرجى إنهاء التعيين الحالي أولاً.";
+      case "phone_sim.assignment_conflict":
+        return "يوجد تعارض في التعيين. يرجى مراجعة سجل التعيينات واختيار تاريخ بدء صالح.";
+      case "phone_sim.concurrency_conflict":
+        return "تم تعديل بيانات الشريحة بواسطة مستخدم آخر. يرجى إعادة تحميل الصفحة والمحاولة مجدداً.";
     }
   }
 

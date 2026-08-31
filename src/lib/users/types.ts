@@ -14,6 +14,7 @@ export type ManagedUser = {
   lastActivityAtUtc: string | null;
   createdAtUtc: string;
   rowVersion: string;
+  profileImageUrl?: string | null;
 };
 export type CreateManagedUserRequest = {
   userName: string;

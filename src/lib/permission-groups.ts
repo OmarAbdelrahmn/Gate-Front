@@ -29,7 +29,7 @@ export function permissionGroup(key: string): PermissionGroup {
   )
     return "Compliance";
   if (key.startsWith("documents.")) return "Documents";
-  if (key.startsWith("fleet.")) return "Fleet";
+  if (key.startsWith("fleet.") || key.startsWith("phone_sims.")) return "Fleet";
   if (/^(leave_requests|absence_cases|employee_status_changes|hr_forms)\./.test(key))
     return "Workflows";
   return "Operations";

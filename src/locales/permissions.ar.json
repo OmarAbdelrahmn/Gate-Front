@@ -82,5 +82,7 @@
   "employee_status_changes.manage": "إدارة تغييرات حالة الموظف",
   "employee_status_changes.approve": "اعتماد تغييرات حالة الموظف",
   "hr_forms.templates.read": "عرض نماذج ومصمم الموارد البشرية",
-  "hr_forms.templates.manage": "إدارة ونشر نماذج ومصمم الموارد البشرية"
+  "hr_forms.templates.manage": "إدارة ونشر نماذج ومصمم الموارد البشرية",
+  "phone_sims.read": "عرض شرائح الاتصال SIM",
+  "phone_sims.manage": "إدارة شرائح الاتصال SIM"
 }
