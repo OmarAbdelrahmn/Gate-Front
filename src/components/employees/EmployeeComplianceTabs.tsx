@@ -507,7 +507,7 @@ export function EmployeeComplianceTabs({
           </p>
         ) : records.length ? (
           <div className="space-y-6">
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-3 grid-cols-1">
               {records.map((record) => {
                 const expiry = expiryState(record.expiryDate, locale);
                 const isSelectedForPreview =
@@ -516,9 +516,9 @@ export function EmployeeComplianceTabs({
                 return (
                   <article
                     key={record.id}
-                    className={`rounded-xl border p-4 transition-all ${isSelectedForPreview
+                    className={`w-full rounded-xl border p-4 transition-all ${isSelectedForPreview
                         ? "border-[#1167c9] bg-blue-50/40 ring-2 ring-[#1167c9]/20"
-                        : "border-[var(--border)]"
+                        : "border-[var(--border)] bg-[var(--surface)]"
                       }`}
                   >
                     <div className="flex items-start justify-between gap-3">

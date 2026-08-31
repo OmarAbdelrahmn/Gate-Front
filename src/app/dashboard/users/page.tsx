@@ -20,6 +20,7 @@ import {
   getPermissionCatalogue,
   listRoles,
   listUsers,
+  resolveProfileImageUrl,
 } from "../../../lib/users/api";
 import type {
   AuthorizationScopeRequest,
@@ -860,18 +861,33 @@ export default function UsersPage() {
                 return (
                   <tr key={user.id} className="hover:bg-blue-500/5">
                     <td className="px-5 py-4">
-                      <b className="block">
-                        {locale === "en"
-                          ? user.displayNameEn || user.displayNameAr
-                          : user.displayNameAr || user.displayNameEn}
-                      </b>
-                      {linkedEmp && (
-                        <span className="block text-xs font-normal text-[var(--muted)]">
-                          {locale === "en"
-                            ? `Employee: ${linkedEmp.fullNameEn || linkedEmp.fullNameAr}`
-                            : `الموظف: ${linkedEmp.fullNameAr}`}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {user.profileImageUrl ? (
+                          <img
+                            src={resolveProfileImageUrl(user.profileImageUrl) || ""}
+                            alt={user.displayNameAr || user.userName}
+                            className="h-9 w-9 shrink-0 rounded-full object-cover border border-slate-200 shadow-sm"
+                          />
+                        ) : (
+                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-[#1167c9] font-black text-xs">
+                            {(user.displayNameAr || user.userName || "U").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <b className="block">
+                            {locale === "en"
+                              ? user.displayNameEn || user.displayNameAr
+                              : user.displayNameAr || user.displayNameEn}
+                          </b>
+                          {linkedEmp && (
+                            <span className="block text-xs font-normal text-[var(--muted)]">
+                              {locale === "en"
+                                ? `Employee: ${linkedEmp.fullNameEn || linkedEmp.fullNameAr}`
+                                : `الموظف: ${linkedEmp.fullNameAr}`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-5 py-4 font-medium" dir="ltr">
                       {user.userName}

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  AlertTriangle,
   Archive,
   ChevronDown,
   ChevronUp,
@@ -94,6 +95,11 @@ export function EmployeeDocumentsInsurance({
   activeTab?: "docs" | "insurance" | "all";
 }) {
   const { can, locale } = useAuth();
+  const canManageDocs =
+    can("documents.upload") ||
+    can("documents.catalog.manage") ||
+    can("employees.update") ||
+    can("documents.read");
   const [docs, setDocs] = useState<EmployeeDocument[]>([]);
   const [types, setTypes] = useState<HrRow[]>([]);
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
@@ -246,7 +252,11 @@ export function EmployeeDocumentsInsurance({
     const f = new FormData(form);
     const file = f.get("file") as File;
     if (!validateFile(file, f)) return;
-    const kind = String(f.get("riderDocumentKind") || "") as RiderDocumentKind;
+    const docTypeId = String(f.get("documentTypeId") || selectedDocTypeId || "");
+    if (docTypeId && !f.has("documentTypeId")) {
+      f.append("documentTypeId", docTypeId);
+    }
+    const kind = String(f.get("riderDocumentKind") || selectedRiderKind || "") as RiderDocumentKind;
 
     const docNumber = String(f.get("documentNumber") || "").trim();
     const issueDate = String(f.get("issueDate") || "").trim();
@@ -261,8 +271,10 @@ export function EmployeeDocumentsInsurance({
       return;
     }
 
+    const isKnownRiderKind = riderKinds.some((rk) => rk.value === kind);
+
     await run(() =>
-      riderProfileId
+      riderProfileId && isKnownRiderKind
         ? uploadRiderDocument(riderProfileId, kind, f)
         : uploadEmployeeDocument(employeeId, f),
     );
@@ -515,7 +527,7 @@ export function EmployeeDocumentsInsurance({
                   : "إدارة واستعراض المستندات والملفات المرفوعة للموظف وتواريخ الصلاحية."}
               </p>
             </div>
-            {can("documents.manage") && (
+            {canManageDocs && (
               <Button
                 variant="secondary"
                 onClick={() => setShowUploadForm((prev) => !prev)}
@@ -533,49 +545,80 @@ export function EmployeeDocumentsInsurance({
             )}
           </div>
 
+            {/* Quick Upload Banner for Missing / Unuploaded Document Types */}
+            {(() => {
+              const uploadedTypeIds = new Set(docs.map((d) => String((d as Record<string, unknown>).documentTypeId || d.documentTypeCode || "")));
+              const uploadedCodes = new Set(docs.map((d) => String(d.documentTypeCode || "").toUpperCase()));
+              const missingTypes = types.filter((t) => {
+                const idStr = String(t.id);
+                const codeStr = String(t.code || "").toUpperCase();
+                return !uploadedTypeIds.has(idStr) && (!codeStr || !uploadedCodes.has(codeStr));
+              });
+
+              if (missingTypes.length === 0) return null;
+
+              return (
+                <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                      <AlertTriangle size={16} className="text-amber-600" />
+                      {locale === "en" ? "Unuploaded / Missing Document Types:" : "أنواع وثائق مطلوبة لم يتم رفعها بعد:"}
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {missingTypes.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDocTypeId(String(t.id));
+                          setShowUploadForm(true);
+                        }}
+                        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 text-xs font-bold text-amber-900 shadow-sm hover:bg-amber-100 hover:border-amber-400 transition-all truncate"
+                        title={locale === "en" ? String(t.nameEn || t.nameAr) : String(t.nameAr)}
+                      >
+                        <Plus size={14} className="shrink-0 text-amber-700" />
+                        <span className="truncate">{locale === "en" ? String(t.nameEn || t.nameAr) : String(t.nameAr)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Upload Form */}
-            {can("documents.manage") && showUploadForm && (
+            {canManageDocs && showUploadForm && (
               <form onSubmit={upload} className="mb-6 rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
                 <h4 className="text-xs font-black text-[#1167c9]">
                   {locale === "en" ? "Upload New Document" : "رفع وثيقة جديدة للموظف"}
                 </h4>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {riderProfileId ? (
-                    <label className="grid gap-1 text-xs font-bold">
-                      {locale === "en" ? "Document Kind *" : "نوع الوثيقة *"}
-                      <select
-                        name="riderDocumentKind"
-                        required
-                        value={selectedRiderKind}
-                        onChange={(e) => setSelectedRiderKind(e.target.value)}
-                        className={cls}
-                      >
-                        <option value="">{locale === "en" ? "Select Document Kind" : "اختر نوع الوثيقة"}</option>
-                        {riderKinds.map((k) => (
-                          <option key={k.value} value={k.value}>
-                            {locale === "en" ? k.labelEn : k.labelAr}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : (
-                    <label className="grid gap-1 text-xs font-bold">
-                      {locale === "en" ? "Document Type *" : "نوع الوثيقة *"}
-                      <SearchableSelect
-                        name="documentTypeId"
-                        required
-                        value={selectedDocTypeId}
-                        onChange={(val) => setSelectedDocTypeId(val)}
-                        options={types.map((t) => ({
-                          value: String(t.id),
-                          label: locale === "en" ? String(t.nameEn || t.nameAr) : String(t.nameAr),
-                          sublabel: String(t.code || ""),
-                        }))}
-                        placeholder={locale === "en" ? "Select Document Type" : "اختر نوع الوثيقة"}
-                        searchPlaceholder={locale === "en" ? "Search document type..." : "ابحث عن نوع الوثيقة..."}
-                      />
-                    </label>
-                  )}
+                  <label className="grid gap-1 text-xs font-bold">
+                    {locale === "en" ? "Document Type *" : "نوع الوثيقة *"}
+                    <SearchableSelect
+                      name="documentTypeId"
+                      required
+                      value={selectedDocTypeId}
+                      onChange={(val) => {
+                        setSelectedDocTypeId(val);
+                        const matchedType = types.find((t) => String(t.id) === val);
+                        if (matchedType) {
+                          const codeKey = String(matchedType.code || "").toLowerCase().replace(/_/g, "-");
+                          setSelectedRiderKind(codeKey);
+                        } else {
+                          setSelectedRiderKind("");
+                        }
+                      }}
+                      options={types.map((t) => ({
+                        value: String(t.id),
+                        label: locale === "en" ? String(t.nameEn || t.nameAr) : String(t.nameAr),
+                        sublabel: String(t.code || ""),
+                      }))}
+                      placeholder={locale === "en" ? "Select Document Type" : "اختر نوع الوثيقة"}
+                      searchPlaceholder={locale === "en" ? "Search document type..." : "ابحث عن نوع الوثيقة..."}
+                    />
+                    <input type="hidden" name="riderDocumentKind" value={selectedRiderKind} />
+                  </label>
 
                   <label className="grid gap-1 text-xs font-bold">
                     {locale === "en" ? "Document Number *" : "رقم الوثيقة *"}
@@ -637,12 +680,17 @@ export function EmployeeDocumentsInsurance({
                             <img
                               src={prevInfo.url}
                               alt={name}
-                              className="h-12 w-12 rounded-lg object-cover border cursor-pointer"
+                              className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 rounded-xl object-cover border border-slate-200 shadow-sm cursor-pointer hover:opacity-95 hover:shadow-md transition-all"
                               onClick={() => previewDoc(doc)}
+                              title={locale === "en" ? "Click to view full preview" : "انقر لتكبير الوثيقة"}
                             />
                           ) : (
-                            <div className="grid h-12 w-12 place-items-center rounded-lg bg-blue-50 text-[#1167c9] border border-blue-200">
-                              <FilePlus size={22} />
+                            <div
+                              onClick={() => previewDoc(doc)}
+                              className="grid h-20 w-20 sm:h-24 sm:w-24 shrink-0 place-items-center rounded-xl bg-blue-50/80 text-[#1167c9] border border-blue-200 shadow-sm cursor-pointer hover:bg-blue-100 transition-all"
+                              title={locale === "en" ? "Click to view document" : "انقر لعرض الوثيقة"}
+                            >
+                              <FilePlus size={32} />
                             </div>
                           )}
                           <div>
@@ -685,7 +733,7 @@ export function EmployeeDocumentsInsurance({
                               </button>
                             </>
                           )}
-                          {can("documents.manage") && (
+                          {canManageDocs && (
                             <>
                               <button
                                 type="button"

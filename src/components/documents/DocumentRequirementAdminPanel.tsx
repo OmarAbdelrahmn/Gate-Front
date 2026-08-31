@@ -48,7 +48,7 @@ function getScopeDescription(
     return isEn ? "All admin staff" : "الإداريين فقط";
   }
   if (rel === "SponsoredInternal" && isRider) {
-    return isEn ? "Admin riders only" : "المناديب الإداريين فقط";
+    return isEn ? "Admin riders only" : "المناديب فقط";
   }
   if (rel === "OutsideRider") {
     return isEn ? "Outside riders only" : "المناديب الخارجيين فقط";
