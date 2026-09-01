@@ -88,6 +88,14 @@ export const navigation: NavItem[] = [
         permission: "insurance.read",
       },
       {
+        label: "التأمينات الاجتماعية",
+        labelKey: "nav.socialInsurance",
+        href: "/dashboard/hr/payroll-employees",
+        icon: Building2,
+        roles: ["admin", "member"],
+        permission: "employees.read",
+      },
+      {
         label: "حالات الغياب",
         labelKey: "nav.absenceCases",
         href: "/dashboard/hr/absence-cases",

@@ -58,6 +58,7 @@
     "catalogs": "Employee Catalogs",
     "documents": "Staff & Rider Documents",
     "insurance": "Medical Insurance",
+    "socialInsurance": "Social Insurance & Payroll",
     "absenceCases": "Absence Cases",
     "statusChangeRequests": "Status Change Requests",
     "hrForms": "HR Forms",
