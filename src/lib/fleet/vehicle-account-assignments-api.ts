@@ -51,6 +51,8 @@ export type VehiclePlatformAccountAssignment = {
     iqamaNo?: string | null;
     relationshipToAssignedRider?: string | null;
   } | null;
+  usesSponsorVehicleLeaseAgreement?: boolean;
+  sponsorVehicleLeaseAgreementId?: string | null;
   approvalStatus: string;
   status: "Active" | "Ended" | "Closed" | string;
   hasProblems: boolean;
@@ -237,6 +239,146 @@ export function acceptVehicleAccountAssignmentSwitch(
 ): Promise<SwitchVehicleAccountAssignmentResponse> {
   return authFetch<SwitchVehicleAccountAssignmentResponse>(
     `/api/vehicle-platform-account-assignments/switches/${encodeURIComponent(switchId)}/accept`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+// Keeta Sponsor Vehicle Leases Types & Endpoints
+
+export type SponsorVehicleLeaseEligibleVehicle = {
+  vehicleId: string;
+  assetNumber: string;
+  registrationNumber: string | null;
+  plateNumberAr: string | null;
+  plateNumberEn: string | null;
+  vehicleType: string;
+  operationalStatus: string;
+  operatingCityId: string | null;
+};
+
+export type SponsorVehicleLeaseVehicle = {
+  id: string; // agreement-vehicle relation ID
+  vehicleId: string;
+  assetNumber: string;
+  registrationNumber: string | null;
+  plateNumberAr: string | null;
+  plateNumberEn: string | null;
+};
+
+export type SponsorVehicleLeaseAgreement = {
+  id: string;
+  platformId: string;
+  platformCode: "KEETA" | string;
+  platformNameAr: string;
+  lessorSponsorId: string;
+  lessorSponsorNameAr: string;
+  lesseeSponsorId: string;
+  lesseeSponsorNameAr: string;
+  agreementDate: string | null;
+  agreementReference: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  status: "Scheduled" | "Active" | "Ended" | string;
+  endReason: string | null;
+  notes: string | null;
+  vehicles: SponsorVehicleLeaseVehicle[];
+  rowVersion: string;
+};
+
+export type CreateSponsorVehicleLeaseAgreementRequest = {
+  lessorSponsorId: string;
+  lesseeSponsorId: string;
+  vehicleIds: string[];
+  agreementDate?: string | null;
+  agreementReference?: string | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  notes?: string | null;
+};
+
+export type CloseSponsorVehicleLeaseAgreementRequest = {
+  effectiveTo?: string | null;
+  reason: string;
+  rowVersion: string;
+};
+
+export type SponsorVehicleLeaseFilters = {
+  lessorSponsorId?: string;
+  lesseeSponsorId?: string;
+  activeOnly?: boolean;
+};
+
+// 9. GET /api/vehicle-platform-account-assignments/lease-agreements/eligible-vehicles
+export async function getSponsorVehicleLeaseEligibleVehicles(
+  lessorSponsorId: string,
+  effectiveFrom?: string,
+  effectiveTo?: string
+): Promise<SponsorVehicleLeaseEligibleVehicle[]> {
+  const query = new URLSearchParams({ lessorSponsorId });
+  if (effectiveFrom) query.set("effectiveFrom", effectiveFrom);
+  if (effectiveTo) query.set("effectiveTo", effectiveTo);
+
+  try {
+    const res = await authFetch<SponsorVehicleLeaseEligibleVehicle[]>(
+      `/api/vehicle-platform-account-assignments/lease-agreements/eligible-vehicles?${query.toString()}`
+    );
+    return res || [];
+  } catch (err: any) {
+    console.error("Failed to fetch eligible vehicles for sponsor lease", err);
+    throw err;
+  }
+}
+
+// 10. POST /api/vehicle-platform-account-assignments/lease-agreements
+export function createSponsorVehicleLeaseAgreement(
+  payload: CreateSponsorVehicleLeaseAgreementRequest
+): Promise<SponsorVehicleLeaseAgreement> {
+  return authFetch<SponsorVehicleLeaseAgreement>(
+    "/api/vehicle-platform-account-assignments/lease-agreements",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+// 11. GET /api/vehicle-platform-account-assignments/lease-agreements
+export async function getSponsorVehicleLeaseAgreements(
+  filters?: SponsorVehicleLeaseFilters
+): Promise<SponsorVehicleLeaseAgreement[]> {
+  const query = new URLSearchParams();
+  if (filters?.lessorSponsorId) query.set("lessorSponsorId", filters.lessorSponsorId);
+  if (filters?.lesseeSponsorId) query.set("lesseeSponsorId", filters.lesseeSponsorId);
+  if (filters?.activeOnly !== undefined) query.set("activeOnly", String(filters.activeOnly));
+
+  try {
+    const res = await authFetch<SponsorVehicleLeaseAgreement[]>(
+      `/api/vehicle-platform-account-assignments/lease-agreements?${query.toString()}`
+    );
+    return res || [];
+  } catch (err: any) {
+    console.error("Failed to fetch sponsor vehicle lease agreements", err);
+    return [];
+  }
+}
+
+// 12. GET /api/vehicle-platform-account-assignments/lease-agreements/{id}
+export function getSponsorVehicleLeaseAgreement(id: string): Promise<SponsorVehicleLeaseAgreement> {
+  return authFetch<SponsorVehicleLeaseAgreement>(
+    `/api/vehicle-platform-account-assignments/lease-agreements/${encodeURIComponent(id)}`
+  );
+}
+
+// 13. POST /api/vehicle-platform-account-assignments/lease-agreements/{id}/close
+export function closeSponsorVehicleLeaseAgreement(
+  id: string,
+  payload: CloseSponsorVehicleLeaseAgreementRequest
+): Promise<SponsorVehicleLeaseAgreement> {
+  return authFetch<SponsorVehicleLeaseAgreement>(
+    `/api/vehicle-platform-account-assignments/lease-agreements/${encodeURIComponent(id)}/close`,
     {
       method: "POST",
       body: JSON.stringify(payload),

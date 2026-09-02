@@ -134,6 +134,16 @@ export function getFriendlyErrorMessage(
         return "يوجد تعارض في التعيين. يرجى مراجعة سجل التعيينات واختيار تاريخ بدء صالح.";
       case "phone_sim.concurrency_conflict":
         return "تم تعديل بيانات الشريحة بواسطة مستخدم آخر. يرجى إعادة تحميل الصفحة والمحاولة مجدداً.";
+      case "fleet.invalid_request":
+        return "طلب غير صالح. يرجى التأكد من التواريخ واختيار كفيلين مختلفين ومركبات صالحة.";
+      case "fleet.lease_vehicle_sponsor_mismatch":
+        return "المركبة المحددة لا تنتمي إلى الكفيل المؤجر الأصلي.";
+      case "fleet.lease_period_conflict":
+        return "توجد اتفاقية تأجير كفيل نشطة أو متداخلة للمركبة المحددة في منصة كيتا.";
+      case "fleet.keeta_platform_unavailable":
+        return "سجل منصة كيتا غير متاح في الكتالوج حالياً.";
+      case "fleet.concurrency_conflict":
+        return "تم تعديل الاتفاقية بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
     }
   }
 

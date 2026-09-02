@@ -277,6 +277,14 @@ export const navigation: NavItem[] = [
         roles: ["admin", "member"],
         permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
       },
+      {
+        label: "عقود تأجير الكفلاء (كيتا)",
+        labelKey: "nav.sponsorVehicleLeases",
+        href: "/dashboard/fleet/vehicle-account-assignments/leases",
+        icon: FileText,
+        roles: ["admin", "member"],
+        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+      },
     ],
   },
   {

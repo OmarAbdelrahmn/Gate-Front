@@ -22,6 +22,7 @@ import {
   Repeat,
   ArrowRight,
   ArrowLeftRight,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -602,6 +603,29 @@ export default function VehicleAccountAssignmentsPage() {
     return (v as any).plateNumberAr || "";
   };
 
+  const isLeasedVehicleAssignment = (item?: any): boolean => {
+    if (!item) return false;
+    // Must be explicitly true
+    if (item.usesSponsorVehicleLeaseAgreement !== true) return false;
+    // Must be an active assignment
+    if (item.status !== "Active") return false;
+
+    // Must be Keeta platform
+    const platformCode = (item.platformCode || "").toUpperCase();
+    const platformName = item.platformNameAr || "";
+    const isKeeta = platformCode === "KEETA" || platformName.includes("كيتا");
+    if (!isKeeta) return false;
+
+    // Account sponsor must differ from vehicle sponsor
+    const vehicleSponsor = item.vehicleSponsorId || item.vehicleSponsorNameAr;
+    const accountSponsor = item.accountSponsorId || item.accountSponsorNameAr;
+    if (vehicleSponsor && accountSponsor && vehicleSponsor === accountSponsor) {
+      return false;
+    }
+
+    return true;
+  };
+
   const resolveVehicleRegistration = (item?: any, role?: "source" | "target") => {
     if (!item) return "—";
     const directReg =
@@ -777,6 +801,75 @@ export default function VehicleAccountAssignmentsPage() {
             ربط مركبة بحساب منصة
           </Button>
         )}
+      </div>
+
+      {/* Top Sub-Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3 overflow-x-auto no-scrollbar">
+        <Link
+          href="/dashboard/fleet/vehicle-account-assignments"
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            pathname === "/dashboard/fleet/vehicle-account-assignments" && activeTab === "assignments"
+              ? "bg-[#1167c9] text-white shadow-md shadow-blue-500/20"
+              : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--subtle-bg)] hover:text-[var(--foreground)] border border-[var(--border)]"
+          }`}
+        >
+          <Server className="h-4 w-4" />
+          <span>جميع الربطات النشطة</span>
+          {assignments.length > 0 && (
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-mono">
+              {assignments.length}
+            </span>
+          )}
+        </Link>
+
+        <Link
+          href="/dashboard/fleet/vehicle-account-assignments/switches"
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            pathname.endsWith("/switches") || activeTab === "switches"
+              ? "bg-[#1167c9] text-white shadow-md shadow-blue-500/20"
+              : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--subtle-bg)] hover:text-[var(--foreground)] border border-[var(--border)]"
+          }`}
+        >
+          <Repeat className="h-4 w-4" />
+          <span>طلبات التبديل المعلقة</span>
+          {pendingSwitches.length > 0 && (
+            <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-mono">
+              {pendingSwitches.length}
+            </span>
+          )}
+        </Link>
+
+        <Link
+          href="/dashboard/fleet/vehicle-account-assignments/problems"
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            pathname.endsWith("/problems") || activeTab === "problems"
+              ? "bg-[#1167c9] text-white shadow-md shadow-blue-500/20"
+              : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--subtle-bg)] hover:text-[var(--foreground)] border border-[var(--border)]"
+          }`}
+        >
+          <AlertTriangle className="h-4 w-4" />
+          <span>التحذيرات التشغيلية</span>
+          {problems.length > 0 && (
+            <span className="rounded-full bg-red-500 text-white px-2 py-0.5 text-[10px] font-mono">
+              {problems.length}
+            </span>
+          )}
+        </Link>
+
+        <Link
+          href="/dashboard/fleet/vehicle-account-assignments/leases"
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            pathname.includes("/leases")
+              ? "bg-[#1167c9] text-white shadow-md shadow-blue-500/20"
+              : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--subtle-bg)] hover:text-[var(--foreground)] border border-[var(--border)]"
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          <span>عقود تأجير الكفلاء (كيتا)</span>
+          <span className="rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 px-2 py-0.5 text-[10px] font-bold">
+            Keeta
+          </span>
+        </Link>
       </div>
 
       {/* Warning Summary Banner if Problems Exist */}
@@ -1104,6 +1197,26 @@ export default function VehicleAccountAssignmentsPage() {
                           <span className="text-[var(--muted)]">كفيل الحساب:</span>
                           <strong className="font-semibold">{item.accountSponsorNameAr || "—"}</strong>
                         </div>
+                        {isLeasedVehicleAssignment(item) && (
+                          <div className="pt-1">
+                            {item.sponsorVehicleLeaseAgreementId ? (
+                              <Link
+                                href={`/dashboard/fleet/vehicle-account-assignments/leases/${item.sponsorVehicleLeaseAgreementId}`}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 hover:bg-amber-200 transition-colors"
+                                title="عرض تفاصيل عقد تأجير الكفيل"
+                              >
+                                <FileText className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span>مركبة مؤجّرة</span>
+                                <ExternalLink className="h-2.5 w-2.5 opacity-70 shrink-0" />
+                              </Link>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                <FileText className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span>مركبة مؤجّرة</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
 
