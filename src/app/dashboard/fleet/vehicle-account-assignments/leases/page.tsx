@@ -91,6 +91,7 @@ export default function SponsorVehicleLeasesPage() {
   // Eligible Vehicles State for Creation Flow
   const [eligibleVehicles, setEligibleVehicles] = useState<SponsorVehicleLeaseEligibleVehicle[]>([]);
   const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
+  const [vehicleSearchQuery, setVehicleSearchQuery] = useState("");
   const [loadingEligible, setLoadingEligible] = useState(false);
   const [eligibleError, setEligibleError] = useState<string | null>(null);
 
@@ -157,6 +158,22 @@ export default function SponsorVehicleLeasesPage() {
     });
   }, [agreements, search]);
 
+  // Filtered Eligible Vehicles for Modal Search
+  const filteredEligibleVehicles = useMemo(() => {
+    const term = vehicleSearchQuery.toLowerCase().trim();
+    if (!term) return eligibleVehicles;
+    return eligibleVehicles.filter((v) => {
+      return (
+        v.assetNumber?.toLowerCase().includes(term) ||
+        v.registrationNumber?.toLowerCase().includes(term) ||
+        v.plateNumberAr?.toLowerCase().includes(term) ||
+        v.plateNumberEn?.toLowerCase().includes(term) ||
+        v.vehicleType?.toLowerCase().includes(term) ||
+        v.operationalStatus?.toLowerCase().includes(term)
+      );
+    });
+  }, [eligibleVehicles, vehicleSearchQuery]);
+
   // Fetch eligible vehicles when Lessor Sponsor or Date Range changes in Create Flow
   const fetchEligibleVehicles = async (lessorId: string, fromDate: string, toDate: string) => {
     if (!lessorId) {
@@ -196,6 +213,7 @@ export default function SponsorVehicleLeasesPage() {
     setAgreementReference("");
     setNotes("");
     setSelectedVehicleIds([]);
+    setVehicleSearchQuery("");
     setEligibleVehicles([]);
     setEligibleError(null);
     setIsCreateOpen(true);
@@ -207,6 +225,7 @@ export default function SponsorVehicleLeasesPage() {
 
   const handleLessorChange = (val: string) => {
     setLessorSponsorId(val);
+    setVehicleSearchQuery("");
     if (val === lesseeSponsorId) {
       // Auto select a different sponsor for lessee if available
       const alt = sponsors.find((s) => s.id !== val);
@@ -236,10 +255,14 @@ export default function SponsorVehicleLeasesPage() {
   };
 
   const handleSelectAllVehicles = () => {
-    if (selectedVehicleIds.length === eligibleVehicles.length) {
-      setSelectedVehicleIds([]);
+    const targetList = filteredEligibleVehicles;
+    const allFilteredSelected = targetList.every((v) => selectedVehicleIds.includes(v.vehicleId));
+    if (allFilteredSelected) {
+      const targetIds = new Set(targetList.map((v) => v.vehicleId));
+      setSelectedVehicleIds((prev) => prev.filter((id) => !targetIds.has(id)));
     } else {
-      setSelectedVehicleIds(eligibleVehicles.map((v) => v.vehicleId));
+      const targetIds = targetList.map((v) => v.vehicleId);
+      setSelectedVehicleIds((prev) => Array.from(new Set([...prev, ...targetIds])));
     }
   };
 
@@ -756,10 +779,26 @@ export default function SponsorVehicleLeasesPage() {
                   onClick={handleSelectAllVehicles}
                   className="text-[11px] py-0.5 px-2 h-auto"
                 >
-                  {selectedVehicleIds.length === eligibleVehicles.length ? "إلغاء تحديد الكل" : "تحديد الكل"}
+                  {filteredEligibleVehicles.length > 0 &&
+                  filteredEligibleVehicles.every((v) => selectedVehicleIds.includes(v.vehicleId))
+                    ? "إلغاء تحديد الكل"
+                    : "تحديد الكل"}
                 </Button>
               )}
             </div>
+
+            {/* Search Input for Eligible Vehicles */}
+            {eligibleVehicles.length > 0 && (
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--muted)]" />
+                <Input
+                  value={vehicleSearchQuery}
+                  onChange={(e) => setVehicleSearchQuery(e.target.value)}
+                  placeholder="ابحث في المركبات المؤهلة (برقم الأصل، اللوحة، التسجيل...)"
+                  className="pr-9 text-xs h-8 rounded-xl bg-[var(--surface)]"
+                />
+              </div>
+            )}
 
             {loadingEligible ? (
               <div className="py-6 text-center text-xs text-[var(--muted)] flex items-center justify-center gap-2">
@@ -776,9 +815,13 @@ export default function SponsorVehicleLeasesPage() {
                   ? "لا توجد مركبات مملوكة للكفيل المؤجّر ومتاحة للتأجير (غير مربوطة باتفاقيات كيتا متداخلة في هذا التاريخ)."
                   : "يرجى اختيار الكفيل المؤجّر أولاً لعرض المركبات المؤهلة."}
               </div>
+            ) : filteredEligibleVehicles.length === 0 ? (
+              <div className="py-6 text-center text-xs text-[var(--muted)]">
+                لا توجد مركبات مؤهلة تطابق كلمة البحث "{vehicleSearchQuery}".
+              </div>
             ) : (
               <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                {eligibleVehicles.map((v) => {
+                {filteredEligibleVehicles.map((v) => {
                   const isSelected = selectedVehicleIds.includes(v.vehicleId);
                   return (
                     <div
@@ -815,8 +858,15 @@ export default function SponsorVehicleLeasesPage() {
               </div>
             )}
 
-            <div className="text-[11px] text-[var(--muted)] font-semibold">
-              تم تحديد <strong className="text-[#1167c9] font-mono">{selectedVehicleIds.length}</strong> من أصل {eligibleVehicles.length} مركبة.
+            <div className="text-[11px] text-[var(--muted)] font-semibold flex items-center justify-between">
+              <span>
+                تم تحديد <strong className="text-[#1167c9] font-mono">{selectedVehicleIds.length}</strong> من أصل {eligibleVehicles.length} مركبة.
+              </span>
+              {vehicleSearchQuery && (
+                <span className="text-[10px] text-slate-500">
+                  (معروض: {filteredEligibleVehicles.length})
+                </span>
+              )}
             </div>
           </div>
 
