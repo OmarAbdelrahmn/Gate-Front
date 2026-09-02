@@ -22,6 +22,7 @@ import {
   UserCheck,
   ArrowLeftRight,
   Archive,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 export type Role = "admin" | "member" | "accountant";
@@ -197,6 +198,7 @@ export const navigation: NavItem[] = [
       "fleet.issues.read",
       "fleet.accidents.read",
       "fleet.compliance.read",
+      "fleet.daily_distances.read",
     ],
     children: [
       {
@@ -214,6 +216,14 @@ export const navigation: NavItem[] = [
         icon: Key,
         roles: ["admin", "member"],
         permission: "fleet.assignments.read",
+      },
+      {
+        label: "المسافات اليومية (GPS والعداد)",
+        labelKey: "nav.vehicleDailyDistances",
+        href: "/dashboard/fleet/daily-distances",
+        icon: Gauge,
+        roles: ["admin", "member"],
+        permissionsAny: ["fleet.daily_distances.read", "fleet.vehicles.read", "fleet.assignments.read"],
       },
       {
         label: "الأعطال والمشاكل",
