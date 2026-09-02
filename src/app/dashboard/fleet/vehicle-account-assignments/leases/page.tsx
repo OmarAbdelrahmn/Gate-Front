@@ -18,6 +18,7 @@ import {
   Key,
   Link2,
   Plus,
+  Printer,
   RefreshCw,
   Repeat,
   Search,
@@ -649,6 +650,13 @@ export default function SponsorVehicleLeasesPage() {
                     {/* Actions */}
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
+                        <Link
+                          href={`/dashboard/fleet/vehicle-account-assignments/leases/${item.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-[#1167c9]/10 text-[#1167c9] hover:bg-[#1167c9] hover:text-white transition-colors"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          <span>العقد (PDF)</span>
+                        </Link>
                         <Button
                           variant="secondary"
                           onClick={() => setViewAgreement(item)}
@@ -1109,7 +1117,14 @@ export default function SponsorVehicleLeasesPage() {
               </div>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-[var(--border)]">
+            <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
+              <Link
+                href={`/dashboard/fleet/vehicle-account-assignments/leases/${viewAgreement.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#1167c9] text-white hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Printer className="h-4 w-4" />
+                <span>معاينة وتصدير العقد (PDF)</span>
+              </Link>
               <Button variant="secondary" onClick={() => setViewAgreement(null)}>
                 {t("common.close")}
               </Button>

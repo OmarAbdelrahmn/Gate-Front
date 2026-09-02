@@ -266,6 +266,10 @@ export type SponsorVehicleLeaseVehicle = {
   registrationNumber: string | null;
   plateNumberAr: string | null;
   plateNumberEn: string | null;
+  serialNumber?: string | null;
+  chassisNo?: string | null;
+  vin?: string | null;
+  modelYear?: number | string | null;
 };
 
 export type SponsorVehicleLeaseAgreement = {

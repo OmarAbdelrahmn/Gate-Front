@@ -14,6 +14,7 @@ import {
   FileText,
   Key,
   Plus,
+  Printer,
   RefreshCw,
   Server,
   ShieldAlert,
@@ -34,6 +35,7 @@ import {
   type SponsorVehicleLeaseAgreement,
   type CloseSponsorVehicleLeaseAgreementRequest,
 } from "@/lib/fleet/vehicle-account-assignments-api";
+import { SponsorVehicleLeaseContractView } from "@/components/fleet/SponsorVehicleLeaseContractView";
 
 function getTodayRiyadhDate(): string {
   const now = new Date();
@@ -52,6 +54,9 @@ export default function SponsorVehicleLeaseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Print Modal State
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Close Modal State
   const [isCloseOpen, setIsCloseOpen] = useState(false);
@@ -179,6 +184,15 @@ export default function SponsorVehicleLeaseDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {agreement && (
+            <Button
+              onClick={() => setIsPrintModalOpen(true)}
+              className="gap-2 bg-[#1167c9] hover:bg-blue-700 text-white font-bold"
+            >
+              <Printer className="h-4 w-4" />
+              طباعة الاتفاقية (PDF)
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={() => router.push("/dashboard/fleet/vehicle-account-assignments/leases")}
@@ -414,6 +428,26 @@ export default function SponsorVehicleLeaseDetailPage() {
           </form>
         )}
       </Modal>
+
+      {/* Modal: Full Contract PDF Preview */}
+      <Modal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        title="معاينة وثيقة عقد تأجير المركبات (اتفاقية رسمية)"
+      >
+        {agreement && (
+          <div className="max-h-[80vh] overflow-y-auto p-2 bg-slate-100 rounded-xl">
+            <SponsorVehicleLeaseContractView agreement={agreement} />
+          </div>
+        )}
+      </Modal>
+
+      {/* Hidden Print Container for native Ctrl+P / window.print() */}
+      {agreement && (
+        <div className="hidden print:block">
+          <SponsorVehicleLeaseContractView agreement={agreement} />
+        </div>
+      )}
     </div>
   );
 }
