@@ -357,7 +357,12 @@ export async function authDownload(path: string) {
       throw new Error("انتهت الجلسة، يرجى إعادة تسجيل الدخول.");
     }
   }
-  if (!response.ok) throw new Error("تعذر تنزيل الملف");
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null);
+    const rawMsg = extractErrorMessageFromBody(errorBody);
+    const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg, errorBody?.errorCode);
+    throw new Error(friendlyMsg || "تعذر تنزيل الملف");
+  }
   return { blob: await response.blob(), fileName: response.headers.get("content-disposition")?.match(/filename\*?=(?:UTF-8'')?[\"']?([^\"';]+)/i)?.[1] ?? "document" };
 }
 export async function authPreviewBlob(path: string) {
@@ -376,7 +381,12 @@ export async function authPreviewBlob(path: string) {
       throw new Error("انتهت الجلسة، يرجى إعادة تسجيل الدخول.");
     }
   }
-  if (!response.ok) throw new Error("تعذر عرض الوثيقة");
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null);
+    const rawMsg = extractErrorMessageFromBody(errorBody);
+    const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg, errorBody?.errorCode);
+    throw new Error(friendlyMsg || "تعذر عرض الوثيقة");
+  }
   const blob = await response.blob();
   const contentType = response.headers.get("content-type") || blob.type || "application/pdf";
   return { blob, contentType, url: URL.createObjectURL(blob) };

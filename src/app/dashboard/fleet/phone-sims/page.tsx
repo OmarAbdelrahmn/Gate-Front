@@ -22,6 +22,7 @@ import { ReturnSimModal } from "./components/ReturnSimModal";
 import { ChangeSimStatusModal } from "./components/ChangeSimStatusModal";
 import { ArchiveSimModal } from "./components/ArchiveSimModal";
 import { SimDetailsModal } from "./components/SimDetailsModal";
+import { SimHandoverFormModal } from "./components/SimHandoverFormModal";
 import {
   Smartphone,
   Plus,
@@ -42,6 +43,7 @@ import {
   AlertTriangle,
   XCircle,
   ExternalLink,
+  Printer,
 } from "lucide-react";
 
 export default function PhoneSimsPage() {
@@ -74,6 +76,8 @@ export default function PhoneSimsPage() {
   const [activeSimForStatus, setActiveSimForStatus] = useState<PhoneSim | null>(null);
   const [activeSimForArchive, setActiveSimForArchive] = useState<PhoneSim | null>(null);
   const [activeSimForDetails, setActiveSimForDetails] = useState<PhoneSim | null>(null);
+  const [activeSimForPrint, setActiveSimForPrint] = useState<PhoneSim | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Fetch Lookups
   useEffect(() => {
@@ -207,6 +211,10 @@ export default function PhoneSimsPage() {
       <PhoneSimsNav
         onRefresh={fetchSims}
         onOpenCreate={() => setIsCreateOpen(true)}
+        onOpenFormTemplate={() => {
+          setActiveSimForPrint(null);
+          setIsPrintModalOpen(true);
+        }}
         loading={loading}
         canManage={canManage}
       />
@@ -429,6 +437,18 @@ export default function PhoneSimsPage() {
                             <Eye size={15} />
                           </button>
 
+                          {/* Print SIM Handover Form */}
+                          <button
+                            onClick={() => {
+                              setActiveSimForPrint(sim);
+                              setIsPrintModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                            title="طباعة نموذج استلام الشريحة"
+                          >
+                            <Printer size={15} />
+                          </button>
+
                           {canManage && (
                             <>
                               {/* Edit SIM details */}
@@ -603,6 +623,19 @@ export default function PhoneSimsPage() {
         isOpen={Boolean(activeSimForDetails)}
         onClose={() => setActiveSimForDetails(null)}
         sim={activeSimForDetails}
+        onOpenPrintForm={(simToPrint) => {
+          setActiveSimForPrint(simToPrint);
+          setIsPrintModalOpen(true);
+        }}
+      />
+
+      <SimHandoverFormModal
+        isOpen={isPrintModalOpen}
+        onClose={() => {
+          setIsPrintModalOpen(false);
+          setActiveSimForPrint(null);
+        }}
+        sim={activeSimForPrint}
       />
     </div>
   );

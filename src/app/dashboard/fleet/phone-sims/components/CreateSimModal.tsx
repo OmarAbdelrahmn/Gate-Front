@@ -25,6 +25,7 @@ export function CreateSimModal({
   const [customCarrier, setCustomCarrier] = useState("");
   const [responsibleEmployeeId, setResponsibleEmployeeId] = useState("");
   const [notes, setNotes] = useState("");
+  const [receiptFormFile, setReceiptFormFile] = useState<File | null>(null);
 
   const [employees, setEmployees] = useState<SelectOption[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -39,6 +40,7 @@ export function CreateSimModal({
       setCustomCarrier("");
       setResponsibleEmployeeId("");
       setNotes("");
+      setReceiptFormFile(null);
       setErrors({});
       loadEmployees();
     }
@@ -80,6 +82,9 @@ export function CreateSimModal({
     if (!responsibleEmployeeId) {
       errs.responsibleEmployeeId = "الموظف المسؤول عن العهدة مطلوب";
     }
+    if (!receiptFormFile) {
+      errs.receiptForm = "نموذج استلام الشريحة مطلوب";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -97,6 +102,7 @@ export function CreateSimModal({
         carrierName: carrierValue || null,
         responsibleEmployeeId,
         notes: notes.trim() || null,
+        receiptForm: receiptFormFile!,
       });
       onSuccess(newSim);
       onClose();
@@ -208,6 +214,54 @@ export function CreateSimModal({
             <p className="text-xs text-red-500 font-semibold mt-1">
               {errors.responsibleEmployeeId}
             </p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-[var(--foreground)] mb-1">
+            نموذج استلام الشريحة <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,image/*,application/pdf"
+            onChange={(e) => {
+              const file = e.target.files?.[0] || null;
+              if (file) {
+                const allowedExtensions = ["pdf", "jpg", "jpeg", "png", "webp", "gif", "bmp"];
+                const ext = file.name.split(".").pop()?.toLowerCase() || "";
+                if (!allowedExtensions.includes(ext)) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    receiptForm: "نوع الملف غير مدعوم. المسموح: PDF, JPG, PNG, WebP, GIF, BMP",
+                  }));
+                  setReceiptFormFile(null);
+                  return;
+                }
+                if (file.size > 10 * 1024 * 1024) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    receiptForm: "حجم الملف تجاوز 10 ميجابايت",
+                  }));
+                  setReceiptFormFile(null);
+                  return;
+                }
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.receiptForm;
+                  return next;
+                });
+                setReceiptFormFile(file);
+              } else {
+                setReceiptFormFile(null);
+              }
+            }}
+            className="w-full text-xs font-semibold file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-[#1167c9] hover:file:bg-blue-100 border border-[var(--border)] rounded-xl p-1 bg-[var(--surface)] cursor-pointer"
+          />
+          <p className="text-[11px] text-[var(--muted)] mt-1">
+            الملفات المسموحة: PDF, JPG/JPEG, PNG, WebP, GIF, BMP (الحد الأقصى: 10 ميجابايت)
+          </p>
+          {errors.receiptForm && (
+            <p className="text-xs text-red-500 font-semibold mt-1">{errors.receiptForm}</p>
           )}
         </div>
 

@@ -12,6 +12,7 @@ import {
   Wallet,
   Briefcase,
   Layers,
+  Smartphone,
 } from "lucide-react";
 
 export type FormCategory = "financial" | "custody" | "employment" | "leave" | "administrative";
@@ -130,6 +131,18 @@ export const FORM_TEMPLATES: FormTemplate[] = [
     icon: Building2,
     requiresDate: true,
     requiresRider: true,
+  },
+  {
+    id: "sim_handover_receipt",
+    titleAr: "نموذج استلام شريحة جوال",
+    titleEn: "Mobile SIM Receipt Form",
+    category: "custody",
+    categoryNameAr: "العهد والتسليم",
+    descriptionAr: "إقرار وتعهد استلام شريحة اتصال جوال للمندوب وتحديد البيانات ورقم الهاتف والتعهد بالحفاظ عليها.",
+    icon: Smartphone,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "شريحة جوال",
   },
   {
     id: "work_commencement",

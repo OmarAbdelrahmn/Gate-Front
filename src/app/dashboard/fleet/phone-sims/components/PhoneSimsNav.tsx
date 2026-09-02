@@ -6,12 +6,14 @@ import {
   ChevronRight,
   Plus,
   RefreshCw,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 interface PhoneSimsNavProps {
   onRefresh?: () => void;
   onOpenCreate?: () => void;
+  onOpenFormTemplate?: () => void;
   loading?: boolean;
   canManage?: boolean;
 }
@@ -19,6 +21,7 @@ interface PhoneSimsNavProps {
 export function PhoneSimsNav({
   onRefresh,
   onOpenCreate,
+  onOpenFormTemplate,
   loading = false,
   canManage = false,
 }: PhoneSimsNavProps) {
@@ -59,6 +62,17 @@ export function PhoneSimsNav({
             >
               <RefreshCw size={16} className={loading ? "animate-spin text-[#1167c9]" : ""} />
               تحديث البيانات
+            </Button>
+          )}
+
+          {onOpenFormTemplate && (
+            <Button
+              variant="secondary"
+              onClick={onOpenFormTemplate}
+              className="flex items-center gap-2 h-10 px-4 rounded-xl shadow-xs text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+            >
+              <Printer size={16} className="text-[#1167c9]" />
+              نموذج استلام الشريحة
             </Button>
           )}
 

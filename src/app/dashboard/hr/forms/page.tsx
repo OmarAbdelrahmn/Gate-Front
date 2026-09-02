@@ -44,6 +44,7 @@ import { FinalSettlementView } from "@/components/hr/forms/FinalSettlementView";
 import { WorkCommencementView } from "@/components/hr/forms/WorkCommencementView";
 import { DisciplinaryActionView } from "@/components/hr/forms/DisciplinaryActionView";
 import { AnnualEntitlementsReceiptView } from "@/components/hr/forms/AnnualEntitlementsReceiptView";
+import { SimHandoverReceiptView } from "@/components/hr/forms/SimHandoverReceiptView";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -1358,7 +1359,24 @@ export default function HrFormsPage() {
               </LetterheadFrame>
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
+            {selectedTemplateId === "sim_handover_receipt" && (
+              <SimHandoverReceiptView
+                data={{
+                  companyName,
+                  date,
+                  riderName,
+                  iqamaNo,
+                  jobTitle,
+                  carrierName: "STC",
+                  phoneNumber: mobile || "05xxxxxxxx",
+                  iccid: "",
+                  responsibleEmployeeName: hrManagerName,
+                  letterheadId: selectedLetterhead,
+                }}
+              />
+            )}
+
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{
