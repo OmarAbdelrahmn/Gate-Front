@@ -143,7 +143,21 @@ export function getFriendlyErrorMessage(
       case "fleet.keeta_platform_unavailable":
         return "سجل منصة كيتا غير متاح في الكتالوج حالياً.";
       case "fleet.concurrency_conflict":
-        return "تم تعديل الاتفاقية بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+        return "تم تعديل الاتفاقية أو التعيين بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+      case "fleet.return_condition_report_required":
+        return "تقرير حالة المركبة مطلوب عندما تكون حالة المركبة غير جيدة.";
+      case "fleet.return_condition_report_not_allowed":
+        return "لا يمكن إرفاق تقرير حالة عند إرجاع المركبة بحالة جيدة.";
+      case "fleet.invalid_file":
+        return "الملف المرفق غير صالح. صيغ الملفات المقبولة: PDF, JPEG, PNG, WebP, GIF, BMP بحجم أقصى 10 ميجابايت.";
+      case "fleet.idempotency_required":
+        return "مطلوب مفتاح تكرار الطلب (Idempotency Key).";
+      case "fleet.idempotency_conflict":
+        return "تعارض في مفتاح التكرار. تم تغيير البيانات أو الملفات.";
+      case "fleet.not_found":
+        return "السجل المطلوب غير موجود أو تم حذفه.";
+      case "fleet.forbidden":
+        return "عفواً، لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.";
     }
   }
 

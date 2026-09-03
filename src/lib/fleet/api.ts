@@ -232,11 +232,52 @@ export const returnVehicle = (payload: T.ReturnVehicleRequest) =>
     return res;
   });
 
-export const switchVehicle = (formData: FormData) =>
-  authFetch<T.RiderVehicleAssignmentResponse>(
+export const returnVehicleWithConditionReport = (
+  returnRequest: T.ReturnVehicleRequest,
+  report: T.VehicleConditionReport,
+  evidenceFiles: File[],
+  idempotencyKey?: string
+) => {
+  const form = new FormData();
+  form.append(
+    "metadata",
+    JSON.stringify({
+      ...returnRequest,
+      conditionReport: report,
+    })
+  );
+
+  for (const file of evidenceFiles) {
+    form.append("evidenceFiles", file);
+  }
+
+  const headers = new Headers();
+  headers.set("Idempotency-Key", idempotencyKey || crypto.randomUUID());
+
+  return authFetch<T.RiderVehicleAssignmentResponse>(
+    "/api/vehicle-assignments/return-with-condition-report",
+    {
+      method: "POST",
+      headers,
+      body: form,
+      notifySuccess: "تم إرجاع المركبة وتوثيق تقرير الحالة بنجاح",
+    }
+  ).then((res) => {
+    console.log("[API Response] POST /api/vehicle-assignments/return-with-condition-report:", res);
+    return res;
+  });
+};
+
+export const switchVehicle = (formData: FormData, idempotencyKey?: string) => {
+  const headers = new Headers();
+  if (idempotencyKey) {
+    headers.set("Idempotency-Key", idempotencyKey);
+  }
+  return authFetch<T.RiderVehicleAssignmentResponse>(
     "/api/vehicle-assignments/switch",
     withIdempotency({
       method: "POST",
+      headers,
       body: formData,
       notifySuccess: "تم تبديل المركبة بنجاح",
     })
@@ -244,6 +285,7 @@ export const switchVehicle = (formData: FormData) =>
     console.log("[API Response] POST /api/vehicle-assignments/switch:", res);
     return res;
   });
+};
 
 export const getVehicleAssignment = (assignmentId: string) =>
   authFetch<T.RiderVehicleAssignmentResponse>(`/api/vehicle-assignments/${assignmentId}`);
@@ -354,6 +396,12 @@ export const resolveVehicleIssue = (id: string, payload: T.IssueResolveRequest) 
     body: JSON.stringify(payload),
     notifySuccess: "تم حل المشكلة بنجاح",
   });
+
+export const getVehicleIssueEvidence = (issueId: string) =>
+  authFetch<T.VehicleIssueEvidenceResponse[]>(`/api/vehicle-issues/${issueId}/evidence`);
+
+export const downloadVehicleIssueEvidence = (issueId: string, evidenceId: string) =>
+  authDownload(`/api/vehicle-issues/${issueId}/evidence/${evidenceId}/download`);
 
 // ---------------------------
 // Accidents

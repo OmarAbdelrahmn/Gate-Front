@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   UserRound,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
@@ -383,16 +384,26 @@ function VehicleTimelineCard({
                     )}
 
                     {(issues.length > 0 || accidents.length > 0) && (
-                      <div className="mt-2 flex flex-wrap gap-2">
+                      <div className="mt-2.5 flex flex-wrap gap-2">
                         {issues.length > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 text-amber-950 border border-amber-200 px-2 py-0.5 text-[11px] font-bold">
-                            {isEn ? `${issues.length} Issues reported` : `${issues.length} أعطال مسبقة`}
-                          </span>
+                          <Link
+                            href={`/dashboard/fleet/issues?search=${encodeURIComponent(assignment.assetNumber || assignment.vehicleId)}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 text-amber-900 border border-amber-300/80 px-2.5 py-1 text-xs font-bold hover:bg-amber-100 hover:border-amber-400 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800 transition-all shadow-2xs group"
+                            title={isEn ? "Click to view issue details" : "انقر لعرض تفاصيل البلاغات والأعطال"}
+                          >
+                            <span>{isEn ? `${issues.length} Issues reported` : `${issues.length} أعطال مسبقة`}</span>
+                            <ExternalLink size={12} className="text-amber-700 dark:text-amber-300 opacity-80 group-hover:translate-x-0.5 transition-transform" />
+                          </Link>
                         )}
                         {accidents.length > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded bg-rose-50 text-rose-950 border border-rose-200 px-2 py-0.5 text-[11px] font-bold">
-                            {isEn ? `${accidents.length} Accidents recorded` : `${accidents.length} حوادث مسجلة`}
-                          </span>
+                          <Link
+                            href={`/dashboard/fleet/accidents?search=${encodeURIComponent(assignment.assetNumber || assignment.vehicleId)}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 text-rose-900 border border-rose-300/80 px-2.5 py-1 text-xs font-bold hover:bg-rose-100 hover:border-rose-400 dark:bg-rose-950/60 dark:text-rose-200 dark:border-rose-800 transition-all shadow-2xs group"
+                            title={isEn ? "Click to view accident reports" : "انقر لعرض سجل الحوادث"}
+                          >
+                            <span>{isEn ? `${accidents.length} Accidents recorded` : `${accidents.length} حوادث مسجلة`}</span>
+                            <ExternalLink size={12} className="text-rose-700 dark:text-rose-300 opacity-80 group-hover:translate-x-0.5 transition-transform" />
+                          </Link>
                         )}
                       </div>
                     )}

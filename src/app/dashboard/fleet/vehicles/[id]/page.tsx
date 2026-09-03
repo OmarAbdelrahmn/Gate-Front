@@ -24,6 +24,7 @@ import { AddComplianceModal, type ComplianceTabType } from "../components/AddCom
 import { PrivateToPublicTransitionModal } from "../components/PrivateToPublicTransitionModal";
 import { OperationCardHistoryModal } from "../components/OperationCardHistoryModal";
 import { VehicleFilesCard } from "../components/VehicleFilesCard";
+import { IssueDetailsModal } from "../../issues/components/IssueDetailsModal";
 import { AssignmentPromissoryFiles } from "@/components/fleet/AssignmentPromissoryFiles";
 import {
   Car,
@@ -67,6 +68,7 @@ export default function VehicleDetailPage() {
   const [isTransitionOpen, setIsTransitionOpen] = useState(false);
   const [isOpCardHistoryOpen, setIsOpCardHistoryOpen] = useState(false);
   const [complianceType, setComplianceType] = useState<ComplianceTabType>("Registration");
+  const [selectedIssue, setSelectedIssue] = useState<VehicleIssueSummaryResponse | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -380,13 +382,20 @@ export default function VehicleDetailPage() {
               {issues.length > 0 ? (
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {issues.map(issue => (
-                    <div key={issue.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <div
+                      key={issue.id}
+                      onClick={() => setSelectedIssue(issue)}
+                      className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                    >
                       <div className="flex justify-between items-start mb-1">
                         <div className="font-bold text-sm text-slate-800 dark:text-slate-200">{formatVehicleIssueCategory(issue.category)}</div>
                         <Badge className="text-[10px] px-1">{formatVehicleIssueStatus(issue.status)}</Badge>
                       </div>
                       <div className="text-xs text-slate-500 line-clamp-1">{issue.description}</div>
-                      <div className="text-xs text-slate-400 mt-2">{formatDate(issue.reportedAtUtc)}</div>
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="text-xs text-slate-400">{formatDate(issue.reportedAtUtc)}</div>
+                        <span className="text-[11px] text-[#1167c9] font-semibold hover:underline">عرض التفاصيل والأدلة</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -432,6 +441,12 @@ export default function VehicleDetailPage() {
           vehicle={vehicle}
         />
       )}
+
+      <IssueDetailsModal
+        isOpen={!!selectedIssue}
+        onClose={() => setSelectedIssue(null)}
+        issue={selectedIssue}
+      />
     </div>
   );
 }

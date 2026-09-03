@@ -177,8 +177,18 @@ export function formatVehicleOperationalStatus(status?: VehicleOperationalStatus
   }
 }
 
-export function formatVehicleIssueCategory(cat?: VehicleIssueCategory | number | null, locale: AppLocale = "ar"): string {
+export function formatVehicleIssueCategory(cat?: VehicleIssueCategory | number | string | null, locale: AppLocale = "ar"): string {
   if (cat === null || cat === undefined) return "—";
+  if (typeof cat === "string" && isNaN(Number(cat))) {
+    switch (cat.trim()) {
+      case "Problem": return translate(locale, "fleet.issueCategories.problem");
+      case "Accident": return translate(locale, "fleet.issueCategories.accident");
+      case "Theft": return translate(locale, "fleet.issueCategories.theft");
+      case "Damage": return translate(locale, "fleet.issueCategories.damage");
+      case "Administrative": return translate(locale, "fleet.issueCategories.administrative");
+      default: break;
+    }
+  }
   switch (Number(cat)) {
     case VehicleIssueCategory.Problem:
       return translate(locale, "fleet.issueCategories.problem");
@@ -258,5 +268,30 @@ export function formatVehicleAccidentStatus(st?: VehicleAccidentStatus | number 
       return translate(locale, "fleet.accidentStatuses.closed");
     default:
       return String(st);
+  }
+}
+
+export function formatVehicleIssueSeverity(sev?: VehicleIssueSeverity | number | string | null, locale: AppLocale = "ar"): string {
+  if (sev === null || sev === undefined) return "—";
+  if (typeof sev === "string" && isNaN(Number(sev))) {
+    switch (sev.trim()) {
+      case "Low": return "منخفضة";
+      case "Medium": return "متوسطة";
+      case "High": return "عالية";
+      case "Critical": return "حرجة جداً";
+      default: break;
+    }
+  }
+  switch (Number(sev)) {
+    case VehicleIssueSeverity.Low:
+      return "منخفضة";
+    case VehicleIssueSeverity.Medium:
+      return "متوسطة";
+    case VehicleIssueSeverity.High:
+      return "عالية";
+    case VehicleIssueSeverity.Critical:
+      return "حرجة جداً";
+    default:
+      return String(sev);
   }
 }

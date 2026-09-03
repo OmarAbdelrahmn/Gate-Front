@@ -560,6 +560,18 @@ export interface ReturnVehicleRequest {
   rowVersion: string;
 }
 
+export interface VehicleConditionReport {
+  category: VehicleIssueCategory;
+  severity: VehicleIssueSeverity;
+  problemDescription: string;
+  isRiderResponsible: boolean;
+  estimatedRepairCost: number;
+}
+
+export interface ReturnVehicleWithConditionReportRequest extends ReturnVehicleRequest {
+  conditionReport: VehicleConditionReport;
+}
+
 export interface SwitchVehicleRequest {
   currentAssignmentId: string;
   newVehicleId: string;
@@ -573,6 +585,7 @@ export interface SwitchVehicleRequest {
   permissionReference?: string | null;
   reason: string;
   rowVersion: string;
+  conditionReport?: VehicleConditionReport | null;
 }
 
 export interface RenewPermissionRequest {
@@ -693,10 +706,27 @@ export interface VehicleComplianceDueResponse {
 // ---------------------------
 // Issues
 // ---------------------------
+export interface VehicleIssueRiderInfo {
+  riderProfileId?: string | null;
+  employeeId?: string | null;
+  riderName?: string | null;
+  isRealRider?: boolean;
+  realRider?: {
+    id?: string | null;
+    name?: string | null;
+    iqamaNo?: string | null;
+    relationshipToAssignedRider?: string | null;
+  } | null;
+}
+
 export interface VehicleIssueSummaryResponse {
   id: string;
   issueNumber: string;
   vehicleId: string;
+  relatedAssignmentId?: string | null;
+  rider?: VehicleIssueRiderInfo | null;
+  isRiderResponsible?: boolean | null;
+  estimatedRepairCost?: number | null;
   category: VehicleIssueCategory;
   severity: VehicleIssueSeverity;
   blocksOperation: boolean;
@@ -705,6 +735,17 @@ export interface VehicleIssueSummaryResponse {
   description: string;
   locationDescription?: string | null;
   resolutionSummary?: string | null;
+  rowVersion: string;
+}
+
+export interface VehicleIssueEvidenceResponse {
+  id: string;
+  vehicleIssueId: string;
+  originalFileName: string;
+  contentType: string;
+  fileSizeBytes: number;
+  sha256Checksum: string;
+  uploadedAtUtc: string;
   rowVersion: string;
 }
 
@@ -822,4 +863,11 @@ export interface VehicleAccidentReportVersionResponse {
   generatedAtUtc: string;
   generatedByUserId?: string | null;
   reason?: string | null;
+}
+
+export interface VehicleReadinessResponse {
+  vehicleId: string;
+  isEligibleForAssignment: boolean;
+  blockingReasons?: string[] | null;
+  notes?: string | null;
 }
