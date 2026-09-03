@@ -12,6 +12,10 @@ import { extractErrorMessageFromBody } from "../../lib/auth/api";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { getUserAuthorization } from "../../lib/auth/authorization-api";
 import { permissionLabel } from "../../lib/permission-labels";
+import {
+  groupPermissions,
+  permissionGroupLabel,
+} from "../../lib/permission-groups";
 import { translate } from "../../lib/i18n";
 import {
   archiveUser,
@@ -68,6 +72,15 @@ const formatDateVal = (value: string | null, locale: "ar" | "en" = "ar") =>
 function AuthorizationView({ data, locale = "ar" }: { data: Authorization; locale?: "ar" | "en" }) {
   const roles = data.roles ?? [];
   const permissions = data.directPermissions ?? [];
+
+  const groupedDirectPermissions = useMemo(
+    () =>
+      groupPermissions(
+        permissions.map((item) => ({ ...item, key: item.permissionKey })),
+      ),
+    [permissions],
+  );
+
   return (
     <div className="mt-5 space-y-5">
       <section>
@@ -112,48 +125,47 @@ function AuthorizationView({ data, locale = "ar" }: { data: Authorization; local
         <h3 className="mb-2 font-black">
           {locale === "en" ? "Direct Permissions" : "الصلاحيات المباشرة"} ({permissions.length})
         </h3>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {permissions.slice(0, 5).map((item) => (
-            <div
-              key={item.assignmentId}
-              className={`min-h-28 rounded-xl border p-3 ${item.effect === "Deny" ? "border-red-200 bg-red-50/60 dark:border-red-900/40 dark:bg-red-950/40" : "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/40"}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <b>{permissionLabel(item.permissionKey, locale)}</b>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${item.effect === "Deny" ? "bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"}`}
-                >
-                  {item.effect === "Deny" ? (locale === "en" ? "Deny" : "منع") : (locale === "en" ? "Grant" : "مسموح")}
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                {locale === "en" ? "Starts" : "يبدأ"}: {formatDateVal(item.startsAtUtc, locale)} · {locale === "en" ? "Expires" : "ينتهي"}:{" "}
-                {formatDateVal(item.expiresAtUtc, locale)}
-              </p>
-            </div>
-          ))}
-        </div>
-        {permissions.length > 5 && (
-          <details className="mt-3">
-            <summary className="cursor-pointer font-bold text-[#1167c9]">
-              {locale === "en" ? `Show ${permissions.length - 5} more permissions` : `عرض ${permissions.length - 5} صلاحيات أخرى`}
-            </summary>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {permissions.slice(5).map((item) => (
-                <div
-                  key={item.assignmentId}
-                  className="min-h-20 rounded-xl border border-[var(--border)] p-3"
-                >
-                  <b>{permissionLabel(item.permissionKey, locale)}</b>
-                  <span className="mx-2 text-xs text-[var(--muted)]">
-                    {item.effect === "Deny" ? (locale === "en" ? "Deny" : "منع") : (locale === "en" ? "Grant" : "مسموح")}
-                  </span>
+        {groupedDirectPermissions.length > 0 ? (
+          <div className="space-y-4">
+            {groupedDirectPermissions.map(([group, items]) => (
+              <div key={group} className="space-y-2">
+                <h4 className="border-r-2 border-[#1167c9] pr-2 text-xs font-black text-[#1167c9]">
+                  {permissionGroupLabel(group, locale)} ({items.length})
+                </h4>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {items.map((item) => (
+                    <div
+                      key={item.assignmentId}
+                      className={`flex items-start justify-between gap-2 rounded-xl border p-3 ${
+                        item.effect === "Deny"
+                          ? "border-red-200 bg-red-50/60 dark:border-red-900/40 dark:bg-red-950/40"
+                          : "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/40"
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <b className="block text-xs leading-5">
+                          {permissionLabel(item.permissionKey, locale)}
+                        </b>
+                        <span className="block font-mono text-[10px] text-[var(--muted)] truncate" dir="ltr">
+                          {item.permissionKey}
+                        </span>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          item.effect === "Deny"
+                            ? "bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300"
+                            : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"
+                        }`}
+                      >
+                        {item.effect === "Deny" ? (locale === "en" ? "Deny" : "منع") : (locale === "en" ? "Grant" : "مسموح")}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </details>
-        )}
-        {!permissions.length && (
+              </div>
+            ))}
+          </div>
+        ) : (
           <p className="rounded-xl bg-slate-500/10 p-3 text-sm text-[var(--muted)]">
             {locale === "en"
               ? "No direct permissions; access is derived from role assignments only."
