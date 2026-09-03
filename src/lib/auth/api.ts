@@ -158,6 +158,22 @@ export function getFriendlyErrorMessage(
         return "السجل المطلوب غير موجود أو تم حذفه.";
       case "fleet.forbidden":
         return "عفواً، لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.";
+      case "fuel.monthly_rider_conflict":
+        return "لا يمكن إسناد بطاقة الوقود إلى رايدرين مختلفين في الشهر نفسه.";
+      case "fuel.active_assignment_conflict":
+        return "توجد عملية إسناد نشطة حالياً لهذه البطاقة.";
+      case "fuel.rider_unavailable":
+        return "المندوب غير متاح حالياً للإسناد.";
+      case "fuel.card_not_found":
+        return "بطاقة الوقود غير موجودة.";
+      case "fuel.duplicate_card":
+        return "رقم البطاقة مستخدم بالفعل لدى مزود الخدمة نفسه.";
+      case "fuel.assignment_not_found":
+        return "لا توجد عملية إسناد نشطة لهذه البطاقة.";
+      case "fuel.concurrency_conflict":
+        return "تم تعديل البيانات بواسطة مستخدم آخر. يرجى التحديث والمحاولة مجدداً.";
+      case "fuel.month_mismatch":
+        return "الشهر المكتشف في الملف يختلف عن الشهر المتوقع المحدد.";
     }
   }
 

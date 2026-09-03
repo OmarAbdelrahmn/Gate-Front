@@ -263,6 +263,12 @@ html[data-theme="dark"] form label:not(.field-shell):has(> :is(input, select, te
   scrollbar-width: none;
 }
 
+.fuel-plate {
+  unicode-bidi: plaintext;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 @media print {
   @page {
     size: A4 portrait;

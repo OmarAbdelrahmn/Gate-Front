@@ -23,6 +23,7 @@ import {
   ArrowLeftRight,
   Archive,
   Gauge,
+  Fuel,
   type LucideIcon,
 } from "lucide-react";
 export type Role = "admin" | "member" | "accountant";
@@ -199,6 +200,9 @@ export const navigation: NavItem[] = [
       "fleet.accidents.read",
       "fleet.compliance.read",
       "fleet.daily_distances.read",
+      "fuel.read",
+      "fuel.manage",
+      "fuel.import",
     ],
     children: [
       {
@@ -208,6 +212,14 @@ export const navigation: NavItem[] = [
         icon: Car,
         roles: ["admin", "member"],
         permission: "fleet.vehicles.read",
+      },
+      {
+        label: "بطاقات الوقود",
+        labelKey: "nav.fuelCards",
+        href: "/dashboard/fleet/fuel-cards",
+        icon: Fuel,
+        roles: ["admin", "member"],
+        permissionsAny: ["fuel.read", "fuel.manage", "fuel.import"],
       },
       {
         label: "التعيينات والاستلام",
