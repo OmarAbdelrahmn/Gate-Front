@@ -53,7 +53,7 @@ export default function MaintenanceOverviewPage() {
       ]);
       setLocations(locs);
       setWorkOrders(orders);
-      setOilReminders(reminders);
+      setOilReminders(Array.isArray(reminders) ? reminders : (reminders as any)?.items || []);
       setOpenBarrels(barrels);
     } catch (err) {
       console.error("Failed to load maintenance overview:", err);
@@ -154,7 +154,7 @@ export default function MaintenanceOverviewPage() {
           <div className="mt-3 flex items-center justify-between text-xs pt-3 border-t border-amber-100 dark:border-amber-900/40">
             <span className="text-slate-500">إجمالي المركبات: {oilReminders.length}</span>
             <Link
-              href="/dashboard/maintenance/work-orders"
+              href="/dashboard/maintenance/work-orders?tab=reminders"
               className="font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1"
             >
               متابعة التذكيرات <ArrowUpRight size={13} />
@@ -371,7 +371,7 @@ export default function MaintenanceOverviewPage() {
               تنبيهات تغيير الزيت العاجلة
             </h2>
             <Link
-              href="/dashboard/maintenance/work-orders"
+              href="/dashboard/maintenance/work-orders?tab=reminders"
               className="text-xs font-bold text-amber-600 hover:underline"
             >
               سجل التذكيرات
@@ -408,8 +408,8 @@ export default function MaintenanceOverviewPage() {
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        العداد: {reminder.currentOdometer.toLocaleString()} كم •
-                        المقطوع منذ آخر تغيير: {reminder.distanceSinceLastChange.toLocaleString()} كم
+                        العداد: {(reminder.currentOdometer ?? 0).toLocaleString()} كم •
+                        المقطوع منذ آخر تغيير: {(reminder.distanceSinceLastChange ?? 0).toLocaleString()} كم
                       </div>
                     </div>
                     <Link

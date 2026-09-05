@@ -375,7 +375,35 @@ export async function getRiderMaterialHistory(riderProfileId: string): Promise<M
 // ==========================================
 
 export async function getOilReminders(): Promise<OilReminder[]> {
-  return authFetch<OilReminder[]>("/api/maintenance/oil-reminders");
+  try {
+    const res = await authFetch<any>("/api/maintenance/oil-reminders");
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.items)) return res.items;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.reminders)) return res.reminders;
+    return [];
+  } catch (err: any) {
+    if (err?.status === 404) {
+      try {
+        const alt = await authFetch<any>("/api/maintenance-oil-reminders");
+        if (Array.isArray(alt)) return alt;
+        if (Array.isArray(alt?.items)) return alt.items;
+        if (Array.isArray(alt?.data)) return alt.data;
+        return [];
+      } catch {
+        try {
+          const alt2 = await authFetch<any>("/api/maintenance-work-orders/oil-reminders");
+          if (Array.isArray(alt2)) return alt2;
+          if (Array.isArray(alt2?.items)) return alt2.items;
+          if (Array.isArray(alt2?.data)) return alt2.data;
+          return [];
+        } catch {
+          throw err;
+        }
+      }
+    }
+    throw err;
+  }
 }
 
 export async function getMaintenancePlans(): Promise<MaintenancePlan[]> {

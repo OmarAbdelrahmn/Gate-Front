@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Wrench, Droplets, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { WorkOrdersListView } from "./components/WorkOrdersListView";
@@ -21,10 +21,13 @@ type WorkOrdersSubTab = "orders" | "reminders";
 
 export default function MaintenanceWorkOrdersPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const tabParam = searchParams.get("tab");
   const openOilChangeFor = searchParams.get("openOilChangeFor");
 
   const [activeTab, setActiveTab] = useState<WorkOrdersSubTab>(
-    openOilChangeFor ? "reminders" : "orders",
+    tabParam === "reminders" || openOilChangeFor ? "reminders" : "orders",
   );
   const [loading, setLoading] = useState(true);
 
@@ -61,6 +64,21 @@ export default function MaintenanceWorkOrdersPage() {
       setCreateModalOpen(true);
     }
   }, [openOilChangeFor]);
+
+  useEffect(() => {
+    if (tabParam === "reminders" || openOilChangeFor) {
+      setActiveTab("reminders");
+    } else if (tabParam === "orders") {
+      setActiveTab("orders");
+    }
+  }, [tabParam, openOilChangeFor]);
+
+  const handleTabChange = (tabId: WorkOrdersSubTab) => {
+    setActiveTab(tabId);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tabId);
+    router.replace(`${pathname}?${params.toString()}`);
+  };
 
   const handleStartOilChange = (vehicleId: string) => {
     setPrefillVehicleId(vehicleId);
@@ -111,7 +129,7 @@ export default function MaintenanceWorkOrdersPage() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
                 isActive
                   ? "bg-[#1167c9] text-white shadow-xs"

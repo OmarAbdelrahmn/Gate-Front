@@ -11,8 +11,10 @@ import {
   PlusCircle,
   Car,
   Bike,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { getOilReminders } from "@/lib/maintenance/api";
 import type { OilReminder } from "@/lib/maintenance/types";
 import { OilReminderStatus } from "@/lib/maintenance/types";
@@ -32,16 +34,30 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
 
   const [reminders, setReminders] = useState<OilReminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const loadReminders = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await getOilReminders();
-      setReminders(data);
-    } catch (err) {
-      console.error(err);
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray((data as any)?.items)
+        ? (data as any).items
+        : Array.isArray((data as any)?.data)
+        ? (data as any).data
+        : Array.isArray((data as any)?.reminders)
+        ? (data as any).reminders
+        : [];
+      setReminders(list);
+    } catch (err: any) {
+      console.error("Failed to load oil reminders:", err);
+      setError(err?.message || "تعذر تحميل استحقاقات وتذكيرات الزيوت من الخادم.");
+      setReminders([]);
     } finally {
       setLoading(false);
     }
@@ -51,14 +67,23 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
     loadReminders();
   }, []);
 
-  const filteredReminders = reminders.filter((r) => {
+  const safeReminders = Array.isArray(reminders) ? reminders : [];
+
+  const filteredReminders = safeReminders.filter((r) => {
+    if (!r) return false;
     if (statusFilter !== "all" && String(r.status) !== statusFilter) return false;
     if (typeFilter !== "all" && String(r.vehicleType) !== typeFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const asset = (r.assetNumber || "").toLowerCase();
+      const plate = ((r as any)?.plateNumber || "").toLowerCase();
+      if (!asset.includes(q) && !plate.includes(q)) return false;
+    }
     return true;
   });
 
-  const dueCount = reminders.filter((r) => r.status === 2).length;
-  const overdueCount = reminders.filter((r) => r.status === 3).length;
+  const dueCount = safeReminders.filter((r) => r && r.status === 2).length;
+  const overdueCount = safeReminders.filter((r) => r && r.status === 3).length;
 
   return (
     <div className="space-y-4">
@@ -93,9 +118,33 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
         </div>
       </div>
 
+      {/* Error Alert if any */}
+      {error && (
+        <div className="p-4 rounded-2xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 text-xs flex items-center justify-between gap-3 text-red-700 dark:text-red-300">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-red-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button variant="secondary" onClick={loadReminders} className="h-8 text-xs border-red-300 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30">
+            إعادة المحاولة
+          </Button>
+        </div>
+      )}
+
       {/* Filters and Counters */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-xs">
         <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-64">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <Input
+              type="text"
+              placeholder="بحث برقم الأصل أو اللوحة..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 pr-8 text-xs"
+            />
+          </div>
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -167,23 +216,31 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
             ) : filteredReminders.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-slate-400">
-                  لا توجد تنبيهات مطابقة للفلتر المحدد.
+                  {error ? "تعذر جلب البيانات، يرجى إعادة المحاولة." : "لا توجد تنبيهات مطابقة للفلتر المحدد."}
                 </td>
               </tr>
             ) : (
-              filteredReminders.map((r) => {
-                const statusCfg = oilReminderStatusConfig[r.status];
+              filteredReminders.map((r, idx) => {
+                const statusCfg = oilReminderStatusConfig[r.status] || {
+                  label: "غير محدد",
+                  bg: "bg-slate-100 dark:bg-slate-800",
+                  text: "text-slate-600 dark:text-slate-300",
+                  border: "border-slate-200 dark:border-slate-700",
+                };
                 const isCar = r.vehicleType === 2;
                 const maxKm = isCar ? 5000 : 1000;
+                const distance = Number(r.distanceSinceLastChange ?? 0);
                 const progressPct = Math.min(
                   100,
-                  Math.max(0, (r.distanceSinceLastChange / maxKm) * 100),
+                  Math.max(0, (distance / maxKm) * 100),
                 );
+                const currentOdoText = r.currentOdometer != null ? `${Number(r.currentOdometer).toLocaleString()} كم` : "غير متوفر";
+                const lastOdoText = r.lastOilChangeOdometer != null ? `${Number(r.lastOilChangeOdometer).toLocaleString()} كم` : "-";
 
                 return (
-                  <tr key={r.vehicleId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                  <tr key={r.vehicleId || r.assetNumber || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                     <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">
-                      {r.assetNumber}
+                      {r.assetNumber || "-"}
                     </td>
                     <td className="p-3">
                       <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300">
@@ -192,15 +249,15 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
                       </span>
                     </td>
                     <td className="p-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
-                      {r.currentOdometer.toLocaleString()} كم
+                      {currentOdoText}
                     </td>
                     <td className="p-3 text-center font-mono text-slate-500">
-                      {r.lastOilChangeOdometer ? `${r.lastOilChangeOdometer.toLocaleString()} كم` : "-"}
+                      {lastOdoText}
                     </td>
                     <td className="p-3 text-center">
                       <div className="space-y-1">
                         <span className="font-mono font-black text-slate-900 dark:text-white">
-                          {r.distanceSinceLastChange.toLocaleString()} كم
+                          {distance.toLocaleString()} كم
                         </span>
                         <div className="h-1.5 w-24 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                           <div
@@ -221,9 +278,9 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
                     </td>
                     <td className="p-3 text-center">
                       <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusCfg?.border} ${statusCfg?.bg} ${statusCfg?.text}`}
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusCfg?.border || "border-slate-200"} ${statusCfg?.bg || "bg-slate-100"} ${statusCfg?.text || "text-slate-600"}`}
                       >
-                        {statusCfg?.label}
+                        {statusCfg?.label || "غير محدد"}
                       </span>
                     </td>
                     {canManage && (
