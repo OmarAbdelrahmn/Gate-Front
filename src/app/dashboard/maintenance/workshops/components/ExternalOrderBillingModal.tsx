@@ -27,6 +27,7 @@ import {
   formatCurrency,
   formatDateTime,
   paymentMethodLabels,
+  itemTypeLabels,
 } from "@/lib/maintenance/constants";
 import {
   DollarSign,
@@ -407,6 +408,8 @@ export function ExternalOrderBillingModal({
                       options={items.map((i) => ({
                         value: i.id,
                         label: `${i.nameAr} (${i.sku})`,
+                        sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                        keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                       }))}
                       placeholder="اختر الصنف..."
                       required

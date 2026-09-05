@@ -26,6 +26,7 @@ import type {
   MaintenanceLocation,
   InventoryItem,
 } from "@/lib/maintenance/types";
+import { ItemType } from "@/lib/maintenance/types";
 import {
   oilBarrelStatusConfig,
   formatCurrency,
@@ -142,7 +143,7 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
     }
   };
 
-  const oilItems = items.filter((i) => i.itemType === 3);
+  const oilItems = items.filter((i) => i.itemType === ItemType.Oil);
 
   return (
     <div className="space-y-4">

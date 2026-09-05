@@ -75,6 +75,39 @@ export const itemTypeLabels: Record<ItemType, string> = {
   [ItemType.Consumable]: "مستهلكات وورشة",
 };
 
+export const itemTypeBadgeStyles: Record<
+  ItemType,
+  { label: string; bg: string; text: string; border: string }
+> = {
+  [ItemType.SparePart]: {
+    label: "قطعة غيار",
+    bg: "bg-blue-50 dark:bg-blue-950/40",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  [ItemType.RiderAccessory]: {
+    label: "مستلزمات ومعدات المندوب",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    text: "text-purple-700 dark:text-purple-300",
+    border: "border-purple-200 dark:border-purple-800",
+  },
+  [ItemType.Oil]: {
+    label: "زيت ومواد تشحيم",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-800 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+  },
+  [ItemType.Consumable]: {
+    label: "مستهلكات وورشة",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+  },
+};
+
+export const RIDER_ASSIGNABLE_ITEM_TYPES = [ItemType.RiderAccessory];
+
+
 export const unitOfMeasureLabels: Record<UnitOfMeasure, string> = {
   [UnitOfMeasure.Piece]: "حبة / قطعة",
   [UnitOfMeasure.Liter]: "لتر",

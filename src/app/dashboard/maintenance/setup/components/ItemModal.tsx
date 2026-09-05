@@ -82,6 +82,20 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     if (!nameEn) setNameEn("Engine Oil 10W-40 (Barrel)");
   };
 
+  const applyRiderAccessoryPreset = () => {
+    setItemType(ItemType.RiderAccessory);
+    setBaseUnitOfMeasure(UnitOfMeasure.Piece); // 1
+    setPurchaseUnitOfMeasure(UnitOfMeasure.Piece); // 1
+    setDefaultPackageQuantity(1);
+    setMinimumStockLevel(5);
+    setReorderQuantity(10);
+    setIsLotTracked(false);
+    setIsSerialized(true);
+    if (!sku) setSku("RDR-ACC-01");
+    if (!nameAr) setNameAr("خوذة دراجة نارية قياسية");
+    if (!nameEn) setNameEn("Standard Rider Helmet");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -141,18 +155,34 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {!item && (
-          <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs">
-            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
-              <Sparkles size={16} />
-              <span>هل تريد تعريف برميل زيت جديد؟</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 text-xs">
+              <div className="flex items-center gap-1.5 text-purple-800 dark:text-purple-300">
+                <Sparkles size={14} className="shrink-0" />
+                <span className="font-bold text-[11px]">مستلزمات مندوب؟</span>
+              </div>
+              <button
+                type="button"
+                onClick={applyRiderAccessoryPreset}
+                className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[10px] transition-colors cursor-pointer shrink-0"
+              >
+                تطبيق قالب المندوب (خوذة)
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={applyOilBarrelPreset}
-              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] transition-colors"
-            >
-              تطبيق إعدادات برميل الزيت (208 لتر)
-            </button>
+
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs">
+              <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                <Sparkles size={14} className="shrink-0" />
+                <span className="font-bold text-[11px]">برميل زيت جديد؟</span>
+              </div>
+              <button
+                type="button"
+                onClick={applyOilBarrelPreset}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[10px] transition-colors cursor-pointer shrink-0"
+              >
+                تطبيق قالب برميل الزيت
+              </button>
+            </div>
           </div>
         )}
 
@@ -187,12 +217,12 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
             <select
               value={itemType}
               onChange={(e) => setItemType(Number(e.target.value) as ItemType)}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden cursor-pointer"
               required
             >
               {Object.entries(itemTypeLabels).map(([val, label]) => (
                 <option key={val} value={val}>
-                  {label}
+                  {label} ({val})
                 </option>
               ))}
             </select>

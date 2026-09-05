@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { createMaintenancePlan, updateMaintenancePlan } from "@/lib/maintenance/api";
 import type { MaintenancePlan, InventoryItem } from "@/lib/maintenance/types";
+import { ItemType } from "@/lib/maintenance/types";
 
 interface PlanModalProps {
   isOpen: boolean;
@@ -135,7 +136,7 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
     }
   };
 
-  const oilItems = items.filter((i) => i.itemType === 3);
+  const oilItems = items.filter((i) => i.itemType === ItemType.Oil);
 
   return (
     <Modal

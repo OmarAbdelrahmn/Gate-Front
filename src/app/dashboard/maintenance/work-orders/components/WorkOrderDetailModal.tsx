@@ -21,12 +21,14 @@ import type {
 import {
   WorkOrderStatus,
   MaterialUsageType,
+  ItemType,
 } from "@/lib/maintenance/types";
 import {
   workOrderStatusConfig,
   maintenanceTypeLabels,
   materialUsageTypeLabels,
   unitOfMeasureLabels,
+  itemTypeLabels,
   formatCurrency,
   formatDateTime,
 } from "@/lib/maintenance/constants";
@@ -82,6 +84,33 @@ export function WorkOrderDetailModal({
   );
   const [issueNotes, setIssueNotes] = useState("");
   const [materialLoading, setMaterialLoading] = useState(false);
+  const [issueItemTypeFilter, setIssueItemTypeFilter] = useState<ItemType | "ALL">("ALL");
+
+  const filteredIssueItems =
+    issueItemTypeFilter === "ALL"
+      ? items
+      : items.filter((i) => i.itemType === issueItemTypeFilter);
+
+  const handleItemSelectForIssue = (itemId: string) => {
+    setSelectedItemId(itemId);
+    const chosen = items.find((i) => i.id === itemId);
+    if (chosen) {
+      if (chosen.itemType === ItemType.Oil) {
+        setIssueUsageType(MaterialUsageType.Oil);
+      } else if (chosen.itemType === ItemType.Consumable) {
+        setIssueUsageType(MaterialUsageType.Consumable);
+      } else if (chosen.itemType === ItemType.SparePart) {
+        if (
+          chosen.nameAr.includes("فلتر زيت") ||
+          chosen.nameEn.toLowerCase().includes("oil filter")
+        ) {
+          setIssueUsageType(MaterialUsageType.OilFilter);
+        } else {
+          setIssueUsageType(MaterialUsageType.SparePart);
+        }
+      }
+    }
+  };
 
   // Oil Change Modal
   const [oilModalOpen, setOilModalOpen] = useState(false);
@@ -512,15 +541,40 @@ export function WorkOrderDetailModal({
         >
           <form onSubmit={handleIssueMaterial} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                الصنف المراد صرفه <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  الصنف المراد صرفه <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  {[
+                    { id: "ALL" as const, label: "الكل" },
+                    { id: ItemType.SparePart, label: "قطع غيار (1)" },
+                    { id: ItemType.Oil, label: "زيوت (3)" },
+                    { id: ItemType.Consumable, label: "مستهلكات (4)" },
+                  ].map((chip) => (
+                    <button
+                      key={String(chip.id)}
+                      type="button"
+                      onClick={() => setIssueItemTypeFilter(chip.id)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors cursor-pointer ${
+                        issueItemTypeFilter === chip.id
+                          ? "bg-[#1167c9] text-white shadow-xs"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <SearchableSelect
                 value={selectedItemId}
-                onChange={(val) => setSelectedItemId(val)}
-                options={items.map((i) => ({
+                onChange={handleItemSelectForIssue}
+                options={filteredIssueItems.map((i) => ({
                   value: i.id,
                   label: `${i.nameAr} (${i.sku})`,
+                  sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                  keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                 }))}
                 placeholder="اختر الصنف..."
                 required

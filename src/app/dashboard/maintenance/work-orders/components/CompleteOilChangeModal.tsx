@@ -12,6 +12,7 @@ import type {
   MaintenanceLocation,
   OilBarrel,
 } from "@/lib/maintenance/types";
+import { ItemType } from "@/lib/maintenance/types";
 import { Droplets, Filter, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 
 interface CompleteOilChangeModalProps {
@@ -157,10 +158,10 @@ export function CompleteOilChangeModal({
     }
   };
 
-  const oilItems = items.filter((i) => i.itemType === 3);
+  const oilItems = items.filter((i) => i.itemType === ItemType.Oil);
   const filterItems = items.filter(
     (i) =>
-      i.itemType === 1 &&
+      i.itemType === ItemType.SparePart &&
       (i.nameAr.includes("فلتر") ||
         i.nameEn.toLowerCase().includes("filter") ||
         i.sku.toLowerCase().includes("flt")),

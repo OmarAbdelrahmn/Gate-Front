@@ -20,7 +20,14 @@ import type {
   MaintenanceLocation,
   InventoryItem,
 } from "@/lib/maintenance/types";
-import { unitOfMeasureLabels, formatCurrency, formatDateTime } from "@/lib/maintenance/constants";
+import { ItemType } from "@/lib/maintenance/types";
+import {
+  unitOfMeasureLabels,
+  formatCurrency,
+  formatDateTime,
+  itemTypeLabels,
+  itemTypeBadgeStyles,
+} from "@/lib/maintenance/constants";
 
 interface BalancesAndFifoViewProps {
   locations: MaintenanceLocation[];
@@ -31,6 +38,7 @@ export function BalancesAndFifoView({ locations, items }: BalancesAndFifoViewPro
   const [loading, setLoading] = useState(true);
   const [selectedLocationId, setSelectedLocationId] = useState("");
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [selectedItemType, setSelectedItemType] = useState("");
 
   const [balances, setBalances] = useState<StockBalance[]>([]);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -70,7 +78,6 @@ export function BalancesAndFifoView({ locations, items }: BalancesAndFifoViewPro
         const layers = await getCostLayers({
           inventoryLocationId: item.inventoryLocationId,
           inventoryItemId: item.inventoryItemId,
-          availableOnly: true,
         });
         setCostLayers((prev) => ({ ...prev, [key]: layers }));
       } catch (err) {
@@ -81,7 +88,17 @@ export function BalancesAndFifoView({ locations, items }: BalancesAndFifoViewPro
     }
   };
 
-  const totalInventoryValue = balances.reduce(
+  const selectableItems = selectedItemType
+    ? items.filter((i) => String(i.itemType) === selectedItemType)
+    : items;
+
+  const filteredBalances = balances.filter((b) => {
+    if (!selectedItemType) return true;
+    const itm = items.find((i) => i.id === b.inventoryItemId);
+    return itm ? String(itm.itemType) === selectedItemType : true;
+  });
+
+  const totalInventoryValue = filteredBalances.reduce(
     (sum, b) => sum + (b.inventoryValue || 0),
     0,
   );
@@ -91,7 +108,29 @@ export function BalancesAndFifoView({ locations, items }: BalancesAndFifoViewPro
       {/* Filters & Total Metric */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="w-56">
+          <div className="w-52">
+            <select
+              value={selectedItemType}
+              onChange={(e) => {
+                const newType = e.target.value;
+                setSelectedItemType(newType);
+                if (newType && selectedItemId) {
+                  const currentItem = items.find((i) => i.id === selectedItemId);
+                  if (currentItem && String(currentItem.itemType) !== newType) {
+                    setSelectedItemId("");
+                  }
+                }
+              }}
+              className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-bold focus:outline-hidden cursor-pointer"
+            >
+              <option value="">جميع أنواع الأصناف (الكل)</option>
+              <option value={String(ItemType.SparePart)}>قطع غيار (1)</option>
+              <option value={String(ItemType.RiderAccessory)}>مستلزمات المناديب (2)</option>
+              <option value={String(ItemType.Oil)}>زيوت ومواد تشحيم (3)</option>
+              <option value={String(ItemType.Consumable)}>مستهلكات وورشة (4)</option>
+            </select>
+          </div>
+          <div className="w-52">
             <SearchableSelect
               value={selectedLocationId}
               onChange={(val) => setSelectedLocationId(val)}
@@ -110,10 +149,12 @@ export function BalancesAndFifoView({ locations, items }: BalancesAndFifoViewPro
               value={selectedItemId}
               onChange={(val) => setSelectedItemId(val)}
               options={[
-                { value: "", label: "جميع الأصناف وقطع الغيار" },
-                ...items.map((i) => ({
+                { value: "", label: "جميع الأصناف المقابلة" },
+                ...selectableItems.map((i) => ({
                   value: i.id,
                   label: `${i.nameAr} (${i.sku})`,
+                  sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                  keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku}`,
                 })),
               ]}
               placeholder="فلترة بالصنف..."
@@ -164,17 +205,19 @@ export function BalancesAndFifoView({ locations, items }: BalancesAndFifoViewPro
                   جارٍ تحميل أرصدة المخزون...
                 </td>
               </tr>
-            ) : balances.length === 0 ? (
+            ) : filteredBalances.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-slate-400">
                   لا توجد أرصدة مطابقة للفلتر المحدد.
                 </td>
               </tr>
             ) : (
-              balances.map((bal) => {
+              filteredBalances.map((bal) => {
                 const key = `${bal.inventoryLocationId}-${bal.inventoryItemId}`;
                 const isExpanded = expandedItemId === key;
                 const layers = costLayers[key] || [];
+                const itm = items.find((i) => i.id === bal.inventoryItemId);
+                const badge = itm ? itemTypeBadgeStyles[itm.itemType] : null;
 
                 return (
                   <React.Fragment key={bal.id}>
@@ -187,7 +230,16 @@ export function BalancesAndFifoView({ locations, items }: BalancesAndFifoViewPro
                         {bal.sku}
                       </td>
                       <td className="p-3 font-bold text-slate-900 dark:text-white">
-                        {bal.itemNameAr}
+                        <div className="flex items-center gap-2">
+                          <span>{bal.itemNameAr}</span>
+                          {badge && (
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold border ${badge.bg} ${badge.text} ${badge.border}`}
+                            >
+                              {badge.label}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3 text-slate-600 dark:text-slate-300">
                         {bal.locationNameAr}

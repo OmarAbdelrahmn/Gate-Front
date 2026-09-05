@@ -4,6 +4,7 @@ import type {
   CreateMaintenanceLocationRequest,
   UpdateMaintenanceLocationRequest,
   InventoryItem,
+  ItemType,
   CreateInventoryItemRequest,
   UpdateInventoryItemRequest,
   Supplier,
@@ -77,9 +78,15 @@ export async function updateMaintenanceLocation(
 // Items & Suppliers
 // ==========================================
 
-export async function getInventoryItems(search?: string): Promise<InventoryItem[]> {
-  const query = search ? `?search=${encodeURIComponent(search)}` : "";
-  return authFetch<InventoryItem[]>(`/api/maintenance-inventory/items${query}`);
+export async function getInventoryItems(
+  search?: string,
+  itemType?: ItemType,
+): Promise<InventoryItem[]> {
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  if (itemType !== undefined) query.set("itemType", String(itemType));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return authFetch<InventoryItem[]>(`/api/maintenance-inventory/items${queryString}`);
 }
 
 export async function createInventoryItem(

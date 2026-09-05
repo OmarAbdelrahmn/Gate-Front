@@ -9,6 +9,7 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle2,
+  Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -28,6 +29,7 @@ import type {
   CostLayer,
 } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
+import { itemTypeLabels } from "@/lib/maintenance/constants";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface TransfersAndReturnsViewProps {
@@ -92,6 +94,12 @@ export function TransfersAndReturnsView({
   const [issueLines, setIssueLines] = useState<
     { inventoryItemId: string; quantity: number; expectedReturn: boolean }[]
   >([{ inventoryItemId: "", quantity: 1, expectedReturn: false }]);
+  const [onlyRiderAccessories, setOnlyRiderAccessories] = useState(true);
+
+  // Rider assignable items (ItemType.RiderAccessory === 2)
+  const riderAccessories = items.filter((i) => i.itemType === ItemType.RiderAccessory);
+  const displayedRiderItems =
+    onlyRiderAccessories && riderAccessories.length > 0 ? riderAccessories : items;
 
   // Inventory-enabled locations
   const invLocations = locations.filter((l) => l.inventoryEnabled);
@@ -343,6 +351,8 @@ export function TransfersAndReturnsView({
                     options={items.map((i) => ({
                       value: i.id,
                       label: `${i.nameAr} (${i.sku})`,
+                      sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                      keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                     }))}
                     placeholder="اختر الصنف..."
                     required
@@ -485,6 +495,8 @@ export function TransfersAndReturnsView({
                     options={items.map((i) => ({
                       value: i.id,
                       label: `${i.nameAr} (${i.sku})`,
+                      sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                      keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                     }))}
                     placeholder="اختر الصنف..."
                     required
@@ -601,10 +613,36 @@ export function TransfersAndReturnsView({
 
           {/* Issue Lines */}
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                المستلزمات المصروفة
-              </h4>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  المستلزمات والعهد المصروفة
+                </h4>
+                <div className="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setOnlyRiderAccessories(true)}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      onlyRiderAccessories
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    مستلزمات المناديب فقط ({riderAccessories.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnlyRiderAccessories(false)}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      !onlyRiderAccessories
+                        ? "bg-[#1167c9] text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    كافة الأصناف ({items.length})
+                  </button>
+                </div>
+              </div>
               <Button
                 type="button"
                 variant="secondary"
@@ -614,12 +652,28 @@ export function TransfersAndReturnsView({
                     { inventoryItemId: "", quantity: 1, expectedReturn: false },
                   ])
                 }
-                className="h-8 text-xs px-2.5"
+                className="h-8 text-xs px-2.5 shrink-0"
               >
                 <Plus size={13} />
                 إضافة صنف
               </Button>
             </div>
+
+            {onlyRiderAccessories && riderAccessories.length === 0 && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>لم يتم العثور على أصناف مصنفة كـ &quot;مستلزمات ومعدات المندوب&quot; (ItemType = 2) حالياً.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOnlyRiderAccessories(false)}
+                  className="font-bold underline text-[11px] shrink-0 cursor-pointer"
+                >
+                  عرض كافة الأصناف
+                </button>
+              </div>
+            )}
 
             {issueLines.map((line, idx) => (
               <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30">
@@ -631,9 +685,11 @@ export function TransfersAndReturnsView({
                       copy[idx].inventoryItemId = val;
                       setIssueLines(copy);
                     }}
-                    options={items.map((i) => ({
+                    options={displayedRiderItems.map((i) => ({
                       value: i.id,
                       label: `${i.nameAr} (${i.sku})`,
+                      sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                      keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                     }))}
                     placeholder="اختر الصنف/المستلزم..."
                     required

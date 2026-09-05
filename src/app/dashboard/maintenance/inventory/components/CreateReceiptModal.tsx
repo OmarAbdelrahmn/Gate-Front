@@ -13,7 +13,7 @@ import type {
   ReceiptLinePayload,
 } from "@/lib/maintenance/types";
 import { UnitOfMeasure, ItemType } from "@/lib/maintenance/types";
-import { unitOfMeasureLabels, formatCurrency } from "@/lib/maintenance/constants";
+import { unitOfMeasureLabels, formatCurrency, itemTypeLabels } from "@/lib/maintenance/constants";
 import {
   Plus,
   Trash2,
@@ -414,7 +414,8 @@ export function CreateReceiptModal({
                         options={items.map((i) => ({
                           value: i.id,
                           label: `${i.nameAr} (${i.sku})`,
-                          sublabel: isOil ? "برميل زيت" : undefined,
+                          sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                          keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                         }))}
                         placeholder="اختر الصنف..."
                         required
