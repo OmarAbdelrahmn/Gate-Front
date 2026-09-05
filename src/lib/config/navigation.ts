@@ -24,6 +24,9 @@ import {
   Archive,
   Gauge,
   Fuel,
+  Package,
+  BadgeDollarSign,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 export type Role = "admin" | "member" | "accountant";
@@ -32,7 +35,7 @@ export type NavItem = {
   labelKey?: string;
   href?: string;
   icon: LucideIcon;
-  roles: Role[];
+  roles?: Role[];
   permission?: string;
   permissionsAny?: string[];
   children?: NavItem[];
@@ -347,6 +350,71 @@ export const navigation: NavItem[] = [
         icon: Archive,
         roles: ["admin", "member"],
         permission: "phone_sims.read",
+      },
+    ],
+  },
+  {
+    label: "الصيانة والمخزون والورش",
+    icon: Wrench,
+    permissionsAny: [
+      "maintenance.locations.read",
+      "maintenance.work_orders.read",
+      "maintenance.oil.read",
+      "maintenance.external_jobs.read",
+      "maintenance.profit_reports.read",
+      "inventory.items.read",
+      "inventory.stock.read",
+      "inventory.cost_layers.read",
+      "inventory.receipts.manage",
+    ],
+    children: [
+      {
+        label: "لوحة مؤشرات الصيانة",
+        href: "/dashboard/maintenance",
+        icon: LayoutDashboard,
+        permissionsAny: [
+          "maintenance.locations.read",
+          "maintenance.work_orders.read",
+          "inventory.stock.read",
+        ],
+      },
+      {
+        label: "إعدادات الصيانة والكتالوج",
+        href: "/dashboard/maintenance/setup",
+        icon: SlidersHorizontal,
+        permissionsAny: [
+          "maintenance.locations.read",
+          "inventory.items.read",
+        ],
+      },
+      {
+        label: "المخزون والمشتريات والزيوت",
+        href: "/dashboard/maintenance/inventory",
+        icon: Package,
+        permissionsAny: [
+          "inventory.stock.read",
+          "inventory.items.read",
+          "inventory.receipts.manage",
+          "inventory.cost_layers.read",
+        ],
+      },
+      {
+        label: "أوامر الصيانة وتغيير الزيت",
+        href: "/dashboard/maintenance/work-orders",
+        icon: Wrench,
+        permissionsAny: [
+          "maintenance.work_orders.read",
+          "maintenance.oil.read",
+        ],
+      },
+      {
+        label: "ورشة الرياض والعمليات الخارجية",
+        href: "/dashboard/maintenance/workshops",
+        icon: BadgeDollarSign,
+        permissionsAny: [
+          "maintenance.external_jobs.read",
+          "maintenance.profit_reports.read",
+        ],
       },
     ],
   },

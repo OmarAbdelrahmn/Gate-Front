@@ -17,7 +17,7 @@ const permitted = (
   item: NavItem,
   role: Role,
   can: (permission: string) => boolean,
-) => item.roles.includes(role) && (!item.permission || can(item.permission)) && (!item.permissionsAny || item.permissionsAny.some(can));
+) => (!item.roles || item.roles.includes(role)) && (!item.permission || can(item.permission)) && (!item.permissionsAny || item.permissionsAny.some(can));
 
 export function Sidebar({
   role = "admin",
@@ -42,6 +42,7 @@ export function Sidebar({
     "إدارة الأسطول والمركبات": path.startsWith("/dashboard/fleet") && !path.startsWith("/dashboard/fleet/vehicle-account-assignments") && !path.startsWith("/dashboard/fleet/phone-sims"),
     "ربط المركبات بالمنصات": path.startsWith("/dashboard/fleet/vehicle-account-assignments"),
     "إدارة شرائح الاتصال (SIM)": path.startsWith("/dashboard/fleet/phone-sims"),
+    "الصيانة والمخزون والورش": path.startsWith("/dashboard/maintenance"),
   });
   const items =
     !authorization || isLoading

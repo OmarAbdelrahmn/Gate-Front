@@ -174,6 +174,32 @@ export function getFriendlyErrorMessage(
         return "تم تعديل البيانات بواسطة مستخدم آخر. يرجى التحديث والمحاولة مجدداً.";
       case "fuel.month_mismatch":
         return "الشهر المكتشف في الملف يختلف عن الشهر المتوقع المحدد.";
+      case "maintenance.concurrency_conflict":
+        return "تم تعديل السجل بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+      case "maintenance.insufficient_stock":
+        return "الكمية المطلوبة غير متوفرة في الرصيد الحالي للمخزون.";
+      case "maintenance.oil_barrel_not_next_fifo":
+        return "يجب فتح البرميل الأقدم وفقاً لطبقات تكلفة الوارد أولاً (FIFO).";
+      case "maintenance.open_oil_barrel_required":
+        return "يلزم وجود برميل زيت مفتوح لإتمام العملية. يرجى فتح البرميل المؤهل أولاً.";
+      case "maintenance.oil_loss_allowance_exceeded":
+        return "تجاوزت كمية الفاقد الحد الأقصى المسموح به (2% من سعة البرميل الأصلية).";
+      case "maintenance.invalid_bill_file":
+        return "ملف الفاتورة غير صالح. يُسمح فقط بملفات PDF أو الصور (JPEG, PNG, WebP, GIF, BMP) بحجم أقصى 10 ميجابايت.";
+      case "maintenance.invalid_oil_filter":
+        return "يرجى تحديد صنف فلتر الزيت عند اختيار تغيير الفلتر.";
+      case "maintenance.invalid_odometer":
+        return "قراءة العداد الحالية غير صالحة؛ يجب ألا تقل عن القراءة المسجلة مسبقاً.";
+      case "maintenance.invalid_location":
+        return "الموقع المحدد غير مصرح له بتنفيذ هذه العملية.";
+      case "maintenance.invalid_state":
+        return "حالة أمر العمل الحالية لا تسمح بهذا الإجراء. يرجى تحديث الصفحة.";
+      case "maintenance.oil_transfer_requires_whole_barrels":
+        return "نقل أو إرجاع الزيوت مقتصر فعلياً على البراميل الكاملة والمختومة فقط.";
+      case "maintenance.invalid_subject":
+        return "بيانات هدف الخدمة غير صالحة (لا يمكن إرسال مركبة خارجية لعمليات الشركة أو العكس).";
+      case "maintenance.invalid_oil_quantity":
+        return "كمية الزيت المحددة غير صالحة لنوع المركبة المختار.";
     }
   }
 

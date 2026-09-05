@@ -6,6 +6,7 @@ export const permissionGroups = [
   "Documents",
   "Operations",
   "Fleet",
+  "Maintenance",
   "Workflows",
 ] as const;
 export type PermissionGroup = (typeof permissionGroups)[number];
@@ -16,6 +17,7 @@ const labels: Record<PermissionGroup, { ar: string; en: string }> = {
   Documents: { ar: "المستندات", en: "Documents" },
   Operations: { ar: "العمليات", en: "Operations" },
   Fleet: { ar: "الأسطول", en: "Fleet" },
+  Maintenance: { ar: "الصيانة والمخزون والورش", en: "Maintenance, Inventory & Workshops" },
   Workflows: { ar: "مسارات العمل", en: "Workflows" },
 };
 export function permissionGroup(key: string): PermissionGroup {
@@ -30,6 +32,7 @@ export function permissionGroup(key: string): PermissionGroup {
     return "Compliance";
   if (key.startsWith("documents.")) return "Documents";
   if (key.startsWith("fleet.") || key.startsWith("phone_sims.") || key.startsWith("fuel.")) return "Fleet";
+  if (key.startsWith("maintenance.") || key.startsWith("inventory.")) return "Maintenance";
   if (/^(leave_requests|absence_cases|employee_status_changes|hr_forms)\./.test(key))
     return "Workflows";
   return "Operations";
