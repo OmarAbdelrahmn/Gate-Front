@@ -97,7 +97,7 @@ export default function MaintenanceOverviewPage() {
             <RefreshCw size={15} />
             تحديث البيانات
           </Button>
-          <Link href="/dashboard/maintenance/work-orders">
+          <Link href="/dashboard/maintenance/work-orders/orders">
             <Button variant="primary" className="text-xs">
               <PlusCircle size={16} />
               أمر صيانة جديد
@@ -127,7 +127,7 @@ export default function MaintenanceOverviewPage() {
           <div className="mt-3 flex items-center justify-between text-xs pt-3 border-t border-blue-100 dark:border-blue-900/40">
             <span className="text-slate-500">إجمالي الأوامر: {workOrders.length}</span>
             <Link
-              href="/dashboard/maintenance/work-orders"
+              href="/dashboard/maintenance/work-orders/orders"
               className="font-bold text-[#1167c9] hover:underline flex items-center gap-1"
             >
               عرض القائمة <ArrowUpRight size={13} />
@@ -154,7 +154,7 @@ export default function MaintenanceOverviewPage() {
           <div className="mt-3 flex items-center justify-between text-xs pt-3 border-t border-amber-100 dark:border-amber-900/40">
             <span className="text-slate-500">إجمالي المركبات: {oilReminders.length}</span>
             <Link
-              href="/dashboard/maintenance/work-orders?tab=reminders"
+              href="/dashboard/maintenance/work-orders/reminders"
               className="font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1"
             >
               متابعة التذكيرات <ArrowUpRight size={13} />
@@ -185,7 +185,7 @@ export default function MaintenanceOverviewPage() {
               لتر
             </span>
             <Link
-              href="/dashboard/maintenance/inventory"
+              href="/dashboard/maintenance/inventory/barrels"
               className="font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1"
             >
               إدارة البراميل <ArrowUpRight size={13} />
@@ -214,7 +214,7 @@ export default function MaintenanceOverviewPage() {
               جدة: JED-WH | الرياض: RUH-WS
             </span>
             <Link
-              href="/dashboard/maintenance/setup"
+              href="/dashboard/maintenance/setup/locations"
               className="font-bold text-purple-700 dark:text-purple-400 hover:underline flex items-center gap-1"
             >
               عرض الإعدادات <ArrowUpRight size={13} />
@@ -309,7 +309,7 @@ export default function MaintenanceOverviewPage() {
               أحدث أوامر العمل
             </h2>
             <Link
-              href="/dashboard/maintenance/work-orders"
+              href="/dashboard/maintenance/work-orders/orders"
               className="text-xs font-bold text-[#1167c9] hover:underline"
             >
               عرض الكل
@@ -371,7 +371,7 @@ export default function MaintenanceOverviewPage() {
               تنبيهات تغيير الزيت العاجلة
             </h2>
             <Link
-              href="/dashboard/maintenance/work-orders?tab=reminders"
+              href="/dashboard/maintenance/work-orders/reminders"
               className="text-xs font-bold text-amber-600 hover:underline"
             >
               سجل التذكيرات
@@ -413,7 +413,7 @@ export default function MaintenanceOverviewPage() {
                       </div>
                     </div>
                     <Link
-                      href={`/dashboard/maintenance/work-orders?openOilChangeFor=${reminder.vehicleId}`}
+                      href={`/dashboard/maintenance/work-orders/reminders?openOilChangeFor=${reminder.vehicleId}`}
                     >
                       <Button variant="secondary" className="h-8 text-[11px] px-2.5">
                         تغيير الزيت
