@@ -465,3 +465,59 @@ export const downloadAccidentPdf = (id: string, reportVersionId?: string) => {
   const query = reportVersionId ? `?reportVersionId=${reportVersionId}` : "";
   return authDownload(`/api/vehicle-accidents/${id}/pdf${query}`);
 };
+
+// ---------------------------
+// Accident Claims & Workflows
+// ---------------------------
+export const getVehicleAccidentWorkflows = (params: {
+  vehicleId?: string;
+  riderProfileId?: string;
+  stage?: number;
+  overdueOnly?: boolean;
+  page?: number;
+  pageSize?: number;
+} = {}) => {
+  const query = new URLSearchParams();
+  if (params.vehicleId) query.set("vehicleId", params.vehicleId);
+  if (params.riderProfileId) query.set("riderProfileId", params.riderProfileId);
+  if (params.stage !== undefined) query.set("stage", String(params.stage));
+  if (params.overdueOnly) query.set("overdueOnly", "true");
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+  const qs = query.toString();
+  return authFetch<T.PagedResponse<T.VehicleAccidentWorkflowSummary>>(
+    `/api/vehicle-accidents/workflows${qs ? `?${qs}` : ""}`
+  );
+};
+
+export const getVehicleAccidentWorkflow = (id: string) =>
+  authFetch<T.VehicleAccidentWorkflowDetailResponse>(`/api/vehicle-accidents/${id}/workflow`);
+
+export const executeWorkflowAction = (id: string, payload: T.WorkflowActionRequest) =>
+  authFetch<T.VehicleAccidentWorkflowDetailResponse>(`/api/vehicle-accidents/${id}/workflow/actions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تنفيذ الإجراء بنجاح",
+  });
+
+export const uploadWorkflowAttachment = (id: string, formData: FormData) =>
+  authFetch<T.VehicleAccidentAttachmentResponse>(`/api/vehicle-accidents/${id}/workflow/attachments`, {
+    method: "POST",
+    body: formData,
+    notifySuccess: "تم رفع المستند بنجاح",
+  });
+
+export const downloadWorkflowAttachment = (id: string, attachmentId: string) =>
+  authDownload(`/api/vehicle-accidents/${id}/evidence/${attachmentId}/download`);
+
+export const downloadWorkflowSourceDocument = (id: string, kind: "iqama" | "license" | "registration") =>
+  authDownload(`/api/vehicle-accidents/${id}/workflow/documents/${kind}/download`);
+
+export const createWorkflowInstallment = (id: string, payload: T.CreateWorkflowInstallmentRequest) =>
+  authFetch<T.VehicleAccidentInstallment>(`/api/vehicle-accidents/${id}/workflow/installments`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تسجيل القسط بنجاح",
+  });
+

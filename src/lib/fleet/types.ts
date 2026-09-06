@@ -132,7 +132,95 @@ export enum VehicleAccidentEvidenceType {
   Image = 1,
   UploadedReport = 2,
   Other = 3,
+  NajmReport = 4,
+  DamagePhoto = 5,
+  DamagePromissoryNote = 6,
+  ClaimOpeningFeeReceipt = 7,
+  ClaimSubmissionReport = 8,
+  AssessmentReceipt = 9,
+  InsuranceDecision = 10,
+  PaymentReceipt = 11,
+  TransferReceipt = 12,
+  RepairDirection = 13,
+  RepairCompletion = 14,
+  ReinspectionReport = 15,
+  TotalLossConfirmation = 16,
+  VehicleCollectionReceipt = 17,
+  ValuationReceipt = 18,
+  TowingReceipt = 19,
+  InstallmentReceipt = 20,
+  InstallmentRefundRequest = 21,
+  InstallmentRefundReceipt = 22,
 }
+
+export enum VehicleAccidentWorkflowStage {
+  AwaitingNajm = 1,
+  Assessed = 2,
+  LocalRepair = 3,
+  ClaimDraft = 4,
+  AwaitingAssessment = 5,
+  CompensationOffered = 6,
+  AwaitingInsurance = 7,
+  InsuranceRejected = 8,
+  InsuranceApproved = 9,
+  AwaitingSupplierTransfer = 10,
+  RepairDirected = 11,
+  Repairing = 12,
+  TotalLossProposed = 13,
+  AwaitingReinspection = 14,
+  TotalLossConfirmed = 15,
+  AwaitingValuation = 16,
+  TotalLossValued = 17,
+  Completed = 18,
+}
+
+export enum VehicleAccidentWorkflowAction {
+  AssessFault = 1,
+  StartLocalRepair = 2,
+  CompleteLocalRepair = 3,
+  OpenClaim = 4,
+  SubmitClaim = 5,
+  ReceiveCompensationOffer = 6,
+  SubmitToInsurance = 7,
+  ApproveInsurance = 8,
+  RejectInsurance = 9,
+  SubmitToSupplier = 10,
+  ConfirmTransfer = 11,
+  ReceiveRepairDirection = 12,
+  StartRepair = 13,
+  RepairProgress = 14,
+  CompleteRepair = 15,
+  ProposeTotalLoss = 16,
+  RequestReinspection = 17,
+  ConfirmTotalLoss = 18,
+  RecordVehicleCollection = 19,
+  RecordValuation = 20,
+  FollowUp = 21,
+  SubmitInstallmentRefund = 22,
+  ReceiveInstallmentRefund = 23,
+  RejectInstallmentRefund = 24,
+  MarkNoInstallments = 25,
+}
+
+export enum VehicleAccidentClaimType {
+  Repair = 1,
+  Compensation = 2,
+}
+
+export enum VehicleAccidentClaimResponseType {
+  Repair = 1,
+  Compensation = 2,
+  TotalLoss = 3,
+}
+
+export enum VehicleAccidentRefundStatus {
+  NotSubmitted = 1,
+  Submitted = 2,
+  Received = 3,
+  Rejected = 4,
+  NotApplicable = 5,
+}
+
 
 // ---------------------------
 // Common Types
@@ -831,6 +919,192 @@ export interface VehicleAccidentAttachmentResponse {
   contentType: string;
   sizeBytes: number;
   uploadedAtUtc: string;
+  description?: string | null;
+  fromLocation?: string | null;
+  toLocation?: string | null;
+  transportedAtUtc?: string | null;
+  amount?: number | null;
+  downloadUrl?: string | null;
+}
+
+export interface OtherPartyFault {
+  name: string;
+  faultPercentage: number;
+  vehiclePlate?: string | null;
+  insuranceCompany?: string | null;
+}
+
+export interface SourceDocumentInfo {
+  versionId?: string | null;
+  originalFileName?: string | null;
+  contentType?: string | null;
+  downloadUrl?: string | null;
+}
+
+export interface WorkflowTimelineEntry {
+  id?: string;
+  action: VehicleAccidentWorkflowAction;
+  actionName?: string;
+  occurredAtUtc: string;
+  performedByUserId?: string | null;
+  performedByUserName?: string | null;
+  notes: string;
+  stageBefore?: VehicleAccidentWorkflowStage | null;
+  stageAfter?: VehicleAccidentWorkflowStage | null;
+  attachmentId?: string | null;
+  amount?: number | null;
+  reference?: string | null;
+  dataSnapshotJson?: string | null;
+}
+
+export interface VehicleAccidentInstallment {
+  id: string;
+  accidentId: string;
+  periodFrom: string;
+  periodTo: string;
+  paidOn: string;
+  amount: number;
+  refundEligibleAmount: number;
+  receiptAttachmentId: string;
+  notes?: string | null;
+  createdAtUtc?: string;
+}
+
+export interface VehicleAccidentWorkflowSummary {
+  id: string;
+  accidentId: string;
+  accidentNumber: string;
+  vehicleId: string;
+  vehiclePlate?: string | null;
+  vehicleAssetNumber?: string | null;
+  riderProfileId: string;
+  riderName?: string | null;
+  stage: VehicleAccidentWorkflowStage;
+  externalReference?: string | null;
+  supplierId?: string | null;
+  supplierName?: string | null;
+  occurredAtUtc: string;
+  deadlineAtUtc?: string | null;
+  remainingSeconds?: number | null;
+  isOverdue: boolean;
+  refundStatus: VehicleAccidentRefundStatus;
+  rowVersion: string;
+}
+
+export interface VehicleAccidentWorkflowDetailResponse {
+  accidentId: string;
+  stage: VehicleAccidentWorkflowStage;
+  incidentStartedAtUtc: string;
+  incidentEndedAtUtc?: string | null;
+  incidentCalendarDays: number;
+  deadlineAtUtc?: string | null;
+  remainingSeconds?: number | null;
+  isOverdue: boolean;
+  rowVersion: string;
+  fault?: {
+    riderFaultPercentage?: number | null;
+    otherParties: OtherPartyFault[];
+    najmAttachmentId?: string | null;
+    assessedAtUtc?: string | null;
+    notes?: string | null;
+  } | null;
+  claim?: {
+    claimType?: VehicleAccidentClaimType | null;
+    responseClaimType?: VehicleAccidentClaimResponseType | null;
+    reference?: string | null;
+    supplierId?: string | null;
+    supplierName?: string | null;
+    openingFeeAmount?: number | null;
+    openingFeeAttachmentId?: string | null;
+    submissionReportAttachmentId?: string | null;
+    submittedAtUtc?: string | null;
+    notes?: string | null;
+  } | null;
+  settlement?: {
+    compensationOfferAmount?: number | null;
+    compensationOfferReceiptAttachmentId?: string | null;
+    insuranceSubmittedAtUtc?: string | null;
+    insuranceDecision?: "Approved" | "Rejected" | string | null;
+    insuranceDecisionAttachmentId?: string | null;
+    paymentReceiptAttachmentId?: string | null;
+    supplierSubmittedAtUtc?: string | null;
+    supplierSubmissionAttachmentId?: string | null;
+    transferReceiptAttachmentId?: string | null;
+    transferredAmount?: number | null;
+    transferredAtUtc?: string | null;
+  } | null;
+  repair?: {
+    repairDirectionAttachmentId?: string | null;
+    repairLocation?: string | null;
+    repairContact?: string | null;
+    repairStartedAtUtc?: string | null;
+    repairCompletionAttachmentId?: string | null;
+    completedAtUtc?: string | null;
+    progressUpdates?: Array<{
+      notes: string;
+      occurredAtUtc: string;
+      attachmentId?: string | null;
+    }> | null;
+  } | null;
+  totalLoss?: {
+    proposedAtUtc?: string | null;
+    proposalAttachmentId?: string | null;
+    reinspectionLocation?: string | null;
+    reinspectionAppointmentAtUtc?: string | null;
+    totalLossConfirmedAtUtc?: string | null;
+    totalLossConfirmationAttachmentId?: string | null;
+    vehicleCollectedAtUtc?: string | null;
+    vehicleCollectionReceiptAttachmentId?: string | null;
+    valuationAmount?: number | null;
+    valuationReceiptAttachmentId?: string | null;
+  } | null;
+  refund?: {
+    installments: VehicleAccidentInstallment[];
+    totalEligibleRefundAmount: number;
+    refundStatus: VehicleAccidentRefundStatus;
+    refundReference?: string | null;
+    refundRequestedAmount?: number | null;
+    refundReceivedAmount?: number | null;
+    refundRequestAttachmentId?: string | null;
+    refundReceiptAttachmentId?: string | null;
+    refundDecisionAttachmentId?: string | null;
+    notes?: string | null;
+  } | null;
+  sourceDocuments: {
+    iqama: SourceDocumentInfo;
+    license: SourceDocumentInfo;
+    registration: SourceDocumentInfo;
+  };
+  attachments: VehicleAccidentAttachmentResponse[];
+  timeline: WorkflowTimelineEntry[];
+}
+
+export interface WorkflowActionRequest {
+  action: VehicleAccidentWorkflowAction;
+  rowVersion: string;
+  notes: string;
+  occurredAtUtc: string;
+  attachmentId?: string | null;
+  riderFaultPercentage?: number | null;
+  otherParties?: OtherPartyFault[] | null;
+  amount?: number | null;
+  claimType?: VehicleAccidentClaimType | null;
+  supplierId?: string | null;
+  reference?: string | null;
+  location?: string | null;
+  contact?: string | null;
+  appointmentAtUtc?: string | null;
+}
+
+export interface CreateWorkflowInstallmentRequest {
+  rowVersion: string;
+  periodFrom: string;
+  periodTo: string;
+  paidOn: string;
+  amount: number;
+  refundEligibleAmount: number;
+  receiptAttachmentId: string;
+  notes?: string | null;
 }
 
 export interface AccidentActionRequest {

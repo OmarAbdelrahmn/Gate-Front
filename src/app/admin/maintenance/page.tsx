@@ -79,8 +79,8 @@ export default function MaintenanceOverviewPage() {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Wrench className="text-[#1167c9]" />
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Wrench className="text-slate-700 dark:text-slate-300" size={22} />
             لوحة مؤشرات الصيانة والمخزون والورش
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -109,26 +109,26 @@ export default function MaintenanceOverviewPage() {
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Active Work Orders */}
-        <div className="rounded-2xl border border-blue-200/70 bg-gradient-to-br from-blue-50/70 to-white dark:from-blue-950/20 dark:to-slate-900 p-5 shadow-xs">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               أوامر العمل النشطة
             </span>
-            <div className="grid size-10 place-items-center rounded-xl bg-blue-600 text-white shadow-sm">
-              <Wrench size={20} />
+            <div className="grid size-9 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <Wrench size={18} />
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
               {loading ? "…" : activeOrdersCount}
             </span>
             <span className="text-xs text-slate-500">أمر مفتوح / قيد التنفيذ</span>
           </div>
-          <div className="mt-3 flex items-center justify-between text-xs pt-3 border-t border-blue-100 dark:border-blue-900/40">
+          <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-[var(--border)]">
             <span className="text-slate-500">إجمالي الأوامر: {workOrders.length}</span>
             <Link
               href="/admin/maintenance/work-orders/orders"
-              className="font-bold text-[#1167c9] hover:underline flex items-center gap-1"
+              className="font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-1 transition-colors"
             >
               عرض القائمة <ArrowUpRight size={13} />
             </Link>
@@ -136,26 +136,26 @@ export default function MaintenanceOverviewPage() {
         </div>
 
         {/* Urgent Oil Reminders */}
-        <div className="rounded-2xl border border-amber-200/70 bg-gradient-to-br from-amber-50/70 to-white dark:from-amber-950/20 dark:to-slate-900 p-5 shadow-xs">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               تغيير الزيت المستحق
             </span>
-            <div className="grid size-10 place-items-center rounded-xl bg-amber-500 text-white shadow-sm">
-              <Droplets size={20} />
+            <div className="grid size-9 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <Droplets size={18} />
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-amber-600 dark:text-amber-400">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
               {loading ? "…" : urgentOilReminders.length}
             </span>
             <span className="text-xs text-slate-500">مركبة مستحقة / متأخرة</span>
           </div>
-          <div className="mt-3 flex items-center justify-between text-xs pt-3 border-t border-amber-100 dark:border-amber-900/40">
+          <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-[var(--border)]">
             <span className="text-slate-500">إجمالي المركبات: {oilReminders.length}</span>
             <Link
               href="/admin/maintenance/work-orders/reminders"
-              className="font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1"
+              className="font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-1 transition-colors"
             >
               متابعة التذكيرات <ArrowUpRight size={13} />
             </Link>
@@ -163,22 +163,22 @@ export default function MaintenanceOverviewPage() {
         </div>
 
         {/* Open Oil Barrels */}
-        <div className="rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white dark:from-emerald-950/20 dark:to-slate-900 p-5 shadow-xs">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               البراميل المفتوحة (النشطة)
             </span>
-            <div className="grid size-10 place-items-center rounded-xl bg-emerald-600 text-white shadow-sm">
-              <Package size={20} />
+            <div className="grid size-9 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <Package size={18} />
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
               {loading ? "…" : openBarrels.length}
             </span>
             <span className="text-xs text-slate-500">براميل قيد الاستهلاك</span>
           </div>
-          <div className="mt-3 flex items-center justify-between text-xs pt-3 border-t border-emerald-100 dark:border-emerald-900/40">
+          <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-[var(--border)]">
             <span className="text-slate-500">
               المتبقي:{" "}
               {openBarrels.reduce((sum, b) => sum + (b.remainingLiters || 0), 0)}{" "}
@@ -186,7 +186,7 @@ export default function MaintenanceOverviewPage() {
             </span>
             <Link
               href="/admin/maintenance/inventory/barrels"
-              className="font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1"
+              className="font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-1 transition-colors"
             >
               إدارة البراميل <ArrowUpRight size={13} />
             </Link>
@@ -194,28 +194,28 @@ export default function MaintenanceOverviewPage() {
         </div>
 
         {/* Operational Locations */}
-        <div className="rounded-2xl border border-purple-200/70 bg-gradient-to-br from-purple-50/70 to-white dark:from-purple-950/20 dark:to-slate-900 p-5 shadow-xs">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               مواقع وورش التشغيل
             </span>
-            <div className="grid size-10 place-items-center rounded-xl bg-purple-600 text-white shadow-sm">
-              <Building2 size={20} />
+            <div className="grid size-9 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <Building2 size={18} />
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
               {loading ? "…" : locations.length}
             </span>
             <span className="text-xs text-slate-500">مواقع مسجلة</span>
           </div>
-          <div className="mt-3 flex items-center justify-between text-xs pt-3 border-t border-purple-100 dark:border-purple-900/40">
+          <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-[var(--border)]">
             <span className="text-slate-500">
               جدة: JED-WH | الرياض: RUH-WS
             </span>
             <Link
               href="/admin/maintenance/setup/locations"
-              className="font-bold text-purple-700 dark:text-purple-400 hover:underline flex items-center gap-1"
+              className="font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-1 transition-colors"
             >
               عرض الإعدادات <ArrowUpRight size={13} />
             </Link>
@@ -224,36 +224,36 @@ export default function MaintenanceOverviewPage() {
       </div>
 
       {/* Operational Locations Overview Cards */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xs">
-        <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-          <Building2 size={18} className="text-[#1167c9]" />
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xs">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+          <Building2 size={16} className="text-slate-500 dark:text-slate-400" />
           القواعد التشغيلية للمواقع والمستودعات
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Jeddah Warehouse */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+          <div className="rounded-xl border border-[var(--border)] p-4 bg-slate-50/50 dark:bg-slate-900/30 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 text-xs font-mono font-bold">
+                <span className="px-2 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono font-medium">
                   JED-WH
                 </span>
                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 mt-1">
                   مستودع جدة (Jeddah Warehouse)
                 </h3>
               </div>
-              <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-bold">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700 font-medium">
                 مركبات الشركة فقط
               </span>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
               المخزون مُمكّن. مخصص لخدمة وصيانة مركبات أسطول الشركة وإصدار المستلزمات للمناديب. لا تظهر فيه خدمات الإصلاح الخارجي أو بيع القطع للعملاء.
             </p>
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-[11px]">
-              <span className="text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 size={13} /> إدارة المخزون
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--border)] text-[11px]">
+              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                <CheckCircle2 size={13} className="text-slate-400" /> إدارة المخزون
               </span>
-              <span className="text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 size={13} /> صيانة الشركة
+              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                <CheckCircle2 size={13} className="text-slate-400" /> صيانة الشركة
               </span>
               <span className="text-slate-400">✕ إصلاح خارجي</span>
               <span className="text-slate-400">✕ بيع قطع نقدي</span>
@@ -261,38 +261,38 @@ export default function MaintenanceOverviewPage() {
           </div>
 
           {/* Riyadh Workshop */}
-          <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 p-4 bg-amber-50/30 dark:bg-amber-950/20 space-y-3">
+          <div className="rounded-xl border border-[var(--border)] p-4 bg-slate-50/50 dark:bg-slate-900/30 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-xs font-mono font-bold">
+                <span className="px-2 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono font-medium">
                   RUH-WS
                 </span>
                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 mt-1">
                   ورشة الرياض (Riyadh Workshop)
                 </h3>
               </div>
-              <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-bold">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700 font-medium">
                 شركة + عملاء خارجيين
               </span>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
               المخزون مُمكّن. يخدم مركبات الشركة والعملاء الخارجيين مع إمكانية بيع قطع الغيار، أجور اليد المدفوعة، مستحقات الفنيين، واحتساب الأرباح الحقيقية.
             </p>
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-amber-200/60 dark:border-amber-900/40 text-[11px]">
-              <span className="text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 size={13} /> إدارة المخزون
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--border)] text-[11px]">
+              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                <CheckCircle2 size={13} className="text-slate-400" /> إدارة المخزون
               </span>
-              <span className="text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 size={13} /> صيانة الشركة
+              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                <CheckCircle2 size={13} className="text-slate-400" /> صيانة الشركة
               </span>
-              <span className="text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 size={13} /> إصلاح خارجي مدفوع
+              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                <CheckCircle2 size={13} className="text-slate-400" /> إصلاح خارجي مدفوع
               </span>
-              <span className="text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 size={13} /> بيع قطع غيار
+              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                <CheckCircle2 size={13} className="text-slate-400" /> بيع قطع غيار
               </span>
-              <span className="text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 size={13} /> تقرير الأرباح
+              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                <CheckCircle2 size={13} className="text-slate-400" /> تقرير الأرباح
               </span>
             </div>
           </div>
@@ -304,13 +304,13 @@ export default function MaintenanceOverviewPage() {
         {/* Recent Work Orders */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Wrench size={18} className="text-[#1167c9]" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Wrench size={16} className="text-slate-500 dark:text-slate-400" />
               أحدث أوامر العمل
             </h2>
             <Link
               href="/admin/maintenance/work-orders/orders"
-              className="text-xs font-bold text-[#1167c9] hover:underline"
+              className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
             >
               عرض الكل
             </Link>
@@ -340,7 +340,7 @@ export default function MaintenanceOverviewPage() {
                           {order.workOrderNumber}
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusCfg?.border} ${statusCfg?.bg} ${statusCfg?.text}`}
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium border ${statusCfg?.border} ${statusCfg?.bg} ${statusCfg?.text}`}
                         >
                           {statusCfg?.label || order.status}
                         </span>
@@ -366,13 +366,13 @@ export default function MaintenanceOverviewPage() {
         {/* Urgent Oil Reminders */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Droplets size={18} className="text-amber-500" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Droplets size={16} className="text-slate-500 dark:text-slate-400" />
               تنبيهات تغيير الزيت العاجلة
             </h2>
             <Link
               href="/admin/maintenance/work-orders/reminders"
-              className="text-xs font-bold text-amber-600 hover:underline"
+              className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
             >
               سجل التذكيرات
             </Link>
