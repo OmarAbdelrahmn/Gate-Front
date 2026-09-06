@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, KeyRound, LogOut, ShieldCheck } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../lib/auth/AuthProvider";
+import { getDefaultRouteForUser } from "../../lib/auth/roles";
 export default function ChangePasswordPage() {
   const router = useRouter();
   const { user, isLoading, isAuthenticated, changePassword, logout } =
@@ -42,9 +43,7 @@ export default function ChangePasswordPage() {
         form.currentPassword,
         form.newPassword,
       );
-      router.replace(
-        nextUser.requiresPasswordChange ? "/change-password" : "/dashboard",
-      );
+      router.replace(getDefaultRouteForUser(nextUser));
     } catch {
       setError(
         "تعذر تغيير كلمة المرور. تحقق من كلمة المرور الحالية وسياسة الأمان.",

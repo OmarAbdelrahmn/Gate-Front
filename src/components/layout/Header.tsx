@@ -167,7 +167,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                   <small className="text-[var(--muted)]">{name}</small>
                 </div>
                 <Link
-                  href="/dashboard/profile"
+                  href="/admin/profile"
                   onClick={() => setOpen(false)}
                   className={menuLink}
                 >
@@ -175,7 +175,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                   {t("header.profile")}
                 </Link>
                 <Link
-                  href="/dashboard/profile#change-password"
+                  href="/admin/profile#change-password"
                   onClick={() => setOpen(false)}
                   className={menuLink}
                 >
@@ -183,7 +183,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                   {t("header.changePassword")}
                 </Link>
                 <Link
-                  href="/dashboard/profile/sessions"
+                  href="/admin/profile/sessions"
                   onClick={() => setOpen(false)}
                   className={menuLink}
                 >

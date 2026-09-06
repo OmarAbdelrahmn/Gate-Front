@@ -35,14 +35,14 @@ export function Sidebar({
   const t = (key: string) => translate(locale, key);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    "إدارة المستخدمين": path.startsWith("/dashboard/users"),
-    "الموارد البشرية": path.startsWith("/dashboard/hr") || path.startsWith("/dashboard/employees"),
-    "إدارة السكن": path.startsWith("/dashboard/housing"),
-    "إدارة المنصات": path.startsWith("/dashboard/platforms"),
-    "إدارة الأسطول والمركبات": path.startsWith("/dashboard/fleet") && !path.startsWith("/dashboard/fleet/vehicle-account-assignments") && !path.startsWith("/dashboard/fleet/phone-sims"),
-    "ربط المركبات بالمنصات": path.startsWith("/dashboard/fleet/vehicle-account-assignments"),
-    "إدارة شرائح الاتصال (SIM)": path.startsWith("/dashboard/fleet/phone-sims"),
-    "الصيانة والمخزون والورش": path.startsWith("/dashboard/maintenance"),
+    "إدارة المستخدمين": path.startsWith("/admin/users"),
+    "الموارد البشرية": path.startsWith("/admin/hr") || path.startsWith("/admin/employees"),
+    "إدارة السكن": path.startsWith("/admin/housing"),
+    "إدارة المنصات": path.startsWith("/admin/platforms"),
+    "إدارة الأسطول والمركبات": path.startsWith("/admin/fleet") && !path.startsWith("/admin/fleet/vehicle-account-assignments") && !path.startsWith("/admin/fleet/phone-sims"),
+    "ربط المركبات بالمنصات": path.startsWith("/admin/fleet/vehicle-account-assignments"),
+    "إدارة شرائح الاتصال (SIM)": path.startsWith("/admin/fleet/phone-sims"),
+    "الصيانة والمخزون والورش": path.startsWith("/admin/maintenance"),
   });
   const items =
     !authorization || isLoading
@@ -64,8 +64,11 @@ export function Sidebar({
   const isChildActive = (href?: string) => {
     if (!href) return false;
     if (path === href) return true;
-    if (href === "/dashboard/fleet/vehicle-account-assignments") {
-      return path === "/dashboard/fleet/vehicle-account-assignments";
+    if (href === "/admin/fleet/vehicle-account-assignments") {
+      return path === "/admin/fleet/vehicle-account-assignments";
+    }
+    if (href === "/admin/maintenance") {
+      return path === "/admin/maintenance";
     }
     if (!path.startsWith(`${href}/`)) return false;
     return !allHrefs.some(

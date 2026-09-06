@@ -7,6 +7,7 @@ import { Input } from "../../components/ui/Input";
 import { useAuth } from "../../lib/auth/AuthProvider";
 
 import { getDefaultDeviceLabel } from "../../lib/auth/api";
+import { getDefaultRouteForUser } from "../../lib/auth/roles";
 import type { AuthApiError } from "../../lib/auth/types";
 
 export default function LoginPage() {
@@ -19,9 +20,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
-      router.replace(
-        user.requiresPasswordChange ? "/change-password" : "/dashboard"
-      );
+      router.replace(getDefaultRouteForUser(user));
     }
   }, [isLoading, isAuthenticated, user, router]);
 
@@ -35,9 +34,7 @@ export default function LoginPage() {
         password: form.password,
         deviceLabel: getDefaultDeviceLabel(),
       });
-      router.replace(
-        loggedUser.requiresPasswordChange ? "/change-password" : "/dashboard",
-      );
+      router.replace(getDefaultRouteForUser(loggedUser));
     } catch (err: unknown) {
       const apiErr = err as AuthApiError;
       setError(apiErr?.message || "اسم المستخدم أو كلمة المرور غير صحيحة، أو أن الحساب غير متاح.");
