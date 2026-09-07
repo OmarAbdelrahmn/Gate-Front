@@ -896,17 +896,17 @@ export interface CreateVehicleAccidentRequest {
   vehicleId: string;
   riderProfileId: string;
   occurredAtUtc: string;
-  locationDescription?: string | null;
+  locationDescription: string;
   latitude?: number | null;
   longitude?: number | null;
-  policeReportNumber?: string | null;
+  policeReportNumber: string;
   insuranceClaimNumber?: string | null;
   severity: VehicleAccidentSeverity;
   isDrivable: boolean;
   hasInjuries: boolean;
   injuryDetails?: string | null;
   thirdPartyDetails?: string | null;
-  damageDescription?: string | null;
+  damageDescription: string;
   faultAssessment?: string | null;
   narrative: string;
 }
@@ -982,7 +982,7 @@ export interface VehicleAccidentInstallment {
 }
 
 export interface VehicleAccidentWorkflowSummary {
-  id: string;
+  id?: string;
   accidentId: string;
   accidentNumber: string;
   trafficReportNumber?: string | null;
@@ -1094,11 +1094,11 @@ export interface VehicleAccidentWorkflowDetailResponse {
     refundDecisionAttachmentId?: string | null;
     notes?: string | null;
   } | null;
-  sourceDocuments: {
-    iqama: SourceDocumentInfo;
-    license: SourceDocumentInfo;
-    registration: SourceDocumentInfo;
-  };
+  sourceDocuments?: {
+    iqama?: SourceDocumentInfo | null;
+    license?: SourceDocumentInfo | null;
+    registration?: SourceDocumentInfo | null;
+  } | null;
   attachments: VehicleAccidentAttachmentResponse[];
   timeline: WorkflowTimelineEntry[];
 }

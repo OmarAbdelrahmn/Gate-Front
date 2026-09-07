@@ -4,10 +4,23 @@ import * as T from "./types";
 // ---------------------------
 // Helpers
 // ---------------------------
-function withIdempotency(init: CustomRequestInit = {}): CustomRequestInit {
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function withIdempotency(init: CustomRequestInit = {}, explicitKey?: string): CustomRequestInit {
   const headers = new Headers(init.headers);
-  if (!headers.has("Idempotency-Key")) {
-    headers.set("Idempotency-Key", crypto.randomUUID());
+  if (explicitKey) {
+    headers.set("Idempotency-Key", explicitKey);
+  } else if (!headers.has("Idempotency-Key")) {
+    headers.set("Idempotency-Key", generateUUID());
   }
   return { ...init, headers };
 }
@@ -420,14 +433,20 @@ export const getVehicleAccidents = (params: { vehicleId?: string; riderProfileId
 export const getVehicleAccident = (id: string) =>
   authFetch<T.VehicleAccidentDetailResponse>(`/api/vehicle-accidents/${id}`);
 
-export const createVehicleAccident = (payload: T.CreateVehicleAccidentRequest) =>
+export const createVehicleAccident = (
+  payload: T.CreateVehicleAccidentRequest,
+  idempotencyKey?: string
+) =>
   authFetch<T.VehicleAccidentDetailResponse>(
     "/api/vehicle-accidents",
-    withIdempotency({
-      method: "POST",
-      body: JSON.stringify(payload),
-      notifySuccess: "تم تسجيل الحادث بنجاح",
-    })
+    withIdempotency(
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+        notifySuccess: "تم تسجيل الحادث بنجاح",
+      },
+      idempotencyKey
+    )
   );
 
 export const uploadAccidentEvidence = (id: string, formData: FormData) =>

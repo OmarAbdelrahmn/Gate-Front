@@ -115,13 +115,13 @@ export default function AccidentOverduePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {data.map((item) => {
+                {data.map((item, index) => {
                   const stageColor = getWorkflowStageColor(item.stage);
                   const timer = formatCountdownTimer(item.remainingSeconds);
 
                   return (
                     <tr
-                      key={item.id}
+                      key={item.accidentId || item.id || `overdue-${index}`}
                       className="transition-colors hover:bg-red-50/40 dark:hover:bg-red-950/20"
                     >
                       <td className="px-6 py-4 font-mono font-bold">

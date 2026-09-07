@@ -185,7 +185,7 @@ export default function AccidentDetailPage() {
   const refund = formatRefundStatus(workflow.refund?.status);
 
   // Towing items
-  const towingAttachments = workflow.attachments.filter(
+  const towingAttachments = (workflow.attachments || []).filter(
     (a) => a.evidenceType === VehicleAccidentEvidenceType.TowingReceipt
   );
 
@@ -954,16 +954,16 @@ export default function AccidentDetailPage() {
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm">إقامة المندوب</span>
-                {workflow.sourceDocuments.iqama.versionId ? (
+                {workflow.sourceDocuments?.iqama?.versionId ? (
                   <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">متوفرة بالنظام</Badge>
                 ) : (
                   <Badge className="bg-red-50 text-red-700 border-red-200">غير متوفرة</Badge>
                 )}
               </div>
               <p className="text-xs text-slate-500">
-                اسم الملف: {workflow.sourceDocuments.iqama.originalFileName || "لا يوجد ملف"}
+                اسم الملف: {workflow.sourceDocuments?.iqama?.originalFileName || "لا يوجد ملف"}
               </p>
-              {workflow.sourceDocuments.iqama.downloadUrl && (
+              {workflow.sourceDocuments?.iqama?.downloadUrl && (
                 <Button
                   variant="secondary"
                   onClick={() => handleDownloadDoc("iqama")}
@@ -978,16 +978,16 @@ export default function AccidentDetailPage() {
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm">رخصة القيادة</span>
-                {workflow.sourceDocuments.license.versionId ? (
+                {workflow.sourceDocuments?.license?.versionId ? (
                   <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">متوفرة بالنظام</Badge>
                 ) : (
                   <Badge className="bg-red-50 text-red-700 border-red-200">غير متوفرة</Badge>
                 )}
               </div>
               <p className="text-xs text-slate-500">
-                اسم الملف: {workflow.sourceDocuments.license.originalFileName || "لا يوجد ملف"}
+                اسم الملف: {workflow.sourceDocuments?.license?.originalFileName || "لا يوجد ملف"}
               </p>
-              {workflow.sourceDocuments.license.downloadUrl && (
+              {workflow.sourceDocuments?.license?.downloadUrl && (
                 <Button
                   variant="secondary"
                   onClick={() => handleDownloadDoc("license")}
@@ -1002,16 +1002,16 @@ export default function AccidentDetailPage() {
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm">استمارة المركبة</span>
-                {workflow.sourceDocuments.registration.versionId ? (
+                {workflow.sourceDocuments?.registration?.versionId ? (
                   <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">متوفرة بالنظام</Badge>
                 ) : (
                   <Badge className="bg-red-50 text-red-700 border-red-200">غير متوفرة</Badge>
                 )}
               </div>
               <p className="text-xs text-slate-500">
-                اسم الملف: {workflow.sourceDocuments.registration.originalFileName || "لا يوجد ملف"}
+                اسم الملف: {workflow.sourceDocuments?.registration?.originalFileName || "لا يوجد ملف"}
               </p>
-              {workflow.sourceDocuments.registration.downloadUrl && (
+              {workflow.sourceDocuments?.registration?.downloadUrl && (
                 <Button
                   variant="secondary"
                   onClick={() => handleDownloadDoc("registration")}
@@ -1228,7 +1228,7 @@ export default function AccidentDetailPage() {
           <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800">
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                جميع المرفقات والأدلة الرسمية ({workflow.attachments.length})
+                جميع المرفقات والأدلة الرسمية ({(workflow.attachments || []).length})
               </h3>
               <p className="text-xs text-slate-500">
                 تقارير نجم، السندات، إيصالات السداد والتحويل، الصور والخطابات
@@ -1237,7 +1237,7 @@ export default function AccidentDetailPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {workflow.attachments.map((att) => (
+            {(workflow.attachments || []).map((att) => (
               <div
                 key={att.id}
                 className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3 dark:border-slate-800 dark:bg-slate-900 flex flex-col justify-between"

@@ -201,14 +201,14 @@ export default function AccidentWorkflowsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {filteredData.map((item) => {
+                {filteredData.map((item, index) => {
                   const stageColor = getWorkflowStageColor(item.stage);
                   const refund = formatRefundStatus(item.refundStatus);
                   const timer = formatCountdownTimer(item.remainingSeconds);
 
                   return (
                     <tr
-                      key={item.id}
+                      key={item.accidentId || item.id || `workflow-${index}`}
                       className="group transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
                     >
                       <td className="px-6 py-4 font-mono font-bold">

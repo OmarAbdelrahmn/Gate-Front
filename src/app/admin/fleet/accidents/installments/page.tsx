@@ -149,12 +149,12 @@ export default function AccidentInstallmentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {filteredData.map((item) => {
+                {filteredData.map((item, index) => {
                   const refund = formatRefundStatus(item.refundStatus);
 
                   return (
                     <tr
-                      key={item.id}
+                      key={item.accidentId || item.id || `installment-${index}`}
                       className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
                     >
                       <td className="px-6 py-4 font-mono font-bold">

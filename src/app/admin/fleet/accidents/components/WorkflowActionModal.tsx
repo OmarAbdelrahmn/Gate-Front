@@ -217,7 +217,7 @@ export function WorkflowActionModal({
 
     // Validate Action 2
     if (action === VehicleAccidentWorkflowAction.StartLocalRepair) {
-      const damagePhotos = workflow.attachments.filter(
+      const damagePhotos = (workflow.attachments || []).filter(
         (a) => a.evidenceType === VehicleAccidentEvidenceType.DamagePhoto
       );
       if (damagePhotos.length < 2) {
@@ -228,8 +228,8 @@ export function WorkflowActionModal({
 
     // Validate Action 5: Source Documents
     if (action === VehicleAccidentWorkflowAction.SubmitClaim) {
-      const { iqama, license, registration } = workflow.sourceDocuments;
-      if (!iqama?.versionId || !license?.versionId || !registration?.versionId) {
+      const docs = workflow.sourceDocuments;
+      if (!docs?.iqama?.versionId || !docs?.license?.versionId || !docs?.registration?.versionId) {
         toast.error("مستندات غير مكتملة", "لا يمكن تقديم المطالبة قبل توفر كافة مستندات السائق والمركبة (الإقامة، الرخصة، الاستمارة) بالنظام.");
         return;
       }

@@ -37,6 +37,16 @@ interface RealRiderNotice {
   assignedRiderName?: string;
 }
 
+function getLocalDatetimeString(d = new Date()) {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
   const [isPending, startTransition] = useTransition();
 
@@ -50,12 +60,14 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
   const [formData, setFormData] = useState({
     vehicleId: "",
     riderProfileId: "",
-    occurredAtUtc: new Date().toISOString().split("T")[0],
+    occurredAtUtc: getLocalDatetimeString(),
     locationDescription: "",
+    latitude: "",
+    longitude: "",
     policeReportNumber: "",
     insuranceClaimNumber: "",
-    severity: VehicleAccidentSeverity.Moderate,
-    isDrivable: false,
+    severity: VehicleAccidentSeverity.Minor,
+    isDrivable: true,
     hasInjuries: false,
     injuryDetails: "",
     thirdPartyDetails: "",
@@ -69,12 +81,14 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
       setFormData({
         vehicleId: "",
         riderProfileId: "",
-        occurredAtUtc: new Date().toISOString().split("T")[0],
+        occurredAtUtc: getLocalDatetimeString(),
         locationDescription: "",
+        latitude: "",
+        longitude: "",
         policeReportNumber: "",
         insuranceClaimNumber: "",
-        severity: VehicleAccidentSeverity.Moderate,
-        isDrivable: false,
+        severity: VehicleAccidentSeverity.Minor,
+        isDrivable: true,
         hasInjuries: false,
         injuryDetails: "",
         thirdPartyDetails: "",
@@ -332,16 +346,104 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.vehicleId || !formData.riderProfileId || !formData.narrative || !formData.policeReportNumber) {
-      toast.error("خطأ", "بيانات غير مكتملة (المركبة، المندوب، رقم تقرير المرور، وسرد الحادث).");
+
+    const vehicleId = formData.vehicleId.trim();
+    const riderProfileId = formData.riderProfileId.trim();
+    const policeReportNumber = formData.policeReportNumber.trim();
+    const locationDescription = formData.locationDescription.trim();
+    const damageDescription = formData.damageDescription.trim();
+    const narrative = formData.narrative.trim();
+
+    if (!vehicleId) {
+      toast.error("بيانات غير مكتملة", "يرجى اختيار المركبة.");
       return;
+    }
+    if (!riderProfileId) {
+      toast.error("بيانات غير مكتملة", "يرجى اختيار المندوب (السائق).");
+      return;
+    }
+    if (!formData.occurredAtUtc) {
+      toast.error("تاريخ غير صالح", "يرجى تحديد تاريخ ووقت الحادث.");
+      return;
+    }
+
+    const occurredDate = new Date(formData.occurredAtUtc);
+    if (isNaN(occurredDate.getTime())) {
+      toast.error("تاريخ غير صالح", "تاريخ ووقت الحادث غير صالح، يرجى إدخال تاريخ صحيح.");
+      return;
+    }
+    if (occurredDate.getTime() > Date.now()) {
+      toast.error("تاريخ غير صالح", "تاريخ ووقت الحادث لا يمكن أن يكون في المستقبل.");
+      return;
+    }
+
+    if (!locationDescription) {
+      toast.error("بيانات غير مكتملة", "وصف موقع الحادث (المدينة، الحي) مطلوب وإلزامي.");
+      return;
+    }
+    if (!policeReportNumber) {
+      toast.error("بيانات غير مكتملة", "رقم تقرير المرور / نجم إلزامي ومطلوب في أحدث نظام لحوادث السير.");
+      return;
+    }
+    if (!damageDescription) {
+      toast.error("بيانات غير مكتملة", "وصف الأضرار والتلفيات بالمركبة مطلوب وإلزامي.");
+      return;
+    }
+    if (!narrative) {
+      toast.error("بيانات غير مكتملة", "سرد تفاصيل وكيفية وقوع الحادث مطلوب وإلزامي.");
+      return;
+    }
+
+    const severityNum = Number(formData.severity);
+    if (![1, 2, 3, 4].includes(severityNum)) {
+      toast.error("خطورة غير صالحة", "درجة خطورة الحادث يجب أن تكون 1، 2، 3 أو 4.");
+      return;
+    }
+
+    if (formData.hasInjuries && !formData.injuryDetails.trim()) {
+      toast.error("بيانات غير مكتملة", "تفاصيل الإصابات البشرية مطلوبة طالما تم تحديد وجود إصابات.");
+      return;
+    }
+
+    let latitude: number | null = null;
+    if (formData.latitude.trim() !== "") {
+      const parsedLat = parseFloat(formData.latitude.trim());
+      if (isNaN(parsedLat) || parsedLat < -90 || parsedLat > 90) {
+        toast.error("إحداثيات غير صالحة", "خط العرض (Latitude) يجب أن يكون رقماً بين -90 و 90.");
+        return;
+      }
+      latitude = parsedLat;
+    }
+
+    let longitude: number | null = null;
+    if (formData.longitude.trim() !== "") {
+      const parsedLng = parseFloat(formData.longitude.trim());
+      if (isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180) {
+        toast.error("إحداثيات غير صالحة", "خط الطول (Longitude) يجب أن يكون رقماً بين -180 و 180.");
+        return;
+      }
+      longitude = parsedLng;
     }
 
     startTransition(async () => {
       try {
         await createVehicleAccident({
-          ...formData,
-          occurredAtUtc: new Date(formData.occurredAtUtc).toISOString(),
+          vehicleId,
+          riderProfileId,
+          occurredAtUtc: occurredDate.toISOString(),
+          locationDescription,
+          latitude,
+          longitude,
+          policeReportNumber,
+          insuranceClaimNumber: formData.insuranceClaimNumber.trim() || null,
+          severity: severityNum as VehicleAccidentSeverity,
+          isDrivable: Boolean(formData.isDrivable),
+          hasInjuries: Boolean(formData.hasInjuries),
+          injuryDetails: formData.hasInjuries ? (formData.injuryDetails.trim() || null) : null,
+          thirdPartyDetails: formData.thirdPartyDetails.trim() || null,
+          damageDescription,
+          faultAssessment: formData.faultAssessment.trim() || null,
+          narrative,
         });
         onSuccess();
       } catch (err: any) {
@@ -474,13 +576,15 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
           </div>
         )}
 
+        {/* Date and Location */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
               تاريخ ووقت الحادث <span className="text-red-500">*</span>
             </label>
             <Input
-              type="date"
+              type="datetime-local"
+              max={getLocalDatetimeString()}
               value={formData.occurredAtUtc}
               onChange={(e) => setFormData({ ...formData, occurredAtUtc: e.target.value })}
               required
@@ -488,28 +592,64 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
           </div>
           <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-              موقع الحادث (المدينة، الحي، الشارع)
+              موقع الحادث (المدينة، الحي، الشارع) <span className="text-red-500">*</span>
             </label>
             <Input
               value={formData.locationDescription}
               onChange={(e) => setFormData({ ...formData, locationDescription: e.target.value })}
+              placeholder="مثال: الرياض - طريق الملك فهد - حي العليا"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Coordinates (Optional) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+              خط العرض (Latitude) <span className="text-xs font-normal text-slate-400">(اختياري: من -90 إلى 90)</span>
+            </label>
+            <Input
+              type="number"
+              step="any"
+              min={-90}
+              max={90}
+              value={formData.latitude}
+              onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+              placeholder="مثال: 24.7136"
+              dir="ltr"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+              خط الطول (Longitude) <span className="text-xs font-normal text-slate-400">(اختياري: من -180 إلى 180)</span>
+            </label>
+            <Input
+              type="number"
+              step="any"
+              min={-180}
+              max={180}
+              value={formData.longitude}
+              onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+              placeholder="مثال: 46.6753"
+              dir="ltr"
             />
           </div>
         </div>
 
         {/* Status & Severity */}
-        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl dark:border-slate-800 dark:bg-slate-900">
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                خطورة الحادث
+                خطورة الحادث <span className="text-red-500">*</span>
               </label>
               <SearchableSelect
                 options={[
-                  { value: VehicleAccidentSeverity.Minor.toString(), label: "بسيط (خدوش، صدمة خفيفة)" },
-                  { value: VehicleAccidentSeverity.Moderate.toString(), label: "متوسط (يحتاج صيانة)" },
-                  { value: VehicleAccidentSeverity.Serious.toString(), label: "خطير (تلفيات كبيرة)" },
-                  { value: VehicleAccidentSeverity.Critical.toString(), label: "حرج (تلف كلي)" },
+                  { value: VehicleAccidentSeverity.Minor.toString(), label: "1 - بسيط (خدوش، صدمة خفيفة)" },
+                  { value: VehicleAccidentSeverity.Moderate.toString(), label: "2 - متوسط (يحتاج صيانة)" },
+                  { value: VehicleAccidentSeverity.Serious.toString(), label: "3 - خطير (تلفيات كبيرة)" },
+                  { value: VehicleAccidentSeverity.Critical.toString(), label: "4 - حرج (تلف كلي)" },
                 ]}
                 value={formData.severity.toString()}
                 onChange={(v) => setFormData({ ...formData, severity: parseInt(v) as VehicleAccidentSeverity })}
@@ -536,6 +676,23 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
               </label>
             </div>
           </div>
+
+          {/* Conditional Injury Details */}
+          {formData.hasInjuries && (
+            <div className="pt-2 border-t border-red-200 dark:border-red-900/50 animate-in fade-in slide-in-from-top-1 duration-200">
+              <label className="mb-1 block text-sm font-bold text-red-700 dark:text-red-300">
+                تفاصيل الإصابات البشرية <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                className="w-full rounded-xl border border-red-300 p-2.5 text-sm focus:border-red-600 focus:outline-none dark:border-red-800 dark:bg-slate-900"
+                rows={2}
+                value={formData.injuryDetails}
+                onChange={(e) => setFormData({ ...formData, injuryDetails: e.target.value })}
+                placeholder="يرجى توضيح نوع الإصابات وحالة المصابين والمستشفى الذي تم النقل إليه..."
+                required={formData.hasInjuries}
+              ></textarea>
+            </div>
+          )}
         </div>
 
         {/* References */}
@@ -558,21 +715,37 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
             <Input
               value={formData.insuranceClaimNumber}
               onChange={(e) => setFormData({ ...formData, insuranceClaimNumber: e.target.value })}
+              placeholder="مثال: CLM-123456"
             />
           </div>
+        </div>
+
+        {/* Damage Description */}
+        <div>
+          <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+            وصف الأضرار والتلفيات بالمركبة <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            rows={2}
+            value={formData.damageDescription}
+            onChange={(e) => setFormData({ ...formData, damageDescription: e.target.value })}
+            placeholder="مثال: تلفيات بالصدام الخلفي، كسر في الأنوار الخلفية..."
+            required
+          ></textarea>
         </div>
 
         {/* Narrative & Assessment */}
         <div>
           <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-            سرد وتفاصيل الحادث والأضرار <span className="text-red-500">*</span>
+            سرد تفاصيل وكيفية وقوع الحادث <span className="text-red-500">*</span>
           </label>
           <textarea
             className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
             rows={3}
             value={formData.narrative}
             onChange={(e) => setFormData({ ...formData, narrative: e.target.value })}
-            placeholder="يرجى وصف ما حدث بشكل واضح..."
+            placeholder="يرجى وصف ما حدث وتتابع الأحداث بالتفصيل..."
             required
           ></textarea>
         </div>
@@ -587,12 +760,12 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
               rows={2}
               value={formData.thirdPartyDetails}
               onChange={(e) => setFormData({ ...formData, thirdPartyDetails: e.target.value })}
-              placeholder="بيانات المركبة الأخرى..."
+              placeholder="بيانات المركبة الأخرى، السائق، التأمين..."
             ></textarea>
           </div>
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-              نسبة الخطأ / التقييم المبدئي
+              نسبة الخطأ / التقييم المبدئي (إن وجد)
             </label>
             <textarea
               className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
