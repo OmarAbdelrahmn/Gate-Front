@@ -1,22 +1,33 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, useMemo, useRef } from "react";
 import { takeVehicle, getVehiclesLookup, getVehicleDetail, getVehicles, getRiderPromissoryFiles } from "@/lib/fleet/api";
 import { listExternalRiders } from "@/lib/workforce/external-riders-api";
 import { listRiders, listEmployees } from "@/lib/workforce/api";
-import { VehicleCondition, VehicleOperationalStatus, type VehicleSummaryResponse, type TakeVehicleRequest } from "@/lib/fleet/types";
+import { getPlatformAccounts } from "@/lib/platforms/api";
+import { getVehicleAccountAssignments } from "@/lib/fleet/vehicle-account-assignments-api";
+import { VehicleCondition, VehicleOperationalStatus, type VehicleSummaryResponse, type TakeVehicleRequest, type VehicleLookupResponse } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
-import { Upload, X, FileText, AlertCircle, CheckCircle2, UserCheck } from "lucide-react";
+import { Upload, X, FileText, AlertCircle, CheckCircle2, UserCheck, Sparkles, RefreshCw, Check } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   preselectedVehicle: VehicleSummaryResponse | null;
+}
+
+interface VehicleSuggestion {
+  vehicleId: string;
+  assetNumber: string;
+  plateNumberAr?: string | null;
+  platformName: string;
+  platformAccountCode?: string;
+  reason: string;
 }
 
 const getCurrentLocalDateTimeString = () => {
@@ -29,8 +40,10 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
   const [isPending, startTransition] = useTransition();
 
   const [riders, setRiders] = useState<{ value: string; label: string }[]>([]);
-  const [vehicles, setVehicles] = useState<{ value: string; label: string }[]>([]);
-  const [lookupVehicleMap, setLookupVehicleMap] = useState<Map<string, { currentOdometer: number }>>(new Map());
+  const [availableLookupVehicles, setAvailableLookupVehicles] = useState<VehicleLookupResponse[]>([]);
+  const [suggestedVehicles, setSuggestedVehicles] = useState<VehicleSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState<boolean>(false);
+  const riderMetaMapRef = useRef<Map<string, { riderProfileId: string; employeeId?: string; name: string }>>(new Map());
 
   const [minOdometer, setMinOdometer] = useState<number>(0);
   const [existingPromissoryCount, setExistingPromissoryCount] = useState<number>(0);
@@ -85,6 +98,8 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         iqamaNo: "",
         relationshipToAssignedRider: "",
       });
+      setSuggestedVehicles([]);
+      setLoadingSuggestions(false);
 
       Promise.all([
         listRiders().catch(() => []),
@@ -102,6 +117,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         }
 
         const map = new Map<string, { value: string; label: string }>();
+        const metaMap = new Map<string, { riderProfileId: string; employeeId?: string; name: string }>();
 
         ridersRes.forEach((r) => {
           const id = r.id || r.employeeId;
@@ -116,6 +132,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
             }
             const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
             map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
+            metaMap.set(id, { riderProfileId: r.id || id, employeeId: r.employeeId, name: r.fullNameAr });
           }
         });
 
@@ -132,6 +149,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
             }
             const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
             map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
+            metaMap.set(id, { riderProfileId: r.riderProfileId || r.id || id, employeeId: r.employeeId, name: r.fullNameAr });
           }
         });
 
@@ -149,9 +167,11 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
             }
             const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
             map.set(id, { value: id, label: `${e.fullNameAr}${iqamaStr}` });
+            metaMap.set(id, { riderProfileId: e.riderProfileId || e.rider?.id || e.id, employeeId: e.id, name: e.fullNameAr });
           }
         });
 
+        riderMetaMapRef.current = metaMap;
         setRiders(Array.from(map.values()));
       });
 
@@ -168,10 +188,15 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           notes: "",
         });
         setMinOdometer(preselectedVehicle.currentOdometer);
-        setVehicles([
+        setAvailableLookupVehicles([
           {
-            value: preselectedVehicle.id,
-            label: `${preselectedVehicle.assetNumber} - ${preselectedVehicle.plateNumberAr || "بدون لوحة"}`,
+            id: preselectedVehicle.id,
+            assetNumber: preselectedVehicle.assetNumber || "",
+            plateNumberAr: preselectedVehicle.plateNumberAr,
+            plateNumberEn: preselectedVehicle.plateNumberEn,
+            manufacturer: preselectedVehicle.manufacturer,
+            model: preselectedVehicle.model,
+            status: preselectedVehicle.status,
           },
         ]);
       } else {
@@ -188,19 +213,115 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         });
         setMinOdometer(0);
         getVehiclesLookup("").then((res) => {
-          setVehicles(
-            res
-              .filter((v) => v.status === VehicleOperationalStatus.Available)
-              .map((v) => ({
-                value: v.id,
-                label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}`,
-              }))
+          setAvailableLookupVehicles(
+            res.filter((v) => v.status === VehicleOperationalStatus.Available)
           );
         });
       }
       setFiles([]);
     }
   }, [isOpen, preselectedVehicle]);
+
+  // Dynamic Suggestion: When rider is chosen, inspect platform accounts & linked active vehicles
+  useEffect(() => {
+    const riderIdKey = formData.riderProfileId;
+    if (!riderIdKey) {
+      setSuggestedVehicles([]);
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setLoadingSuggestions(true);
+
+    const fetchRiderPlatformVehicles = async () => {
+      try {
+        const meta = riderMetaMapRef.current.get(riderIdKey);
+        const targetRiderId = meta?.riderProfileId || riderIdKey;
+        const targetEmpId = meta?.employeeId;
+
+        const accountQueries: Promise<any>[] = [
+          getPlatformAccounts({ actualRiderProfileId: targetRiderId, currentOnly: false }).catch(() => []),
+          getPlatformAccounts({ ownerRiderProfileId: targetRiderId, currentOnly: false }).catch(() => []),
+        ];
+
+        if (targetEmpId && targetEmpId !== targetRiderId) {
+          accountQueries.push(
+            getPlatformAccounts({ actualRiderProfileId: targetEmpId, currentOnly: false }).catch(() => []),
+            getPlatformAccounts({ ownerRiderProfileId: targetEmpId, currentOnly: false }).catch(() => [])
+          );
+        }
+
+        const [accountResults, activeAssignments] = await Promise.all([
+          Promise.all(accountQueries),
+          getVehicleAccountAssignments({ activeOnly: true }).catch(() => []),
+        ]);
+
+        if (isCancelled) return;
+
+        // Collect all unique accounts belonging to this rider
+        const accountMap = new Map<string, any>();
+        accountResults.flat().forEach((acc: any) => {
+          if (acc && acc.id) {
+            accountMap.set(acc.id, acc);
+          }
+        });
+
+        const suggestions: VehicleSuggestion[] = [];
+        const seenVehicleIds = new Set<string>();
+
+        activeAssignments.forEach((assign) => {
+          if (
+            assign.platformRiderAccountId &&
+            accountMap.has(assign.platformRiderAccountId) &&
+            assign.vehicleId &&
+            !seenVehicleIds.has(assign.vehicleId)
+          ) {
+            // Verify if available for rider
+            const isAvailable = availableLookupVehicles.some((v) => v.id === assign.vehicleId);
+            if (isAvailable) {
+              seenVehicleIds.add(assign.vehicleId);
+              const acc = accountMap.get(assign.platformRiderAccountId);
+              const platformName =
+                assign.platformNameAr ||
+                acc?.platformNameAr ||
+                acc?.platformNameEn ||
+                acc?.platformCode ||
+                "المنصة";
+              const accountCode = assign.platformAccountCode || acc?.code || "";
+
+              suggestions.push({
+                vehicleId: assign.vehicleId,
+                assetNumber: assign.vehicleAssetNumber || "",
+                plateNumberAr: assign.vehiclePlateNumberAr || "",
+                platformName,
+                platformAccountCode: accountCode,
+                reason: `هذه مركبته في منصة ${platformName}${accountCode ? ` (حساب: ${accountCode})` : ""}`,
+              });
+            }
+          }
+        });
+
+        setSuggestedVehicles(suggestions);
+
+        // If exactly 1 suggestion found and no vehicle chosen yet, auto-select it
+        if (suggestions.length === 1 && !formData.vehicleId && !preselectedVehicle) {
+          handleVehicleChange(suggestions[0].vehicleId);
+        }
+      } catch (err) {
+        console.error("Failed to fetch suggestions for rider platform accounts:", err);
+        if (!isCancelled) setSuggestedVehicles([]);
+      } finally {
+        if (!isCancelled) setLoadingSuggestions(false);
+      }
+    };
+
+    fetchRiderPlatformVehicles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [formData.riderProfileId, availableLookupVehicles, preselectedVehicle]);
 
   const handleVehicleChange = async (vehicleId: string) => {
     setFormData((prev) => ({ ...prev, vehicleId }));
@@ -221,6 +342,45 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       // Fallback
     }
   };
+
+  const vehicleOptions = useMemo(() => {
+    if (preselectedVehicle) {
+      return [
+        {
+          value: preselectedVehicle.id,
+          label: `${preselectedVehicle.assetNumber} - ${preselectedVehicle.plateNumberAr || "بدون لوحة"}`,
+        },
+      ];
+    }
+
+    const suggestionMap = new Map(suggestedVehicles.map((s) => [s.vehicleId, s]));
+
+    const options = availableLookupVehicles.map((v) => {
+      const suggestion = suggestionMap.get(v.id);
+      if (suggestion) {
+        return {
+          value: v.id,
+          label: `⭐ ${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"} (مقترحة - منصة ${suggestion.platformName})`,
+          sublabel: suggestion.reason,
+          keywords: `${v.assetNumber} ${v.plateNumberAr || ""} ${suggestion.platformName} ${suggestion.platformAccountCode || ""} مقترحة`,
+        };
+      }
+      return {
+        value: v.id,
+        label: `${v.assetNumber} - ${v.plateNumberAr || "بدون لوحة"}`,
+        sublabel: v.manufacturer && v.model ? `${v.manufacturer} ${v.model}` : undefined,
+        keywords: `${v.assetNumber} ${v.plateNumberAr || ""} ${v.manufacturer || ""} ${v.model || ""}`,
+      };
+    });
+
+    return options.sort((a, b) => {
+      const aSug = suggestionMap.has(a.value);
+      const bSug = suggestionMap.has(b.value);
+      if (aSug && !bSug) return -1;
+      if (!aSug && bSug) return 1;
+      return 0;
+    });
+  }, [preselectedVehicle, availableLookupVehicles, suggestedVehicles]);
 
   const handleAddFiles = (newFilesList: FileList | null) => {
     if (!newFilesList) return;
@@ -270,7 +430,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
     e.preventDefault();
 
     if (!formData.riderProfileId) {
-      toast.error("خطأ في البيانات", "يرجى اختيار المندوب المستلم.");
+      toast.error("خطأ في البيانات", "يرجى اختيار المندوب المستلم أولاً.");
       return;
     }
     if (!formData.vehicleId) {
@@ -364,17 +524,30 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تسليم مركبة لمندوب (عهدة جديدة)" maxWidth="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-5 pt-3">
-        {/* Rider & Vehicle Section */}
+        {/* Rider & Vehicle Section: Rider FIRST, Vehicle SECOND */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+              المندوب المستلم <span className="text-red-500">*</span>
+            </label>
+            <SearchableSelect
+              options={riders}
+              value={formData.riderProfileId}
+              placeholder="اختر المندوب أولاً..."
+              searchPlaceholder="بحث بالاسم أو رقم الإقامة..."
+              onChange={(v) => setFormData({ ...formData, riderProfileId: v })}
+            />
+          </div>
+
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
               المركبة <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
-              options={vehicles}
+              options={vehicleOptions}
               value={formData.vehicleId}
-              placeholder="اختر المركبة..."
-              searchPlaceholder="بحث برقم المركبة أو اللوحة..."
+              placeholder={formData.riderProfileId ? "اختر المركبة (أو اختر من المقترحات)..." : "اختر المندوب أولاً أو اختر مركبة..."}
+              searchPlaceholder="بحث برقم المركبة أو اللوحة أو المنصة..."
               onChange={handleVehicleChange}
               disabled={!!preselectedVehicle}
             />
@@ -384,20 +557,83 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
               </p>
             )}
           </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-              المندوب المستلم <span className="text-red-500">*</span>
-            </label>
-            <SearchableSelect
-              options={riders}
-              value={formData.riderProfileId}
-              placeholder="اختر المندوب..."
-              searchPlaceholder="بحث بالاسم أو رقم الإقامة..."
-              onChange={(v) => setFormData({ ...formData, riderProfileId: v })}
-            />
-          </div>
         </div>
+
+        {/* Loading Indicator for Suggestions */}
+        {loadingSuggestions && (
+          <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50/70 dark:bg-blue-950/40 p-2.5 rounded-xl border border-blue-200/70 dark:border-blue-900/50 animate-pulse">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+            <span>جاري فحص حسابات المنصة للمندوب واقتراح المركبات المتاحة له...</span>
+          </div>
+        )}
+
+        {/* Suggestions Box */}
+        {suggestedVehicles.length > 0 && (
+          <div className="rounded-xl border border-emerald-300/80 bg-gradient-to-r from-emerald-50/90 to-teal-50/60 p-3.5 dark:border-emerald-800/80 dark:from-emerald-950/40 dark:to-teal-950/30 space-y-2.5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>مركبات مقترحة للمندوب (مرتبطة بحساباته على المنصات ومتاحة حالياً)</span>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full">
+                {suggestedVehicles.length} {suggestedVehicles.length === 1 ? "مركبة مقترحة" : "مركبات مقترحة"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+              {suggestedVehicles.map((sug) => {
+                const isSelected = formData.vehicleId === sug.vehicleId;
+                return (
+                  <div
+                    key={sug.vehicleId}
+                    className={`flex items-center justify-between gap-2.5 p-2.5 rounded-lg border transition-all ${
+                      isSelected
+                        ? "border-emerald-500 bg-emerald-100/80 dark:bg-emerald-900/60 ring-1 ring-emerald-500/50 shadow-sm"
+                        : "border-emerald-200/80 bg-white/90 dark:bg-slate-900/90 hover:border-emerald-400 hover:shadow-xs"
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-xs text-slate-800 dark:text-slate-100 font-mono">
+                          {sug.assetNumber}
+                        </span>
+                        {sug.plateNumberAr && (
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                            {sug.plateNumberAr}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-1.5 py-0.5 rounded">
+                          {sug.platformName}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium truncate mt-1" title={sug.reason}>
+                        السبب: {sug.reason}
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant={isSelected ? "primary" : "secondary"}
+                      className={`shrink-0 text-xs h-7 px-2.5 transition-all ${
+                        isSelected ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                      }`}
+                      onClick={() => handleVehicleChange(sug.vehicleId)}
+                      disabled={!!preselectedVehicle}
+                    >
+                      {isSelected ? (
+                        <span className="flex items-center gap-1">
+                          <Check className="h-3.5 w-3.5" /> تم الاختيار
+                        </span>
+                      ) : (
+                        "اختيار المركبة"
+                      )}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Real Rider Checkbox & Section */}
         <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900/50 space-y-2">
