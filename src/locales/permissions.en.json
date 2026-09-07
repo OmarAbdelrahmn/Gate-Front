@@ -105,7 +105,10 @@
   "inventory.stock.read": "View stock balances & movements",
   "inventory.stock.move": "Transfer inventory between locations",
   "inventory.stock.adjust": "Adjust & depreciate inventory",
-  "inventory.cost_layers.read": "View FIFO cost layers",
+  "inventory.cost_layers.read": "View inventory cost layers & batches",
   "inventory.receipts.manage": "Manage purchase receipts & bills",
-  "inventory.returns.manage": "Manage supplier returns & rider issues"
+  "inventory.returns.manage": "Manage supplier returns & rider issues",
+  "inventory.supply_requests.read": "View warehouse supply requests",
+  "inventory.supply_requests.submit": "Submit supply requests",
+  "inventory.supply_requests.approve": "Approve and issue warehouse supply requests"
 }

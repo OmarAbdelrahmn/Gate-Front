@@ -105,7 +105,10 @@
   "inventory.stock.read": "عرض أرصدة وحركات المخزون",
   "inventory.stock.move": "نقل المخزون بين المواقع",
   "inventory.stock.adjust": "تسوية وإهلاك المخزون",
-  "inventory.cost_layers.read": "عرض طبقات تكلفة الوارد أولاً FIFO",
+  "inventory.cost_layers.read": "عرض تفاصيل وطبقات تكلفة المخزون",
   "inventory.receipts.manage": "إدارة استلام المشتريات والفواتير",
-  "inventory.returns.manage": "إدارة مرتجعات الموردين وصرف المناديب"
+  "inventory.returns.manage": "إدارة مرتجعات الموردين وصرف المناديب",
+  "inventory.supply_requests.read": "عرض طلبات صرف المستودع",
+  "inventory.supply_requests.submit": "تقديم طلبات صرف المستلزمات وقطع الغيار",
+  "inventory.supply_requests.approve": "اعتماد وصرف طلبات المستودع"
 }

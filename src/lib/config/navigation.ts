@@ -34,6 +34,8 @@ import {
   Clock,
   CreditCard,
   Truck,
+  PackageCheck,
+  ShoppingBag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -418,6 +420,9 @@ export const navigation: NavItem[] = [
       "inventory.stock.read",
       "inventory.cost_layers.read",
       "inventory.receipts.manage",
+      "inventory.supply_requests.read",
+      "inventory.supply_requests.approve",
+      "inventory.supply_requests.submit",
     ],
     children: [
       {
@@ -470,7 +475,7 @@ export const navigation: NavItem[] = [
         ],
       },
       {
-        label: "أرصدة المخزون وطبقات FIFO",
+        label: "أرصدة المخزون",
         href: "/admin/maintenance/inventory/balances",
         icon: Layers,
         roles: ["admin", "manager", "member", "accountant"],
@@ -495,6 +500,24 @@ export const navigation: NavItem[] = [
           "inventory.receipts.manage",
           "inventory.stock.read",
         ],
+      },
+      {
+        label: "طلبات صرف المستودع",
+        href: "/admin/maintenance/inventory/supply-requests",
+        icon: PackageCheck,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: [
+          "inventory.supply_requests.read",
+          "inventory.supply_requests.approve",
+          "inventory.stock.move",
+        ],
+      },
+      {
+        label: "طلب مستلزمات مناديب",
+        href: "/admin/maintenance/inventory/request-rider-items",
+        icon: ShoppingBag,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "inventory.supply_requests.submit",
       },
       {
         label: "كتالوج قطع الغيار والأصناف",

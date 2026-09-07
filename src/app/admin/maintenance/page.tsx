@@ -30,6 +30,7 @@ import type {
 } from "@/lib/maintenance/types";
 import {
   workOrderStatusConfig,
+  getWorkOrderEffectiveStatus,
   oilReminderStatusConfig,
   formatDateTime,
   formatCurrency,
@@ -84,7 +85,7 @@ export default function MaintenanceOverviewPage() {
             لوحة مؤشرات الصيانة والمخزون والورش
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            مستودع جدة (JED-WH)، ورشة الرياض (RUH-WS)، طبقات تكلفة FIFO، تتبع براميل الزيوت، وأرباح الورشة.
+            مستودع جدة (JED-WH)، ورشة الرياض (RUH-WS)، أرصدة المخزون، تتبع براميل الزيوت، وأرباح الورشة.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -328,7 +329,7 @@ export default function MaintenanceOverviewPage() {
           ) : (
             <div className="divide-y divide-[var(--border)] overflow-hidden">
               {workOrders.slice(0, 5).map((order) => {
-                const statusCfg = workOrderStatusConfig[order.status];
+                const statusCfg = getWorkOrderEffectiveStatus(order.status, order.supplyRequest);
                 return (
                   <div
                     key={order.id}

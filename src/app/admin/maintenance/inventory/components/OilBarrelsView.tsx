@@ -280,7 +280,7 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
                 {/* Key Metrics Grid */}
                 <div className="mt-4 grid grid-cols-2 gap-2 pt-3 border-t border-[var(--border)] text-xs">
                   <div>
-                    <span className="text-[11px] text-slate-400 block">تكلفة اللتر (FIFO):</span>
+                    <span className="text-[11px] text-slate-400 block">تكلفة اللتر:</span>
                     <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
                       {formatCurrency(barrel.unitCostPerLiter)}/لتر
                     </span>

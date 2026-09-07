@@ -11,6 +11,7 @@ import type {
   InventoryItem,
   Supplier,
   ReceiptLinePayload,
+  PurchaseReceipt,
 } from "@/lib/maintenance/types";
 import { UnitOfMeasure, ItemType } from "@/lib/maintenance/types";
 import { unitOfMeasureLabels, formatCurrency, itemTypeLabels } from "@/lib/maintenance/constants";
@@ -26,7 +27,7 @@ import {
 interface CreateReceiptModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (receipt?: PurchaseReceipt) => void;
   locations: MaintenanceLocation[];
   suppliers: Supplier[];
   items: InventoryItem[];
@@ -225,8 +226,27 @@ export function CreateReceiptModal({
         })),
       };
 
-      await createPurchaseReceipt(receiptJson, billFile);
-      onSaved();
+      const created = await createPurchaseReceipt(receiptJson, billFile);
+      setSupplierId("");
+      setSupplierInvoiceNumber("");
+      setInventoryLocationId("");
+      setBillFile(null);
+      setLines([
+        {
+          inventoryItemId: "",
+          purchaseUnit: UnitOfMeasure.Piece,
+          packageCount: 1,
+          declaredQuantityPerPackage: 1,
+          grossWeightKg: null,
+          netWeightKg: null,
+          packageUnitPrice: 0,
+          discountAmount: 0,
+          taxAmount: 0,
+          lotNumber: null,
+          expiryDate: null,
+        },
+      ]);
+      onSaved(created);
       onClose();
     } catch (err) {
       console.error(err);
@@ -359,7 +379,7 @@ export function CreateReceiptModal({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              بنود وأصناف الإيصال (كل عبوة زيت تُنشئ برميلاً مستقلاً بنظام FIFO)
+              بنود وأصناف الإيصال (كل عبوة زيت تُنشئ برميلاً مستقلاً في المخزون)
             </h3>
             <Button
               type="button"

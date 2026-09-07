@@ -43,6 +43,12 @@ import type {
   CustomerPaymentRequest,
   CustomerPaymentResponse,
   ExternalProfitReport,
+  SupplyRequest,
+  CreateRiderSupplyRequestDto,
+  ApproveAndIssueSupplyRequestDto,
+  RejectSupplyRequestDto,
+  CancelSupplyRequestDto,
+  SupplyRequestFilterParams,
 } from "./types";
 
 // ==========================================
@@ -176,6 +182,24 @@ export async function createPurchaseReceipt(
   });
 }
 
+export async function getPurchaseReceipts(params?: {
+  inventoryLocationId?: string;
+  supplierId?: string;
+  search?: string;
+}): Promise<PurchaseReceipt[]> {
+  const query = new URLSearchParams();
+  if (params?.inventoryLocationId) query.set("inventoryLocationId", params.inventoryLocationId);
+  if (params?.supplierId) query.set("supplierId", params.supplierId);
+  if (params?.search) query.set("search", params.search);
+  const qStr = query.toString();
+  const res = await authFetch<any>(`/api/maintenance-inventory/receipts${qStr ? `?${qStr}` : ""}`);
+  if (Array.isArray(res)) return res;
+  if (res && Array.isArray(res.items)) return res.items;
+  if (res && Array.isArray(res.data)) return res.data;
+  if (res && Array.isArray(res.value)) return res.value;
+  return [];
+}
+
 export async function getPurchaseReceipt(id: string): Promise<PurchaseReceipt> {
   return authFetch<PurchaseReceipt>(`/api/maintenance-inventory/receipts/${id}`);
 }
@@ -280,6 +304,73 @@ export async function createRiderIssue(
 }
 
 // ==========================================
+// Warehouse Supply Requests
+// ==========================================
+
+export async function getSupplyRequests(
+  params?: SupplyRequestFilterParams,
+): Promise<SupplyRequest[]> {
+  const query = new URLSearchParams();
+  if (params?.inventoryLocationId) query.set("inventoryLocationId", params.inventoryLocationId);
+  if (params?.vehicleId) query.set("vehicleId", params.vehicleId);
+  if (params?.riderProfileId) query.set("riderProfileId", params.riderProfileId);
+  if (params?.status && params.status !== "all") query.set("status", params.status);
+  const qStr = query.toString();
+  return authFetch<SupplyRequest[]>(`/api/maintenance-inventory/supply-requests${qStr ? `?${qStr}` : ""}`);
+}
+
+export async function getSupplyRequest(id: string): Promise<SupplyRequest> {
+  return authFetch<SupplyRequest>(`/api/maintenance-inventory/supply-requests/${id}`);
+}
+
+export async function getMySupplyRequest(id: string): Promise<SupplyRequest> {
+  return authFetch<SupplyRequest>(`/api/maintenance-inventory/my-supply-requests/${id}`);
+}
+
+export async function createRiderSupplyRequest(
+  payload: CreateRiderSupplyRequestDto,
+): Promise<SupplyRequest> {
+  return authFetch<SupplyRequest>("/api/maintenance-inventory/rider-supply-requests", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تقديم طلب المستلزمات بنجاح. بانتظار موافقة المستودع.",
+  });
+}
+
+export async function approveAndIssueSupplyRequest(
+  id: string,
+  payload: ApproveAndIssueSupplyRequestDto,
+): Promise<SupplyRequest> {
+  return authFetch<SupplyRequest>(`/api/maintenance-inventory/supply-requests/${id}/approve-and-issue`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم اعتماد وصرف الطلب بنجاح وتحديث أرصدة المخزون",
+  });
+}
+
+export async function rejectSupplyRequest(
+  id: string,
+  payload: RejectSupplyRequestDto,
+): Promise<SupplyRequest> {
+  return authFetch<SupplyRequest>(`/api/maintenance-inventory/supply-requests/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم رفض طلب الصرف بنجاح",
+  });
+}
+
+export async function cancelSupplyRequest(
+  id: string,
+  payload: CancelSupplyRequestDto,
+): Promise<SupplyRequest> {
+  return authFetch<SupplyRequest>(`/api/maintenance-inventory/supply-requests/${id}/cancel`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم إلغاء طلب الصرف بنجاح",
+  });
+}
+
+// ==========================================
 // Work Orders & Materials
 // ==========================================
 
@@ -347,7 +438,7 @@ export async function recordMaterialUsage(
   return authFetch<MaterialUsage>(`/api/maintenance-work-orders/${workOrderId}/materials`, {
     method: "POST",
     body: JSON.stringify(payload),
-    notifySuccess: "تم صرف القطعة/المادة وتطبيق تكلفة FIFO بنجاح",
+    notifySuccess: "تم صرف القطعة/المادة واحتساب تكلفة المخزون بنجاح",
   });
 }
 

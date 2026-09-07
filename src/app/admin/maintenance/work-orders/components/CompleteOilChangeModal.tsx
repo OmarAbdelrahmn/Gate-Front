@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -13,6 +13,10 @@ import type {
   OilBarrel,
 } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
+import {
+  getLinkedInventoryLocationId,
+  getInventoryLocationsForSite,
+} from "@/lib/maintenance/constants";
 import { Droplets, Filter, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 
 interface CompleteOilChangeModalProps {
@@ -55,14 +59,50 @@ export function CompleteOilChangeModal({
   useEffect(() => {
     if (workOrder) {
       setOdometerAtChange(workOrder.odometerAtOpen || 0);
-      setInventoryLocationId(workOrder.maintenanceLocationId || "");
+      const linkedInventoryId = getLinkedInventoryLocationId(
+        workOrder.maintenanceLocationId,
+        locations,
+      );
+      setInventoryLocationId(linkedInventoryId);
       setPerformedAtUtc(new Date().toISOString().slice(0, 16));
       setLaborCost(50);
       setOtherCost(0);
       setNotes("");
       setNextOilBarrelId("");
     }
-  }, [workOrder, isOpen]);
+  }, [workOrder, isOpen, locations]);
+
+  const inventoryLocationOptions = useMemo(() => {
+    const list = getInventoryLocationsForSite(workOrder?.maintenanceLocationId, locations);
+    const opts = list.map((l) => ({
+      value: l.id,
+      label: `${l.nameAr} (${l.code})`,
+    }));
+
+    if (
+      inventoryLocationId &&
+      !opts.some((o) => o.value === inventoryLocationId)
+    ) {
+      const locMatch = locations.find((l) => l.id === inventoryLocationId);
+      if (locMatch) {
+        opts.unshift({
+          value: locMatch.id,
+          label: `${locMatch.nameAr} (${locMatch.code})`,
+        });
+      } else if (inventoryLocationId === "019d77f0-0000-7000-8000-000000000003") {
+        opts.unshift({
+          value: "019d77f0-0000-7000-8000-000000000003",
+          label: "مستودع جدة (Jeddah Warehouse Stock)",
+        });
+      } else if (inventoryLocationId === "019d77f0-0000-7000-8000-000000000004") {
+        opts.unshift({
+          value: "019d77f0-0000-7000-8000-000000000004",
+          label: "مستودع الرياض (Riyadh Warehouse Stock)",
+        });
+      }
+    }
+    return opts;
+  }, [workOrder?.maintenanceLocationId, locations, inventoryLocationId]);
 
   // Load barrels when location or oil item changes
   useEffect(() => {
@@ -125,7 +165,7 @@ export function CompleteOilChangeModal({
 
     if (isMultiBarrelNeeded && !nextOilBarrelId) {
       alert(
-        `البرميل المفتوح حالياً يحتوي على (${openBarrel?.remainingLiters} لتر) فقط بينما تتطلب العملية (${effectiveQuantity} لتر). يرجى اختيار البرميل المختوم التالي (FIFO) لاستكمال الكمية.`,
+        `البرميل المفتوح حالياً يحتوي على (${openBarrel?.remainingLiters} لتر) فقط بينما تتطلب العملية (${effectiveQuantity} لتر). يرجى اختيار البرميل المختوم التالي لاستكمال الكمية.`,
       );
       return;
     }
@@ -221,16 +261,13 @@ export function CompleteOilChangeModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              موقع الورشة / المستودع <span className="text-red-500">*</span>
+              مستودع الصرف / المخزون <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
               value={inventoryLocationId}
               onChange={(val) => setInventoryLocationId(val)}
-              options={locations.map((l) => ({
-                value: l.id,
-                label: `${l.nameAr} (${l.code})`,
-              }))}
-              placeholder="اختر موقع الورشة..."
+              options={inventoryLocationOptions}
+              placeholder="اختر موقع المستودع..."
               required
             />
           </div>
@@ -288,7 +325,7 @@ export function CompleteOilChangeModal({
 
                 <div>
                   <label className="block text-[11px] font-bold text-amber-950 dark:text-amber-200 mb-1">
-                    اختر البرميل المختوم التالي (FIFO) <span className="text-red-500">*</span>
+                    اختر البرميل المختوم التالي <span className="text-red-500">*</span>
                   </label>
                   <SearchableSelect
                     value={nextOilBarrelId}

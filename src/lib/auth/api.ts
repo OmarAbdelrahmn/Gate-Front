@@ -175,11 +175,19 @@ export function getFriendlyErrorMessage(
       case "fuel.month_mismatch":
         return "الشهر المكتشف في الملف يختلف عن الشهر المتوقع المحدد.";
       case "maintenance.concurrency_conflict":
-        return "تم تعديل السجل بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+        return "تم تعديل السجل أو طلب الصرف بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
       case "maintenance.insufficient_stock":
-        return "الكمية المطلوبة غير متوفرة في الرصيد الحالي للمخزون.";
+        return "الكمية المطلوبة غير متوفرة بالكامل في رصيد المستودع الحالي. لا يمكن صرف الطلب جزئياً.";
+      case "maintenance.supply_request_not_pending":
+        return "حالة طلب الصرف لم تعد معلقة؛ تم اتخاذ إجراء عليها مسبقاً من قِبل مستخدم آخر.";
+      case "maintenance.supply_approval_required":
+        return "يلزم اعتماد وصرف قطع الغيار والمواد من المستودع أولاً قبل بدء أمر الصيانة أو صرف المواد مباشرة.";
+      case "maintenance.supply_request_ownership":
+        return "عفواً، لا يملك صلاحية إلغاء هذا الطلب سوى المستخدم الذي قام بإنشائه.";
+      case "maintenance.invalid_inventory_item":
+        return "صنف المخزون المحدد غير صالح أو لا يتطابق نوعه ووحدته مع هذا الطلب.";
       case "maintenance.oil_barrel_not_next_fifo":
-        return "يجب فتح البرميل الأقدم وفقاً لطبقات تكلفة الوارد أولاً (FIFO).";
+        return "يجب فتح البرميل الأقدم وفقاً لتاريخ الاستلام المعتمد.";
       case "maintenance.open_oil_barrel_required":
         return "يلزم وجود برميل زيت مفتوح لإتمام العملية. يرجى فتح البرميل المؤهل أولاً.";
       case "maintenance.oil_loss_allowance_exceeded":
@@ -191,7 +199,7 @@ export function getFriendlyErrorMessage(
       case "maintenance.invalid_odometer":
         return "قراءة العداد الحالية غير صالحة؛ يجب ألا تقل عن القراءة المسجلة مسبقاً.";
       case "maintenance.invalid_location":
-        return "الموقع المحدد غير مصرح له بتنفيذ هذه العملية.";
+        return "موقع المستودع أو الصيانة المحدد غير مصرح به أو لا يطابق موقع العمل المختار.";
       case "maintenance.invalid_state":
         return "حالة أمر العمل الحالية لا تسمح بهذا الإجراء. يرجى تحديث الصفحة.";
       case "maintenance.oil_transfer_requires_whole_barrels":

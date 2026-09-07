@@ -87,6 +87,18 @@ export enum MaterialUsageDirection {
   Reversal = 2,
 }
 
+export enum SupplyRequestStatus {
+  PendingWarehouseApproval = 1,
+  ApprovedAndIssued = 2,
+  Rejected = 3,
+  Cancelled = 4,
+}
+
+export enum SupplyRequestSubjectType {
+  VehicleMaintenance = 1,
+  Rider = 2,
+}
+
 // ==========================================
 // Locations
 // ==========================================
@@ -338,7 +350,7 @@ export interface PurchaseReceipt {
 }
 
 // ==========================================
-// Stock Balances, FIFO, & Oil Barrels
+// Stock Balances & Batches
 // ==========================================
 
 export interface StockBalance {
@@ -499,6 +511,107 @@ export interface ExternalVehicleSnapshot {
   notes?: string | null;
 }
 
+// ==========================================
+// Warehouse Supply Requests
+// ==========================================
+
+export interface SupplyRequestLine {
+  id: string;
+  supplyRequestId?: string;
+  inventoryItemId: string;
+  sku: string;
+  itemNameAr: string;
+  itemNameEn?: string | null;
+  unitOfMeasure?: UnitOfMeasure;
+  requestedQuantity: number;
+  issuedQuantity: number;
+  issuedCost: number;
+  maintenanceUsageType?: MaterialUsageType | number | null;
+  expectedReturn?: boolean;
+  notes?: string | null;
+}
+
+export interface SupplyRequest {
+  id: string;
+  requestNumber: string;
+  subjectType: SupplyRequestSubjectType;
+  status: SupplyRequestStatus;
+  inventoryLocationId: string;
+  inventoryLocationNameAr?: string;
+  workOrderId?: string | null;
+  workOrderNumber?: string | null;
+  vehicleId?: string | null;
+  vehicleAssetNumber?: string | null;
+  vehiclePlateNumber?: string | null;
+  riderProfileId?: string | null;
+  riderNameAr?: string | null;
+  requestedAtUtc: string;
+  requestedByUserId?: string | null;
+  requestedByUserName?: string | null;
+  decisionAtUtc?: string | null;
+  decisionByUserId?: string | null;
+  decisionByUserName?: string | null;
+  decisionNotes?: string | null;
+  rejectionReason?: string | null;
+  notes?: string | null;
+  totalIssuedCost: number;
+  lines: SupplyRequestLine[];
+  rowVersion: string;
+}
+
+export interface CreateSupplyRequestLineDto {
+  inventoryItemId: string;
+  quantity: number;
+  maintenanceUsageType?: number | null;
+  expectedReturn?: boolean;
+  notes?: string | null;
+}
+
+export interface CreateSupplyRequestDto {
+  inventoryLocationId: string;
+  notes?: string | null;
+  lines: CreateSupplyRequestLineDto[];
+}
+
+export interface CreateRiderSupplyRequestDto {
+  riderProfileId: string;
+  inventoryLocationId: string;
+  requestedAtUtc: string;
+  notes?: string | null;
+  lines: {
+    inventoryItemId: string;
+    quantity: number;
+    maintenanceUsageType: null;
+    expectedReturn: boolean;
+    notes?: string | null;
+  }[];
+}
+
+export interface ApproveAndIssueSupplyRequestDto {
+  occurredAtUtc: string;
+  rowVersion: string;
+  notes?: string | null;
+}
+
+export interface RejectSupplyRequestDto {
+  occurredAtUtc: string;
+  rowVersion: string;
+  notes: string;
+}
+
+export interface CancelSupplyRequestDto {
+  occurredAtUtc: string;
+  rowVersion: string;
+  notes?: string | null;
+}
+
+export interface SupplyRequestFilterParams {
+  inventoryLocationId?: string;
+  vehicleId?: string;
+  riderProfileId?: string;
+  status?: string;
+}
+
 export interface WorkOrder {
   id: string;
   workOrderNumber: string;
@@ -526,6 +639,7 @@ export interface WorkOrder {
   diagnosis?: string | null;
   externalVehicle: ExternalVehicleSnapshot | null;
   notes: string | null;
+  supplyRequest?: SupplyRequest | null;
   rowVersion: string;
 }
 
@@ -542,6 +656,7 @@ export interface CreateCompanyWorkOrderRequest {
   diagnosis?: string | null;
   notes?: string | null;
   externalVehicle: null;
+  supplyRequest?: CreateSupplyRequestDto | null;
 }
 
 export interface CreateExternalWorkOrderRequest {
@@ -789,7 +904,8 @@ export interface ExternalProfitWorkOrder {
   partsRevenueBeforeTax: number;
   customerLaborRevenueBeforeTax: number;
   otherIncomeBeforeTax: number;
-  fifoInventoryCost: number;
+  inventoryCost: number;
+  fifoInventoryCost?: number;
   mechanicLaborCost: number;
   otherExpense: number;
   taxCollected: number;

@@ -14,6 +14,7 @@ import type {
 } from "@/lib/maintenance/types";
 import {
   workOrderStatusConfig,
+  getWorkOrderEffectiveStatus,
   maintenanceTypeLabels,
   formatDateTime,
 } from "@/lib/maintenance/constants";
@@ -113,7 +114,7 @@ export function ExternalOrdersListView({ locations, items }: ExternalOrdersListV
               </tr>
             ) : (
               orders.map((order) => {
-                const statusCfg = workOrderStatusConfig[order.status];
+                const statusCfg = getWorkOrderEffectiveStatus(order.status, order.supplyRequest);
                 return (
                   <tr key={order.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                     <td className="p-3 font-mono font-black text-[#1167c9] dark:text-blue-400">

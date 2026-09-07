@@ -29,12 +29,10 @@ import {
   itemTypeBadgeStyles,
 } from "@/lib/maintenance/constants";
 
-interface StockBalancesViewProps {
+export interface StockBalancesViewProps {
   locations: MaintenanceLocation[];
   items: InventoryItem[];
 }
-
-export type BalancesAndFifoViewProps = StockBalancesViewProps;
 
 export function StockBalancesView({ locations, items }: StockBalancesViewProps) {
   const [loading, setLoading] = useState(true);
@@ -364,5 +362,3 @@ export function StockBalancesView({ locations, items }: StockBalancesViewProps) 
     </div>
   );
 }
-
-export const BalancesAndFifoView = StockBalancesView;

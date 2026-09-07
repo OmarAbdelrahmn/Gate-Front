@@ -10,6 +10,7 @@ import {
   transitionWorkOrder,
   recordMaterialUsage,
   reverseMaterialUsage,
+  cancelSupplyRequest,
 } from "@/lib/maintenance/api";
 import { authFetch } from "@/lib/auth/api";
 import type {
@@ -22,15 +23,19 @@ import {
   WorkOrderStatus,
   MaterialUsageType,
   ItemType,
+  SupplyRequestStatus,
 } from "@/lib/maintenance/types";
 import {
   workOrderStatusConfig,
+  getWorkOrderEffectiveStatus,
   maintenanceTypeLabels,
   materialUsageTypeLabels,
   unitOfMeasureLabels,
   itemTypeLabels,
   formatCurrency,
   formatDateTime,
+  supplyRequestStatusConfig,
+  getLinkedInventoryLocationId,
 } from "@/lib/maintenance/constants";
 import { CompleteOilChangeModal } from "./CompleteOilChangeModal";
 import { MaterialHistoryModal } from "./MaterialHistoryModal";
@@ -44,9 +49,10 @@ import {
   History,
   Droplets,
   Wrench,
-  Layers,
   Package,
+  PackageCheck,
   AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -74,6 +80,7 @@ export function WorkOrderDetailModal({
   const [materials, setMaterials] = useState<MaterialUsage[]>([]);
   const [loading, setLoading] = useState(false);
   const [transitionLoading, setTransitionLoading] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   // Material Issue Modal/Form
   const [issueModalOpen, setIssueModalOpen] = useState(false);
@@ -118,33 +125,50 @@ export function WorkOrderDetailModal({
   // History Modal
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
-  const loadOrderDetails = async () => {
-    if (!workOrderId) return;
+  const loadOrderDetails = () => {
     setLoading(true);
-    try {
-      const data = await getWorkOrder(workOrderId);
-      setOrder(data);
+    setRefreshCount((prev) => prev + 1);
+  };
 
-      // Fetch materials for this work order
-      const mats = await authFetch<MaterialUsage[]>(
-        `/api/maintenance-work-orders/${workOrderId}/materials`,
-      ).catch(() => []);
-      setMaterials(Array.isArray(mats) ? mats : []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  const handleModalClose = () => {
+    setOrder(null);
+    setMaterials([]);
+    setIssueModalOpen(false);
+    setOilModalOpen(false);
+    setHistoryModalOpen(false);
+    onClose();
   };
 
   useEffect(() => {
-    if (isOpen && workOrderId) {
-      loadOrderDetails();
-    } else {
-      setOrder(null);
-      setMaterials([]);
+    if (!isOpen || !workOrderId) {
+      return;
     }
-  }, [isOpen, workOrderId]);
+
+    let active = true;
+    Promise.all([
+      getWorkOrder(workOrderId),
+      authFetch<MaterialUsage[]>(
+        `/api/maintenance-work-orders/${workOrderId}/materials`,
+      ).catch(() => []),
+    ])
+      .then(([data, mats]) => {
+        if (active) {
+          setOrder(data);
+          setMaterials(Array.isArray(mats) ? mats : []);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, workOrderId, refreshCount]);
 
   // Handle Transitions
   const handleTransition = async (action: "start" | "complete" | "close" | "cancel") => {
@@ -166,9 +190,9 @@ export function WorkOrderDetailModal({
         occurredAtUtc: new Date().toISOString(),
         rowVersion: order.rowVersion,
       });
-      await loadOrderDetails();
+      loadOrderDetails();
       onUpdated();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       // Reload on error (e.g. concurrency conflict or state conflict)
       loadOrderDetails();
@@ -186,7 +210,7 @@ export function WorkOrderDetailModal({
     try {
       await recordMaterialUsage(order.id, {
         inventoryItemId: selectedItemId,
-        inventoryLocationId: order.maintenanceLocationId,
+        inventoryLocationId: getLinkedInventoryLocationId(order.maintenanceLocationId, locations),
         quantity: Number(issueQuantity),
         usageType: Number(issueUsageType),
         usedAtUtc: new Date().toISOString(),
@@ -222,9 +246,33 @@ export function WorkOrderDetailModal({
     }
   };
 
+  // Handle Supply Request Cancel
+  const [cancelSupplyLoading, setCancelSupplyLoading] = useState(false);
+  const handleCancelSupplyRequest = async () => {
+    if (!order?.supplyRequest) return;
+    const reason = prompt("يرجى إدخال سبب إلغاء طلب صرف المواد من المستودع:", "Wrong item selected");
+    if (reason === null) return;
+
+    setCancelSupplyLoading(true);
+    try {
+      await cancelSupplyRequest(order.supplyRequest.id, {
+        occurredAtUtc: new Date().toISOString(),
+        rowVersion: order.supplyRequest.rowVersion,
+        notes: reason.trim() || "Wrong item selected",
+      });
+      loadOrderDetails();
+      onUpdated();
+    } catch (err: unknown) {
+      console.error(err);
+      loadOrderDetails();
+    } finally {
+      setCancelSupplyLoading(false);
+    }
+  };
+
   if (!order && loading) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="تفاصيل أمر الصيانة" maxWidth="max-w-4xl">
+      <Modal isOpen={isOpen} onClose={handleModalClose} title="تفاصيل أمر الصيانة" maxWidth="max-w-4xl">
         <div className="p-12 text-center text-xs text-slate-400">
           جارٍ تحميل تفاصيل أمر الصيانة...
         </div>
@@ -234,14 +282,22 @@ export function WorkOrderDetailModal({
 
   if (!order) return null;
 
-  const statusCfg = workOrderStatusConfig[order.status];
+  const statusCfg = getWorkOrderEffectiveStatus(order.status, order.supplyRequest);
   const isOilChangeOrder = order.maintenanceType === 5;
   const isEditable = order.status === 1 || order.status === 2;
+
+  const supplyReq = order.supplyRequest;
+  const isSupplyPending = supplyReq?.status === SupplyRequestStatus.PendingWarehouseApproval;
+  const isSupplyRejected = supplyReq?.status === SupplyRequestStatus.Rejected;
+  const isSupplyCancelled = supplyReq?.status === SupplyRequestStatus.Cancelled;
+  const hasSupplyBlock = isSupplyPending || isSupplyRejected || isSupplyCancelled;
+  const canStart = order.status === WorkOrderStatus.Open && !hasSupplyBlock;
+  const canCancelSupply = isSupplyPending && (can("inventory.supply_requests.submit") || canManage);
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleModalClose}
       title={`أمر صيانة رقم ${order.workOrderNumber}`}
       maxWidth="max-w-5xl"
     >
@@ -286,7 +342,7 @@ export function WorkOrderDetailModal({
           {/* Workflow Action Buttons */}
           {canManage && (
             <div className="flex items-center gap-2">
-              {order.status === WorkOrderStatus.Open && (
+              {canStart && (
                 <Button
                   variant="primary"
                   onClick={() => handleTransition("start")}
@@ -338,6 +394,209 @@ export function WorkOrderDetailModal({
           )}
         </div>
 
+        {/* Status Banners for Supply Request */}
+        {supplyReq && isSupplyPending && (
+          <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+            <div className="flex items-center gap-3">
+              <AlertTriangle size={20} className="text-amber-600 shrink-0" />
+              <div>
+                <span className="font-bold block text-sm">
+                  Waiting for warehouse approval. Stock has not been issued.
+                </span>
+                <span className="text-[11px] text-amber-800 dark:text-amber-300">
+                  بانتظار موافقة المستودع. لم يتم صرف المواد بعد. طلب الصرف رقم <strong>{supplyReq.requestNumber}</strong> قيد مراجعة أمين المستودع.
+                </span>
+              </div>
+            </div>
+            {canCancelSupply && (
+              <Button
+                variant="danger"
+                onClick={handleCancelSupplyRequest}
+                loading={cancelSupplyLoading}
+                className="text-xs h-8 shrink-0"
+              >
+                <XCircle size={13} />
+                إلغاء طلب الصرف
+              </Button>
+            )}
+          </div>
+        )}
+
+        {supplyReq && isSupplyRejected && (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-300 dark:border-red-800 text-red-900 dark:text-red-200">
+            <div className="flex items-center gap-3">
+              <XCircle size={20} className="text-red-600 shrink-0" />
+              <div className="flex-1">
+                <span className="font-bold block text-sm">تم رفض طلب صرف المواد من قِبل المستودع</span>
+                <span className="text-[11px] text-red-800 dark:text-red-300 block mt-0.5">
+                  سبب الرفض: <strong>{supplyReq.rejectionReason || supplyReq.decisionNotes || "غير محدد"}</strong>
+                </span>
+                <span className="text-[10px] text-red-700/80 dark:text-red-400 mt-1 block">
+                  لا يمكن بدء أمر الصيانة. يلزم إلغاء أمر الصيانة الحالي وإعادة إنشائه في حال الرغبة بطلب قطع بديلة.
+                </span>
+              </div>
+            </div>
+            {canManage && (order.status === WorkOrderStatus.Open || order.status === WorkOrderStatus.InProgress) && (
+              <Button
+                variant="danger"
+                onClick={() => handleTransition("cancel")}
+                loading={transitionLoading}
+                className="text-xs h-8 shrink-0"
+              >
+                <XCircle size={13} />
+                إلغاء أمر الصيانة
+              </Button>
+            )}
+          </div>
+        )}
+
+        {supplyReq && isSupplyCancelled && (
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-slate-500/10 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+            <AlertCircle size={20} className="text-slate-500 shrink-0" />
+            <div className="flex-1">
+              <span className="font-bold block text-sm">تم إلغاء طلب صرف المواد من المستودع</span>
+              <span className="text-[11px] text-slate-500 block">
+                ملاحظات الإلغاء: {supplyReq.decisionNotes || supplyReq.notes || "تم إلغاء الطلب من قبل المنشئ."}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Warehouse Supply Request Card */}
+        {supplyReq && (
+          <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-9 place-items-center rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                  <PackageCheck size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                      طلب صرف المواد من المستودع (Warehouse supply request)
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-500">
+                      {supplyReq.requestNumber}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                        supplyRequestStatusConfig[supplyReq.status]?.border || ""
+                      } ${supplyRequestStatusConfig[supplyReq.status]?.bg || ""} ${
+                        supplyRequestStatusConfig[supplyReq.status]?.text || ""
+                      }`}
+                    >
+                      {supplyRequestStatusConfig[supplyReq.status]?.label || supplyReq.status}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    دورة صرف المستودع برقم طلب مستقل وتأكيد التسليم الفعلي
+                  </span>
+                </div>
+              </div>
+
+              {canCancelSupply && (
+                <Button
+                  variant="ghost"
+                  onClick={handleCancelSupplyRequest}
+                  loading={cancelSupplyLoading}
+                  className="text-xs h-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40"
+                >
+                  <XCircle size={13} />
+                  إلغاء طلب الصرف
+                </Button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-slate-600 dark:text-slate-300 text-[11px]">
+              <div className="p-2.5 rounded-xl border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30">
+                <span className="text-slate-400 block text-[10px]">مستودع الصرف المختار:</span>
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {supplyReq.inventoryLocationNameAr || order.maintenanceLocationNameAr}
+                </strong>
+              </div>
+              <div className="p-2.5 rounded-xl border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30">
+                <span className="text-slate-400 block text-[10px]">مركبة أمر العمل:</span>
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {supplyReq.vehicleAssetNumber || order.vehicleAssetNumber || "مركبة"} • {supplyReq.vehiclePlateNumber || "-"}
+                </strong>
+              </div>
+              <div className="p-2.5 rounded-xl border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30">
+                <span className="text-slate-400 block text-[10px]">مقدم الطلب / وقت الطلب:</span>
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {supplyReq.requestedByUserName || "مسؤول المركبات"} • {formatDateTime(supplyReq.requestedAtUtc)}
+                </strong>
+              </div>
+            </div>
+
+            {/* Decision info if approved or rejected */}
+            {(supplyReq.decisionAtUtc || supplyReq.decisionByUserName || supplyReq.decisionNotes || supplyReq.rejectionReason) && (
+              <div className="p-3 rounded-xl border border-[var(--border)] bg-slate-50/40 dark:bg-slate-900/20 text-[11px] space-y-1">
+                <div className="flex flex-wrap items-center gap-4 text-slate-500">
+                  {supplyReq.decisionAtUtc && (
+                    <span>تاريخ قرار المستودع: <strong>{formatDateTime(supplyReq.decisionAtUtc)}</strong></span>
+                  )}
+                  {supplyReq.decisionByUserName && (
+                    <span>المسؤول: <strong>{supplyReq.decisionByUserName}</strong></span>
+                  )}
+                  <span>إجمالي التكلفة المصروفة: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">{formatCurrency(supplyReq.totalIssuedCost || 0)}</strong></span>
+                </div>
+                {supplyReq.decisionNotes && (
+                  <div className="text-slate-700 dark:text-slate-300">
+                    ملاحظات المستودع: {supplyReq.decisionNotes}
+                  </div>
+                )}
+                {supplyReq.rejectionReason && (
+                  <div className="text-red-600 dark:text-red-400 font-bold">
+                    سبب الرفض: {supplyReq.rejectionReason}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Lines Table */}
+            <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+              <table className="w-full text-right text-xs">
+                <thead className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 font-bold">
+                  <tr>
+                    <th className="p-2.5">الصنف</th>
+                    <th className="p-2.5 font-mono">الرمز SKU</th>
+                    <th className="p-2.5 text-center">الكمية المطلوبة</th>
+                    <th className="p-2.5 text-center">الكمية المصروفة</th>
+                    <th className="p-2.5 text-left font-mono">التكلفة المصروفة</th>
+                    <th className="p-2.5">ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {supplyReq.lines?.map((line, lIdx) => (
+                    <tr key={line.id || lIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                      <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
+                        {line.itemNameAr}
+                      </td>
+                      <td className="p-2.5 font-mono text-slate-500 text-[11px]">
+                        {line.sku}
+                      </td>
+                      <td className="p-2.5 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                        {line.requestedQuantity}
+                      </td>
+                      <td className="p-2.5 text-center font-mono font-bold">
+                        <span className={line.issuedQuantity > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}>
+                          {line.issuedQuantity}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-left font-mono font-bold">
+                        {formatCurrency(line.issuedCost || 0)}
+                      </td>
+                      <td className="p-2.5 text-slate-500 text-[11px]">
+                        {line.notes || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Oil Change Specialized Wizard CTA */}
         {isOilChangeOrder && isEditable && (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-800">
@@ -366,7 +625,7 @@ export function WorkOrderDetailModal({
         {/* Details & Costs Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-center">
           <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            <span className="text-[11px] text-slate-400 block">تكلفة المواد والقطع (FIFO)</span>
+            <span className="text-[11px] text-slate-400 block">تكلفة المواد والقطع</span>
             <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
               {formatCurrency(order.actualMaterialCost)}
             </span>
@@ -411,7 +670,7 @@ export function WorkOrderDetailModal({
           </div>
         )}
 
-        {/* Materials Usage & FIFO Section */}
+        {/* Materials Usage & Cost Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -420,7 +679,7 @@ export function WorkOrderDetailModal({
                 المواد وقطع الغيار المصروفة على أمر العمل
               </h3>
               <span className="text-[11px] text-slate-500">
-                (توزيع تكلفة الوارد أولاً FIFO مسجل ومدقق آلياً من الخادم)
+                (توزيع تكلفة المواد والقطع مسجل ومدقق آلياً)
               </span>
             </div>
 
@@ -435,7 +694,7 @@ export function WorkOrderDetailModal({
                   سجل استهلاك المركبة التاريخي
                 </Button>
               )}
-              {isEditable && canManage && (
+              {isEditable && canManage && !order.supplyRequest && (
                 <Button
                   variant="primary"
                   onClick={() => setIssueModalOpen(true)}
@@ -455,8 +714,8 @@ export function WorkOrderDetailModal({
                   <th className="p-2.5">الصنف</th>
                   <th className="p-2.5">نوع الاستخدام</th>
                   <th className="p-2.5 text-center">الكمية</th>
-                  <th className="p-2.5 text-left font-mono">التكلفة الإجمالية (FIFO)</th>
-                  <th className="p-2.5">توزيع طبقات التكلفة (Audit)</th>
+                  <th className="p-2.5 text-left font-mono">التكلفة الإجمالية</th>
+                  <th className="p-2.5">تفاصيل التكلفة والتوريد</th>
                   <th className="p-2.5 text-center">الحالة / الإجراء</th>
                 </tr>
               </thead>
@@ -629,7 +888,7 @@ export function WorkOrderDetailModal({
             </div>
 
             <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-700 dark:text-blue-300">
-              يقوم الخادم آلياً باحتساب طبقات تكلفة الوارد أولاً صادر أولاً (FIFO) من واقع الرصيد المتاح في مستودع {order.maintenanceLocationNameAr}.
+              يقوم الخادم آلياً باحتساب تكلفة الصرف من واقع الرصيد المتاح في مستودع {order.maintenanceLocationNameAr}.
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">

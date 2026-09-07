@@ -144,7 +144,7 @@ export function ProfitReportView({ locations }: ProfitReportViewProps) {
           <span>المعادلة المحاسبية المعتمدة للربح التشغيلي الحقيقي للورشة (قبل الضريبة):</span>
         </div>
         <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-blue-200/80 dark:border-blue-800 text-xs font-mono font-bold text-slate-800 dark:text-slate-200 text-center tracking-wide">
-          صافي الربح قبل الضريبة = (مبيعات قطع الغيار + أجور يد العميل + إيرادات أخرى) − (تكلفة مخزون FIFO + أجور ومستحقات الفنيين + مصروفات أخرى)
+          صافي الربح قبل الضريبة = (مبيعات قطع الغيار + أجور يد العميل + إيرادات أخرى) − (تكلفة المخزون + أجور ومستحقات الفنيين + مصروفات أخرى)
         </div>
         <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1">
           <span>
@@ -224,7 +224,7 @@ export function ProfitReportView({ locations }: ProfitReportViewProps) {
               <th className="p-3">مرجع المركبة</th>
               <th className="p-3 text-left font-mono">إيراد القطع</th>
               <th className="p-3 text-left font-mono">أجور يد العميل</th>
-              <th className="p-3 text-left font-mono text-red-600">تكلفة FIFO للمخزون</th>
+              <th className="p-3 text-left font-mono text-red-600">تكلفة المخزون</th>
               <th className="p-3 text-left font-mono text-red-600">أجرة الفني</th>
               <th className="p-3 text-left font-mono font-bold text-emerald-700">صافي الربح قبل الضريبة</th>
               <th className="p-3 text-left font-mono">المحصل</th>
@@ -264,7 +264,7 @@ export function ProfitReportView({ locations }: ProfitReportViewProps) {
                       {formatCurrency(wo.customerLaborRevenueBeforeTax)}
                     </td>
                     <td className="p-3 text-left font-mono text-red-600 dark:text-red-400">
-                      {formatCurrency(wo.fifoInventoryCost)}
+                      {formatCurrency(wo.inventoryCost ?? wo.fifoInventoryCost ?? 0)}
                     </td>
                     <td className="p-3 text-left font-mono text-red-600 dark:text-red-400">
                       {formatCurrency(wo.mechanicLaborCost)}

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BalancesAndFifoView } from "../components/BalancesAndFifoView";
+import { StockBalancesView } from "../components/StockBalancesView";
 import {
   getMaintenanceLocations,
   getInventoryItems,
@@ -39,13 +39,13 @@ export default function MaintenanceInventoryBalancesPage() {
   if (loading) {
     return (
       <div className="p-8 text-center text-xs text-slate-400">
-        جارٍ تحميل أرصدة المخزون وطبقات FIFO...
+        جارٍ تحميل أرصدة المخزون...
       </div>
     );
   }
 
   return (
-    <BalancesAndFifoView
+    <StockBalancesView
       locations={locations}
       items={items}
     />

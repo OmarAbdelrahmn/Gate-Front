@@ -10,6 +10,9 @@ import {
   OilBarrelStatus,
   OilReminderStatus,
   ExternalPaymentStatus,
+  SupplyRequestStatus,
+  SupplyRequestSubjectType,
+  MaintenanceLocation,
 } from "./types";
 
 export const locationTypeLabels: Record<LocationType, string> = {
@@ -67,6 +70,53 @@ export const workOrderStatusConfig: Record<
     border: "border-red-200 dark:border-red-800",
   },
 };
+
+export function getWorkOrderEffectiveStatus(
+  status: WorkOrderStatus,
+  supplyRequest?: { status: SupplyRequestStatus } | null,
+): { label: string; bg: string; text: string; border: string } {
+  if (status === WorkOrderStatus.Cancelled) {
+    return workOrderStatusConfig[WorkOrderStatus.Cancelled];
+  }
+  if (status === WorkOrderStatus.Completed) {
+    return workOrderStatusConfig[WorkOrderStatus.Completed];
+  }
+  if (status === WorkOrderStatus.Closed) {
+    return workOrderStatusConfig[WorkOrderStatus.Closed];
+  }
+  if (status === WorkOrderStatus.InProgress) {
+    return workOrderStatusConfig[WorkOrderStatus.InProgress];
+  }
+
+  if (supplyRequest) {
+    if (supplyRequest.status === SupplyRequestStatus.Rejected) {
+      return {
+        label: "مرفوض",
+        bg: "bg-red-50 dark:bg-red-950/40",
+        text: "text-red-700 dark:text-red-300",
+        border: "border-red-200 dark:border-red-800",
+      };
+    }
+    if (supplyRequest.status === SupplyRequestStatus.PendingWarehouseApproval) {
+      return {
+        label: "بانتظار موافقة المستودع",
+        bg: "bg-amber-50 dark:bg-amber-950/40",
+        text: "text-amber-700 dark:text-amber-300",
+        border: "border-amber-200 dark:border-amber-800",
+      };
+    }
+    if (supplyRequest.status === SupplyRequestStatus.Cancelled) {
+      return {
+        label: "ملغي (طلب مواد)",
+        bg: "bg-slate-100 dark:bg-slate-800/60",
+        text: "text-slate-700 dark:text-slate-300",
+        border: "border-slate-200 dark:border-slate-700",
+      };
+    }
+  }
+
+  return workOrderStatusConfig[status] || workOrderStatusConfig[WorkOrderStatus.Open];
+}
 
 export const itemTypeLabels: Record<ItemType, string> = {
   [ItemType.SparePart]: "قطعة غيار",
@@ -268,3 +318,162 @@ export function formatDate(dateString: string | null | undefined): string {
     return dateString;
   }
 }
+
+export const supplyRequestStatusConfig: Record<
+  SupplyRequestStatus,
+  { label: string; bg: string; text: string; border: string; dot: string }
+> = {
+  [SupplyRequestStatus.PendingWarehouseApproval]: {
+    label: "بانتظار موافقة المستودع",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+    dot: "bg-amber-500",
+  },
+  [SupplyRequestStatus.ApprovedAndIssued]: {
+    label: "معتمد ومصروف",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+    dot: "bg-emerald-500",
+  },
+  [SupplyRequestStatus.Rejected]: {
+    label: "مرفوض",
+    bg: "bg-red-50 dark:bg-red-950/40",
+    text: "text-red-700 dark:text-red-300",
+    border: "border-red-200 dark:border-red-800",
+    dot: "bg-red-500",
+  },
+  [SupplyRequestStatus.Cancelled]: {
+    label: "ملغي",
+    bg: "bg-slate-100 dark:bg-slate-800/60",
+    text: "text-slate-600 dark:text-slate-400",
+    border: "border-slate-200 dark:border-slate-700",
+    dot: "bg-slate-400",
+  },
+};
+
+export const supplyRequestSubjectLabels: Record<SupplyRequestSubjectType, string> = {
+  [SupplyRequestSubjectType.VehicleMaintenance]: "صيانة مركبة",
+  [SupplyRequestSubjectType.Rider]: "مستلزمات مندوب",
+};
+
+// ==========================================
+// Maintenance Work Site & Stock Location Mapping
+// ==========================================
+
+export const WORK_SITE_TO_INVENTORY_LOCATION_MAP: Record<string, string> = {
+  // Jeddah work site -> Jeddah warehouse stock location
+  "019d77f0-0000-7000-8000-000000000001": "019d77f0-0000-7000-8000-000000000003",
+  // Riyadh work site -> Riyadh warehouse stock location
+  "019d77f0-0000-7000-8000-000000000002": "019d77f0-0000-7000-8000-000000000004",
+};
+
+export const INVENTORY_TO_WORK_SITE_LOCATION_MAP: Record<string, string> = {
+  "019d77f0-0000-7000-8000-000000000003": "019d77f0-0000-7000-8000-000000000001",
+  "019d77f0-0000-7000-8000-000000000004": "019d77f0-0000-7000-8000-000000000002",
+};
+
+/**
+ * Resolves the valid linked inventory stock location ID for a given maintenance work site ID.
+ */
+export function getLinkedInventoryLocationId(
+  maintenanceLocationId: string | undefined | null,
+  locations: MaintenanceLocation[] = [],
+): string {
+  if (!maintenanceLocationId) return "";
+
+  // 1. Direct explicit mapping for known work sites
+  if (WORK_SITE_TO_INVENTORY_LOCATION_MAP[maintenanceLocationId]) {
+    return WORK_SITE_TO_INVENTORY_LOCATION_MAP[maintenanceLocationId];
+  }
+
+  // 2. If the ID is already an inventory stock location
+  if (INVENTORY_TO_WORK_SITE_LOCATION_MAP[maintenanceLocationId]) {
+    return maintenanceLocationId;
+  }
+
+  // 3. Match from locations list
+  const currentLoc = locations.find((l) => l.id === maintenanceLocationId);
+  if (
+    currentLoc &&
+    currentLoc.locationType === LocationType.Warehouse &&
+    currentLoc.inventoryEnabled
+  ) {
+    return currentLoc.id;
+  }
+
+  if (currentLoc?.operatingCityId) {
+    // Find warehouse in the same city
+    const warehouseInCity = locations.find(
+      (l) =>
+        l.operatingCityId === currentLoc.operatingCityId &&
+        l.inventoryEnabled &&
+        (l.locationType === LocationType.Warehouse || (l.locationType as number) === 1),
+    );
+    if (warehouseInCity) return warehouseInCity.id;
+
+    const anyStockInCity = locations.find(
+      (l) =>
+        l.operatingCityId === currentLoc.operatingCityId &&
+        l.inventoryEnabled &&
+        l.id !== currentLoc.id,
+    );
+    if (anyStockInCity) return anyStockInCity.id;
+  }
+
+  // 4. Any warehouse with inventoryEnabled
+  const generalWarehouse = locations.find(
+    (l) =>
+      l.inventoryEnabled &&
+      (l.locationType === LocationType.Warehouse || (l.locationType as number) === 1),
+  );
+  if (generalWarehouse) return generalWarehouse.id;
+
+  const anyInventory = locations.find((l) => l.inventoryEnabled);
+  return anyInventory?.id || maintenanceLocationId;
+}
+
+/**
+ * Returns available inventory/stock locations suitable for parts/materials requests for a given maintenance site.
+ */
+export function getInventoryLocationsForSite(
+  maintenanceLocationId: string | undefined | null,
+  locations: MaintenanceLocation[] = [],
+): MaintenanceLocation[] {
+  const workSiteIds = new Set(Object.keys(WORK_SITE_TO_INVENTORY_LOCATION_MAP));
+  const inventoryCandidates = locations.filter((l) => {
+    // Exclude known work sites from being selectable as warehouse stock locations
+    if (workSiteIds.has(l.id)) return false;
+    return (
+      l.inventoryEnabled ||
+      l.locationType === LocationType.Warehouse ||
+      (l.locationType as number) === 1
+    );
+  });
+
+  if (!maintenanceLocationId) {
+    return inventoryCandidates.length > 0 ? inventoryCandidates : locations;
+  }
+
+  const linkedId = WORK_SITE_TO_INVENTORY_LOCATION_MAP[maintenanceLocationId];
+  const chosenSite = locations.find((l) => l.id === maintenanceLocationId);
+
+  const filtered = inventoryCandidates.filter((l) => {
+    if (linkedId && l.id === linkedId) return true;
+    if (chosenSite?.operatingCityId && l.operatingCityId === chosenSite.operatingCityId) {
+      return true;
+    }
+    return false;
+  });
+
+  if (filtered.length > 0) return filtered;
+
+  if (linkedId) {
+    const fromAll = locations.find((l) => l.id === linkedId);
+    if (fromAll) return [fromAll];
+  }
+
+  return inventoryCandidates.length > 0 ? inventoryCandidates : locations;
+}
+

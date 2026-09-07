@@ -28,6 +28,7 @@ import {
   formatDateTime,
   paymentMethodLabels,
   itemTypeLabels,
+  getLinkedInventoryLocationId,
 } from "@/lib/maintenance/constants";
 import {
   DollarSign,
@@ -160,7 +161,7 @@ export function ExternalOrderBillingModal({
     try {
       await recordPartSale(order.id, {
         inventoryItemId: partItemId,
-        inventoryLocationId: order.maintenanceLocationId,
+        inventoryLocationId: getLinkedInventoryLocationId(order.maintenanceLocationId, locations),
         quantity: Number(partQuantity),
         sellingUnitPriceBeforeTax: Number(partSellingPrice),
         discountAmount: Number(partDiscount || 0),
@@ -459,7 +460,7 @@ export function ExternalOrderBillingModal({
 
                 <div className="flex items-center justify-between pt-2">
                   <span className="text-[11px] text-slate-500">
-                    ملاحظة: سعر البيع يُسجل كإيراد، وتكلفة FIFO للمخزون تُخصم وتُحسب تلقائياً من الخادم دون تدخل الكاشير.
+                    ملاحظة: سعر البيع يُسجل كإيراد، وتكلفة المخزون تُخصم وتُحسب تلقائياً من الخادم دون تدخل الكاشير.
                   </span>
                   <Button variant="primary" type="submit" loading={actionLoading} className="text-xs">
                     إضافة البيع

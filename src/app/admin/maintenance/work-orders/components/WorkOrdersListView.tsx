@@ -1,19 +1,26 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { PlusCircle, Eye, Wrench, RefreshCw, Car, User } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { WorkOrderDetailModal } from "./WorkOrderDetailModal";
 import { CreateCompanyWorkOrderModal } from "./CreateCompanyWorkOrderModal";
-import { getWorkOrders } from "@/lib/maintenance/api";
+import { getWorkOrders, getSupplyRequests } from "@/lib/maintenance/api";
 import type {
   WorkOrder,
   MaintenanceLocation,
   InventoryItem,
+  SupplyRequest,
+} from "@/lib/maintenance/types";
+import {
+  SupplyRequestStatus,
+  WorkOrderStatus,
 } from "@/lib/maintenance/types";
 import {
   workOrderStatusConfig,
+  getWorkOrderEffectiveStatus,
   maintenanceTypeLabels,
   formatCurrency,
   formatDateTime,
@@ -28,6 +35,7 @@ interface WorkOrdersListViewProps {
 export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps) {
   const { can } = useAuth();
   const canManage = can("maintenance.work_orders.manage");
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
@@ -41,15 +49,67 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
+  // Deep-link effect
+  useEffect(() => {
+    const deepId = searchParams.get("workOrderId") || searchParams.get("id");
+    if (deepId) {
+      setSelectedOrderId(deepId);
+    }
+  }, [searchParams]);
+
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const data = await getWorkOrders({
-        maintenanceLocationId: locationFilter || undefined,
-        status: statusFilter === "all" ? undefined : statusFilter,
-        serviceSubjectType: subjectFilter === "all" ? undefined : Number(subjectFilter),
-      });
-      setWorkOrders(data);
+      const isCustomStatus =
+        statusFilter === "rejected" || statusFilter === "pending_supply";
+      const [data, supplyRequests] = await Promise.all([
+        getWorkOrders({
+          maintenanceLocationId: locationFilter || undefined,
+          status:
+            statusFilter === "all" || isCustomStatus ? undefined : statusFilter,
+          serviceSubjectType:
+            subjectFilter === "all" ? undefined : Number(subjectFilter),
+        }),
+        getSupplyRequests().catch(() => []),
+      ]);
+
+      const supplyMap = new Map<string, SupplyRequest>();
+      if (Array.isArray(supplyRequests)) {
+        for (const sr of supplyRequests) {
+          if (sr.workOrderId) {
+            supplyMap.set(sr.workOrderId, sr);
+          }
+        }
+      }
+
+      const merged = (Array.isArray(data) ? data : []).map((ord) => ({
+        ...ord,
+        supplyRequest:
+          ord.supplyRequest || (ord.id ? supplyMap.get(ord.id) : null) || null,
+      }));
+
+      let filtered = merged;
+      if (statusFilter === "1") {
+        // Truly open orders: open in work order status, and not blocked by rejected or pending supply request
+        filtered = merged.filter(
+          (o) =>
+            o.status === WorkOrderStatus.Open &&
+            o.supplyRequest?.status !== SupplyRequestStatus.Rejected &&
+            o.supplyRequest?.status !== SupplyRequestStatus.PendingWarehouseApproval,
+        );
+      } else if (statusFilter === "rejected") {
+        filtered = merged.filter(
+          (o) => o.supplyRequest?.status === SupplyRequestStatus.Rejected,
+        );
+      } else if (statusFilter === "pending_supply") {
+        filtered = merged.filter(
+          (o) =>
+            o.supplyRequest?.status ===
+            SupplyRequestStatus.PendingWarehouseApproval,
+        );
+      }
+
+      setWorkOrders(filtered);
     } catch (err) {
       console.error(err);
     } finally {
@@ -87,7 +147,9 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
             className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 font-bold focus:outline-hidden"
           >
             <option value="all">جميع الحالات</option>
-            <option value="1">مفتوح (Open)</option>
+            <option value="1">مفتوح (جاهز)</option>
+            <option value="rejected">مرفوض (المستودع)</option>
+            <option value="pending_supply">بانتظار موافقة المستودع</option>
             <option value="2">قيد التنفيذ (InProgress)</option>
             <option value="3">مكتمل (Completed)</option>
             <option value="4">مغلق نهائياً (Closed)</option>
@@ -153,7 +215,7 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
               </tr>
             ) : (
               workOrders.map((order) => {
-                const statusCfg = workOrderStatusConfig[order.status];
+                const statusCfg = getWorkOrderEffectiveStatus(order.status, order.supplyRequest);
                 const isCompany = order.serviceSubjectType === 1;
 
                 return (
@@ -186,6 +248,11 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
                     <td className="p-3 text-center">
                       <span
                         className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusCfg?.border} ${statusCfg?.bg} ${statusCfg?.text}`}
+                        title={
+                          order.supplyRequest?.status === SupplyRequestStatus.Rejected
+                            ? `تم رفض طلب المواد: ${order.supplyRequest.rejectionReason || "من قبل المستودع"}`
+                            : statusCfg?.label
+                        }
                       >
                         {statusCfg?.label}
                       </span>
@@ -220,6 +287,7 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
         onClose={() => setCreateModalOpen(false)}
         onSaved={loadOrders}
         locations={locations}
+        items={items}
       />
 
       {/* Detail Modal */}

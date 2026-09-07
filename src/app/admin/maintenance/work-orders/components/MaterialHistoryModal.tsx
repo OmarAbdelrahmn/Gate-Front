@@ -73,8 +73,8 @@ export function MaterialHistoryModal({
                 <th className="p-3">نوع الاستخدام</th>
                 <th className="p-3 text-center">الكمية</th>
                 <th className="p-3 text-center">الحركة</th>
-                <th className="p-3 text-left">التكلفة الإجمالية (FIFO)</th>
-                <th className="p-3">توزيع طبقات التكلفة</th>
+                <th className="p-3 text-left">التكلفة الإجمالية</th>
+                <th className="p-3">تفاصيل التكلفة والتوريد</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">

@@ -14,13 +14,18 @@ export default function MaintenanceLayout({
   const canAccessAny =
     can("maintenance.locations.read") ||
     can("maintenance.work_orders.read") ||
+    can("maintenance.work_orders.manage") ||
     can("maintenance.oil.read") ||
     can("maintenance.external_jobs.read") ||
     can("maintenance.profit_reports.read") ||
     can("inventory.items.read") ||
     can("inventory.stock.read") ||
     can("inventory.cost_layers.read") ||
-    can("inventory.receipts.manage");
+    can("inventory.receipts.manage") ||
+    can("inventory.supply_requests.read") ||
+    can("inventory.supply_requests.submit") ||
+    can("inventory.supply_requests.approve") ||
+    can("inventory.stock.move");
 
   if (!canAccessAny) {
     return (

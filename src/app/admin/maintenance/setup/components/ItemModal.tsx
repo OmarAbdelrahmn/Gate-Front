@@ -359,7 +359,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
         <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-700 dark:text-blue-300">
           <Info size={16} className="shrink-0 mt-0.5" />
           <p>
-            تنويه نظام التكاليف: لا يتم تعيين سعر تكلفة ثابت للأصناف، بل يتم احتساب التكلفة تلقائياً بنظام الوارد أولاً صادر أولاً (FIFO) من واقع فواتير وإيصالات الشراء الفعلية.
+            تنويه نظام التكاليف: لا يتم تعيين سعر تكلفة ثابت للأصناف، بل يتم احتساب التكلفة تلقائياً من واقع فواتير وإيصالات الشراء الفعلية.
           </p>
         </div>
 
