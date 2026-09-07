@@ -13,10 +13,15 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { getSupplyRequests } from "@/lib/maintenance/api";
+import { getSupplyRequests, getStockBalances } from "@/lib/maintenance/api";
 import { getVehicles } from "@/lib/fleet/api";
 import { listRiders } from "@/lib/workforce/api";
-import type { SupplyRequest, MaintenanceLocation } from "@/lib/maintenance/types";
+import type {
+  SupplyRequest,
+  SupplyRequestLine,
+  MaintenanceLocation,
+  StockBalance,
+} from "@/lib/maintenance/types";
 import {
   SupplyRequestStatus,
   SupplyRequestSubjectType,
@@ -28,16 +33,20 @@ import {
   formatDateTime,
 } from "@/lib/maintenance/constants";
 import { SupplyRequestDetailModal } from "./SupplyRequestDetailModal";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface SupplyRequestsQueueViewProps {
   locations: MaintenanceLocation[];
 }
 
 export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewProps) {
+  const { can } = useAuth();
+  const canReadQueue = can("inventory.supply_requests.read");
   const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<SupplyRequest[]>([]);
+  const [balances, setBalances] = useState<StockBalance[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Filter state (Initial request defaults to pending per specs)
@@ -93,6 +102,11 @@ export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewPr
   };
 
   useEffect(() => {
+    if (!canReadQueue) {
+      setLoading(false);
+      return;
+    }
+
     let active = true;
     getSupplyRequests({
       status: statusFilter,
@@ -114,14 +128,150 @@ export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewPr
         }
       });
 
+    // Fetch stock balances across warehouses to resolve item unit costs
+    const balancePromises: Promise<StockBalance[]>[] = [
+      getStockBalances().catch(() => [] as StockBalance[]),
+    ];
+    if (locations && locations.length > 0) {
+      for (const loc of locations) {
+        balancePromises.push(
+          getStockBalances({ inventoryLocationId: loc.id }).catch(() => [] as StockBalance[]),
+        );
+      }
+    }
+    Promise.all(balancePromises)
+      .then((results) => {
+        if (active) {
+          const allBalances: StockBalance[] = [];
+          const seen = new Set<string>();
+          for (const list of results) {
+            if (Array.isArray(list)) {
+              for (const b of list) {
+                const key = `${b.inventoryLocationId}_${b.inventoryItemId}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  allBalances.push(b);
+                }
+              }
+            }
+          }
+          setBalances(allBalances);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       active = false;
     };
-  }, [statusFilter, locationFilter, vehicleFilter, riderFilter, refreshKey]);
+  }, [canReadQueue, statusFilter, locationFilter, vehicleFilter, riderFilter, refreshKey, locations]);
+
+  const resolveBalanceUnitCost = (b: StockBalance): number => {
+    if (b.reportingAverageUnitCost && b.reportingAverageUnitCost > 0) {
+      return b.reportingAverageUnitCost;
+    }
+    if (b.quantityOnHand > 0 && b.inventoryValue > 0) {
+      return b.inventoryValue / b.quantityOnHand;
+    }
+    return 0;
+  };
+
+  const getItemUnitCost = (itemId: string, locationId?: string, sku?: string): number => {
+    if (locationId) {
+      const exact = balances.find(
+        (b) =>
+          b.inventoryLocationId === locationId &&
+          (b.inventoryItemId === itemId || (sku && b.sku === sku)),
+      );
+      if (exact) {
+        const cost = resolveBalanceUnitCost(exact);
+        if (cost > 0) return cost;
+      }
+    }
+    const anyBal = balances.find(
+      (b) =>
+        (b.inventoryItemId === itemId || (sku && b.sku === sku)) &&
+        (b.reportingAverageUnitCost > 0 || (b.quantityOnHand > 0 && b.inventoryValue > 0)),
+    );
+    if (anyBal) {
+      const cost = resolveBalanceUnitCost(anyBal);
+      if (cost > 0) return cost;
+    }
+    return 0;
+  };
+
+  const getLineUnitCost = (line: SupplyRequestLine, locationId?: string): number => {
+    if (line.issuedQuantity > 0 && line.issuedCost > 0) {
+      return line.issuedCost / line.issuedQuantity;
+    }
+    if ((line as any).unitCost && Number((line as any).unitCost) > 0) {
+      return Number((line as any).unitCost);
+    }
+    if ((line as any).cost && Number((line as any).cost) > 0) {
+      return Number((line as any).cost);
+    }
+    if ((line as any).price && Number((line as any).price) > 0) {
+      return Number((line as any).price);
+    }
+    if ((line as any).estimatedUnitCost && Number((line as any).estimatedUnitCost) > 0) {
+      return Number((line as any).estimatedUnitCost);
+    }
+    const balCost = getItemUnitCost(line.inventoryItemId, locationId, line.sku);
+    if (balCost > 0) {
+      return balCost;
+    }
+    if (line.notes) {
+      const match = line.notes.match(
+        /(?:تكلفة الوحدة|unit\s*cost|سعر الوحدة|تكلفة|سعر)[:\s]+([\d.]+)/i,
+      );
+      if (match && !isNaN(Number(match[1]))) {
+        return Number(match[1]);
+      }
+    }
+    return 0;
+  };
+
+  const getLineTotalCost = (line: SupplyRequestLine, locationId?: string): number => {
+    if (line.issuedCost && Number(line.issuedCost) > 0) {
+      return Number(line.issuedCost);
+    }
+    const uCost = getLineUnitCost(line, locationId);
+    const qty = line.requestedQuantity || 1;
+    return uCost * qty;
+  };
+
+  const getRequestTotalCost = (req: SupplyRequest): number => {
+    if (req.totalIssuedCost && Number(req.totalIssuedCost) > 0) {
+      return Number(req.totalIssuedCost);
+    }
+    if (!req.lines || req.lines.length === 0) {
+      return (req as any).estimatedCost || (req as any).totalCost || 0;
+    }
+    const linesTotal = req.lines.reduce((sum, line) => {
+      return sum + getLineTotalCost(line, req.inventoryLocationId);
+    }, 0);
+    if (linesTotal > 0) {
+      return linesTotal;
+    }
+    return (req as any).estimatedCost || (req as any).totalCost || 0;
+  };
 
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };
+
+  if (!canReadQueue) {
+    return (
+      <div className="p-8 rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-center space-y-3" dir="rtl">
+        <PackageCheck size={36} className="mx-auto text-slate-400" />
+        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+          طابور طلبات صرف المستودع مخصص لمسؤولي المستودع
+        </h3>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          يتطلب هذا القسم صلاحية قراءة طلبات المستودع (inventory.supply_requests.read). يمكن لمسؤول المركبات متابعة حالة طلب الصرف من داخل تفاصيل أمر الصيانة، كما يمكن لمسؤول المناديب متابعة طلباته من شاشة طلب مستلزمات المناديب.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -346,7 +496,7 @@ export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewPr
 
                       {/* Cost */}
                       <td className="p-3 text-left font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {formatCurrency(req.totalIssuedCost || 0)}
+                        {formatCurrency(getRequestTotalCost(req))}
                       </td>
 
                       {/* Actions */}
@@ -373,29 +523,43 @@ export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewPr
                               تفاصيل الأصناف المطلوبة في الطلب {req.requestNumber}:
                             </span>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {req.lines.map((line, lIdx) => (
-                                <div
-                                  key={line.id || lIdx}
-                                  className="p-2 rounded-lg border border-[var(--border)] bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between text-xs"
-                                >
-                                  <div>
-                                    <div className="font-bold text-slate-800 dark:text-slate-200">
-                                      {line.itemNameAr}
+                              {req.lines.map((line, lIdx) => {
+                                const lineUnit = getLineUnitCost(line, req.inventoryLocationId);
+                                const lineTotal = getLineTotalCost(line, req.inventoryLocationId);
+                                return (
+                                  <div
+                                    key={line.id || lIdx}
+                                    className="p-2.5 rounded-lg border border-[var(--border)] bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between text-xs"
+                                  >
+                                    <div>
+                                      <div className="font-bold text-slate-800 dark:text-slate-200">
+                                        {line.itemNameAr}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-mono">{line.sku}</div>
+                                      {lineUnit > 0 && (
+                                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                          سعر الوحدة: {formatCurrency(lineUnit)}
+                                        </div>
+                                      )}
                                     </div>
-                                    <div className="text-[10px] text-slate-400 font-mono">{line.sku}</div>
-                                  </div>
-                                  <div className="text-left font-mono">
-                                    <span className="font-bold text-slate-900 dark:text-white">
-                                      {line.requestedQuantity} مطلوب
-                                    </span>
-                                    {line.issuedQuantity > 0 && (
-                                      <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">
-                                        {line.issuedQuantity} مصروف
+                                    <div className="text-left font-mono">
+                                      <span className="font-bold text-slate-900 dark:text-white">
+                                        {line.requestedQuantity} مطلوب
                                       </span>
-                                    )}
+                                      {lineTotal > 0 && (
+                                        <span className="block text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                          {formatCurrency(lineTotal)}
+                                        </span>
+                                      )}
+                                      {line.issuedQuantity > 0 && (
+                                        <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">
+                                          {line.issuedQuantity} مصروف
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         </td>

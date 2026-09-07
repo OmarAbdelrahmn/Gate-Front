@@ -248,6 +248,7 @@ export function WorkOrderDetailModal({
 
   // Handle Supply Request Cancel
   const [cancelSupplyLoading, setCancelSupplyLoading] = useState(false);
+  const [ownershipError, setOwnershipError] = useState(false);
   const handleCancelSupplyRequest = async () => {
     if (!order?.supplyRequest) return;
     const reason = prompt("يرجى إدخال سبب إلغاء طلب صرف المواد من المستودع:", "Wrong item selected");
@@ -262,8 +263,13 @@ export function WorkOrderDetailModal({
       });
       loadOrderDetails();
       onUpdated();
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error(err);
+      const code = err?.details?.errorCode || err?.details?.code;
+      if (code === "maintenance.supply_request_ownership") {
+        setOwnershipError(true);
+        alert("عفواً، لا يملك صلاحية إلغاء هذا الطلب سوى المستخدم الذي قام بإنشائه.");
+      }
       loadOrderDetails();
     } finally {
       setCancelSupplyLoading(false);
@@ -292,7 +298,7 @@ export function WorkOrderDetailModal({
   const isSupplyCancelled = supplyReq?.status === SupplyRequestStatus.Cancelled;
   const hasSupplyBlock = isSupplyPending || isSupplyRejected || isSupplyCancelled;
   const canStart = order.status === WorkOrderStatus.Open && !hasSupplyBlock;
-  const canCancelSupply = isSupplyPending && (can("inventory.supply_requests.submit") || canManage);
+  const canCancelSupply = isSupplyPending && !ownershipError && (can("inventory.supply_requests.submit") || canManage);
 
   return (
     <Modal
@@ -597,13 +603,13 @@ export function WorkOrderDetailModal({
           </div>
         )}
 
-        {/* Oil Change Specialized Wizard CTA */}
-        {isOilChangeOrder && isEditable && (
+        {/* Oil Change Legacy CTA only for External Vehicles (Company oil changes handled by warehouse approval) */}
+        {isOilChangeOrder && isEditable && order.serviceSubjectType === 2 && (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-800">
             <div className="flex items-center gap-3 text-amber-900 dark:text-amber-300">
               <Droplets size={24} className="text-amber-600" />
               <div>
-                <span className="font-bold text-sm block">أمر تغيير زيت محرك</span>
+                <span className="font-bold text-sm block">أمر تغيير زيت محرك (عميل خارجي)</span>
                 <span className="text-[11px] text-amber-800 dark:text-amber-400">
                   تحديد صنف الزيت، استهلاك البرميل المفتوح تلقائياً، والتحقق من كمية السيارة (3.5L / 4L مع الفلتر).
                 </span>
@@ -623,34 +629,71 @@ export function WorkOrderDetailModal({
         )}
 
         {/* Details & Costs Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-center">
-          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            <span className="text-[11px] text-slate-400 block">تكلفة المواد والقطع</span>
-            <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
-              {formatCurrency(order.actualMaterialCost)}
-            </span>
+        {order.serviceSubjectType === 1 ? (
+          /* Company / Internal Vehicle: actualTotalCost is labeled 'التكلفة الإجمالية' and contains issued material cost only; actualLaborCost is omitted */
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+            {order.estimatedCost > 0 && (
+              <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                <span className="text-[11px] text-slate-400 block">التكلفة التقديرية (محسوبة آلياً)</span>
+                <span className="text-sm font-black font-mono text-slate-700 dark:text-slate-300">
+                  {formatCurrency(order.estimatedCost)}
+                </span>
+              </div>
+            )}
+            <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              <span className="text-[11px] text-slate-400 block">تكلفة المواد والقطع الفعلية</span>
+              <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                {formatCurrency(order.actualMaterialCost)}
+              </span>
+            </div>
+            {order.actualOtherCost > 0 && (
+              <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                <span className="text-[11px] text-slate-400 block">تكاليف أخرى</span>
+                <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                  {formatCurrency(order.actualOtherCost)}
+                </span>
+              </div>
+            )}
+            <div className="p-3 rounded-xl border border-blue-200/80 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30">
+              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold block">
+                التكلفة الإجمالية
+              </span>
+              <span className="text-sm font-black font-mono text-blue-700 dark:text-blue-300">
+                {formatCurrency(order.actualTotalCost)}
+              </span>
+            </div>
           </div>
-          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            <span className="text-[11px] text-slate-400 block">تكلفة أجور اليد والعمالة</span>
-            <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
-              {formatCurrency(order.actualLaborCost)}
-            </span>
+        ) : (
+          /* Outside / External Customer Vehicle: full outside-work totals including actualLaborCost */
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-center">
+            <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              <span className="text-[11px] text-slate-400 block">تكلفة المواد والقطع</span>
+              <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                {formatCurrency(order.actualMaterialCost)}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              <span className="text-[11px] text-slate-400 block">تكلفة أجور اليد والعمالة</span>
+              <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                {formatCurrency(order.actualLaborCost)}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              <span className="text-[11px] text-slate-400 block">تكاليف أخرى</span>
+              <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                {formatCurrency(order.actualOtherCost)}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl border border-blue-200/80 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30">
+              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold block">
+                التكلفة الإجمالية الفعلية
+              </span>
+              <span className="text-sm font-black font-mono text-blue-700 dark:text-blue-300">
+                {formatCurrency(order.actualTotalCost)}
+              </span>
+            </div>
           </div>
-          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            <span className="text-[11px] text-slate-400 block">تكاليف أخرى</span>
-            <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
-              {formatCurrency(order.actualOtherCost)}
-            </span>
-          </div>
-          <div className="p-3 rounded-xl border border-blue-200/80 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30">
-            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold block">
-              التكلفة الإجمالية الفعلية
-            </span>
-            <span className="text-sm font-black font-mono text-blue-700 dark:text-blue-300">
-              {formatCurrency(order.actualTotalCost)}
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* Diagnosis & Notes */}
         {(order.diagnosis || order.notes) && (

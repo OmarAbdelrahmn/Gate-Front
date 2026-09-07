@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { CreateExternalOrderModal } from "./CreateExternalOrderModal";
 import { ExternalOrderBillingModal } from "./ExternalOrderBillingModal";
 import { WorkOrderDetailModal } from "../../work-orders/components/WorkOrderDetailModal";
-import { getWorkOrders } from "@/lib/maintenance/api";
+import { getExternalWorkOrders } from "@/lib/maintenance/api";
 import type {
   WorkOrder,
   MaintenanceLocation,
@@ -40,9 +40,7 @@ export function ExternalOrdersListView({ locations, items }: ExternalOrdersListV
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const data = await getWorkOrders({
-        serviceSubjectType: 2, // ExternalVehicle only
-      });
+      const data = await getExternalWorkOrders();
       setOrders(data);
     } catch (err) {
       console.error(err);

@@ -208,6 +208,12 @@ export function getFriendlyErrorMessage(
         return "بيانات هدف الخدمة غير صالحة (لا يمكن إرسال مركبة خارجية لعمليات الشركة أو العكس).";
       case "maintenance.invalid_oil_quantity":
         return "كمية الزيت المحددة غير صالحة لنوع المركبة المختار.";
+      case "maintenance.active_vehicle_work_order_exists":
+        return "توجد عملية صيانة نشطة حالياً لهذه المركبة (مفتوح أو قيد العمل أو مكتمل). لا يمكن إنشاء أمر صيانة جديد حتى إقفال أو إلغاء الأمر الحالي.";
+      case "maintenance.oil_change_request_required":
+        return "يلزم تعبئة بيانات طلب تغيير الزيت والفلتر ورقم العداد في نموذج أمر العمل وإعادة الإرسال.";
+      case "maintenance.labor_cost_external_vehicles_only":
+        return "أجور اليد والعمالة مقتصرة فقط على إصلاحات العملاء الخارجيين.";
     }
   }
 

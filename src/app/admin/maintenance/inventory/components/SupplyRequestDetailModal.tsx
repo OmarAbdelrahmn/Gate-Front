@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -8,11 +8,20 @@ import {
   getSupplyRequest,
   approveAndIssueSupplyRequest,
   rejectSupplyRequest,
+  getOilBarrels,
+  getStockBalances,
 } from "@/lib/maintenance/api";
-import type { SupplyRequest, MaintenanceLocation } from "@/lib/maintenance/types";
+import type {
+  SupplyRequest,
+  SupplyRequestLine,
+  MaintenanceLocation,
+  OilBarrel,
+  StockBalance,
+} from "@/lib/maintenance/types";
 import {
   SupplyRequestStatus,
   SupplyRequestSubjectType,
+  OilBarrelStatus,
 } from "@/lib/maintenance/types";
 import {
   supplyRequestStatusConfig,
@@ -30,6 +39,7 @@ import {
   User,
   Building2,
   AlertCircle,
+  Droplets,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -55,10 +65,13 @@ export function SupplyRequestDetailModal({
   const [request, setRequest] = useState<SupplyRequest | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
+  const [balancesMap, setBalancesMap] = useState<Record<string, StockBalance>>({});
 
   // Approval State
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
-  const [approveNotes, setApproveNotes] = useState("تم التسليم الفعلي للمستلم");
+  const [approveNotes, setApproveNotes] = useState("Handed to vehicle administrator");
+  const [nextOilBarrelId, setNextOilBarrelId] = useState<string | null>(null);
+  const [sealedBarrels, setSealedBarrels] = useState<OilBarrel[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
 
   // Rejection State
@@ -68,10 +81,12 @@ export function SupplyRequestDetailModal({
   const handleModalClose = () => {
     setShowApproveConfirm(false);
     setShowRejectForm(false);
-    setApproveNotes("تم التسليم الفعلي للمستلم");
+    setApproveNotes("Handed to vehicle administrator");
+    setNextOilBarrelId(null);
     setRejectNotes("");
     setRequest(null);
     setErrorMsg(null);
+    setBalancesMap({});
     onClose();
   };
 
@@ -91,6 +106,54 @@ export function SupplyRequestDetailModal({
         if (active) {
           setRequest(data);
           setLoading(false);
+
+          // Fetch warehouse stock balances to lookup average/standard unit cost for items
+          if (data?.inventoryLocationId) {
+            Promise.all([
+              getStockBalances({ inventoryLocationId: data.inventoryLocationId }).catch(() => [] as StockBalance[]),
+              getStockBalances().catch(() => [] as StockBalance[]),
+            ])
+              .then(([bLoc, bAll]) => {
+                if (active) {
+                  const bMap: Record<string, StockBalance> = {};
+                  if (Array.isArray(bAll)) {
+                    for (const b of bAll) {
+                      bMap[b.inventoryItemId] = b;
+                      if (b.sku) bMap[b.sku] = b;
+                    }
+                  }
+                  if (Array.isArray(bLoc)) {
+                    for (const b of bLoc) {
+                      bMap[b.inventoryItemId] = b;
+                      if (b.sku) bMap[b.sku] = b;
+                    }
+                  }
+                  setBalancesMap(bMap);
+                }
+              })
+              .catch(() => {});
+          }
+
+          // Check if request involves oil items to load candidate sealed barrels
+          const isOil = data?.lines?.some(
+            (l) =>
+              l.itemNameAr.includes("زيت") ||
+              (l.itemNameEn && l.itemNameEn.toLowerCase().includes("oil")) ||
+              l.sku.toLowerCase().includes("oil"),
+          );
+
+          if (isOil && data.inventoryLocationId) {
+            getOilBarrels({
+              inventoryLocationId: data.inventoryLocationId,
+              status: "Sealed",
+            })
+              .then((bData) => {
+                if (active && Array.isArray(bData)) {
+                  setSealedBarrels(bData.filter((b) => b.status === OilBarrelStatus.Sealed));
+                }
+              })
+              .catch(() => {});
+          }
         }
       })
       .catch((err: unknown) => {
@@ -106,6 +169,66 @@ export function SupplyRequestDetailModal({
     };
   }, [isOpen, requestId, refreshCount]);
 
+  // Helpers to resolve unit cost and calculate total line cost and total request cost
+  const getLineUnitCost = (line: SupplyRequestLine): number => {
+    if (line.issuedQuantity > 0 && line.issuedCost > 0) {
+      return line.issuedCost / line.issuedQuantity;
+    }
+    if ((line as any).unitCost && Number((line as any).unitCost) > 0) {
+      return Number((line as any).unitCost);
+    }
+    if ((line as any).cost && Number((line as any).cost) > 0) {
+      return Number((line as any).cost);
+    }
+    if ((line as any).price && Number((line as any).price) > 0) {
+      return Number((line as any).price);
+    }
+    if ((line as any).estimatedUnitCost && Number((line as any).estimatedUnitCost) > 0) {
+      return Number((line as any).estimatedUnitCost);
+    }
+    const bal = balancesMap[line.inventoryItemId] || (line.sku ? balancesMap[line.sku] : undefined);
+    if (bal) {
+      if (bal.reportingAverageUnitCost > 0) {
+        return bal.reportingAverageUnitCost;
+      }
+      if (bal.quantityOnHand > 0 && bal.inventoryValue > 0) {
+        return bal.inventoryValue / bal.quantityOnHand;
+      }
+    }
+    if (line.notes) {
+      const match = line.notes.match(
+        /(?:تكلفة الوحدة|unit\s*cost|سعر الوحدة|تكلفة|سعر)[:\s]+([\d.]+)/i,
+      );
+      if (match && !isNaN(Number(match[1]))) {
+        return Number(match[1]);
+      }
+    }
+    return 0;
+  };
+
+  const getLineTotalCost = (line: SupplyRequestLine): number => {
+    if (line.issuedCost && Number(line.issuedCost) > 0) {
+      return Number(line.issuedCost);
+    }
+    const uCost = getLineUnitCost(line);
+    const qty = line.requestedQuantity || 1;
+    return uCost * qty;
+  };
+
+  const totalCalculatedCost = useMemo(() => {
+    if (!request?.lines || request.lines.length === 0) {
+      return request?.totalIssuedCost || 0;
+    }
+    const sumOfLines = request.lines.reduce((sum, line) => {
+      return sum + getLineTotalCost(line);
+    }, 0);
+
+    if (request.totalIssuedCost > 0) {
+      return request.totalIssuedCost;
+    }
+    return sumOfLines > 0 ? sumOfLines : (request.totalIssuedCost || 0);
+  }, [request, balancesMap]);
+
   const handleApprove = async () => {
     if (!request) return;
     setActionLoading(true);
@@ -115,15 +238,35 @@ export function SupplyRequestDetailModal({
         occurredAtUtc: new Date().toISOString(),
         rowVersion: request.rowVersion,
         notes: approveNotes.trim() || null,
+        nextOilBarrelId: nextOilBarrelId || null,
       });
 
       setShowApproveConfirm(false);
       onActionCompleted();
       handleModalClose();
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error(err);
-      // Reload details to obtain fresh rowVersion / concurrency state
-      loadDetails();
+      const code = err?.details?.errorCode || err?.details?.code;
+      if (code === "maintenance.insufficient_stock") {
+        setErrorMsg(
+          "الرصيد في المستودع غير كافٍ لصرف كامل الطلب. لا يمكن صرف الطلب جزئياً ويظل الطلب معلقاً.",
+        );
+        setShowApproveConfirm(false);
+      } else if (code === "maintenance.concurrency_conflict") {
+        setErrorMsg(
+          "حدث تعارض في التحديث بالتزامن (تم تعديل الطلب مسبقاً). تم تحديث البيانات، يرجى المراجعة والتأكيد مجدداً.",
+        );
+        setShowApproveConfirm(false);
+        loadDetails();
+      } else if (code === "maintenance.supply_request_not_pending") {
+        setErrorMsg("حالة طلب الصرف لم تعد معلقة؛ تم اتخاذ إجراء عليها مسبقاً من قِبل مستخدم آخر.");
+        setShowApproveConfirm(false);
+        onActionCompleted();
+        loadDetails();
+      } else {
+        setErrorMsg(err?.message || "تعذر اعتماد وصرف الطلب.");
+        loadDetails();
+      }
     } finally {
       setActionLoading(false);
     }
@@ -145,10 +288,20 @@ export function SupplyRequestDetailModal({
       setShowRejectForm(false);
       onActionCompleted();
       handleModalClose();
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error(err);
-      // Reload details
-      loadDetails();
+      const code = err?.details?.errorCode || err?.details?.code;
+      if (code === "maintenance.concurrency_conflict") {
+        setErrorMsg("تم تعديل السجل بواسطة مستخدم آخر. يرجى إعادة المحاولة بعد التحديث.");
+        loadDetails();
+      } else if (code === "maintenance.supply_request_not_pending") {
+        setErrorMsg("تم اتخاذ إجراء على هذا الطلب مسبقاً.");
+        onActionCompleted();
+        loadDetails();
+      } else {
+        setErrorMsg(err?.message || "تعذر رفض الطلب.");
+        loadDetails();
+      }
     } finally {
       setActionLoading(false);
     }
@@ -214,8 +367,13 @@ export function SupplyRequestDetailModal({
               <div className="text-left">
                 <span className="text-[10px] text-slate-400 block">إجمالي تكلفة الصرف</span>
                 <span className="text-base font-black font-mono text-slate-800 dark:text-slate-200">
-                  {formatCurrency(request.totalIssuedCost || 0)}
+                  {formatCurrency(totalCalculatedCost)}
                 </span>
+                {isPending && totalCalculatedCost > 0 && !request.totalIssuedCost && (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-medium">
+                    (محسوبة من القطع والكميات)
+                  </span>
+                )}
               </div>
             </div>
 
@@ -315,7 +473,7 @@ export function SupplyRequestDetailModal({
               <h4 className="font-bold text-slate-900 dark:text-white flex items-center justify-between">
                 <span>الأصناف المطلوبة للتسليم ({request.lines?.length || 0})</span>
                 <span className="text-[11px] text-slate-400 font-normal">
-                  يتم تسليم كامل الكمية واحتساب التكلفة الفعلية تلقائياً
+                  يتم احتساب التكلفة آلياً بناءً على سعر قطع الغيار والكميات المطلوبة
                 </span>
               </h4>
 
@@ -327,48 +485,71 @@ export function SupplyRequestDetailModal({
                       <th className="p-2.5 font-mono">الرمز SKU</th>
                       <th className="p-2.5 text-center">الكمية المطلوبة</th>
                       <th className="p-2.5 text-center">الكمية المسلمة</th>
-                      <th className="p-2.5 text-left font-mono">التكلفة الفعلية</th>
+                      <th className="p-2.5 text-left font-mono">تكلفة الوحدة</th>
+                      <th className="p-2.5 text-left font-mono">إجمالي التكلفة</th>
                       <th className="p-2.5">الملاحظات والعهدة</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {request.lines?.map((line, idx) => (
-                      <tr key={line.id || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
-                        <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
-                          <div>{line.itemNameAr}</div>
-                          {line.itemNameEn && (
-                            <div className="text-[10px] text-slate-400 font-normal">{line.itemNameEn}</div>
-                          )}
-                        </td>
-                        <td className="p-2.5 font-mono text-slate-500 text-[11px]">{line.sku}</td>
-                        <td className="p-2.5 text-center font-mono font-bold text-slate-900 dark:text-white">
-                          {line.requestedQuantity}
-                        </td>
-                        <td className="p-2.5 text-center font-mono font-bold">
-                          <span
-                            className={
-                              line.issuedQuantity > 0
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-slate-400"
-                            }
-                          >
-                            {line.issuedQuantity}
-                          </span>
-                        </td>
-                        <td className="p-2.5 text-left font-mono font-bold">
-                          {formatCurrency(line.issuedCost || 0)}
-                        </td>
-                        <td className="p-2.5 text-slate-500 text-[11px]">
-                          {line.expectedReturn && (
-                            <span className="inline-block px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-bold text-[10px] ml-1">
-                              عهدة مستردة
+                    {request.lines?.map((line, idx) => {
+                      const lineKey = line.id || `line-${idx}`;
+                      const unitCost = getLineUnitCost(line);
+                      const lineTotal = getLineTotalCost(line);
+
+                      return (
+                        <tr key={lineKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                          <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
+                            <div>{line.itemNameAr}</div>
+                            {line.itemNameEn && (
+                              <div className="text-[10px] text-slate-400 font-normal">{line.itemNameEn}</div>
+                            )}
+                          </td>
+                          <td className="p-2.5 font-mono text-slate-500 text-[11px]">{line.sku}</td>
+                          <td className="p-2.5 text-center font-mono font-bold text-slate-900 dark:text-white">
+                            {line.requestedQuantity}
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-bold">
+                            <span
+                              className={
+                                line.issuedQuantity > 0
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-slate-400"
+                              }
+                            >
+                              {line.issuedQuantity}
                             </span>
-                          )}
-                          {line.notes || "-"}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="p-2.5 text-left font-mono font-bold text-slate-700 dark:text-slate-300">
+                            {formatCurrency(unitCost)}
+                          </td>
+                          <td className="p-2.5 text-left font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(lineTotal)}
+                          </td>
+                          <td className="p-2.5 text-slate-500 text-[11px]">
+                            {line.expectedReturn && (
+                              <span className="inline-block px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-bold text-[10px] ml-1">
+                                عهدة مستردة
+                              </span>
+                            )}
+                            {line.notes || "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
+                  {request.lines && request.lines.length > 0 && (
+                    <tfoot className="border-t-2 border-[var(--border)] bg-slate-50/80 dark:bg-slate-800/50 font-bold">
+                      <tr>
+                        <td colSpan={5} className="p-2.5 text-right font-black text-slate-800 dark:text-slate-200">
+                          إجمالي تكلفة قطع الغيار والمواد المحتسبة:
+                        </td>
+                        <td className="p-2.5 text-left font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                          {formatCurrency(totalCalculatedCost)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             </div>
@@ -382,11 +563,35 @@ export function SupplyRequestDetailModal({
                     <strong className="text-sm font-black block">
                       تأكيد التسليم الفعلي وخصم المخزون (Approve and Issue)
                     </strong>
-                    <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">
-                      أنت تؤكد أنه تم تسليم هذه الأصناف فعلياً للمستلم. سيقوم النظام بخصم الكميات واحتساب التكلفة آلياً من واقع المخزون، ولا يمكن الموافقة الجزئية على هذا الطلب.
+                    <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200 font-bold">
+                      أنت تؤكد أنه تم تسليم هذه الأصناف فعلياً للمستلم. سيقوم النظام بخصم الكميات واحتساب التكلفة آلياً باستخدام طريقة الوارد أولاً يصرف أولاً (FIFO)، ولا يمكن الموافقة الجزئية على هذا الطلب.
+                    </p>
+                    <p className="text-[11px] text-amber-800/80 dark:text-amber-300 font-mono">
+                      You are confirming that these items were physically handed over. The system will deduct stock using FIFO and cannot partially approve this request.
                     </p>
                   </div>
                 </div>
+
+                {sealedBarrels.length > 0 && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-200 mb-1 flex items-center gap-1.5">
+                      <Droplets size={13} className="text-amber-600" />
+                      <span>برميل الزيت الاحتياطي / التالي (اختياري - في حال عدم كفاية البرميل المفتوح الحالي)</span>
+                    </label>
+                    <select
+                      value={nextOilBarrelId || ""}
+                      onChange={(e) => setNextOilBarrelId(e.target.value || null)}
+                      className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 p-2 text-xs font-mono font-bold focus:outline-hidden"
+                    >
+                      <option value="">-- الاعتماد على البرميل المفتوح الحالي تلقائياً --</option>
+                      {sealedBarrels.map((barrel) => (
+                        <option key={barrel.id} value={barrel.id}>
+                          برميل رقم {barrel.barrelNumber} - سعة {barrel.nominalCapacityLiters} لتر (المتبقي: {barrel.remainingLiters} لتر)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-200 mb-1">
@@ -395,7 +600,7 @@ export function SupplyRequestDetailModal({
                   <Input
                     value={approveNotes}
                     onChange={(e) => setApproveNotes(e.target.value)}
-                    placeholder="تم تسليم القطع للمسؤول / المستلم..."
+                    placeholder="Handed to vehicle administrator"
                     className="text-xs bg-white dark:bg-slate-900"
                   />
                 </div>

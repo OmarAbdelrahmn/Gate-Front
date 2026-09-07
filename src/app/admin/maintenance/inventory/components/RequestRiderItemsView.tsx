@@ -100,6 +100,7 @@ export function RequestRiderItemsView({
   // Last submitted or active request
   const [submittedRequest, setSubmittedRequest] = useState<SupplyRequest | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [ownershipError, setOwnershipError] = useState(false);
 
   // Deep linking for viewing a personal request
   useEffect(() => {
@@ -234,6 +235,7 @@ export function RequestRiderItemsView({
       // Fetch fresh details via personal request endpoint per specs
       const fresh = await getMySupplyRequest(created.id);
       setSubmittedRequest(fresh);
+      setOwnershipError(false);
 
       // Reset form lines
       setLines([
@@ -271,8 +273,13 @@ export function RequestRiderItemsView({
 
       const updated = await getMySupplyRequest(req.id);
       setSubmittedRequest(updated);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const code = err?.details?.errorCode || err?.details?.code;
+      if (code === "maintenance.supply_request_ownership") {
+        setOwnershipError(true);
+        alert("عفواً، لا يملك صلاحية إلغاء هذا الطلب سوى المستخدم الذي قام بإنشائه.");
+      }
     } finally {
       setCancelLoading(false);
     }

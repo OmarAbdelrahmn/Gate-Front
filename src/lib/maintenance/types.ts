@@ -591,6 +591,7 @@ export interface ApproveAndIssueSupplyRequestDto {
   occurredAtUtc: string;
   rowVersion: string;
   notes?: string | null;
+  nextOilBarrelId?: string | null;
 }
 
 export interface RejectSupplyRequestDto {
@@ -657,6 +658,13 @@ export interface CreateCompanyWorkOrderRequest {
   notes?: string | null;
   externalVehicle: null;
   supplyRequest?: CreateSupplyRequestDto | null;
+  oilChange?: {
+    inventoryLocationId: string;
+    oilInventoryItemId: string;
+    oilFilterChanged: boolean;
+    oilFilterInventoryItemId?: string | null;
+    notes?: string | null;
+  } | null;
 }
 
 export interface CreateExternalWorkOrderRequest {

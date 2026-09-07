@@ -343,7 +343,12 @@ export async function approveAndIssueSupplyRequest(
 ): Promise<SupplyRequest> {
   return authFetch<SupplyRequest>(`/api/maintenance-inventory/supply-requests/${id}/approve-and-issue`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      occurredAtUtc: payload.occurredAtUtc,
+      rowVersion: payload.rowVersion,
+      notes: payload.notes ?? null,
+      nextOilBarrelId: payload.nextOilBarrelId ?? null,
+    }),
     notifySuccess: "تم اعتماد وصرف الطلب بنجاح وتحديث أرصدة المخزون",
   });
 }
@@ -387,6 +392,17 @@ export async function getWorkOrders(params?: {
   if (params?.serviceSubjectType) query.set("serviceSubjectType", String(params.serviceSubjectType));
   const qStr = query.toString();
   return authFetch<WorkOrder[]>(`/api/maintenance-work-orders${qStr ? `?${qStr}` : ""}`);
+}
+
+export async function getExternalWorkOrders(params?: {
+  maintenanceLocationId?: string;
+  status?: string;
+}): Promise<WorkOrder[]> {
+  const query = new URLSearchParams();
+  if (params?.maintenanceLocationId) query.set("maintenanceLocationId", params.maintenanceLocationId);
+  if (params?.status) query.set("status", params.status);
+  const qStr = query.toString();
+  return authFetch<WorkOrder[]>(`/api/maintenance-work-orders/external${qStr ? `?${qStr}` : ""}`);
 }
 
 export async function getWorkOrder(id: string): Promise<WorkOrder> {

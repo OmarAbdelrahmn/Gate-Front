@@ -62,6 +62,7 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
     try {
       const isCustomStatus =
         statusFilter === "rejected" || statusFilter === "pending_supply";
+      const canReadSupply = can("inventory.supply_requests.read");
       const [data, supplyRequests] = await Promise.all([
         getWorkOrders({
           maintenanceLocationId: locationFilter || undefined,
@@ -70,7 +71,7 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
           serviceSubjectType:
             subjectFilter === "all" ? undefined : Number(subjectFilter),
         }),
-        getSupplyRequests().catch(() => []),
+        canReadSupply ? getSupplyRequests().catch(() => []) : Promise.resolve([]),
       ]);
 
       const supplyMap = new Map<string, SupplyRequest>();
