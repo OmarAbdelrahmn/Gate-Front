@@ -515,7 +515,7 @@ export const downloadWorkflowSourceDocument = (id: string, kind: "iqama" | "lice
   authDownload(`/api/vehicle-accidents/${id}/workflow/documents/${kind}/download`);
 
 export const createWorkflowInstallment = (id: string, payload: T.CreateWorkflowInstallmentRequest) =>
-  authFetch<T.VehicleAccidentInstallment>(`/api/vehicle-accidents/${id}/workflow/installments`, {
+  authFetch<T.VehicleAccidentWorkflowDetailResponse>(`/api/vehicle-accidents/${id}/workflow/installments`, {
     method: "POST",
     body: JSON.stringify(payload),
     notifySuccess: "تم تسجيل القسط بنجاح",

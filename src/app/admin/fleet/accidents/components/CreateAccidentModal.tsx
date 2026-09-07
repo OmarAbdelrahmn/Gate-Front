@@ -311,12 +311,10 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
         // Toast notification when choosing vehicle with real rider
         toast.warning(
           "تنبيه: المندوب الفعلي (Actual Rider)",
-          `المركبة مسجل عليها تفويض بمندوب فعلي: ${detectedRealRider.name}${
-            detectedRealRider.iqamaNo ? ` (رقم الإقامة: ${detectedRealRider.iqamaNo})` : ""
-          }${
-            detectedRealRider.relationshipToAssignedRider
-              ? ` - صلة القرابة: ${detectedRealRider.relationshipToAssignedRider}`
-              : ""
+          `المركبة مسجل عليها تفويض بمندوب فعلي: ${detectedRealRider.name}${detectedRealRider.iqamaNo ? ` (رقم الإقامة: ${detectedRealRider.iqamaNo})` : ""
+          }${detectedRealRider.relationshipToAssignedRider
+            ? ` - صلة القرابة: ${detectedRealRider.relationshipToAssignedRider}`
+            : ""
           }`
         );
       } else if (targetRiderId && targetRiderName) {
@@ -425,17 +423,14 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
                   <button
                     type="button"
                     onClick={() => {
-                      const noteText = `(المندوب الفعلي وقت الحادث: ${realRiderNotice.name}${
-                        realRiderNotice.iqamaNo ? ` - إقامة: ${realRiderNotice.iqamaNo}` : ""
-                      }${
-                        realRiderNotice.relationshipToAssignedRider
+                      const noteText = `(المندوب الفعلي وقت الحادث: ${realRiderNotice.name}${realRiderNotice.iqamaNo ? ` - إقامة: ${realRiderNotice.iqamaNo}` : ""
+                        }${realRiderNotice.relationshipToAssignedRider
                           ? ` - صلة القرابة: ${realRiderNotice.relationshipToAssignedRider}`
                           : ""
-                      }${
-                        realRiderNotice.permissionReference
+                        }${realRiderNotice.permissionReference
                           ? ` - مرجع التفويض: ${realRiderNotice.permissionReference}`
                           : ""
-                      })`;
+                        })`;
                       setFormData((prev) => ({
                         ...prev,
                         narrative: prev.narrative

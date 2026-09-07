@@ -114,15 +114,15 @@ export function WorkflowActionModal({
         setOtherParties(workflow.fault?.otherParties || []);
       }
 
-      // Action 4 defaults: if 100% rider fault and non-minor, fee is 2500
+      // Action 4 defaults: if 100% rider fault and non-minor, fee is 2500 (locked)
       const is100Rider = (workflow.fault?.riderFaultPercentage ?? 0) === 100;
       const isNonMinor = (accident?.summary?.severity ?? 1) > 1;
       if (action === VehicleAccidentWorkflowAction.OpenClaim && is100Rider && isNonMinor) {
         setAmount(2500);
       } else if (action === VehicleAccidentWorkflowAction.SubmitInstallmentRefund) {
-        setAmount(workflow.refund?.totalEligibleRefundAmount ?? 0);
+        setAmount(workflow.refund?.recordedEligibleAmount ?? 0);
       } else if (action === VehicleAccidentWorkflowAction.ConfirmTransfer) {
-        setAmount(workflow.settlement?.compensationOfferAmount ?? "");
+        setAmount(workflow.settlement?.amount ?? "");
       } else {
         setAmount("");
       }
@@ -474,8 +474,11 @@ export function WorkflowActionModal({
           </div>
         )}
 
-        {/* Amount: Action 2, 6, 11, 20, 21, 22, 23 */}
+        {/* Amount: Action 2, 4 (if 100% rider + non-minor), 6, 11, 20, 21, 22, 23 */}
         {(action === VehicleAccidentWorkflowAction.StartLocalRepair ||
+          (action === VehicleAccidentWorkflowAction.OpenClaim &&
+            (workflow.fault?.riderFaultPercentage ?? 0) === 100 &&
+            (accident?.summary?.severity ?? 1) > 1) ||
           action === VehicleAccidentWorkflowAction.ReceiveCompensationOffer ||
           action === VehicleAccidentWorkflowAction.ConfirmTransfer ||
           action === VehicleAccidentWorkflowAction.RecordValuation ||
@@ -496,7 +499,9 @@ export function WorkflowActionModal({
               required={action !== VehicleAccidentWorkflowAction.FollowUp}
               disabled={
                 action === VehicleAccidentWorkflowAction.SubmitInstallmentRefund ||
-                action === VehicleAccidentWorkflowAction.ConfirmTransfer
+                (action === VehicleAccidentWorkflowAction.OpenClaim &&
+                  (workflow.fault?.riderFaultPercentage ?? 0) === 100 &&
+                  (accident?.summary?.severity ?? 1) > 1)
               }
             />
           </div>

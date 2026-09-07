@@ -126,7 +126,7 @@ export function CloseAccidentModal({
   const isWorkflowCompleted =
     workflowDetail?.stage === VehicleAccidentWorkflowStage.Completed;
 
-  const refundStatus = workflowDetail?.refund?.refundStatus;
+  const refundStatus = workflowDetail?.refund?.status;
   const isRefundSettled =
     refundStatus === VehicleAccidentRefundStatus.Received ||
     refundStatus === VehicleAccidentRefundStatus.Rejected ||

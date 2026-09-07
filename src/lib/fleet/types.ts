@@ -866,8 +866,8 @@ export interface VehicleAccidentSummaryResponse {
   accidentNumber: string;
   vehicleId: string;
   riderProfileId: string;
-  assignmentId?: string | null;
-  issueId?: string | null;
+  riderVehicleAssignmentId?: string | null;
+  vehicleIssueId?: string | null;
   occurredAtUtc: string;
   severity: VehicleAccidentSeverity;
   isDrivable: boolean;
@@ -888,8 +888,8 @@ export interface VehicleAccidentDetailResponse {
   damageDescription?: string | null;
   faultAssessment?: string | null;
   narrative: string;
-  evidenceAttachments: VehicleAccidentAttachmentResponse[];
-  reportVersions: VehicleAccidentReportVersionResponse[];
+  attachments: VehicleAccidentAttachmentResponse[];
+  reports: VehicleAccidentReportVersionResponse[];
 }
 
 export interface CreateVehicleAccidentRequest {
@@ -917,7 +917,8 @@ export interface VehicleAccidentAttachmentResponse {
   evidenceType: VehicleAccidentEvidenceType;
   originalFileName: string;
   contentType: string;
-  sizeBytes: number;
+  fileSizeBytes: number;
+  sha256Checksum?: string | null;
   uploadedAtUtc: string;
   description?: string | null;
   fromLocation?: string | null;
@@ -943,17 +944,27 @@ export interface SourceDocumentInfo {
 
 export interface WorkflowTimelineEntry {
   id?: string;
-  action: VehicleAccidentWorkflowAction;
+  /** Action enum value (same as VehicleAccidentWorkflowAction) */
+  eventType?: VehicleAccidentWorkflowAction | null;
+  /** Kept for backward compatibility */
+  action?: VehicleAccidentWorkflowAction | null;
   actionName?: string;
   occurredAtUtc: string;
+  actorUserId?: string | null;
+  /** Kept for backward compatibility */
   performedByUserId?: string | null;
   performedByUserName?: string | null;
-  notes: string;
+  /** Reason / notes for this timeline entry */
+  reason?: string | null;
+  /** Kept for backward compatibility */
+  notes?: string | null;
   stageBefore?: VehicleAccidentWorkflowStage | null;
   stageAfter?: VehicleAccidentWorkflowStage | null;
   attachmentId?: string | null;
   amount?: number | null;
   reference?: string | null;
+  snapshotJson?: string | null;
+  /** Kept for backward compatibility */
   dataSnapshotJson?: string | null;
 }
 
@@ -974,16 +985,21 @@ export interface VehicleAccidentWorkflowSummary {
   id: string;
   accidentId: string;
   accidentNumber: string;
+  trafficReportNumber?: string | null;
   vehicleId: string;
   vehiclePlate?: string | null;
   vehicleAssetNumber?: string | null;
   riderProfileId: string;
   riderName?: string | null;
   stage: VehicleAccidentWorkflowStage;
+  requestedClaimType?: VehicleAccidentClaimType | null;
+  outcome?: VehicleAccidentClaimResponseType | null;
+  claimNumber?: string | null;
   externalReference?: string | null;
   supplierId?: string | null;
   supplierName?: string | null;
   occurredAtUtc: string;
+  incidentEndedAtUtc?: string | null;
   deadlineAtUtc?: string | null;
   remainingSeconds?: number | null;
   isOverdue: boolean;
@@ -1007,37 +1023,49 @@ export interface VehicleAccidentWorkflowDetailResponse {
     najmAttachmentId?: string | null;
     assessedAtUtc?: string | null;
     notes?: string | null;
-  } | null;
-  claim?: {
-    claimType?: VehicleAccidentClaimType | null;
-    responseClaimType?: VehicleAccidentClaimResponseType | null;
-    reference?: string | null;
-    supplierId?: string | null;
-    supplierName?: string | null;
+    damageAssessment?: string | null;
+    estimatedRepairCost?: number | null;
+    damagePromissoryNoteAttachmentId?: string | null;
     openingFeeAmount?: number | null;
     openingFeeAttachmentId?: string | null;
-    submissionReportAttachmentId?: string | null;
+    openingFeePaidAtUtc?: string | null;
+  } | null;
+  claim?: {
+    /** Requested claim type (Repair=1, Compensation=2) */
+    requestedType?: VehicleAccidentClaimType | null;
+    /** Actual response type from insurer (Repair=1, Compensation=2, TotalLoss=3) */
+    outcome?: VehicleAccidentClaimResponseType | null;
+    /** Claim reference/number from insurer */
+    number?: string | null;
+    supplierId?: string | null;
+    supplierName?: string | null;
+    submissionAttachmentId?: string | null;
     submittedAtUtc?: string | null;
     notes?: string | null;
   } | null;
   settlement?: {
-    compensationOfferAmount?: number | null;
-    compensationOfferReceiptAttachmentId?: string | null;
+    /** Compensation offer / assessment amount */
+    amount?: number | null;
+    assessmentReceiptAttachmentId?: string | null;
     insuranceSubmittedAtUtc?: string | null;
+    insuranceDueAtUtc?: string | null;
+    insuranceRespondedAtUtc?: string | null;
     insuranceDecision?: "Approved" | "Rejected" | string | null;
+    insuranceRejectionReason?: string | null;
     insuranceDecisionAttachmentId?: string | null;
     paymentReceiptAttachmentId?: string | null;
     supplierSubmittedAtUtc?: string | null;
+    supplierTransferDueAtUtc?: string | null;
     supplierSubmissionAttachmentId?: string | null;
     transferReceiptAttachmentId?: string | null;
-    transferredAmount?: number | null;
-    transferredAtUtc?: string | null;
+    transferReceivedAtUtc?: string | null;
+    transferReceivedAmount?: number | null;
   } | null;
   repair?: {
     repairDirectionAttachmentId?: string | null;
-    repairLocation?: string | null;
-    repairContact?: string | null;
-    repairStartedAtUtc?: string | null;
+    location?: string | null;
+    contact?: string | null;
+    startedAtUtc?: string | null;
     repairCompletionAttachmentId?: string | null;
     completedAtUtc?: string | null;
     progressUpdates?: Array<{
@@ -1045,26 +1073,22 @@ export interface VehicleAccidentWorkflowDetailResponse {
       occurredAtUtc: string;
       attachmentId?: string | null;
     }> | null;
-  } | null;
-  totalLoss?: {
-    proposedAtUtc?: string | null;
-    proposalAttachmentId?: string | null;
     reinspectionLocation?: string | null;
     reinspectionAppointmentAtUtc?: string | null;
     totalLossConfirmedAtUtc?: string | null;
-    totalLossConfirmationAttachmentId?: string | null;
     vehicleCollectedAtUtc?: string | null;
-    vehicleCollectionReceiptAttachmentId?: string | null;
-    valuationAmount?: number | null;
-    valuationReceiptAttachmentId?: string | null;
   } | null;
   refund?: {
     installments: VehicleAccidentInstallment[];
-    totalEligibleRefundAmount: number;
-    refundStatus: VehicleAccidentRefundStatus;
-    refundReference?: string | null;
-    refundRequestedAmount?: number | null;
-    refundReceivedAmount?: number | null;
+    /** Total eligible refund amount across all recorded installments */
+    recordedEligibleAmount: number;
+    recordedPaidAmount: number;
+    status: VehicleAccidentRefundStatus;
+    reference?: string | null;
+    requestedAmount?: number | null;
+    receivedAmount?: number | null;
+    submittedAtUtc?: string | null;
+    receivedAtUtc?: string | null;
     refundRequestAttachmentId?: string | null;
     refundReceiptAttachmentId?: string | null;
     refundDecisionAttachmentId?: string | null;
@@ -1095,6 +1119,7 @@ export interface WorkflowActionRequest {
   contact?: string | null;
   appointmentAtUtc?: string | null;
 }
+
 
 export interface CreateWorkflowInstallmentRequest {
   rowVersion: string;
@@ -1132,11 +1157,15 @@ export interface CorrectVehicleAccidentRequest {
 
 export interface VehicleAccidentReportVersionResponse {
   id: string;
-  accidentId: string;
+  accidentId?: string | null;
   versionNumber: number;
+  reportNumber?: string | null;
+  fileSizeBytes?: number | null;
+  sha256Checksum?: string | null;
   generatedAtUtc: string;
   generatedByUserId?: string | null;
-  reason?: string | null;
+  supersedesReportVersionId?: string | null;
+  correctionReason?: string | null;
 }
 
 export interface VehicleReadinessResponse {

@@ -69,7 +69,7 @@ export function SupplyRequestDetailModal({
 
   // Approval State
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
-  const [approveNotes, setApproveNotes] = useState("Handed to vehicle administrator");
+  const [approveNotes, setApproveNotes] = useState("تسليم للمسؤول الإداري للمركبة");
   const [nextOilBarrelId, setNextOilBarrelId] = useState<string | null>(null);
   const [sealedBarrels, setSealedBarrels] = useState<OilBarrel[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
@@ -81,7 +81,7 @@ export function SupplyRequestDetailModal({
   const handleModalClose = () => {
     setShowApproveConfirm(false);
     setShowRejectForm(false);
-    setApproveNotes("Handed to vehicle administrator");
+    setApproveNotes("تسليم للمسؤول الإداري للمركبة");
     setNextOilBarrelId(null);
     setRejectNotes("");
     setRequest(null);
@@ -561,14 +561,12 @@ export function SupplyRequestDetailModal({
                   <AlertTriangle size={24} className="text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <strong className="text-sm font-black block">
-                      تأكيد التسليم الفعلي وخصم المخزون (Approve and Issue)
+                      تأكيد التسليم الفعلي وخصم المخزون
                     </strong>
                     <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200 font-bold">
                       أنت تؤكد أنه تم تسليم هذه الأصناف فعلياً للمستلم. سيقوم النظام بخصم الكميات واحتساب التكلفة آلياً باستخدام طريقة الوارد أولاً يصرف أولاً (FIFO)، ولا يمكن الموافقة الجزئية على هذا الطلب.
                     </p>
-                    <p className="text-[11px] text-amber-800/80 dark:text-amber-300 font-mono">
-                      You are confirming that these items were physically handed over. The system will deduct stock using FIFO and cannot partially approve this request.
-                    </p>
+
                   </div>
                 </div>
 
@@ -600,7 +598,7 @@ export function SupplyRequestDetailModal({
                   <Input
                     value={approveNotes}
                     onChange={(e) => setApproveNotes(e.target.value)}
-                    placeholder="Handed to vehicle administrator"
+                    placeholder="تسليم للمسؤول الإداري للمركبة"
                     className="text-xs bg-white dark:bg-slate-900"
                   />
                 </div>
@@ -694,7 +692,7 @@ export function SupplyRequestDetailModal({
                     className="text-xs h-9"
                   >
                     <XCircle size={14} />
-                    رفض الطلب (Reject)
+                    رفض الطلب
                   </Button>
                   <Button
                     variant="primary"
@@ -702,7 +700,7 @@ export function SupplyRequestDetailModal({
                     className="text-xs h-9 bg-emerald-600 hover:bg-emerald-700"
                   >
                     <CheckCircle size={14} />
-                    اعتماد وصرف (Approve & Issue)
+                    اعتماد وصرف
                   </Button>
                 </div>
               )}

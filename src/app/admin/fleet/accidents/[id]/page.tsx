@@ -182,7 +182,7 @@ export default function AccidentDetailPage() {
 
   const stageColor = getWorkflowStageColor(workflow.stage);
   const timer = formatCountdownTimer(remainingSecs);
-  const refund = formatRefundStatus(workflow.refund?.refundStatus);
+  const refund = formatRefundStatus(workflow.refund?.status);
 
   // Towing items
   const towingAttachments = workflow.attachments.filter(
@@ -782,14 +782,14 @@ export default function AccidentDetailPage() {
                     <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                       <span className="text-slate-500">نوع المطالبة المطلوبة:</span>
                       <span className="font-bold">
-                        {workflow.claim.claimType === 1 ? "إصلاح المركبة" : "طلب تعويض مالي"}
+                        {workflow.claim.requestedType === 1 ? "إصلاح المركبة" : "طلب تعويض مالي"}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                       <span className="text-slate-500">رقم المطالبة (المرجع):</span>
                       <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {workflow.claim.reference || "لم يُسجل بعد"}
+                        {workflow.claim.number || "لم يُسجل بعد"}
                       </span>
                     </div>
 
@@ -798,10 +798,10 @@ export default function AccidentDetailPage() {
                       <span className="font-bold">{workflow.claim.supplierName || "الشركة الافتراضية"}</span>
                     </div>
 
-                    {workflow.claim.openingFeeAmount && (
+                    {workflow.fault?.openingFeeAmount && (
                       <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800 text-amber-700 dark:text-amber-300 font-bold">
                         <span>رسوم فتح المطالبة المدفوعة:</span>
-                        <span>{workflow.claim.openingFeeAmount} ريال</span>
+                        <span>{workflow.fault.openingFeeAmount} ريال</span>
                       </div>
                     )}
                   </>
@@ -811,10 +811,10 @@ export default function AccidentDetailPage() {
 
                 {workflow.settlement && (
                   <>
-                    {workflow.settlement.compensationOfferAmount && (
+                    {workflow.settlement.amount && (
                       <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800 font-bold text-purple-700">
                         <span>مبلغ عرض التعويض:</span>
-                        <span>{workflow.settlement.compensationOfferAmount} ريال</span>
+                        <span>{workflow.settlement.amount} ريال</span>
                       </div>
                     )}
 
@@ -833,10 +833,10 @@ export default function AccidentDetailPage() {
                       </div>
                     )}
 
-                    {workflow.settlement.transferredAmount && (
+                    {workflow.settlement.transferReceivedAmount && (
                       <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800 font-bold text-emerald-700">
                         <span>المبلغ المستلم بحساب شركتنا:</span>
-                        <span>{workflow.settlement.transferredAmount} ريال</span>
+                        <span>{workflow.settlement.transferReceivedAmount} ريال</span>
                       </div>
                     )}
                   </>
@@ -1113,7 +1113,7 @@ export default function AccidentDetailPage() {
               <p className="text-xs text-slate-500 mt-1">
                 مدة تعطل المركبة: <strong>{workflow.incidentCalendarDays} أيام</strong> | إجمالي المبالغ المؤهلة:{" "}
                 <strong className="text-purple-600 font-mono font-bold">
-                  {workflow.refund?.totalEligibleRefundAmount ?? 0} ريال
+                  {workflow.refund?.recordedEligibleAmount ?? 0} ريال
                 </strong>
               </p>
             </div>
@@ -1128,8 +1128,8 @@ export default function AccidentDetailPage() {
                     <Plus className="h-4 w-4" /> إضافة قسط مدفوع
                   </Button>
 
-                  {workflow.refund?.refundStatus === VehicleAccidentRefundStatus.NotSubmitted &&
-                    (workflow.refund?.totalEligibleRefundAmount ?? 0) > 0 && (
+                  {workflow.refund?.status === VehicleAccidentRefundStatus.NotSubmitted &&
+                    (workflow.refund?.recordedEligibleAmount ?? 0) > 0 && (
                       <Button
                         onClick={() => handleOpenAction(VehicleAccidentWorkflowAction.SubmitInstallmentRefund)}
                         className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
@@ -1138,7 +1138,7 @@ export default function AccidentDetailPage() {
                       </Button>
                     )}
 
-                  {workflow.refund?.refundStatus === VehicleAccidentRefundStatus.Submitted && (
+                  {workflow.refund?.status === VehicleAccidentRefundStatus.Submitted && (
                     <div className="flex gap-2">
                       <Button
                         onClick={() => handleOpenAction(VehicleAccidentWorkflowAction.ReceiveInstallmentRefund)}
@@ -1155,7 +1155,7 @@ export default function AccidentDetailPage() {
                     </div>
                   )}
 
-                  {workflow.refund?.refundStatus === VehicleAccidentRefundStatus.NotSubmitted && (
+                  {workflow.refund?.status === VehicleAccidentRefundStatus.NotSubmitted && (
                     <Button
                       variant="secondary"
                       onClick={() => handleOpenAction(VehicleAccidentWorkflowAction.MarkNoInstallments)}
@@ -1248,7 +1248,7 @@ export default function AccidentDetailPage() {
                       {formatEvidenceType(att.evidenceType)}
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
-                      {(att.sizeBytes / 1024).toFixed(1)} KB
+                      {((att.fileSizeBytes ?? 0) / 1024).toFixed(1)} KB
                     </span>
                   </div>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
@@ -1295,14 +1295,14 @@ export default function AccidentDetailPage() {
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-900 dark:text-white">
-                          {formatWorkflowActionName(entry.action)}
+                          {formatWorkflowActionName(entry.eventType ?? entry.action ?? 0 as any)}
                         </span>
                         <span className="text-[11px] font-mono text-slate-400">
                           {new Date(entry.occurredAtUtc).toLocaleString("ar-SA")}
                         </span>
                       </div>
                       <p className="text-xs text-slate-600 dark:text-slate-300">
-                        {entry.notes}
+                        {entry.reason ?? entry.notes}
                       </p>
                       {entry.performedByUserName && (
                         <span className="text-[10px] text-slate-400 block pt-1">
