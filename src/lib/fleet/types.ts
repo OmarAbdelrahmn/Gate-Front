@@ -893,10 +893,11 @@ export interface VehicleAccidentDetailResponse {
 }
 
 export interface CreateVehicleAccidentRequest {
+  accidentNumber: string;
   vehicleId: string;
   riderProfileId: string;
   occurredAtUtc: string;
-  locationDescription: string;
+  locationDescription?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   policeReportNumber: string;
@@ -906,9 +907,9 @@ export interface CreateVehicleAccidentRequest {
   hasInjuries: boolean;
   injuryDetails?: string | null;
   thirdPartyDetails?: string | null;
-  damageDescription: string;
+  damageDescription?: string | null;
   faultAssessment?: string | null;
-  narrative: string;
+  narrative?: string | null;
 }
 
 export interface VehicleAccidentAttachmentResponse {

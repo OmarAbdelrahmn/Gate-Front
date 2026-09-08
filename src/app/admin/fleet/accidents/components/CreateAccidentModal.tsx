@@ -21,7 +21,14 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
-import { UserCheck, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
+import {
+  UserCheck,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  ChevronDown,
+  SlidersHorizontal,
+} from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -56,8 +63,10 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
   const [assignedRiderName, setAssignedRiderName] = useState("");
   const [realRiderNotice, setRealRiderNotice] = useState<RealRiderNotice | null>(null);
   const [loadingVehicleInfo, setLoadingVehicleInfo] = useState(false);
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
 
   const [formData, setFormData] = useState({
+    accidentNumber: "",
     vehicleId: "",
     riderProfileId: "",
     occurredAtUtc: getLocalDatetimeString(),
@@ -76,9 +85,21 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
     narrative: "",
   });
 
+  const hasAnyOptionalFilled = Boolean(
+    formData.locationDescription.trim() ||
+      formData.latitude.trim() ||
+      formData.longitude.trim() ||
+      formData.insuranceClaimNumber.trim() ||
+      formData.damageDescription.trim() ||
+      formData.narrative.trim() ||
+      formData.thirdPartyDetails.trim() ||
+      formData.faultAssessment.trim()
+  );
+
   useEffect(() => {
     if (isOpen) {
       setFormData({
+        accidentNumber: "",
         vehicleId: "",
         riderProfileId: "",
         occurredAtUtc: getLocalDatetimeString(),
@@ -99,6 +120,7 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
       setAssignedRiderName("");
       setRealRiderNotice(null);
       setLoadingVehicleInfo(false);
+      setShowOptionalFields(false);
 
       // 1. Fetch vehicles lookup and detailed summaries
       Promise.all([
@@ -347,13 +369,19 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const accidentNumber = formData.accidentNumber.trim();
     const vehicleId = formData.vehicleId.trim();
     const riderProfileId = formData.riderProfileId.trim();
     const policeReportNumber = formData.policeReportNumber.trim();
-    const locationDescription = formData.locationDescription.trim();
-    const damageDescription = formData.damageDescription.trim();
-    const narrative = formData.narrative.trim();
 
+    if (!accidentNumber) {
+      toast.error("بيانات غير مكتملة", "رقم الحادث (Accident Number) إلزامي ومطلوب.");
+      return;
+    }
+    if (accidentNumber.length > 64) {
+      toast.error("رقم غير صالح", "رقم الحادث يجب ألا يتجاوز 64 حرفاً.");
+      return;
+    }
     if (!vehicleId) {
       toast.error("بيانات غير مكتملة", "يرجى اختيار المركبة.");
       return;
@@ -377,20 +405,8 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
       return;
     }
 
-    if (!locationDescription) {
-      toast.error("بيانات غير مكتملة", "وصف موقع الحادث (المدينة، الحي) مطلوب وإلزامي.");
-      return;
-    }
     if (!policeReportNumber) {
-      toast.error("بيانات غير مكتملة", "رقم تقرير المرور / نجم إلزامي ومطلوب في أحدث نظام لحوادث السير.");
-      return;
-    }
-    if (!damageDescription) {
-      toast.error("بيانات غير مكتملة", "وصف الأضرار والتلفيات بالمركبة مطلوب وإلزامي.");
-      return;
-    }
-    if (!narrative) {
-      toast.error("بيانات غير مكتملة", "سرد تفاصيل وكيفية وقوع الحادث مطلوب وإلزامي.");
+      toast.error("بيانات غير مكتملة", "رقم تقرير المرور / نجم إلزامي ومطلوب.");
       return;
     }
 
@@ -427,24 +443,41 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
 
     startTransition(async () => {
       try {
-        await createVehicleAccident({
+        const payload: Parameters<typeof createVehicleAccident>[0] = {
+          accidentNumber,
           vehicleId,
           riderProfileId,
           occurredAtUtc: occurredDate.toISOString(),
-          locationDescription,
-          latitude,
-          longitude,
           policeReportNumber,
-          insuranceClaimNumber: formData.insuranceClaimNumber.trim() || null,
           severity: severityNum as VehicleAccidentSeverity,
           isDrivable: Boolean(formData.isDrivable),
           hasInjuries: Boolean(formData.hasInjuries),
-          injuryDetails: formData.hasInjuries ? (formData.injuryDetails.trim() || null) : null,
-          thirdPartyDetails: formData.thirdPartyDetails.trim() || null,
-          damageDescription,
-          faultAssessment: formData.faultAssessment.trim() || null,
-          narrative,
-        });
+          ...(formData.hasInjuries && formData.injuryDetails.trim()
+            ? { injuryDetails: formData.injuryDetails.trim() }
+            : {}),
+          ...(formData.locationDescription.trim()
+            ? { locationDescription: formData.locationDescription.trim() }
+            : {}),
+          ...(latitude !== null ? { latitude } : {}),
+          ...(longitude !== null ? { longitude } : {}),
+          ...(formData.insuranceClaimNumber.trim()
+            ? { insuranceClaimNumber: formData.insuranceClaimNumber.trim() }
+            : {}),
+          ...(formData.damageDescription.trim()
+            ? { damageDescription: formData.damageDescription.trim() }
+            : {}),
+          ...(formData.narrative.trim()
+            ? { narrative: formData.narrative.trim() }
+            : {}),
+          ...(formData.thirdPartyDetails.trim()
+            ? { thirdPartyDetails: formData.thirdPartyDetails.trim() }
+            : {}),
+          ...(formData.faultAssessment.trim()
+            ? { faultAssessment: formData.faultAssessment.trim() }
+            : {}),
+        };
+
+        await createVehicleAccident(payload);
         onSuccess();
       } catch (err: any) {
         toast.error("فشل التسجيل", err?.message || "حدث خطأ أثناء تسجيل الحادث.");
@@ -455,6 +488,24 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تسجيل حادث سير" maxWidth="max-w-4xl">
       <form onSubmit={handleSubmit} className="space-y-6 pt-4" dir="rtl">
+        {/* Accident Number (First Input) */}
+        <div>
+          <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+            رقم الحادث (Accident Number) <span className="text-red-500">*</span>
+          </label>
+          <Input
+            value={formData.accidentNumber}
+            onChange={(e) => setFormData({ ...formData, accidentNumber: e.target.value })}
+            placeholder="مثال: ACC-2026-000123"
+            maxLength={64}
+            required
+            autoFocus
+          />
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            رقم تعريفي فريد للحادث يتم إدخاله بواسطة المستخدم (حد أقصى 64 حرفاً، منفصل عن رقم تقرير المرور/نجم).
+          </p>
+        </div>
+
         {/* Basic Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -539,6 +590,7 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
                           ? `${prev.narrative}\n${noteText}`
                           : `ملاحظة: ${noteText}`,
                       }));
+                      setShowOptionalFields(true);
                       toast.success("تم التضمين", "تم إدراج بيانات المندوب الفعلي في سرد الحادث.");
                     }}
                     className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 dark:text-purple-300 hover:underline bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800 shadow-xs"
@@ -576,8 +628,8 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
           </div>
         )}
 
-        {/* Date and Location */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Primary Required Fields: Date & Police Report Number */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
               تاريخ ووقت الحادث <span className="text-red-500">*</span>
@@ -590,59 +642,25 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
               required
             />
           </div>
-          <div className="md:col-span-2">
+          <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-              موقع الحادث (المدينة، الحي، الشارع) <span className="text-red-500">*</span>
+              رقم تقرير المرور / نجم <span className="text-red-500">*</span>
             </label>
             <Input
-              value={formData.locationDescription}
-              onChange={(e) => setFormData({ ...formData, locationDescription: e.target.value })}
-              placeholder="مثال: الرياض - طريق الملك فهد - حي العليا"
+              value={formData.policeReportNumber}
+              onChange={(e) => setFormData({ ...formData, policeReportNumber: e.target.value })}
+              placeholder="مثال: NAJM-123456 أو TRAFFIC-XXXXXX"
               required
             />
           </div>
         </div>
 
-        {/* Coordinates (Optional) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-              خط العرض (Latitude) <span className="text-xs font-normal text-slate-400">(اختياري: من -90 إلى 90)</span>
-            </label>
-            <Input
-              type="number"
-              step="any"
-              min={-90}
-              max={90}
-              value={formData.latitude}
-              onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-              placeholder="مثال: 24.7136"
-              dir="ltr"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-              خط الطول (Longitude) <span className="text-xs font-normal text-slate-400">(اختياري: من -180 إلى 180)</span>
-            </label>
-            <Input
-              type="number"
-              step="any"
-              min={-180}
-              max={180}
-              value={formData.longitude}
-              onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-              placeholder="مثال: 46.6753"
-              dir="ltr"
-            />
-          </div>
-        </div>
-
-        {/* Status & Severity */}
+        {/* Primary Required Fields: Status & Severity */}
         <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                خطورة الحادث <span className="text-red-500">*</span>
+                درجة خطورة الحادث <span className="text-red-500">*</span>
               </label>
               <SearchableSelect
                 options={[
@@ -695,86 +713,156 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
           )}
         </div>
 
-        {/* References */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-              رقم تقرير المرور / نجم <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={formData.policeReportNumber}
-              onChange={(e) => setFormData({ ...formData, policeReportNumber: e.target.value })}
-              placeholder="TRAFFIC-XXXXXX"
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-              رقم مطالبة التأمين (إن وجد)
-            </label>
-            <Input
-              value={formData.insuranceClaimNumber}
-              onChange={(e) => setFormData({ ...formData, insuranceClaimNumber: e.target.value })}
-              placeholder="مثال: CLM-123456"
-            />
-          </div>
-        </div>
+        {/* Collapsible Optional Fields */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowOptionalFields((prev) => !prev)}
+            className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-800 transition-colors text-right"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                <SlidersHorizontal className="h-4 w-4" />
+              </div>
+              <div className="text-right">
+                <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 block">
+                  بيانات وتفاصيل إضافية (اختياري)
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">
+                  الموقع، الأضرار، السرد، التأمين، بيانات الطرف الثالث
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {hasAnyOptionalFilled && (
+                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300">
+                  تم إدخال تفاصيل
+                </span>
+              )}
+              <ChevronDown
+                className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${
+                  showOptionalFields ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
 
-        {/* Damage Description */}
-        <div>
-          <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-            وصف الأضرار والتلفيات بالمركبة <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-            rows={2}
-            value={formData.damageDescription}
-            onChange={(e) => setFormData({ ...formData, damageDescription: e.target.value })}
-            placeholder="مثال: تلفيات بالصدام الخلفي، كسر في الأنوار الخلفية..."
-            required
-          ></textarea>
-        </div>
+          {showOptionalFields && (
+            <div className="mt-3 space-y-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+              {/* Location */}
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  موقع الحادث (المدينة، الحي، الشارع) <span className="text-xs font-normal text-slate-400">(اختياري)</span>
+                </label>
+                <Input
+                  value={formData.locationDescription}
+                  onChange={(e) => setFormData({ ...formData, locationDescription: e.target.value })}
+                  placeholder="مثال: الرياض - طريق الملك فهد - حي العليا"
+                />
+              </div>
 
-        {/* Narrative & Assessment */}
-        <div>
-          <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-            سرد تفاصيل وكيفية وقوع الحادث <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-            rows={3}
-            value={formData.narrative}
-            onChange={(e) => setFormData({ ...formData, narrative: e.target.value })}
-            placeholder="يرجى وصف ما حدث وتتابع الأحداث بالتفصيل..."
-            required
-          ></textarea>
-        </div>
+              {/* Coordinates */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    خط العرض (Latitude) <span className="text-xs font-normal text-slate-400">(اختياري: من -90 إلى 90)</span>
+                  </label>
+                  <Input
+                    type="number"
+                    step="any"
+                    min={-90}
+                    max={90}
+                    value={formData.latitude}
+                    onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                    placeholder="مثال: 24.7136"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    خط الطول (Longitude) <span className="text-xs font-normal text-slate-400">(اختياري: من -180 إلى 180)</span>
+                  </label>
+                  <Input
+                    type="number"
+                    step="any"
+                    min={-180}
+                    max={180}
+                    value={formData.longitude}
+                    onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                    placeholder="مثال: 46.6753"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-              تفاصيل الطرف الثالث (إن وجد)
-            </label>
-            <textarea
-              className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              rows={2}
-              value={formData.thirdPartyDetails}
-              onChange={(e) => setFormData({ ...formData, thirdPartyDetails: e.target.value })}
-              placeholder="بيانات المركبة الأخرى، السائق، التأمين..."
-            ></textarea>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-              نسبة الخطأ / التقييم المبدئي (إن وجد)
-            </label>
-            <textarea
-              className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              rows={2}
-              value={formData.faultAssessment}
-              onChange={(e) => setFormData({ ...formData, faultAssessment: e.target.value })}
-              placeholder="مثال: الخطأ 100% على الطرف الآخر..."
-            ></textarea>
-          </div>
+              {/* Insurance Claim Number */}
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  رقم مطالبة التأمين <span className="text-xs font-normal text-slate-400">(اختياري)</span>
+                </label>
+                <Input
+                  value={formData.insuranceClaimNumber}
+                  onChange={(e) => setFormData({ ...formData, insuranceClaimNumber: e.target.value })}
+                  placeholder="مثال: CLM-123456"
+                />
+              </div>
+
+              {/* Damage Description */}
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  وصف الأضرار والتلفيات بالمركبة <span className="text-xs font-normal text-slate-400">(اختياري)</span>
+                </label>
+                <textarea
+                  className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+                  rows={2}
+                  value={formData.damageDescription}
+                  onChange={(e) => setFormData({ ...formData, damageDescription: e.target.value })}
+                  placeholder="مثال: تلفيات بالصدام الخلفي، كسر في الأنوار الخلفية..."
+                ></textarea>
+              </div>
+
+              {/* Narrative & Assessment */}
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  سرد تفاصيل وكيفية وقوع الحادث <span className="text-xs font-normal text-slate-400">(اختياري)</span>
+                </label>
+                <textarea
+                  className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+                  rows={3}
+                  value={formData.narrative}
+                  onChange={(e) => setFormData({ ...formData, narrative: e.target.value })}
+                  placeholder="يرجى وصف ما حدث وتتابع الأحداث بالتفصيل..."
+                ></textarea>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    تفاصيل الطرف الثالث <span className="text-xs font-normal text-slate-400">(اختياري)</span>
+                  </label>
+                  <textarea
+                    className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+                    rows={2}
+                    value={formData.thirdPartyDetails}
+                    onChange={(e) => setFormData({ ...formData, thirdPartyDetails: e.target.value })}
+                    placeholder="بيانات المركبة الأخرى، السائق، التأمين..."
+                  ></textarea>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    نسبة الخطأ / التقييم المبدئي <span className="text-xs font-normal text-slate-400">(اختياري)</span>
+                  </label>
+                  <textarea
+                    className="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-[#1167c9] focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+                    rows={2}
+                    value={formData.faultAssessment}
+                    onChange={(e) => setFormData({ ...formData, faultAssessment: e.target.value })}
+                    placeholder="مثال: الخطأ 100% على الطرف الآخر..."
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
