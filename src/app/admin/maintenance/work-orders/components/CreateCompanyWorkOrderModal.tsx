@@ -27,6 +27,7 @@ interface RequestedPartLine {
 
 interface VehicleOption {
   id: string;
+  serialNumber?: string | null;
   plateNumber: string;
   assetNumber: string;
   operatingCityId?: string | null;
@@ -202,7 +203,8 @@ export function CreateCompanyWorkOrderModal({
         if (active && res?.items) {
           const mappedVehicles: VehicleOption[] = res.items.map((v) => ({
             id: v.id,
-            plateNumber: v.plateNumberAr || v.plateNumberEn || "",
+            serialNumber: v.serialNumber,
+            plateNumber: v.plateNumberAr || (v.plateLettersAr && v.plateDigits ? `${v.plateLettersAr} ${v.plateDigits}` : "") || v.plateNumberEn || "",
             assetNumber: v.assetNumber || "مركبة",
             operatingCityId: v.operatingCityId,
             operatingCity: v.operatingCity,
@@ -531,12 +533,17 @@ export function CreateCompanyWorkOrderModal({
             <SearchableSelect
               value={vehicleId}
               onChange={handleVehicleSelect}
-              options={vehicles.map((v) => ({
-                value: v.id,
-                label: `${v.assetNumber} - لوحة: ${v.plateNumber}`,
-                sublabel: v.operatingCity ? `المدينة: ${v.operatingCity}` : undefined,
-                keywords: `${v.assetNumber} ${v.plateNumber} ${v.operatingCity || ""}`,
-              }))}
+              options={vehicles.map((v) => {
+                const serialPart = v.serialNumber ? `تسلسلي: ${v.serialNumber}` : "";
+                const platePart = v.plateNumber ? `لوحة: ${v.plateNumber}` : "";
+                const mainLabel = [serialPart, platePart].filter(Boolean).join(" • ") || v.assetNumber;
+                return {
+                  value: v.id,
+                  label: mainLabel,
+                  sublabel: [v.assetNumber !== mainLabel ? v.assetNumber : "", v.operatingCity ? `المدينة: ${v.operatingCity}` : ""].filter(Boolean).join(" | ") || undefined,
+                  keywords: `${v.serialNumber || ""} ${v.plateNumber} ${v.assetNumber} ${v.operatingCity || ""}`,
+                };
+              })}
               placeholder="اختر المركبة من الأسطول..."
               required
             />

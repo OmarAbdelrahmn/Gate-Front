@@ -56,6 +56,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
+import type { VehicleSummaryResponse } from "@/lib/fleet/types";
+
 interface WorkOrderDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -63,6 +65,8 @@ interface WorkOrderDetailModalProps {
   items: InventoryItem[];
   locations: MaintenanceLocation[];
   onUpdated: () => void;
+  vehiclesMap?: Map<string, VehicleSummaryResponse>;
+  vehiclesByAssetMap?: Map<string, VehicleSummaryResponse>;
 }
 
 export function WorkOrderDetailModal({
@@ -72,6 +76,8 @@ export function WorkOrderDetailModal({
   items,
   locations,
   onUpdated,
+  vehiclesMap,
+  vehiclesByAssetMap,
 }: WorkOrderDetailModalProps) {
   const { can } = useAuth();
   const canManage = can("maintenance.work_orders.manage");
@@ -296,6 +302,39 @@ export function WorkOrderDetailModal({
   const isSupplyPending = supplyReq?.status === SupplyRequestStatus.PendingWarehouseApproval;
   const isSupplyRejected = supplyReq?.status === SupplyRequestStatus.Rejected;
   const isSupplyCancelled = supplyReq?.status === SupplyRequestStatus.Cancelled;
+  const veh = order
+    ? (order.vehicleId && vehiclesMap ? vehiclesMap.get(order.vehicleId) : null) ||
+      (order.vehicleAssetNumber && vehiclesByAssetMap
+        ? vehiclesByAssetMap.get(order.vehicleAssetNumber)
+        : null)
+    : null;
+
+  const serialDisplay =
+    (order as any)?.vehicleSerialNumber ||
+    (order as any)?.serialNumber ||
+    veh?.serialNumber ||
+    veh?.chassisNumber ||
+    order?.vehicleAssetNumber;
+
+  let plateDisplay: string | null = null;
+  if (veh) {
+    if (veh.plateNumberAr) {
+      plateDisplay = veh.plateNumberAr;
+    } else if (veh.plateLettersAr && veh.plateDigits) {
+      plateDisplay = `${veh.plateLettersAr} ${veh.plateDigits}`;
+    } else if (veh.plateNumberEn) {
+      plateDisplay = veh.plateNumberEn;
+    }
+  }
+  if (!plateDisplay && order) {
+    plateDisplay =
+      (order as any).vehiclePlateNumberAr ||
+      (order as any).vehiclePlateNumber ||
+      (order as any).plateNumberAr ||
+      order.supplyRequest?.vehiclePlateNumber ||
+      null;
+  }
+
   const hasSupplyBlock = isSupplyPending || isSupplyRejected || isSupplyCancelled;
   const canStart = order.status === WorkOrderStatus.Open && !hasSupplyBlock;
   const canCancelSupply = isSupplyPending && !ownershipError && (can("inventory.supply_requests.submit") || canManage);
@@ -312,11 +351,11 @@ export function WorkOrderDetailModal({
         <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl border border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/40">
           <div className="flex items-center gap-3">
             <div className="grid size-12 place-items-center rounded-2xl bg-[#1167c9] text-white shadow-xs">
-              <Wrench size={22} />
+              <Wrench size={24} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-black text-slate-900 dark:text-white">
+                <span className="font-mono font-black text-sm text-[#1167c9] dark:text-blue-400">
                   {order.workOrderNumber}
                 </span>
                 <span
@@ -332,9 +371,15 @@ export function WorkOrderDetailModal({
                 <span>
                   الهدف:{" "}
                   <strong className="text-slate-700 dark:text-slate-300">
-                    {order.serviceSubjectType === 1
-                      ? `مركبة شركة (${order.vehicleAssetNumber || "غير محدد"})`
-                      : `عميل خارجي (${order.externalVehicle?.plateOrReference || "-"})`}
+                    {order.serviceSubjectType === 1 ? (
+                      <>
+                        مركبة شركة
+                        {serialDisplay ? ` (الرقم التسلسلي: ${serialDisplay})` : ""}
+                        {plateDisplay ? ` • اللوحة: ${plateDisplay}` : ""}
+                      </>
+                    ) : (
+                      `عميل خارجي (${order.externalVehicle?.plateOrReference || "-"})`
+                    )}
                   </strong>
                 </span>
                 <span>•</span>

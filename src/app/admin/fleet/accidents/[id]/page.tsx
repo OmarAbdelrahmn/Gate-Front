@@ -7,10 +7,12 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   getVehicleAccident,
   getVehicleAccidentWorkflow,
+  getVehicleDetail,
   downloadAccidentPdf,
   downloadWorkflowAttachment,
   downloadWorkflowSourceDocument,
 } from "@/lib/fleet/api";
+import { listRiders } from "@/lib/workforce/api";
 import {
   VehicleAccidentDetailResponse,
   VehicleAccidentWorkflowDetailResponse,
@@ -100,6 +102,14 @@ export default function AccidentDetailPage() {
 
   // Live timer tick
   const [remainingSecs, setRemainingSecs] = useState<number | null>(null);
+  const [vehicleInfo, setVehicleInfo] = useState<{
+    serialNumber?: string | null;
+    plateDisplay?: string | null;
+  } | null>(null);
+  const [riderInfo, setRiderInfo] = useState<{
+    name?: string | null;
+    iqamaNo?: string | null;
+  } | null>(null);
 
   const loadAllData = async () => {
     setLoading(true);
@@ -111,6 +121,38 @@ export default function AccidentDetailPage() {
       setAccident(accRes);
       setWorkflow(wfRes);
       setRemainingSecs(wfRes.remainingSeconds ?? null);
+
+      if (accRes.summary.vehicleId) {
+        getVehicleDetail(accRes.summary.vehicleId)
+          .then((v) => {
+            const serial = v.serialNumber || v.summary?.serialNumber || v.summary?.assetNumber;
+            const plate =
+              v.summary?.plateNumberAr ||
+              (v.summary?.plateLettersAr && v.summary?.plateDigits
+                ? `${v.summary.plateLettersAr} ${v.summary.plateDigits}`
+                : null) ||
+              v.summary?.plateNumberEn;
+            setVehicleInfo({ serialNumber: serial, plateDisplay: plate });
+          })
+          .catch(() => {});
+      }
+      if (accRes.summary.riderProfileId) {
+        listRiders()
+          .then((riders) => {
+            const r = riders.find(
+              (x) =>
+                x.id === accRes.summary.riderProfileId ||
+                x.employeeId === accRes.summary.riderProfileId,
+            );
+            if (r) {
+              setRiderInfo({
+                name: r.fullNameAr || r.fullNameEn,
+                iqamaNo: r.iqamaNo,
+              });
+            }
+          })
+          .catch(() => {});
+      }
     } catch (err: any) {
       console.error(err);
       toast.error("خطأ", "تعذر تحميل بيانات الحادث ودورة العمل.");
@@ -242,17 +284,27 @@ export default function AccidentDetailPage() {
             <div className="flex items-center gap-4 flex-wrap text-xs text-slate-500 dark:text-slate-400 pt-1">
               <Link
                 href={`/admin/fleet/vehicles/${accident.summary.vehicleId}`}
-                className="flex items-center gap-1 text-slate-700 dark:text-slate-200 hover:text-blue-600 font-semibold"
+                className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 hover:text-blue-600 font-bold"
               >
-                <Car className="h-4 w-4 text-slate-400" />
-                <span>المركبة المعنية</span>
+                <Car className="h-4 w-4 text-blue-600 shrink-0" />
+                <span>
+                  {vehicleInfo?.serialNumber
+                    ? `مركبة: ${vehicleInfo.serialNumber}`
+                    : "المركبة المعنية"}
+                  {vehicleInfo?.plateDisplay ? ` • ${vehicleInfo.plateDisplay}` : ""}
+                </span>
               </Link>
               <Link
                 href={`/admin/employees/${accident.summary.riderProfileId}`}
-                className="flex items-center gap-1 text-slate-700 dark:text-slate-200 hover:text-blue-600 font-semibold"
+                className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 hover:text-blue-600 font-bold"
               >
-                <User className="h-4 w-4 text-slate-400" />
-                <span>المندوب: {accident.summary.riderProfileId.substring(0, 10)}...</span>
+                <User className="h-4 w-4 text-slate-400 shrink-0" />
+                <span>
+                  {riderInfo?.name
+                    ? `المندوب: ${riderInfo.name}`
+                    : `المندوب: ${accident.summary.riderProfileId.substring(0, 10)}...`}
+                  {riderInfo?.iqamaNo ? ` (هوية: ${riderInfo.iqamaNo})` : ""}
+                </span>
               </Link>
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4 text-slate-400" />

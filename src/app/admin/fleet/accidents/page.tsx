@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicleAccidents } from "@/lib/fleet/api";
+import { getVehicleAccidents, getVehicles } from "@/lib/fleet/api";
+import { listRiders, listEmployees } from "@/lib/workforce/api";
 import {
   VehicleAccidentStatus,
   VehicleAccidentSeverity,
   type VehicleAccidentSummaryResponse,
+  type VehicleSummaryResponse,
 } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -41,6 +43,8 @@ export default function AccidentsPage() {
   const { can } = useAuth();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [data, setData] = useState<VehicleAccidentSummaryResponse[]>([]);
+  const [vehiclesMap, setVehiclesMap] = useState<Map<string, VehicleSummaryResponse>>(new Map());
+  const [ridersMap, setRidersMap] = useState<Map<string, { name: string; iqamaNo: string | null; employeeId?: string | null }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -49,11 +53,47 @@ export default function AccidentsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await getVehicleAccidents({
-        page,
-        pageSize: 50,
-      });
-      setData(res.items || []);
+      const [accidentsRes, vehiclesRes, ridersRes, employeesRes] = await Promise.allSettled([
+        getVehicleAccidents({ page, pageSize: 50 }),
+        getVehicles({ pageSize: 500 }),
+        listRiders().catch(() => []),
+        listEmployees().catch(() => []),
+      ]);
+
+      if (accidentsRes.status === "fulfilled") {
+        setData(accidentsRes.value.items || []);
+      }
+      if (vehiclesRes.status === "fulfilled" && vehiclesRes.value?.items) {
+        const vMap = new Map<string, VehicleSummaryResponse>();
+        vehiclesRes.value.items.forEach((v) => {
+          if (v.id) vMap.set(v.id, v);
+        });
+        setVehiclesMap(vMap);
+      }
+      const rMap = new Map<string, { name: string; iqamaNo: string | null; employeeId?: string | null }>();
+      if (ridersRes.status === "fulfilled" && Array.isArray(ridersRes.value)) {
+        ridersRes.value.forEach((r) => {
+          const info = {
+            name: r.fullNameAr || r.fullNameEn || "مندوب",
+            iqamaNo: r.iqamaNo || null,
+            employeeId: r.employeeId || null,
+          };
+          if (r.id) rMap.set(r.id, info);
+          if (r.employeeId) rMap.set(r.employeeId, info);
+        });
+      }
+      if (employeesRes.status === "fulfilled" && Array.isArray(employeesRes.value)) {
+        employeesRes.value.forEach((e) => {
+          const info = {
+            name: e.fullNameAr || e.fullNameEn || "موظف",
+            iqamaNo: e.iqamaNo || null,
+            employeeId: e.id,
+          };
+          if (e.id && !rMap.has(e.id)) rMap.set(e.id, info);
+          if (e.riderProfileId && !rMap.has(e.riderProfileId)) rMap.set(e.riderProfileId, info);
+        });
+      }
+      setRidersMap(rMap);
     } catch (e) {
       console.error(e);
     } finally {
@@ -69,12 +109,31 @@ export default function AccidentsPage() {
     return () => window.removeEventListener("accident-created", handleCreated);
   }, [page]);
 
+  const getVehicleInfo = (vehicleId: string) => {
+    const veh = vehiclesMap.get(vehicleId);
+    const serialNumber = veh?.serialNumber || veh?.chassisNumber || veh?.assetNumber || "—";
+    const plateDisplay =
+      veh?.plateNumberAr ||
+      (veh?.plateLettersAr && veh?.plateDigits ? `${veh.plateLettersAr} ${veh.plateDigits}` : null) ||
+      veh?.plateNumberEn ||
+      null;
+    return { serialNumber, plateDisplay };
+  };
+
+  const getRiderInfo = (riderProfileId: string) => {
+    return ridersMap.get(riderProfileId) || null;
+  };
+
   const filteredData = data.filter((item) => {
+    const { serialNumber, plateDisplay } = getVehicleInfo(item.vehicleId);
+    const riderInfo = getRiderInfo(item.riderProfileId);
+
     const matchesSearch =
       !search ||
-      String(item.accidentNumber).includes(search) ||
-      (item.riderProfileId &&
-        item.riderProfileId.toLowerCase().includes(search.toLowerCase())) ||
+      String(serialNumber).toLowerCase().includes(search.toLowerCase()) ||
+      (plateDisplay && plateDisplay.toLowerCase().includes(search.toLowerCase())) ||
+      (riderInfo?.name && riderInfo.name.toLowerCase().includes(search.toLowerCase())) ||
+      (riderInfo?.iqamaNo && String(riderInfo.iqamaNo).includes(search)) ||
       (item.locationDescription &&
         item.locationDescription.toLowerCase().includes(search.toLowerCase()));
 
@@ -187,7 +246,7 @@ export default function AccidentsPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث برقم الحادث، المندوب، أو الموقع..."
+            placeholder="بحث بالرقم التسلسلي، اللوحة، اسم السائق، أو رقم الهوية..."
             className="pr-10"
           />
         </div>
@@ -230,7 +289,6 @@ export default function AccidentsPage() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">رقم الحادث</th>
                   <th className="px-6 py-4">المركبة المعنية</th>
                   <th className="px-6 py-4">المندوب (السائق)</th>
                   <th className="px-6 py-4">تاريخ الحادث</th>
@@ -240,69 +298,84 @@ export default function AccidentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {filteredData.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="group transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                  >
-                    <td className="px-6 py-4 font-mono font-bold">
-                      <Link
-                        href={`/admin/fleet/accidents/${item.id}`}
-                        className="flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:underline font-black"
-                      >
-                        <span>#{item.accidentNumber}</span>
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Link
-                        href={`/admin/fleet/vehicles/${item.vehicleId}`}
-                        className="flex items-center gap-1.5 font-semibold text-slate-700 hover:text-blue-600 dark:text-slate-200"
-                      >
-                        <Car className="h-3.5 w-3.5 text-slate-400" />
-                        <span>عرض المركبة</span>
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Link
-                        href={`/admin/employees/${item.riderProfileId}`}
-                        className="flex items-center gap-1.5 font-mono text-xs text-slate-600 hover:text-blue-600 dark:text-slate-300"
-                      >
-                        <User className="h-3.5 w-3.5 text-slate-400" />
-                        <span>{item.riderProfileId.substring(0, 12)}...</span>
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        {formatDateTime(item.occurredAtUtc)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        {renderSeverity(item.severity)}
-                        {!item.isDrivable && (
-                          <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">
-                            غير قابلة للقيادة
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-[var(--muted)] line-clamp-1">
-                        <MapPin className="h-3 w-3 shrink-0" />
-                        <span>{item.locationDescription || "—"}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">{renderStatus(item.status)}</td>
-                    <td className="px-6 py-4 text-center">
-                      <Link
-                        href={`/admin/fleet/accidents/${item.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm hover:border-red-500 hover:text-red-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all"
-                      >
-                        <span>دورة العمل</span>
-                        <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {filteredData.map((item) => {
+                  const { serialNumber, plateDisplay } = getVehicleInfo(item.vehicleId);
+                  const riderInfo = getRiderInfo(item.riderProfileId);
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className="group transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1 items-start">
+                          <Link
+                            href={`/admin/fleet/vehicles/${item.vehicleId}`}
+                            className="flex items-center gap-1.5 font-mono font-black text-[#1167c9] dark:text-blue-400 hover:underline text-sm"
+                          >
+                            <Car className="h-4 w-4 text-blue-600 shrink-0" />
+                            <span>{serialNumber}</span>
+                          </Link>
+                          {plateDisplay ? (
+                            <span className="font-bold border border-slate-300 dark:border-slate-700 rounded-md px-2 py-0.5 text-xs bg-white dark:bg-slate-900 shadow-xs text-slate-800 dark:text-slate-200">
+                              {plateDisplay}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">بدون لوحة</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-0.5">
+                          <Link
+                            href={`/admin/employees/${riderInfo?.employeeId || item.riderProfileId}`}
+                            className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 hover:text-blue-600 hover:underline"
+                          >
+                            <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span>{riderInfo?.name || "مندوب غير محدد"}</span>
+                          </Link>
+                          {riderInfo?.iqamaNo ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                              هوية: {riderInfo.iqamaNo}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                          {formatDateTime(item.occurredAtUtc)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {renderSeverity(item.severity)}
+                          {!item.isDrivable && (
+                            <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">
+                              غير قابلة للقيادة
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-[var(--muted)] line-clamp-1">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          <span>{item.locationDescription || "—"}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">{renderStatus(item.status)}</td>
+                      <td className="px-6 py-4 text-center">
+                        <Link
+                          href={`/admin/fleet/accidents/${item.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm hover:border-red-500 hover:text-red-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all"
+                        >
+                          <span>دورة العمل</span>
+                          <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

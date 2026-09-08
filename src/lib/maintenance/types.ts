@@ -619,6 +619,9 @@ export interface WorkOrder {
   serviceSubjectType: ServiceSubjectType;
   vehicleId: string | null;
   vehicleAssetNumber: string | null;
+  vehicleSerialNumber?: string | null;
+  vehiclePlateNumber?: string | null;
+  vehiclePlateNumberAr?: string | null;
   vehicleIssueId: string | null;
   maintenanceLocationId: string;
   maintenanceLocationNameAr: string;
