@@ -486,6 +486,7 @@ export default function AccidentDetailPage() {
     }
   };
 
+  // Handle IQAMA download (existing) and LIVE VIEW
   const handleDownloadIqama = async () => {
     const doc = hrDocs.iqama;
     if (doc) {
