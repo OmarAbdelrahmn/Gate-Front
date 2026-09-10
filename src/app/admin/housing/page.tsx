@@ -91,7 +91,7 @@ const initialFormState: HousingFormState = {
 };
 
 export default function HousingPage() {
-  const { can, locale } = useAuth();
+  const { can, locale, refreshSession } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
@@ -114,20 +114,41 @@ export default function HousingPage() {
   const [archiveError, setArchiveError] = useState("");
 
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<{ status?: number; message: string } | null>(null);
+  const [refreshingSession, setRefreshingSession] = useState(false);
   const manage = can("housing.manage");
 
   async function loadData() {
     setLoading(true);
+    setFetchError(null);
     try {
-      const [h, c] = await Promise.all([
+      const [hRes, cRes] = await Promise.allSettled([
         listHousing(),
         authFetch<City[]>("/api/hr-catalogs/operating-cities"),
       ]);
-      setItems(h || []);
-      setCities(c || []);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : (isEn ? "Failed to load housing data" : "تعذر تحميل بيانات السكن");
-      toast.error(isEn ? "Error" : "خطأ", msg);
+
+      if (hRes.status === "fulfilled") {
+        setItems(hRes.value || []);
+      } else {
+        const err = hRes.reason;
+        const msg =
+          err instanceof Error
+            ? err.message
+            : isEn
+              ? "Failed to load housing data"
+              : "تعذر تحميل بيانات السكن";
+        setFetchError({
+          status: (err as any)?.status,
+          message: msg,
+        });
+        toast.error(isEn ? "Error" : "خطأ", msg);
+      }
+
+      if (cRes.status === "fulfilled") {
+        setCities(cRes.value || []);
+      } else {
+        setCities([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -401,6 +422,65 @@ export default function HousingPage() {
           </Button>
         )}
       </header>
+
+      {/* Access Denied or Fetch Error Diagnostic Banner */}
+      {fetchError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/50 dark:bg-red-950/30">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={22} className="mt-0.5 text-red-600 shrink-0" />
+              <div>
+                <h3 className="font-bold text-red-900 dark:text-red-200">
+                  {fetchError.status === 403
+                    ? isEn
+                      ? "Access Denied by Server (403 Forbidden) - Missing Housing Scope"
+                      : "تم رفض الوصول من الخادم (403 Forbidden) - نقص في نطاق السكن (Housing Scope)"
+                    : isEn
+                      ? "Failed to load housing data"
+                      : "تعذر تحميل بيانات السكن"}
+                </h3>
+                <p className="mt-1 text-xs text-red-700 dark:text-red-300 leading-relaxed max-w-3xl">
+                  {fetchError.status === 403
+                    ? isEn
+                      ? "Your account does not have the 'housing.read' permission granted, or your session needs to be refreshed following role updates. Ensure the 'housing.read' permission is saved for your role in Roles Management (/admin/users/roles), then click 'Refresh Session & Retry' below or sign in again."
+                      : "لا يمتلك حسابك صلاحية عرض السكن (housing.read) أو أن جلستك الحالية بحاجة للتحديث بعد تعديل صلاحيات الدور. تأكد من تفعيل صلاحية 'housing.read' للدور في إدارة الأدوار (/admin/users/roles) والضغط على حفظ، ثم اضغط على 'تحديث الجلسة وإعادة المحاولة' أدناه أو أعد تسجيل الدخول."
+                    : fetchError.message}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                loading={refreshingSession}
+                className="text-xs min-h-9 px-3"
+                onClick={async () => {
+                  setRefreshingSession(true);
+                  try {
+                    await refreshSession();
+                    await loadData();
+                    toast.success(
+                      isEn ? "Session Refreshed" : "تم تحديث الجلسة",
+                      isEn ? "Authorization and tokens reloaded." : "تم إعادة تحميل بيانات الجلسة والصلاحيات بنجاح."
+                    );
+                  } catch (e: any) {
+                    toast.error(
+                      isEn ? "Refresh Failed" : "فشل تحديث الجلسة",
+                      e?.message || (isEn ? "Unable to refresh session" : "تعذر تحديث الجلسة")
+                    );
+                  } finally {
+                    setRefreshingSession(false);
+                  }
+                }}
+              >
+                {isEn ? "Refresh Session & Retry" : "تحديث الجلسة وإعادة المحاولة"}
+              </Button>
+              <Button variant="ghost" className="text-xs min-h-9 px-3" onClick={() => void loadData()}>
+                {isEn ? "Retry" : "إعادة المحاولة"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

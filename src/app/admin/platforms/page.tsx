@@ -24,16 +24,20 @@ import {
   Archive,
   RefreshCw,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
 
 export default function PlatformsPage() {
-  const { can, locale } = useAuth();
+  const { can, locale, refreshSession } = useAuth();
   const t = (key: string) => translate(locale, key);
+  const isEn = locale === "en";
 
   const [platforms, setPlatforms] = useState<PlatformResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<{ status?: number; message: string } | null>(null);
+  const [refreshingSession, setRefreshingSession] = useState(false);
   const [search, setSearch] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -61,11 +65,20 @@ export default function PlatformsPage() {
 
   const fetchPlatformsData = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const data = await getPlatforms(includeArchived);
       setPlatforms(data);
     } catch (err: any) {
       console.error("Failed to load platforms", err);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : isEn
+            ? "Failed to load platforms data"
+            : "تعذر تحميل بيانات المنصات";
+      setFetchError({ status: err?.status, message: msg });
+      toast.error(isEn ? "Error" : "خطأ", msg);
     } finally {
       setLoading(false);
     }
@@ -81,11 +94,13 @@ export default function PlatformsPage() {
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-3 text-center">
         <AlertTriangle className="h-12 w-12 text-amber-500" />
-        <h2 className="text-xl font-bold text-slate-800">
+        <h2 className="text-xl font-bold">
           {t("common.error")}
         </h2>
-        <p className="text-slate-500">
-          عفواً، لا تملك صلاحية قراءة المنصات (platform_accounts.read).
+        <p className="text-[var(--muted)]">
+          {isEn
+            ? "You do not have the 'platform_accounts.read' permission."
+            : "عفواً، لا تملك صلاحية قراءة المنصات (platform_accounts.read)."}
         </p>
       </div>
     );
@@ -230,25 +245,86 @@ export default function PlatformsPage() {
       {/* Header */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <Layers className="h-7 w-7 text-[#1167c9]" />
+          <p className="text-sm font-bold text-[#1167c9]">{t("nav.platforms")}</p>
+          <h1 className="flex items-center gap-2 text-3xl font-black">
             {t("platforms.platformsList")}
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            إدارة منصات التوصيل وتكوينات الربط الخاصة بالحسابات والمناديب
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {isEn
+              ? "Manage delivery platforms and account configurations."
+              : "إدارة منصات التوصيل وتكوينات الربط الخاصة بالحسابات والمناديب"}
           </p>
         </div>
 
         {can("platform_accounts.manage") && (
           <Button
             onClick={handleOpenAddModal}
-            className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]"
+            className="flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
             {t("platforms.newPlatform")}
           </Button>
         )}
       </div>
+
+      {/* 403 / Error Diagnostic Banner */}
+      {fetchError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/50 dark:bg-red-950/30">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={22} className="mt-0.5 text-red-600 shrink-0" />
+              <div>
+                <h3 className="font-bold text-red-900 dark:text-red-200">
+                  {fetchError.status === 403
+                    ? isEn
+                      ? "Access Denied by Server (403 Forbidden) — Missing Platform Scope"
+                      : "تم رفض الوصول من الخادم (403 Forbidden) — نقص في نطاق المنصات (Client Scope)"
+                    : isEn
+                      ? "Failed to load platforms data"
+                      : "تعذر تحميل بيانات المنصات"}
+                </h3>
+                <p className="mt-1 text-xs text-red-700 dark:text-red-300 leading-relaxed max-w-3xl">
+                  {fetchError.status === 403
+                    ? isEn
+                      ? "Your account has 'platform_accounts.read' permission, but the role or direct permission is missing 'isAllClientScope: true'. An administrator must open your account in User Management (/admin/users), enable 'All Platforms & Clients Scope', save, then click 'Refresh Session & Retry' below."
+                      : "يمتلك حسابك صلاحية المنصات ولكن يفتقر إلى النطاق الشامل (isAllClientScope: true). يجب على مدير النظام فتح حسابك في إدارة المستخدمين وتفعيل 'شامل لجميع المنصات والعملاء' والضغط على حفظ، ثم الضغط على 'تحديث الجلسة وإعادة المحاولة' أدناه."
+                    : fetchError.message}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                loading={refreshingSession}
+                className="text-xs min-h-9 px-3"
+                onClick={async () => {
+                  setRefreshingSession(true);
+                  try {
+                    await refreshSession();
+                    await fetchPlatformsData();
+                    toast.success(
+                      isEn ? "Session Refreshed" : "تم تحديث الجلسة",
+                      isEn ? "Authorization and tokens reloaded." : "تم إعادة تحميل بيانات الجلسة والصلاحيات بنجاح."
+                    );
+                  } catch (e: any) {
+                    toast.error(
+                      isEn ? "Refresh Failed" : "فشل تحديث الجلسة",
+                      e?.message || (isEn ? "Unable to refresh session" : "تعذر تحديث الجلسة")
+                    );
+                  } finally {
+                    setRefreshingSession(false);
+                  }
+                }}
+              >
+                {isEn ? "Refresh Session & Retry" : "تحديث الجلسة وإعادة المحاولة"}
+              </Button>
+              <Button variant="ghost" className="text-xs min-h-9 px-3" onClick={() => void fetchPlatformsData()}>
+                {isEn ? "Retry" : "إعادة المحاولة"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Control Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">

@@ -121,6 +121,14 @@ export const navigation: NavItem[] = [
         permission: "absence_cases.read",
       },
       {
+        label: "طلبات الإجازات",
+        labelKey: "nav.leaveRequests",
+        href: "/admin/hr/leave-requests",
+        icon: CalendarCheck,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "leave_requests.read",
+      },
+      {
         label: "طلبات تغيير الحالة",
         labelKey: "nav.statusChangeRequests",
         href: "/admin/hr/employee-status-change-requests",
@@ -157,18 +165,10 @@ export const navigation: NavItem[] = [
   {
     label: "إدارة السكن",
     labelKey: "nav.housing",
+    href: "/admin/housing",
     icon: House,
     roles: ["admin", "manager", "member", "accountant"],
-    children: [
-      {
-        label: "السكن",
-        labelKey: "nav.housing",
-        href: "/admin/housing",
-        icon: House,
-        roles: ["admin", "manager", "member", "accountant"],
-        permission: "housing.read",
-      },
-    ],
+    permission: "housing.read",
   },
   {
     label: "إدارة المنصات",
@@ -336,6 +336,7 @@ export const navigation: NavItem[] = [
     children: [
       {
         label: "جميع الربطات النشطة",
+        labelKey: "nav.vehicleAccountAssignmentsAll",
         href: "/admin/fleet/vehicle-account-assignments",
         icon: Server,
         roles: ["admin", "manager", "member", "accountant"],
@@ -343,6 +344,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "طلبات التبديل المعلقة",
+        labelKey: "nav.vehicleAccountAssignmentsSwitches",
         href: "/admin/fleet/vehicle-account-assignments/switches",
         icon: Repeat,
         roles: ["admin", "manager", "member", "accountant"],
@@ -350,6 +352,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "التحذيرات التشغيلية",
+        labelKey: "nav.vehicleAccountAssignmentsProblems",
         href: "/admin/fleet/vehicle-account-assignments/problems",
         icon: AlertTriangle,
         roles: ["admin", "manager", "member", "accountant"],
@@ -408,6 +411,7 @@ export const navigation: NavItem[] = [
   },
   {
     label: "الصيانة والمخزون والورش",
+    labelKey: "nav.maintenanceGroup",
     icon: Wrench,
     roles: ["admin", "manager", "member", "accountant"],
     permissionsAny: [
@@ -427,6 +431,7 @@ export const navigation: NavItem[] = [
     children: [
       {
         label: "لوحة مؤشرات الصيانة",
+        labelKey: "nav.maintenanceDashboard",
         href: "/admin/maintenance",
         icon: LayoutDashboard,
         roles: ["admin", "manager", "member", "accountant"],
@@ -438,6 +443,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "أوامر الصيانة والعمل",
+        labelKey: "nav.maintenanceWorkOrders",
         href: "/admin/maintenance/work-orders/orders",
         icon: Wrench,
         roles: ["admin", "manager", "member", "accountant"],
@@ -445,6 +451,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "تذكيرات واستحقاقات الزيوت",
+        labelKey: "nav.maintenanceOilReminders",
         href: "/admin/maintenance/work-orders/reminders",
         icon: Droplets,
         roles: ["admin", "manager", "member", "accountant"],
@@ -452,6 +459,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "ورشة الرياض والعمليات الخارجية",
+        labelKey: "nav.maintenanceRiyadhWorkshop",
         href: "/admin/maintenance/workshops/orders",
         icon: BadgeDollarSign,
         roles: ["admin", "manager", "member", "accountant"],
@@ -459,6 +467,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "تقرير أرباح ورشة الرياض",
+        labelKey: "nav.maintenanceRiyadhProfit",
         href: "/admin/maintenance/workshops/profit",
         icon: BarChart3,
         roles: ["admin", "manager", "member", "accountant"],
@@ -466,6 +475,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "فواتير واستلام المشتريات",
+        labelKey: "nav.maintenanceReceipts",
         href: "/admin/maintenance/inventory/receipts",
         icon: FileSpreadsheet,
         roles: ["admin", "manager", "member", "accountant"],
@@ -476,6 +486,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "أرصدة المخزون",
+        labelKey: "nav.maintenanceBalances",
         href: "/admin/maintenance/inventory/balances",
         icon: Layers,
         roles: ["admin", "manager", "member", "accountant"],
@@ -483,6 +494,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "براميل الزيوت وإدارة الفاقد",
+        labelKey: "nav.maintenanceBarrels",
         href: "/admin/maintenance/inventory/barrels",
         icon: Droplets,
         roles: ["admin", "manager", "member", "accountant"],
@@ -493,6 +505,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "التحويلات والمرتجعات والعهد",
+        labelKey: "nav.maintenanceTransfers",
         href: "/admin/maintenance/inventory/transfers",
         icon: ArrowLeftRight,
         roles: ["admin", "manager", "member", "accountant"],
@@ -503,6 +516,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "طلبات صرف المستودع",
+        labelKey: "nav.maintenanceSupplyRequests",
         href: "/admin/maintenance/inventory/supply-requests",
         icon: PackageCheck,
         roles: ["admin", "manager", "member", "accountant"],
@@ -514,6 +528,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "طلب مستلزمات مناديب",
+        labelKey: "nav.maintenanceRequestRiderItems",
         href: "/admin/maintenance/inventory/request-rider-items",
         icon: ShoppingBag,
         roles: ["admin", "manager", "member", "accountant"],
@@ -521,6 +536,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "كتالوج قطع الغيار والأصناف",
+        labelKey: "nav.maintenanceItemsCatalog",
         href: "/admin/maintenance/setup/items",
         icon: Package,
         roles: ["admin", "manager", "member", "accountant"],
@@ -528,6 +544,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "مواقع وورش الصيانة والمستودعات",
+        labelKey: "nav.maintenanceLocations",
         href: "/admin/maintenance/setup/locations",
         icon: Building2,
         roles: ["admin", "manager", "member", "accountant"],
@@ -535,6 +552,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "موردو قطع الغيار والخدمات",
+        labelKey: "nav.maintenanceSuppliers",
         href: "/admin/maintenance/setup/suppliers",
         icon: Users,
         roles: ["admin", "manager", "member", "accountant"],
@@ -542,6 +560,7 @@ export const navigation: NavItem[] = [
       },
       {
         label: "خطط وبرامج الصيانة الدورية",
+        labelKey: "nav.maintenancePlans",
         href: "/admin/maintenance/setup/plans",
         icon: CalendarCheck,
         roles: ["admin", "manager", "member", "accountant"],
@@ -567,12 +586,12 @@ export const navigation: NavItem[] = [
         permission: "users.read",
       },
       {
-        label: "الأدوار",
-        labelKey: "nav.roles",
+        label: "الأدوار والصلاحيات",
+        labelKey: "nav.rolesAndPermissions",
         href: "/admin/users/roles",
         icon: ShieldCheck,
         roles: ["admin", "manager", "member", "accountant"],
-        permission: "roles.read",
+        permissionsAny: ["roles.read", "permissions.read"],
       },
     ],
   },

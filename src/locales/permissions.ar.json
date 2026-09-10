@@ -64,6 +64,7 @@
   "fleet.issues.manage": "إدارة أعطال الأسطول",
   "fleet.compliance.read": "عرض متابعة تجديد التراخيص",
   "fleet.compliance.manage": "إدارة متابعة تجديد التراخيص",
+  "fleet.daily_distances.read": "عرض المسافات اليومية للأسطول",
   "fleet.files.read": "عرض ملفات الأسطول",
   "fleet.files.upload": "رفع ملفات الأسطول",
   "fleet.files.download": "تنزيل ملفات الأسطول",

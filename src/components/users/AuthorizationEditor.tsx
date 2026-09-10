@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, Search, ShieldCheck, X } from "lucide-react";
+import { Plus, Save, Search, ShieldCheck, X, House, Layers, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { getUserAuthorization } from "../../lib/auth/authorization-api";
 import { permissionLabel } from "../../lib/permission-labels";
@@ -26,29 +26,39 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { toast } from "../ui/Toast";
 
-type ExistingRole = ManagedRoleAssignmentRequest & { roleId: string };
+type ExistingRole = ManagedRoleAssignmentRequest & { roleId: string; roleCode?: string };
 type ExistingPermission = ManagedDirectPermissionAssignmentRequest;
-const roleRequest = (roleId: string): ManagedRoleAssignmentRequest => ({
+
+const roleRequest = (
+  roleId: string,
+  isAllHousingScope = true,
+  isAllClientScope = true,
+  includesFuturePlatformContracts = true,
+): ManagedRoleAssignmentRequest => ({
   roleId,
   startsAtUtc: null,
   expiresAtUtc: null,
   reason: null,
-  isAllHousingScope: false,
-  isAllClientScope: false,
-  includesFuturePlatformContracts: false,
+  isAllHousingScope,
+  isAllClientScope,
+  includesFuturePlatformContracts,
   scopes: [],
 });
+
 const permissionRequest = (
   permissionKey: string,
+  isAllHousingScope = true,
+  isAllClientScope = true,
+  includesFuturePlatformContracts = true,
 ): ManagedDirectPermissionAssignmentRequest => ({
   permissionKey,
   effect: "Grant",
   startsAtUtc: null,
   expiresAtUtc: null,
   reason: null,
-  isAllHousingScope: false,
-  isAllClientScope: false,
-  includesFuturePlatformContracts: false,
+  isAllHousingScope,
+  isAllClientScope,
+  includesFuturePlatformContracts,
   scopes: [],
 });
 
@@ -67,6 +77,12 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  // Data Scopes states (required by backend RBAC for housing.read, platform_accounts.read, etc.)
+  const [isAllHousingScope, setIsAllHousingScope] = useState(true);
+  const [isAllClientScope, setIsAllClientScope] = useState(true);
+  const [includesFuturePlatformContracts, setIncludesFuturePlatformContracts] = useState(true);
+
   const canManageRoles = can("roles.manage");
   const canManagePermissions = can("permissions.manage");
 
@@ -83,13 +99,29 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
           getPermissionCatalogue(),
         ]);
         const raw = auth as {
-          roles?: ExistingRole[];
+          roles?: (ExistingRole & { roleCode?: string })[];
           directPermissions?: ExistingPermission[];
         };
-        setAssignRoles(raw.roles ?? []);
-        setAssignPermissions(raw.directPermissions ?? []);
+        const loadedRoles = raw.roles ?? [];
+        const loadedPermissions = raw.directPermissions ?? [];
+
+        setAssignRoles(loadedRoles);
+        setAssignPermissions(loadedPermissions);
         setRoles(allRoles);
         setCatalog(allPermissions);
+
+        // Detect initial scope state from existing assignments if present
+        const firstRole = loadedRoles[0];
+        const firstPerm = loadedPermissions[0];
+        if (firstRole) {
+          setIsAllHousingScope(firstRole.isAllHousingScope ?? true);
+          setIsAllClientScope(firstRole.isAllClientScope ?? true);
+          setIncludesFuturePlatformContracts(firstRole.includesFuturePlatformContracts ?? true);
+        } else if (firstPerm) {
+          setIsAllHousingScope(firstPerm.isAllHousingScope ?? true);
+          setIsAllClientScope(firstPerm.isAllClientScope ?? true);
+          setIncludesFuturePlatformContracts(firstPerm.includesFuturePlatformContracts ?? true);
+        }
       } catch {
         setMessage(
           locale === "en"
@@ -125,7 +157,15 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
       if (exists) {
         return prev.filter((item) => item.permissionKey !== key);
       } else {
-        return [...prev, permissionRequest(key)];
+        return [
+          ...prev,
+          permissionRequest(
+            key,
+            isAllHousingScope,
+            isAllClientScope,
+            includesFuturePlatformContracts,
+          ),
+        ];
       }
     });
   };
@@ -144,7 +184,14 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         const existingKeys = new Set(prev.map((item) => item.permissionKey));
         const newItems = groupKeys
           .filter((key) => !existingKeys.has(key))
-          .map((key) => permissionRequest(key));
+          .map((key) =>
+            permissionRequest(
+              key,
+              isAllHousingScope,
+              isAllClientScope,
+              includesFuturePlatformContracts,
+            ),
+          );
         return [...prev, ...newItems];
       });
     }
@@ -168,11 +215,17 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     setSaving(true);
     setMessage("");
     try {
-      await replaceUserRoles(userId, assignRoles);
+      const payload = assignRoles.map((r) => ({
+        ...r,
+        isAllHousingScope,
+        isAllClientScope,
+        includesFuturePlatformContracts,
+      }));
+      await replaceUserRoles(userId, payload);
       const msg =
         locale === "en"
           ? "Roles saved and user authorization updated."
-          : "تم حفظ الأدوار وتحديث صلاحيات المستخدم.";
+          : "تم حفظ الأدوار وتحديث صلاحيات ونطاقات المستخدم بنجاح.";
       setMessage(msg);
       toast.success(
         locale === "en" ? "Roles Updated" : "تم تحديث الأدوار",
@@ -193,11 +246,17 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     setSaving(true);
     setMessage("");
     try {
-      await replaceUserPermissions(userId, assignPermissions);
+      const payload = assignPermissions.map((p) => ({
+        ...p,
+        isAllHousingScope,
+        isAllClientScope,
+        includesFuturePlatformContracts,
+      }));
+      await replaceUserPermissions(userId, payload);
       const msg =
         locale === "en"
           ? "Direct permissions saved and user authorization updated."
-          : "تم حفظ الصلاحيات المباشرة وتحديث صلاحيات المستخدم.";
+          : "تم حفظ الصلاحيات المباشرة ونطاقات المستخدم بنجاح.";
       setMessage(msg);
       toast.success(
         locale === "en" ? "Permissions Updated" : "تم تحديث الصلاحيات",
@@ -248,6 +307,66 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         </p>
       ) : (
         <div className="mt-5 space-y-6">
+          {/* Data Scopes Section */}
+          <section className="rounded-xl border border-blue-500/30 bg-blue-50/40 dark:bg-blue-950/20 p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Layers size={18} className="text-[#1167c9]" />
+              <h3 className="font-black text-base">
+                {locale === "en" ? "Data Scopes & Access Boundaries" : "نطاقات البيانات والصلاحيات الجغرافية والمنصات"}
+              </h3>
+            </div>
+            <p className="text-xs text-[var(--muted)] leading-relaxed">
+              {locale === "en"
+                ? "Crucial: Backend RBAC requires active data scopes for platforms and clients. If these scopes are disabled, users with permissions like 'platform_accounts.read' will receive 403 Forbidden errors (Housing permissions are module-level and do not require data scopes)."
+                : "تنبيه هام: يتطلب نظام التحقق في الخادم (Backend RBAC) تحديد نطاقات البيانات للمنصات والعملاء. إذا كانت هذه النطاقات معطلة، سيواجه المستخدم خطأ (403 Forbidden) عند محاولة جلب بيانات المنصات حتى وإن كان يمتلك الصلاحية (صلاحيات السكن عامة على مستوى النظام ولا تتطلب نطاقاً)."}
+            </p>
+            <div className="grid gap-3 pt-1 sm:grid-cols-2">
+
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all ${
+                isAllClientScope
+                  ? "border-[#1167c9] bg-white dark:bg-slate-900 shadow-sm font-bold"
+                  : "border-[var(--border)] bg-transparent opacity-80"
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={isAllClientScope}
+                  onChange={(e) => setIsAllClientScope(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-sm font-bold">
+                    <Layers size={15} className="text-[#1167c9] shrink-0" />
+                    <span>{locale === "en" ? "All Platforms & Clients" : "شامل لجميع المنصات والعملاء"}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted)] font-normal">
+                    {locale === "en" ? "Access all platforms and accounts" : "صلاحية كاملة لجميع المنصات والحسابات"}
+                  </p>
+                </div>
+              </label>
+
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all ${
+                includesFuturePlatformContracts
+                  ? "border-[#1167c9] bg-white dark:bg-slate-900 shadow-sm font-bold"
+                  : "border-[var(--border)] bg-transparent opacity-80"
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={includesFuturePlatformContracts}
+                  onChange={(e) => setIncludesFuturePlatformContracts(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-sm font-bold">
+                    <CheckCircle2 size={15} className="text-[#1167c9] shrink-0" />
+                    <span>{locale === "en" ? "Future Contracts" : "شمول العقود المستقبلية"}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted)] font-normal">
+                    {locale === "en" ? "Auto-include newly created contracts" : "تطبيق الصلاحية تلقائياً على العقود الجديدة"}
+                  </p>
+                </div>
+              </label>
+            </div>
+          </section>
           {canManageRoles && (
             <section className="rounded-xl border border-[var(--border)] p-5">
               <div className="flex items-center justify-between gap-3 mb-3">
@@ -274,7 +393,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                   .filter((role) => role.status === "Active")
                   .map((role) => {
                     const selected = assignRoles.some(
-                      (item) => item.roleId === role.id,
+                      (item) => item.roleId === role.id || item.roleCode === role.code || item.roleCode === role.id,
                     );
                     const roleName =
                       locale === "en"
@@ -300,9 +419,17 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                             setAssignRoles((current) =>
                               selected
                                 ? current.filter(
-                                    (item) => item.roleId !== role.id,
+                                    (item) => item.roleId !== role.id && item.roleCode !== role.code,
                                   )
-                                : [...current, roleRequest(role.id)],
+                                : [
+                                    ...current,
+                                    roleRequest(
+                                      role.id,
+                                      isAllHousingScope,
+                                      isAllClientScope,
+                                      includesFuturePlatformContracts,
+                                    ),
+                                  ],
                             )
                           }
                           className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"

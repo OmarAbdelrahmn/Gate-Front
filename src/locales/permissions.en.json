@@ -64,6 +64,7 @@
   "fleet.issues.manage": "Manage fleet issues",
   "fleet.compliance.read": "View fleet compliance",
   "fleet.compliance.manage": "Manage fleet compliance",
+  "fleet.daily_distances.read": "View daily fleet distances",
   "fleet.files.read": "View fleet files",
   "fleet.files.upload": "Upload fleet files",
   "fleet.files.download": "Download fleet files",

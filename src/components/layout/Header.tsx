@@ -12,11 +12,13 @@ import {
   ShieldCheck,
   Sun,
   UserRound,
+  RotateCcw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { systemConfirm } from "../ui/SystemDialog";
+import { toast } from "../ui/Toast";
 import { translate } from "../../lib/i18n";
 
 import { resolveProfileImageUrl } from "../../lib/users/api";
@@ -24,10 +26,11 @@ import { resolveProfileImageUrl } from "../../lib/users/api";
 export function Header({ onMenu }: { onMenu: () => void }) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [imgError, setImgError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { user, logout, logoutAll, locale, theme, setPreferences } = useAuth();
+  const { user, logout, logoutAll, locale, theme, setPreferences, refreshSession } = useAuth();
   const t = (key: string) => translate(locale, key);
   const router = useRouter();
 
@@ -190,6 +193,30 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                   <MonitorSmartphone size={17} />
                   {t("header.activeSessions")}
                 </Link>
+                <button
+                  type="button"
+                  disabled={refreshing}
+                  onClick={async () => {
+                    setRefreshing(true);
+                    try {
+                      await refreshSession();
+                      setOpen(false);
+                      toast.success(
+                        locale === "en" ? "Session Refreshed" : "تم تحديث الجلسة",
+                        locale === "en" ? "Permissions reloaded successfully." : "تم إعادة تحميل الصلاحيات بنجاح."
+                      );
+                      router.refresh();
+                    } catch (e: any) {
+                      toast.error("خطأ", e?.message || "تعذر تحديث الجلسة");
+                    } finally {
+                      setRefreshing(false);
+                    }
+                  }}
+                  className={`${menuLink} w-full text-blue-700 dark:text-blue-400`}
+                >
+                  <RotateCcw size={17} className={refreshing ? "animate-spin" : ""} />
+                  {locale === "en" ? "Refresh Permissions" : "تحديث الصلاحيات والجلسة"}
+                </button>
                 <div className="my-1 border-t border-[var(--border)]" />
                 <button
                   disabled={loggingOut}

@@ -48,8 +48,9 @@ import {
 } from "lucide-react";
 
 export default function PlatformAccountsPage() {
-  const { can, locale } = useAuth();
+  const { can, locale, refreshSession } = useAuth();
   const t = (key: string) => translate(locale, key);
+  const isEn = locale === "en";
 
   // Data states
   const [accounts, setAccounts] = useState<AccountResponse[]>([]);
@@ -60,6 +61,8 @@ export default function PlatformAccountsPage() {
   const [riders, setRiders] = useState<Rider[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<{ status?: number; message: string } | null>(null);
+  const [refreshingSession, setRefreshingSession] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Filters
@@ -135,6 +138,7 @@ export default function PlatformAccountsPage() {
 
   const loadData = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const [accRes, platRes, cityRes, sponsorRes, empRes, riderRes] = await Promise.allSettled([
         getPlatformAccounts({
@@ -158,7 +162,16 @@ export default function PlatformAccountsPage() {
         console.log("=== All Platform Accounts Returned ===", accRes.value);
         setAccounts(accRes.value);
       } else {
-        console.error("=== Platform Accounts API Error ===", accRes.reason);
+        const err = accRes.reason;
+        console.error("=== Platform Accounts API Error ===", err);
+        const msg =
+          err instanceof Error
+            ? err.message
+            : isEn
+              ? "Failed to load platform accounts"
+              : "تعذر تحميل حسابات المنصات";
+        setFetchError({ status: (err as any)?.status, message: msg });
+        toast.error(isEn ? "Error" : "خطأ", msg);
       }
 
       if (platRes.status === "fulfilled") {
@@ -632,6 +645,65 @@ export default function PlatformAccountsPage() {
           </Button>
         )}
       </div>
+
+      {/* 403 / Error Diagnostic Banner */}
+      {fetchError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/50 dark:bg-red-950/30">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-red-600 shrink-0" />
+              <div>
+                <h3 className="font-bold text-red-900 dark:text-red-200">
+                  {fetchError.status === 403
+                    ? isEn
+                      ? "Access Denied by Server (403 Forbidden) — Missing Platform Scope"
+                      : "تم رفض الوصول من الخادم (403 Forbidden) — نقص في نطاق المنصات (Client Scope)"
+                    : isEn
+                      ? "Failed to load platform accounts"
+                      : "تعذر تحميل حسابات المنصات"}
+                </h3>
+                <p className="mt-1 text-xs text-red-700 dark:text-red-300 leading-relaxed max-w-3xl">
+                  {fetchError.status === 403
+                    ? isEn
+                      ? "Your account has 'platform_accounts.read' permission, but the role or direct permission is missing 'isAllClientScope: true'. An administrator must open your account in User Management (/admin/users), enable 'All Platforms & Clients Scope', save, then click 'Refresh Session & Retry'."
+                      : "يمتلك حسابك صلاحية المنصات ولكن يفتقر إلى النطاق الشامل (isAllClientScope: true). يجب على مدير النظام فتح حسابك في إدارة المستخدمين وتفعيل 'شامل لجميع المنصات والعملاء' والضغط على حفظ، ثم 'تحديث الجلسة وإعادة المحاولة'."
+                    : fetchError.message}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                loading={refreshingSession}
+                className="text-xs min-h-9 px-3"
+                onClick={async () => {
+                  setRefreshingSession(true);
+                  try {
+                    await refreshSession();
+                    await loadData();
+                    toast.success(
+                      isEn ? "Session Refreshed" : "تم تحديث الجلسة",
+                      isEn ? "Authorization and tokens reloaded." : "تم إعادة تحميل بيانات الجلسة والصلاحيات بنجاح."
+                    );
+                  } catch (e: any) {
+                    toast.error(
+                      isEn ? "Refresh Failed" : "فشل تحديث الجلسة",
+                      e?.message || (isEn ? "Unable to refresh session" : "تعذر تحديث الجلسة")
+                    );
+                  } finally {
+                    setRefreshingSession(false);
+                  }
+                }}
+              >
+                {isEn ? "Refresh Session & Retry" : "تحديث الجلسة وإعادة المحاولة"}
+              </Button>
+              <Button variant="ghost" className="text-xs min-h-9 px-3" onClick={() => void loadData()}>
+                {isEn ? "Retry" : "إعادة المحاولة"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-4">

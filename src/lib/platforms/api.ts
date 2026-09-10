@@ -178,7 +178,8 @@ export const getPlatforms = async (includeArchived = false) => {
     return res;
   } catch (err: any) {
     console.error("=== API Error: GET /api/platforms ===", err?.status, err?.message, err?.details);
-    return [];
+    // Rethrow so the caller can detect 403 (missing isAllClientScope) and show the proper error banner.
+    throw err;
   }
 };
 
@@ -220,7 +221,8 @@ export const getPlatformAccounts = async (filters?: AccountFilterParams) => {
     return res;
   } catch (err: any) {
     console.error(`=== API Error: GET ${url} ===`, err?.status, err?.message, err?.details);
-    return [];
+    // Rethrow so calling pages can detect 403 (missing isAllClientScope) and display an error.
+    throw err;
   }
 };
 

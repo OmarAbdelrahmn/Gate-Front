@@ -36,6 +36,7 @@ type AuthContextValue = {
   ) => Promise<void>;
   updateProfileUser: (updatedProfile: { profileImageUrl?: string | null }) => void;
   refreshProfile: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 const localeOf = (value?: string): Locale => (value === "en" ? "en" : "ar");
@@ -187,6 +188,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       refreshProfile: async () => {
         await loadProfile();
+      },
+      refreshSession: async () => {
+        try {
+          const refreshed = await refreshAccessToken();
+          await loadSession(refreshed.user);
+        } catch {
+          await Promise.all([loadAuthorization(), loadProfile()]);
+        }
       },
     }),
     [authorization, density, isLoading, locale, theme, user],

@@ -107,7 +107,16 @@ export type AssignHousingResidentRequest = AssignResidentPayload;
 export type ClosePeriodRequest = CloseResidencePayload;
 export type AssignHousingSupervisorRequest = AssignSupervisorPayload;
 
-export const listHousing = () => authFetch<Housing[]>("/api/housing");
+export const listHousing = async () => {
+  try {
+    const res = await authFetch<Housing[]>("/api/housing");
+    console.log("=== API Response: GET /api/housing ===", res);
+    return res;
+  } catch (err: any) {
+    console.error("=== API Error: GET /api/housing ===", err?.status, err?.message, err?.details);
+    throw err;
+  }
+};
 
 export const getHousing = (id: string) =>
   authFetch<Housing>(`/api/housing/${encodeURIComponent(id)}`);
