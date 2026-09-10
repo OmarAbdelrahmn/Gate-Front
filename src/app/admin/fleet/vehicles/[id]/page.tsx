@@ -3,8 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicleDetail, getVehicleIssues } from "@/lib/fleet/api";
-import { VehicleOperationalStatus, type VehicleDetailResponse, type VehicleIssueSummaryResponse } from "@/lib/fleet/types";
+import { getVehicleDetail, getVehicleIssues, updateVehicle } from "@/lib/fleet/api";
+import {
+  VehicleOperationalStatus,
+  type VehicleDetailResponse,
+  type VehicleIssueSummaryResponse,
+  type VehicleUpsertRequest,
+} from "@/lib/fleet/types";
 import {
   formatVehicleType,
   formatVehicleFuelType,
@@ -14,11 +19,13 @@ import {
   formatVehicleIssueCategory,
   formatVehicleIssueStatus,
   formatVehicleRegistrationType,
+  resolveVehicleRegisteredOwner,
 } from "@/lib/fleet/formatters";
 import { VehicleRegistrationType } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
 import { VehicleUpsertModal } from "../components/VehicleUpsertModal";
 import { AddComplianceModal, type ComplianceTabType } from "../components/AddComplianceModal";
 import { PrivateToPublicTransitionModal } from "../components/PrivateToPublicTransitionModal";
@@ -40,6 +47,8 @@ import {
   ArrowRightLeft,
   CreditCard,
   History,
+  Landmark,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -69,6 +78,55 @@ export default function VehicleDetailPage() {
   const [isOpCardHistoryOpen, setIsOpCardHistoryOpen] = useState(false);
   const [complianceType, setComplianceType] = useState<ComplianceTabType>("Registration");
   const [selectedIssue, setSelectedIssue] = useState<VehicleIssueSummaryResponse | null>(null);
+  const [isFinancingTransferOpen, setIsFinancingTransferOpen] = useState(false);
+  const [isTransferringOwnership, setIsTransferringOwnership] = useState(false);
+
+  const handleCompleteFinancing = async () => {
+    if (!vehicle) return;
+    setIsTransferringOwnership(true);
+    try {
+      const payload: VehicleUpsertRequest = {
+        assetNumber: vehicle.summary.assetNumber,
+        serialNumber: vehicle.serialNumber?.trim() || null,
+        chassisNumber: vehicle.chassisNumber?.trim() || null,
+        plateNumberAr: vehicle.summary.plateNumberAr?.trim() || null,
+        plateNumberEn: vehicle.summary.plateNumberEn?.trim() || null,
+        plateLettersAr: vehicle.plateLettersAr?.trim() || null,
+        plateLettersEn: vehicle.plateLettersEn?.trim() || null,
+        plateDigits: vehicle.plateDigits?.trim() || null,
+        vin: vehicle.vin?.trim() || null,
+        engineNumber: vehicle.engineNumber?.trim() || null,
+        sponsorId: vehicle.summary.sponsorId || null,
+        operatingCityId: vehicle.summary.operatingCityId || null,
+        purchasedFromSupplierId: vehicle.purchasedFromSupplierId || null,
+        registeredOwnerSupplierId: null,
+        registrationType: vehicle.registrationType ?? vehicle.summary.registrationType,
+        vehicleManufacturerId: vehicle.vehicleManufacturerId,
+        vehicleModelId: vehicle.vehicleModelId,
+        modelYear: vehicle.modelYear || null,
+        vehicleType: vehicle.summary.vehicleType,
+        fuelType: vehicle.fuelType,
+        transmissionType: vehicle.transmissionType,
+        colorAr: vehicle.colorAr?.trim() || null,
+        colorEn: vehicle.colorEn?.trim() || null,
+        ownershipType: vehicle.ownershipType,
+        ownerName: vehicle.ownerName?.trim() || null,
+        acquisitionDate: vehicle.acquisitionDate ? vehicle.acquisitionDate.split("T")[0] : null,
+        leaseReference: vehicle.leaseReference?.trim() || null,
+        currentOdometer: vehicle.summary.currentOdometer,
+        notes: vehicle.notes?.trim() || null,
+        rowVersion: vehicle.summary.rowVersion,
+      };
+
+      await updateVehicle(vehicle.summary.id, payload);
+      setIsFinancingTransferOpen(false);
+      await loadData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsTransferringOwnership(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -121,6 +179,7 @@ export default function VehicleDetailPage() {
   }
 
   const { summary } = vehicle;
+  const registeredOwnerInfo = resolveVehicleRegisteredOwner(vehicle, "الشركة");
 
   const renderStatus = (status: VehicleOperationalStatus) => {
     switch (status) {
@@ -180,6 +239,17 @@ export default function VehicleDetailPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
+          {can("fleet.vehicles.manage") && vehicle.registeredOwnerSupplierId && (
+            <Button
+              onClick={() => setIsFinancingTransferOpen(true)}
+              variant="secondary"
+              className="gap-2 border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+            >
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span>نقل الملكية للكفيل</span>
+            </Button>
+          )}
+
           {can("fleet.vehicles.manage") && (
             <Button onClick={() => setIsUpsertOpen(true)} variant="secondary" className="gap-2">
               <Edit2 className="h-4 w-4" /> تعديل البيانات
@@ -204,6 +274,34 @@ export default function VehicleDetailPage() {
         {/* Left Column - Main Info */}
         <div className="lg:col-span-2 space-y-6">
           
+          {/* Financed Notice Banner */}
+          {vehicle.registeredOwnerSupplierId && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-800/60 dark:bg-amber-950/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+                  <Landmark className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-amber-950 dark:text-amber-200">
+                    المركبة ممولة ومسجلة باسم ({vehicle.registeredOwnerSupplier || "جهة التمويل"})
+                  </div>
+                  <div className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                    الكفيل المشغّل هو <span className="font-bold">{summary.sponsorName || "الشركة"}</span>. عند انتهاء أقساط التمويل، يمكنك نقل الملكية مباشرة للكفيل.
+                  </div>
+                </div>
+              </div>
+              {can("fleet.vehicles.manage") && (
+                <Button
+                  onClick={() => setIsFinancingTransferOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 text-xs gap-1.5 shadow-sm px-3 py-1.5 h-auto"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>إتمام التمويل ونقل الملكية</span>
+                </Button>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-4 flex flex-col gap-1">
               <span className="text-xs font-bold text-slate-500 uppercase">اللوحة</span>
@@ -223,11 +321,22 @@ export default function VehicleDetailPage() {
                 {summary.currentOdometer.toLocaleString()} <span className="text-sm">كم</span>
               </span>
             </Card>
-            <Card className="p-4 flex flex-col gap-1">
-              <span className="text-xs font-bold text-slate-500 uppercase">الكفيل المالك</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-1 line-clamp-2">
-                {summary.sponsorName || "الشركة"}
+            <Card className="p-4 flex flex-col justify-between gap-1">
+              <span className="text-xs font-bold text-slate-500 uppercase">المالك المسجل</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-200 line-clamp-1" title={registeredOwnerInfo.ownerName}>
+                {registeredOwnerInfo.ownerName}
               </span>
+              <div className="mt-1">
+                {registeredOwnerInfo.isFinanced ? (
+                  <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">
+                    تمويل بنكي / جهة خارجية
+                  </Badge>
+                ) : (
+                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">
+                    الكفيل المباشر
+                  </Badge>
+                )}
+              </div>
             </Card>
           </div>
 
@@ -279,11 +388,52 @@ export default function VehicleDetailPage() {
                 <div className="text-sm text-slate-500 mb-1">مدينة التشغيل</div>
                 <div className="font-medium text-slate-900 dark:text-slate-100">{summary.operatingCity || "—"}</div>
               </div>
-              <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div className="text-sm text-slate-500 mb-1">تاريخ الاستحواذ / الملكية</div>
-                <div className="font-medium text-slate-900 dark:text-slate-100">
-                  {formatVehicleOwnershipType(vehicle.ownershipType)} {vehicle.acquisitionDate ? `- ${formatDate(vehicle.acquisitionDate)}` : ""}
+
+              {/* Ownership & Financing Details */}
+              <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-y-5 gap-x-12">
+                <div>
+                  <div className="text-sm text-slate-500 mb-1">المالك المسجل الرسمي</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
+                      {registeredOwnerInfo.ownerName}
+                    </span>
+                    {registeredOwnerInfo.isFinanced ? (
+                      <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
+                        جهة تمويل / بنك
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                        مملوكة للكفيل مباشرة
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+                <div>
+                  <div className="text-sm text-slate-500 mb-1">الكفيل / الجهة المشغّلة</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">
+                    {summary.sponsorName || "الشركة"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500 mb-1">مورد الشراء الأصلي</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">
+                    {vehicle.supplierName || "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500 mb-1">نوع وتاريخ الاستحواذ</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">
+                    {formatVehicleOwnershipType(vehicle.ownershipType)} {vehicle.acquisitionDate ? `- ${formatDate(vehicle.acquisitionDate)}` : ""}
+                  </div>
+                </div>
+                {vehicle.leaseReference && (
+                  <div>
+                    <div className="text-sm text-slate-500 mb-1">مرجع عقد التمويل / الإيجار</div>
+                    <div className="font-mono font-medium text-slate-900 dark:text-slate-100">
+                      {vehicle.leaseReference}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -447,6 +597,55 @@ export default function VehicleDetailPage() {
         onClose={() => setSelectedIssue(null)}
         issue={selectedIssue}
       />
+
+      <Modal
+        isOpen={isFinancingTransferOpen}
+        onClose={() => setIsFinancingTransferOpen(false)}
+        title="إتمام التمويل ونقل الملكية للكفيل"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4 pt-2">
+          <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 text-xs">
+            <Landmark className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div className="space-y-1">
+              <div className="font-bold text-sm">تأكيد نقل الملكية الرسمية</div>
+              <div>
+                المالك المسجل حالياً: <span className="font-bold">{vehicle?.registeredOwnerSupplier || "جهة التمويل"}</span>
+              </div>
+              <div>
+                المالك الجديد (الكفيل): <span className="font-bold">{summary.sponsorName || "الشركة"}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            هل تم الانتهاء من سداد كافة أقساط التمويل وتم نقل ملكية الاستمارة رسمياً إلى الكفيل المشغّل؟
+          </p>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            سيتم تعيين المالك المسجل ليصبح الكفيل المباشر، مع الاحتفاظ ببيانات مورد الشراء الأصلي ({vehicle?.supplierName || "المورد"}).
+          </p>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsFinancingTransferOpen(false)}
+              disabled={isTransferringOwnership}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCompleteFinancing}
+              disabled={isTransferringOwnership}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {isTransferringOwnership ? "جارٍ حفظ التحديث..." : "تأكيد نقل الملكية للكفيل"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

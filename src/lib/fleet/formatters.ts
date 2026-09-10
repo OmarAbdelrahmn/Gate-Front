@@ -484,3 +484,35 @@ export function formatCountdownTimer(remainingSeconds?: number | null): {
   return { formatted, isOverdue, days, hours, minutes };
 }
 
+/**
+ * Resolves the authoritative registered owner according to the fleet ownership rule:
+ * - registeredOwnerSupplierId != null => selected supplier/bank is the registered owner
+ * - registeredOwnerSupplierId == null => the vehicle sponsor is the registered owner
+ */
+export function resolveVehicleRegisteredOwner(
+  vehicle?: {
+    registeredOwnerSupplierId?: string | null;
+    registeredOwnerSupplier?: string | null;
+    summary?: { sponsorName?: string | null } | null;
+  } | null,
+  fallback = "—"
+): {
+  ownerName: string;
+  isFinanced: boolean;
+} {
+  if (!vehicle) {
+    return { ownerName: fallback, isFinanced: false };
+  }
+  if (vehicle.registeredOwnerSupplierId && vehicle.registeredOwnerSupplier) {
+    return {
+      ownerName: vehicle.registeredOwnerSupplier,
+      isFinanced: true,
+    };
+  }
+  return {
+    ownerName: vehicle.summary?.sponsorName || fallback,
+    isFinanced: false,
+  };
+}
+
+

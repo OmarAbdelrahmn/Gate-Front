@@ -389,6 +389,8 @@ export interface VehicleDetailResponse {
   engineNumber?: string | null;
   purchasedFromSupplierId?: string | null;
   supplierName?: string | null;
+  registeredOwnerSupplierId?: string | null;
+  registeredOwnerSupplier?: string | null;
   registrationType: VehicleRegistrationType;
   vehicleManufacturerId: string;
   vehicleModelId: string;
@@ -430,6 +432,7 @@ export interface VehicleUpsertRequest {
   sponsorId?: string | null;
   operatingCityId?: string | null;
   purchasedFromSupplierId?: string | null;
+  registeredOwnerSupplierId?: string | null;
   registrationType: VehicleRegistrationType;
   vehicleManufacturerId: string;
   vehicleModelId: string;

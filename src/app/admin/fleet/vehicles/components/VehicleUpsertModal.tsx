@@ -29,7 +29,7 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { listSponsors, type Sponsor } from "@/lib/workforce/api";
 import { getOperatingCities, type OperatingCityCatalogItem } from "@/lib/workforce/external-riders-api";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Landmark, ShieldCheck } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -79,6 +79,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
     sponsorId: "",
     operatingCityId: "",
     purchasedFromSupplierId: "",
+    registeredOwnerSupplierId: null,
     registrationType: VehicleRegistrationType.Private,
     vehicleManufacturerId: "",
     vehicleModelId: "",
@@ -96,6 +97,8 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
     notes: "",
     rowVersion: null,
   });
+
+  const [isFinancedOwner, setIsFinancedOwner] = useState<boolean>(false);
 
   const [manufacturers, setManufacturers] = useState<VehicleManufacturerResponse[]>([]);
   const [allModels, setAllModels] = useState<VehicleModelResponse[]>([]);
@@ -134,6 +137,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
       });
 
       if (editingVehicle) {
+        setIsFinancedOwner(Boolean(editingVehicle.registeredOwnerSupplierId));
         setFormData({
           assetNumber: editingVehicle.summary.assetNumber,
           serialNumber: editingVehicle.serialNumber || "",
@@ -148,6 +152,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           sponsorId: editingVehicle.summary.sponsorId || "",
           operatingCityId: editingVehicle.summary.operatingCityId || "",
           purchasedFromSupplierId: editingVehicle.purchasedFromSupplierId || "",
+          registeredOwnerSupplierId: editingVehicle.registeredOwnerSupplierId || null,
           registrationType: editingVehicle.registrationType ?? editingVehicle.summary.registrationType,
           vehicleManufacturerId: editingVehicle.vehicleManufacturerId,
           vehicleModelId: editingVehicle.vehicleModelId,
@@ -166,6 +171,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           rowVersion: editingVehicle.summary.rowVersion,
         });
       } else {
+        setIsFinancedOwner(false);
         setFormData({
           assetNumber: "",
           serialNumber: "",
@@ -180,6 +186,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           sponsorId: "",
           operatingCityId: "",
           purchasedFromSupplierId: "",
+          registeredOwnerSupplierId: null,
           registrationType: VehicleRegistrationType.Private,
           vehicleManufacturerId: "",
           vehicleModelId: "",
@@ -202,6 +209,8 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
   }, [isOpen, editingVehicle]);
 
   const availableModels = allModels.filter((m) => m.vehicleManufacturerId === formData.vehicleManufacturerId);
+  const selectedSponsor = sponsors.find((s) => s.id === formData.sponsorId);
+  const selectedSponsorName = selectedSponsor?.registryNameAr || "الكفيل المختار";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,6 +260,12 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
       return;
     }
 
+    // Required selection when financed/external registered owner is enabled
+    if (isFinancedOwner && !formData.registeredOwnerSupplierId) {
+      toast.error("خطأ في البيانات", "يرجى اختيار جهة التمويل / المالك المسجل للمركبة");
+      return;
+    }
+
     // Model Year validation (1950 - 2200)
     if (formData.modelYear !== null && formData.modelYear !== undefined && formData.modelYear !== 0) {
       if (formData.modelYear < 1950 || formData.modelYear > 2200) {
@@ -284,12 +299,14 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           sponsorId: formData.sponsorId || null,
           operatingCityId: formData.operatingCityId || null,
           purchasedFromSupplierId: formData.purchasedFromSupplierId || null,
+          registeredOwnerSupplierId: isFinancedOwner ? (formData.registeredOwnerSupplierId || null) : null,
           colorAr: formData.colorAr?.trim() || null,
           colorEn: formData.colorEn?.trim() || null,
           ownerName: formData.ownerName?.trim() || null,
           acquisitionDate: formData.acquisitionDate?.trim() || null,
           leaseReference: formData.leaseReference?.trim() || null,
           notes: formData.notes?.trim() || null,
+          rowVersion: editingVehicle ? editingVehicle.summary.rowVersion : null,
         };
 
         if (editingVehicle) {
@@ -626,7 +643,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
             </div>
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                مورد الشراء / التأجير{" "}
+                مورد الشراء الأصلي{" "}
                 {formData.ownershipType === VehicleOwnershipType.Owned ? (
                   <span className="text-red-500">*</span>
                 ) : (
@@ -639,16 +656,103 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                   ...suppliers.map((s) => ({ value: s.id, label: s.nameAr })),
                 ]}
                 value={formData.purchasedFromSupplierId || ""}
-                placeholder="اختر المورد..."
+                placeholder="اختر مورد الشراء..."
                 onChange={(v) => setFormData({ ...formData, purchasedFromSupplierId: v })}
               />
+              <span className="mt-1 block text-[11px] text-slate-500 dark:text-slate-400">
+                مصدر شراء المركبة (يبقى محفوظاً ولا يتغير حتى بعد انتهاء التمويل)
+              </span>
             </div>
+
+            {/* Financed / External Registered Owner Section */}
+            <div className="col-span-1 md:col-span-3 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/60">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1167c9] dark:bg-blue-950/50 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50">
+                    <Landmark className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      المالك المسجل (في استمارة المركبة)
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      حدد ما إذا كانت المركبة مسجلة باسم بنك/جهة تمويلية أم باسم الكفيل المباشر
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 self-end sm:self-auto">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    تمويل / مالك مسجل خارجي:
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isFinancedOwner}
+                    onClick={() => {
+                      const next = !isFinancedOwner;
+                      setIsFinancedOwner(next);
+                      if (!next) {
+                        setFormData((prev) => ({ ...prev, registeredOwnerSupplierId: null }));
+                      }
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      isFinancedOwner ? "bg-[#1167c9]" : "bg-slate-300 dark:bg-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        isFinancedOwner
+                          ? (locale === "ar" ? "-translate-x-5" : "translate-x-5")
+                          : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {isFinancedOwner ? (
+                <div className="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800 space-y-2">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    جهة التمويل / البنك المالك المسجل <span className="text-red-500">*</span>
+                  </label>
+                  <SearchableSelect
+                    options={suppliers.map((s) => ({ value: s.id, label: s.nameAr }))}
+                    value={formData.registeredOwnerSupplierId || ""}
+                    placeholder="اختر البنك أو جهة التمويل (مثال: مصرف الراجحي)..."
+                    onChange={(v) => setFormData({ ...formData, registeredOwnerSupplierId: v })}
+                  />
+                  <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50/90 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200/80 dark:border-amber-800/50">
+                    <span className="font-bold shrink-0">تنبيه:</span>
+                    <span>
+                      ستُسجل المركبة باسم جهة التمويل المختارة طوال فترة التمويل، ويبقى الكفيل المختار هو المستفيد المشغّل.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-2.5 rounded-lg bg-emerald-50/90 dark:bg-emerald-950/30 p-3 border border-emerald-200/80 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300">
+                  <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <div>
+                    <span className="font-bold">المالك المسجل المعتمد: </span>
+                    <span className="font-semibold underline decoration-emerald-400 underline-offset-2">
+                      {selectedSponsorName}
+                    </span>
+                    <p className="text-emerald-700/90 dark:text-emerald-400/90 text-[11px] mt-0.5">
+                      المركبة مسجلة مباشرة باسم الكفيل المختار (غير ممولة، أو تم إنهاء تمويلها ونقل الملكية بالكامل).
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
-              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">اسم المالك المسجل</label>
+              <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                اسم المالك المسجل (حقل نصي اختياري للتوافق)
+              </label>
               <Input
                 value={formData.ownerName || ""}
                 onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
-                placeholder="مثال: شركة الحلول المتقدمة"
+                placeholder="حقل إضافي اختياري..."
               />
             </div>
             <div>
