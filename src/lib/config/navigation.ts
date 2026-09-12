@@ -67,6 +67,22 @@ export const navigation: NavItem[] = [
     roles: ["admin", "manager", "member", "accountant"],
     children: [
       {
+        label: "لوحة مؤشرات الموارد البشرية",
+        labelKey: "nav.hrDashboard",
+        href: "/admin/hr/dashboard",
+        icon: LayoutDashboard,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "reports.read",
+      },
+      {
+        label: "لوحة مؤشرات الالتزام",
+        labelKey: "nav.peopleComplianceDashboard",
+        href: "/admin/people-compliance",
+        icon: ShieldCheck,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "reports.read",
+      },
+      {
         label: "جميع الإداريين والمناديب",
         labelKey: "nav.employees",
         href: "/admin/employees",
@@ -178,6 +194,14 @@ export const navigation: NavItem[] = [
     permissionsAny: ["platform_accounts.read", "platform_assignments.read"],
     children: [
       {
+        label: "لوحة مؤشرات العمليات",
+        labelKey: "nav.operationsDashboard",
+        href: "/admin/operations/dashboard",
+        icon: LayoutDashboard,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "reports.read",
+      },
+      {
         label: "المنصات",
         labelKey: "nav.platformList",
         href: "/admin/platforms",
@@ -220,6 +244,14 @@ export const navigation: NavItem[] = [
       "fuel.import",
     ],
     children: [
+      {
+        label: "لوحة مؤشرات الأسطول",
+        labelKey: "nav.fleetDashboard",
+        href: "/admin/fleet/dashboard",
+        icon: LayoutDashboard,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "reports.read",
+      },
       {
         label: "المركبات",
         labelKey: "nav.vehicles",
@@ -430,16 +462,12 @@ export const navigation: NavItem[] = [
     ],
     children: [
       {
-        label: "لوحة مؤشرات الصيانة",
-        labelKey: "nav.maintenanceDashboard",
-        href: "/admin/maintenance",
+        label: "لوحة مؤشرات الصيانة والمخزون",
+        labelKey: "nav.maintenanceInventoryDashboard",
+        href: "/admin/maintenance/dashboard",
         icon: LayoutDashboard,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: [
-          "maintenance.locations.read",
-          "maintenance.work_orders.read",
-          "inventory.stock.read",
-        ],
+        permission: "reports.read",
       },
       {
         label: "أوامر الصيانة والعمل",

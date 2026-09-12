@@ -8,10 +8,10 @@ import {
   navigation,
   type NavItem,
   type Role,
-} from "../../lib/config/navigation";
-import { useAuth } from "../../lib/auth/AuthProvider";
-import { getDefaultRouteForUser } from "../../lib/auth/roles";
-import { translate } from "../../lib/i18n";
+} from "@/lib/config/navigation";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { getDefaultRouteForUser } from "@/lib/auth/roles";
+import { translate } from "@/lib/i18n";
 
 const permitted = (
   item: NavItem,
@@ -60,8 +60,8 @@ export function Sidebar({
     if (targetHref === "/admin/fleet/vehicle-account-assignments") {
       return path === "/admin/fleet/vehicle-account-assignments";
     }
-    if (targetHref === "/admin/maintenance") {
-      return path === "/admin/maintenance";
+    if (targetHref === "/admin/maintenance" || targetHref === "/admin/maintenance/dashboard") {
+      return path === "/admin/maintenance" || path === "/admin/maintenance/dashboard";
     }
     if (!path.startsWith(`${targetHref}/`)) return false;
     return !allHrefs.some(
