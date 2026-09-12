@@ -174,7 +174,7 @@ export function resolveProfileImageUrl(path?: string | null): string | null {
     return path;
   }
   const apiBase = (
-    process.env.NEXT_PUBLIC_API_URL || "https://gate.premiumasp.net"
+    process.env.NEXT_PUBLIC_API_URL || "https://gat.premiumasp.net"
   ).replace(/\/$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   return `${apiBase}${cleanPath}`;
