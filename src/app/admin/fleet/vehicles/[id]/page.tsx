@@ -256,7 +256,7 @@ export default function VehicleDetailPage() {
             </Button>
           )}
 
-          {(can("fleet.registration-transitions.manage") || can("fleet.vehicles.manage")) && (
+          {(can("fleet.registration_transitions.manage") || can("fleet.vehicles.manage")) && (
             <Button
               onClick={() => setIsTransitionOpen(true)}
               variant="secondary"
