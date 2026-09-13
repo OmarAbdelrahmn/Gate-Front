@@ -13,6 +13,8 @@ import {
   Shield,
   Check,
   Archive,
+  ZoomIn,
+  ExternalLink,
 } from "lucide-react";
 import { extractErrorMessageFromBody } from "../../../lib/auth/api";
 import { useAuth } from "../../../lib/auth/AuthProvider";
@@ -95,6 +97,21 @@ export default function UsersPage() {
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [userToArchive, setUserToArchive] = useState<ManagedUser | null>(null);
+  const [previewImage, setPreviewImage] = useState<{
+    url: string;
+    title: string;
+    subtitle?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && previewImage) {
+        setPreviewImage(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewImage]);
 
   // Authorization catalog prerequisites
   const [rolesCatalog, setRolesCatalog] = useState<Role[]>([]);
@@ -866,13 +883,32 @@ export default function UsersPage() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         {user.profileImageUrl ? (
-                          <img
-                            src={resolveProfileImageUrl(user.profileImageUrl) || ""}
-                            alt={user.displayNameAr || user.userName}
-                            className="h-9 w-9 shrink-0 rounded-full object-cover border border-slate-200 shadow-sm"
-                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewImage({
+                                url: resolveProfileImageUrl(user.profileImageUrl) || "",
+                                title:
+                                  locale === "en"
+                                    ? user.displayNameEn || user.displayNameAr || user.userName
+                                    : user.displayNameAr || user.displayNameEn || user.userName,
+                                subtitle: user.userName,
+                              })
+                            }
+                            className="group relative h-10 w-10 shrink-0 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1167c9] transition-transform hover:scale-105 cursor-pointer"
+                            title={locale === "en" ? "Click to view full photo" : "انقر لعرض الصورة بالحجم الكامل"}
+                          >
+                            <img
+                              src={resolveProfileImageUrl(user.profileImageUrl) || ""}
+                              alt={user.displayNameAr || user.userName}
+                              className="h-full w-full object-cover group-hover:brightness-90 transition-all"
+                            />
+                            <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                              <ZoomIn size={14} className="text-white drop-shadow" />
+                            </div>
+                          </button>
                         ) : (
-                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-[#1167c9] font-black text-xs">
+                          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-100 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400 font-black text-xs">
                             {(user.displayNameAr || user.userName || "U").charAt(0).toUpperCase()}
                           </div>
                         )}
@@ -973,6 +1009,72 @@ export default function UsersPage() {
           void load();
         }}
       />
+
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewImage(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative max-w-2xl w-full max-h-[90vh] flex flex-col items-center bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+            dir={locale === "ar" ? "rtl" : "ltr"}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between w-full pb-3 border-b border-[var(--border)]">
+              <div>
+                <h3 className="font-black text-base text-[var(--foreground)]">
+                  {previewImage.title}
+                </h3>
+                {previewImage.subtitle && (
+                  <p className="text-xs text-[var(--muted)] font-mono" dir="ltr">
+                    @{previewImage.subtitle}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="flex size-9 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[var(--foreground)] transition-colors"
+                aria-label={locale === "en" ? "Close" : "إغلاق"}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Image View */}
+            <div className="mt-3 flex items-center justify-center w-full max-h-[70vh] overflow-hidden rounded-xl bg-slate-900/5 dark:bg-slate-950/40 p-2">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[65vh] max-w-full rounded-lg object-contain shadow-md"
+              />
+            </div>
+
+            {/* Footer / Link */}
+            <div className="mt-3 flex items-center justify-between w-full pt-2 border-t border-[var(--border)] text-xs text-[var(--muted)]">
+              <span>
+                {locale === "en"
+                  ? "Click outside or press Esc to close"
+                  : "انقر خارج الصورة أو اضغط Esc للإغلاق"}
+              </span>
+              <a
+                href={previewImage.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 font-bold text-[#1167c9] hover:underline"
+              >
+                <ExternalLink size={14} />
+                <span>
+                  {locale === "en" ? "Open full image" : "فتح الصورة كاملة"}
+                </span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
