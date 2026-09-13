@@ -46,7 +46,7 @@ export function DisciplinaryActionView({ data }: { data: DisciplinaryActionData 
 
           <div className="flex items-start gap-2">
             <span className="whitespace-nowrap font-black">رقم الاقامة :</span>
-            <span className="font-extrabold text-black underline px-2 dir-ltr inline-block">
+            <span dir="rtl" className="font-extrabold text-black underline px-2 dir-rtl inline-block">
               {data.iqamaNo || "................................................................................"}
             </span>
           </div>

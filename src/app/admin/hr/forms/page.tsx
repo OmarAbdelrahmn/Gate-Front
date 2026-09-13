@@ -511,6 +511,7 @@ export default function HrFormsPage() {
                 value={iqamaNo}
                 onChange={(e) => setIqamaNo(e.target.value)}
                 placeholder="أدخل رقم الإقامة..."
+                dir="rtl"
               />
             </div>
 

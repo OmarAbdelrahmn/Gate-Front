@@ -50,7 +50,7 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
             الاسم رباعياً : <span className="font-bold border-b border-dotted border-black px-2">{data.riderName || "........................................................"}</span>
           </div>
           <div>
-            رقم الهوية / الإقامة : <span className="font-bold border-b border-dotted border-black px-2">{data.iqamaNo || "...................................."}</span>
+            رقم الهوية / الإقامة : <span dir="rtl" className="font-bold border-b border-dotted border-black px-2 dir-rtl inline-block">{data.iqamaNo || "...................................."}</span>
           </div>
           <div>
             المسمى الوظيفي : <span className="font-bold border-b border-dotted border-black px-2">{data.jobTitle || "سائق مندوب توصيل"}</span>

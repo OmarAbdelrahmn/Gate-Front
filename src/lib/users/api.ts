@@ -43,14 +43,30 @@ export function updateUserStatus(
     { method: "PATCH", body: JSON.stringify({ status, reason, rowVersion }) },
   );
 }
-export function archiveUser(
+export async function archiveUser(
   userId: string,
   reason: string,
-  rowVersion: string,
+  rowVersion?: string,
 ) {
+  let targetRowVersion = rowVersion;
+
+  // Obtain the current rowVersion from GET /api/users/{userId} if not provided
+  if (!targetRowVersion) {
+    try {
+      const currentUser = await getUser(userId);
+      if (currentUser?.rowVersion) {
+        targetRowVersion = currentUser.rowVersion;
+      }
+    } catch (err) {
+      console.warn("Could not fetch user to obtain fresh rowVersion:", err);
+    }
+  }
+
+  const cleanReason = reason?.trim() || "User account is no longer required";
+
   return authFetch<void>(`/api/users/${encodeURIComponent(userId)}/archive`, {
     method: "PATCH",
-    body: JSON.stringify({ reason, rowVersion }),
+    body: JSON.stringify({ reason: cleanReason, rowVersion: targetRowVersion }),
   });
 }
 export function resetUserPassword(userId: string, newPassword: string) {

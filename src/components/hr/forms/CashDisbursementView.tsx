@@ -86,7 +86,7 @@ export function CashDisbursementView({ data }: { data: CashDisbursementData }) {
             </div>
             <div className="flex items-center gap-1">
               <span className="font-bold whitespace-nowrap">رقم الهوية :-</span>
-              <span className="border-b border-dotted border-black flex-1 text-center font-bold">
+              <span dir="rtl" className="border-b border-dotted border-black flex-1 text-center font-bold dir-rtl inline-block">
                 {data.iqamaNo || ".................."}
               </span>
             </div>

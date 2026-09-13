@@ -60,7 +60,7 @@ export function GenericDocumentView({
             </div>
             <div>
               <span className="font-bold text-gray-700">رقم الإقامة / الهوية: </span>
-              <span className="font-extrabold text-black">{data.iqamaNo || "لم يتم التحديد"}</span>
+              <span dir="rtl" className="font-extrabold text-black dir-rtl inline-block">{data.iqamaNo || "لم يتم التحديد"}</span>
             </div>
             <div>
               <span className="font-bold text-gray-700">الجنسية: </span>

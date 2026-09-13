@@ -33,6 +33,7 @@ import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { ArchiveUserModal } from "./ArchiveUserModal";
 
 type Props = { user: ManagedUser; onChanged: (user: ManagedUser) => void };
 type Role = {
@@ -184,6 +185,7 @@ export function UserManagementPanel({ user, onChanged }: Props) {
   const [message, setMessage] = useState("");
   const [password, setPassword] = useState("");
   const [reason, setReason] = useState("");
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [status, setStatus] = useState(user.status);
   const [credential, setCredential] = useState<TemporaryCredential | null>(
     null,
@@ -465,22 +467,40 @@ export function UserManagementPanel({ user, onChanged }: Props) {
             <h2 className="font-black text-red-700">
               {locale === "en" ? "Final Action" : "إجراء نهائي"}
             </h2>
-            <Button
-              variant="danger"
-              className="mt-3"
-              loading={busy}
-              onClick={() =>
-                void run(
-                  () => archiveUser(user.id, reason, user.rowVersion),
-                  locale === "en" ? "User archived successfully." : "تمت أرشفة المستخدم.",
-                )
-              }
-            >
-              <Archive size={16} />
-              {locale === "en" ? "Archive User" : "أرشفة المستخدم"}
-            </Button>
+            {user.status === "Archived" ? (
+              <p className="mt-3 text-xs font-bold text-[var(--muted)]">
+                {locale === "en"
+                  ? "This user account is currently archived."
+                  : "تمت أرشفة حساب هذا المستخدم مسبقاً."}
+              </p>
+            ) : (
+              <>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  {locale === "en"
+                    ? "Archiving will revoke user access and move the account to the archive."
+                    : "الأرشفة تقوم بتعطيل صلاحيات الدخول ونقل الحساب إلى الأرشيف."}
+                </p>
+                <Button
+                  variant="danger"
+                  className="mt-3"
+                  loading={busy}
+                  onClick={() => setIsArchiveModalOpen(true)}
+                >
+                  <Archive size={16} />
+                  {locale === "en" ? "Archive User" : "أرشفة المستخدم"}
+                </Button>
+              </>
+            )}
           </Card>
         )}
+        <ArchiveUserModal
+          isOpen={isArchiveModalOpen}
+          onClose={() => setIsArchiveModalOpen(false)}
+          user={user}
+          onSuccess={() => {
+            onChanged({ ...user, status: "Archived" });
+          }}
+        />
       </div>
       <div className="xl:col-span-2">
         <Card className="p-5 sm:p-7">

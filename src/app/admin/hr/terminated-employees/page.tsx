@@ -30,6 +30,7 @@ import type { Employee } from "@/lib/workforce/types";
 import { ExternalRiderStatusBadge } from "@/components/hr/ExternalRiderStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { matchesArabicSearch } from "@/lib/utils/arabicSearch";
 
 type TerminatedPerson = {
   id: string;
@@ -195,15 +196,18 @@ export default function TerminatedEmployeesPage() {
       if (typeFilter !== "all" && item.sourceType !== typeFilter) {
         return false;
       }
-      const query = search.trim().toLowerCase();
-      if (!query) return true;
-      return (
-        item.fullName.toLowerCase().includes(query) ||
-        item.iqamaNo.includes(query) ||
-        item.phone.includes(query) ||
-        item.cityName.toLowerCase().includes(query) ||
-        item.roleName.toLowerCase().includes(query) ||
-        item.nationality.toLowerCase().includes(query)
+      if (!search.trim()) return true;
+      return matchesArabicSearch(
+        search,
+        item.fullName,
+        item.iqamaNo,
+        item.phone,
+        item.cityName,
+        item.roleName,
+        item.nationality,
+        item.engagementLabel?.ar,
+        item.engagementLabel?.en,
+        item.sourceType,
       );
     });
   }, [terminatedList, search, typeFilter]);

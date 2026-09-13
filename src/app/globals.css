@@ -269,6 +269,16 @@ html[data-theme="dark"] form label:not(.field-shell):has(> :is(input, select, te
   font-variant-numeric: tabular-nums;
 }
 
+.dir-rtl {
+  direction: rtl !important;
+  text-align: right;
+}
+
+.dir-ltr {
+  direction: ltr !important;
+  text-align: left;
+}
+
 @media print {
   @page {
     size: A4 portrait;

@@ -131,7 +131,7 @@ export function PromissoryNoteView({ data }: { data: PromissoryNoteData }) {
                   رقم الإقامة
                 </td>
                 <td className="border-2 border-black p-2 font-bold px-3">
-                  {data.iqamaNo || "........................................................"}
+                  <span dir="rtl" className="dir-rtl inline-block">{data.iqamaNo || "........................................................"}</span>
                 </td>
               </tr>
               <tr>

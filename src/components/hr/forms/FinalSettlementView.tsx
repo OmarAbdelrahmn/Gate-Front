@@ -43,7 +43,7 @@ export function FinalSettlementView({ data }: { data: FinalSettlementData }) {
         {/* Iqama Digits Row */}
         <div className="flex items-center gap-3 border-b border-black pb-2.5 font-bold text-xs">
           <span>رقم الهوية:</span>
-          <div className="flex items-center gap-1 dir-ltr">
+          <div dir="rtl" className="flex items-center gap-1 dir-rtl">
             {iqamaDigits.map((digit, index) => (
               <span
                 key={index}

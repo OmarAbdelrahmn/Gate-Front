@@ -12,9 +12,11 @@ import {
   User,
   Shield,
   Check,
+  Archive,
 } from "lucide-react";
 import { extractErrorMessageFromBody } from "../../../lib/auth/api";
 import { useAuth } from "../../../lib/auth/AuthProvider";
+import { ArchiveUserModal } from "../../../components/users/ArchiveUserModal";
 import {
   createUser,
   getPermissionCatalogue,
@@ -92,6 +94,7 @@ export default function UsersPage() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [userToArchive, setUserToArchive] = useState<ManagedUser | null>(null);
 
   // Authorization catalog prerequisites
   const [rolesCatalog, setRolesCatalog] = useState<Role[]>([]);
@@ -918,15 +921,29 @@ export default function UsersPage() {
                       {formatDate(user.createdAtUtc, locale)}
                     </td>
                     <td className="px-5 py-4">
-                      <Link
-                        href={`/admin/users/${user.id}`}
-                        aria-label={`${t("common.edit")} ${user.displayNameAr || user.userName}`}
-                        title={t("common.edit")}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-[#1167c9] hover:bg-blue-500/10"
-                      >
-                        <Pencil size={17} />
-                        <span className="hidden sm:inline">{t("common.edit")}</span>
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          aria-label={`${t("common.edit")} ${user.displayNameAr || user.userName}`}
+                          title={t("common.edit")}
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-[#1167c9] hover:bg-blue-500/10"
+                        >
+                          <Pencil size={15} />
+                          <span className="hidden sm:inline">{t("common.edit")}</span>
+                        </Link>
+                        {can("users.archive") && user.status !== "Archived" && (
+                          <button
+                            type="button"
+                            onClick={() => setUserToArchive(user)}
+                            aria-label={locale === "en" ? "Archive User" : "أرشفة المستخدم"}
+                            title={locale === "en" ? "Archive User" : "أرشفة المستخدم"}
+                            className="inline-flex min-h-9 items-center gap-1 rounded-xl px-2 text-xs font-bold text-red-600 hover:bg-red-500/10 transition-colors"
+                          >
+                            <Archive size={15} />
+                            <span className="hidden md:inline">{locale === "en" ? "Archive" : "أرشفة"}</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -947,6 +964,15 @@ export default function UsersPage() {
           </Table>
         )}
       </Card>
+
+      <ArchiveUserModal
+        isOpen={Boolean(userToArchive)}
+        onClose={() => setUserToArchive(null)}
+        user={userToArchive}
+        onSuccess={() => {
+          void load();
+        }}
+      />
     </div>
   );
 }

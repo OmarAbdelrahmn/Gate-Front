@@ -36,7 +36,7 @@ export function ResignationFormView({ data }: { data: ResignationFormData }) {
             </td>
             <td className="p-2.5 w-1/2">
               <span>رقم الهوية: </span>
-              <span className="font-extrabold text-sm underline">{data.iqamaNo || "...................................."}</span>
+              <span dir="rtl" className="font-extrabold text-sm underline dir-rtl inline-block">{data.iqamaNo || "...................................."}</span>
             </td>
           </tr>
 

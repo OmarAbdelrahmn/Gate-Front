@@ -48,7 +48,7 @@ export function CashAdvanceView({ data }: { data: CashAdvanceData }) {
 
           <div>
             حامل إقامة رقم: ({" "}
-            <span className="font-extrabold text-black px-1">
+            <span dir="rtl" className="font-extrabold text-black px-1 dir-rtl inline-block">
               {data.iqamaNo || "...................................."}
             </span>{" "}
             )،

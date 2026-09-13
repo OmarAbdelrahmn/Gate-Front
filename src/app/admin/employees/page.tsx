@@ -10,6 +10,7 @@ import type { Employee } from "../../../lib/workforce/types";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { Badge } from "../../../components/ui/Badge";
+import { matchesArabicSearch } from "@/lib/utils/arabicSearch";
 
 const statusLabel: Record<string, { ar: string; en: string }> = {
     Draft: { ar: "مسودة", en: "Draft" },
@@ -258,37 +259,113 @@ export default function EmployeesPage() {
                     }
                 }
 
-                const searchTerm = search.trim().toLowerCase();
-                if (!searchTerm) return true;
+                if (!search.trim()) return true;
 
                 const empRecord = item as Record<string, unknown>;
                 const rawValues = extractAllObjectValues(item).join(" ");
+
+                const displayNameAr = item.fullNameAr || "";
+                const displayNameEn = item.fullNameEn || "";
                 
-                const workTypeStr = getWorkTypeDisplay(item, workTypes, locale);
-                const cityStr = getCityDisplay(item, cities, locale);
-                const housingStr = (item.housingNameAr || item.housingNameEn || (empRecord.housingNameAr as string) || (empRecord.housingNameEn as string) || (empRecord.housingName as string) || "") as string;
-                
-                const statusObj = statusLabel[item.status];
-                const statusAr = statusObj?.ar || "";
-                const statusEn = statusObj?.en || "";
-                
+                const roleAr = item.isEmployee ? "إداري اداري موظف إداري موظف اداري" : "مندوب سائق مندوب توصيل";
+                const roleEn = item.isEmployee ? "Staff Administrative" : "Delegate Rider";
+
+                const secondaryPhones = [
+                    item.primaryPhone,
+                    item.secondaryPhone,
+                    item.email,
+                    item.employeeNumber ? `رقم: ${item.employeeNumber} Emp #: ${item.employeeNumber} ${item.employeeNumber}` : "",
+                    !item.primaryPhone && !item.secondaryPhone ? "بدون جوال No phone" : "",
+                ].filter(Boolean).join(" ");
+
+                const iqamaNo = item.iqamaNo || (empRecord.iqamaNo as string) || "";
+                const nationalId = (empRecord.nationalId as string) || "";
+
+                const nationality = [
+                    item.nationality,
+                    empRecord.nationalityAr as string,
+                    empRecord.nationalityEn as string,
+                ].filter(Boolean).join(" ");
+
                 const engKey = item.engagementType || item.relationshipType || "";
                 const relObj = relationshipLabel[engKey];
-                const relAr = relObj?.ar || "";
-                const relEn = relObj?.en || "";
-                
-                const roleAr = item.isEmployee ? "إداري" : "مندوب";
-                const roleEn = item.isEmployee ? "Staff" : "Delegate";
-                
-                const pm = item.currentWorkPlatform?.paymentModel;
-                const pmAr = pm === "PayPerOrder" ? "بالطلب" : pm === "Salary" ? "راتب" : "";
-                const pmEn = pm === "PayPerOrder" ? "Pay Per Order" : pm === "Salary" ? "Salary" : "";
+                const relationshipStr = [
+                    relObj?.ar,
+                    relObj?.en,
+                    engKey === "SponsoredInternal" ? "على الكفالة علي الكفالة مكفول" : "",
+                    engKey === "OutsideRider" ? "مندوب خارجي" : "",
+                    item.sponsor?.nameAr,
+                    item.sponsor?.nameEn,
+                    (item.sponsor as Record<string, unknown>)?.code as string,
+                    item.sponsorNameAr,
+                    empRecord.sponsorNameEn as string,
+                    empRecord.sponsorNameAr as string,
+                ].filter(Boolean).join(" ");
 
-                const fullSearchableText = `${rawValues} ${workTypeStr} ${cityStr} ${housingStr} ${statusAr} ${statusEn} ${relAr} ${relEn} ${roleAr} ${roleEn} ${pmAr} ${pmEn}`
-                    .toLowerCase();
+                const workTypeAr = getWorkTypeDisplay(item, workTypes, "ar");
+                const workTypeEn = getWorkTypeDisplay(item, workTypes, "en");
+                const professionDetails = [
+                    workTypeAr,
+                    workTypeEn,
+                    item.operationalWorkTypeAr,
+                    empRecord.operationalWorkTypeEn as string,
+                    item.jobTitleAr,
+                    empRecord.jobTitleEn as string,
+                    empRecord.jobTitle as string,
+                    item.rider?.tShirtSize ? `المقاس: ${item.rider.tShirtSize} Size: ${item.rider.tShirtSize} ${item.rider.tShirtSize}` : "",
+                    empRecord.residencyProfession as string,
+                    empRecord.professionAr as string,
+                    empRecord.professionEn as string,
+                ].filter(Boolean).join(" ");
 
-                const searchWords = searchTerm.split(/\s+/);
-                return searchWords.every((word) => fullSearchableText.includes(word));
+                const platformDetails = [
+                    item.currentWorkPlatform?.nameAr,
+                    item.currentWorkPlatform?.nameEn,
+                    item.currentWorkPlatform?.code,
+                    item.currentWorkPlatform?.paymentModel === "PayPerOrder" ? "بالطلب Pay Per Order" : "",
+                    item.currentWorkPlatform?.paymentModel === "Salary" ? "راتب Salary" : "",
+                    item.currentWorkPlatform?.paymentModel,
+                    item.currentWorkPlatform?.externalAccountId,
+                    item.currentWorkPlatform?.platformRiderAccountId,
+                ].filter(Boolean).join(" ");
+
+                const cityAr = getCityDisplay(item, cities, "ar");
+                const cityEn = getCityDisplay(item, cities, "en");
+                const housingStr = (item.housingNameAr || item.housingNameEn || (empRecord.housingNameAr as string) || (empRecord.housingNameEn as string) || (empRecord.housingName as string) || "") as string;
+                const locationDetails = [
+                    cityAr,
+                    cityEn,
+                    item.operatingCityAr,
+                    empRecord.operatingCityEn as string,
+                    empRecord.cityNameAr as string,
+                    empRecord.cityNameEn as string,
+                    housingStr,
+                ].filter(Boolean).join(" ");
+
+                const statusObj = statusLabel[item.status];
+                const statusDetails = [
+                    statusObj?.ar,
+                    statusObj?.en,
+                    item.status,
+                ].filter(Boolean).join(" ");
+
+                return matchesArabicSearch(
+                    search,
+                    displayNameAr,
+                    displayNameEn,
+                    roleAr,
+                    roleEn,
+                    secondaryPhones,
+                    iqamaNo,
+                    nationalId,
+                    nationality,
+                    relationshipStr,
+                    professionDetails,
+                    platformDetails,
+                    locationDetails,
+                    statusDetails,
+                    rawValues,
+                );
             }),
         [employees, search, cities, workTypes, locale, statusFilter, engagementFilter],
     );
@@ -329,8 +406,8 @@ export default function EmployeesPage() {
                                 onChange={(event) => setSearch(event.target.value)}
                                 placeholder={
                                     locale === "en"
-                                        ? "Search by name, Iqama #, platform, sponsor, nationality, or phone..."
-                                        : "ابحث بالاسم، رقم الإقامة، المنصة، الكفيل، الجنسية، الجوال..."
+                                        ? "Search by name, Iqama #, role (Staff/Delegate), platform, sponsor, city, or status..."
+                                        : "ابحث بالاسم، رقم الإقامة، الدور (إداري/مندوب)، المنصة، الكفيل، المدينة، الحالة..."
                                 }
                                 className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"}`}
                             />

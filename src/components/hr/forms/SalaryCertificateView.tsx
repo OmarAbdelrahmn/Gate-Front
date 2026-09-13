@@ -53,7 +53,7 @@ export function SalaryCertificateView({ data }: { data: SalaryCertificateData })
 
             <div className="flex items-center gap-2">
               <span className="min-w-[140px] text-gray-700">رقم الهوية/الإقامة :</span>
-              <span className="text-black font-black text-base underline">{data.iqamaNo || "........................................................"}</span>
+              <span dir="rtl" className="text-black font-black text-base underline dir-rtl inline-block">{data.iqamaNo || "........................................................"}</span>
             </div>
 
             <div className="flex items-center gap-2">

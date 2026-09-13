@@ -40,7 +40,7 @@ export function ClearanceFormView({ data }: { data: ClearanceFormData }) {
             <tr className="border-b border-black">
               <td className="p-1.5 border-l border-black bg-gray-50/80 w-1/4">رقم الإقامة</td>
               <td colSpan={3} className="p-1.5">
-                <div className="flex items-center gap-1 justify-start dir-ltr">
+                <div dir="rtl" className="flex items-center gap-1 justify-start dir-rtl">
                   {iqamaDigits.map((digit, index) => (
                     <span
                       key={index}

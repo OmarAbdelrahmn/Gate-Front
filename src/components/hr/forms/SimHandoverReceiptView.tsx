@@ -96,7 +96,7 @@ export function SimHandoverReceiptView({ data }: { data: SimHandoverReceiptData 
 
             <div className="flex items-center gap-2">
               <span className="font-bold min-w-[140px]">رقم الهوية / الإقامة:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-mono font-bold">
+              <span dir="rtl" className="border-b-2 border-dotted border-black flex-1 px-2 font-mono font-bold dir-rtl inline-block">
                 {data.iqamaNo || "...................................................................."}
               </span>
             </div>

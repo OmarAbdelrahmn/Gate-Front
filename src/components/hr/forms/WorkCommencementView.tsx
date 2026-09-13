@@ -71,7 +71,7 @@ export function WorkCommencementView({ data }: { data: WorkCommencementData }) {
             <li className="flex items-start gap-2">
               <span className="font-black text-xl leading-none mt-1">•</span>
               <span className="whitespace-nowrap">رقم الهوية / الإقامة:</span>
-              <span className="font-extrabold text-black underline px-2 dir-ltr inline-block">
+              <span dir="rtl" className="font-extrabold text-black underline px-2 dir-rtl inline-block">
                 {data.iqamaNo || "................................................................................"}
               </span>
             </li>
