@@ -35,6 +35,7 @@ import { Card } from "../../../../components/ui/Card";
 import { Input } from "../../../../components/ui/Input";
 import { SearchableSelect, SelectOption } from "../../../../components/ui/SearchableSelect";
 import { toast } from "../../../../components/ui/Toast";
+import { ExternalRiderStatusBadge } from "../../../../components/hr/ExternalRiderStatusBadge";
 
 export default function ExternalRidersPage() {
   const { can, locale } = useAuth();
@@ -161,9 +162,11 @@ export default function ExternalRidersPage() {
   }, [workTypes, locale]);
 
   const filteredRiders = useMemo(() => {
+    // Terminated riders are separated to the dedicated Terminated Staff section
+    const nonTerminated = riders.filter((r) => r.status !== "Terminated");
     const query = search.trim().toLowerCase();
-    if (!query) return riders;
-    return riders.filter(
+    if (!query) return nonTerminated;
+    return nonTerminated.filter(
       (r) =>
         r.fullNameAr?.toLowerCase().includes(query) ||
         r.iqamaNo?.includes(query) ||
@@ -174,6 +177,11 @@ export default function ExternalRidersPage() {
         r.riderProfileId?.toLowerCase().includes(query)
     );
   }, [riders, search]);
+
+  const nonTerminatedCount = useMemo(
+    () => riders.filter((r) => r.status !== "Terminated").length,
+    [riders]
+  );
 
   const activeRidersCount = useMemo(
     () => riders.filter((r) => r.status === "Active").length,
@@ -496,7 +504,7 @@ export default function ExternalRidersPage() {
             <p className="text-xs font-bold text-[var(--muted)]">
               {locale === "en" ? "Total External Riders" : "إجمالي المناديب الخارجيين"}
             </p>
-            <p className="mt-1 text-2xl font-black">{riders.length}</p>
+            <p className="mt-1 text-2xl font-black">{nonTerminatedCount}</p>
           </div>
         </Card>
 
@@ -601,9 +609,12 @@ export default function ExternalRidersPage() {
                       className="hover:bg-blue-500/5 transition-colors"
                     >
                       <td className="px-5 py-4">
-                        <div className="font-black text-slate-900">
+                        <Link
+                          href={`/admin/hr/external-riders/${rider.employeeId}`}
+                          className="font-black text-slate-900 hover:text-[#1167c9] transition-colors"
+                        >
                           {rider.fullNameAr}
-                        </div>
+                        </Link>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted)] font-semibold">
                           <span>{locale === "en" ? "Outside Rider" : "مندوب خارجي"}</span>
                           {rider.nationality && (
@@ -642,13 +653,7 @@ export default function ExternalRidersPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-700">
-                          {rider.status === "Active"
-                            ? locale === "en"
-                              ? "Active"
-                              : "نشط"
-                            : rider.status}
-                        </span>
+                        <ExternalRiderStatusBadge status={rider.status} locale={locale} />
                       </td>
                       <td className="px-5 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -662,7 +667,7 @@ export default function ExternalRidersPage() {
                               {t("common.edit")}
                             </Button>
                           )}
-                          <Link href={`/admin/employees/${rider.employeeId}`}>
+                          <Link href={`/admin/hr/external-riders/${rider.employeeId}`}>
                             <Button variant="secondary" className="h-8 px-2.5 text-xs">
                               <Eye size={14} />
                               {locale === "en" ? "Profile" : "الملف"}

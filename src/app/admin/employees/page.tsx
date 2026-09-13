@@ -230,6 +230,10 @@ export default function EmployeesPage() {
     const results = useMemo(
         () =>
             employees.filter((item) => {
+                if (item.status === "Terminated") {
+                    return false;
+                }
+
                 if (statusFilter !== "all" && item.status !== statusFilter) {
                     return false;
                 }
