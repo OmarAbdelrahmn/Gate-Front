@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Search,
-  Users,
   UserX,
   Eye,
   Briefcase,
@@ -144,7 +143,7 @@ export default function TerminatedEmployeesPage() {
           nationality: (empRec.nationalityAr as string) || e.nationality || "—",
           cityName: cityNameFound || "—",
           roleName: roleNameFound || "—",
-          profileUrl: `/admin/employees/${e.id}`,
+          profileUrl: `/admin/hr/external-riders/${e.id}`,
           engagementLabel: {
             ar: e.isEmployee ? "إداري مكفول" : "مندوب مكفول",
             en: e.isEmployee ? "Sponsored Staff" : "Sponsored Rider",
@@ -229,45 +228,6 @@ export default function TerminatedEmployeesPage() {
               : "السجل الشامل للموظفين والمناديب المكفولين والمناديب الخارجيين منتهيي الخدمة."}
           </p>
         </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="flex items-center gap-4 p-5 border-rose-200 dark:border-rose-900/50">
-          <div className="grid size-12 place-items-center rounded-2xl bg-rose-50 text-rose-600 dark:bg-rose-950/40">
-            <UserX size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-[var(--muted)]">
-              {isEn ? "Total Terminated" : "إجمالي منتهيي الخدمة"}
-            </p>
-            <p className="mt-1 text-2xl font-black text-rose-600">{totalTerminated}</p>
-          </div>
-        </Card>
-
-        <Card className="flex items-center gap-4 p-5">
-          <div className="grid size-12 place-items-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/40">
-            <Users size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-[var(--muted)]">
-              {isEn ? "Sponsored Staff" : "المكفولين منتهي الخدمة"}
-            </p>
-            <p className="mt-1 text-2xl font-black">{sponsoredCount}</p>
-          </div>
-        </Card>
-
-        <Card className="flex items-center gap-4 p-5">
-          <div className="grid size-12 place-items-center rounded-2xl bg-blue-50 text-[#1167c9] dark:bg-blue-950/40">
-            <Briefcase size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-[var(--muted)]">
-              {isEn ? "External Riders" : "المناديب الخارجيين منتهي الخدمة"}
-            </p>
-            <p className="mt-1 text-2xl font-black">{externalRidersCount}</p>
-          </div>
-        </Card>
       </div>
 
       {/* Main Table Card */}
@@ -356,9 +316,12 @@ export default function TerminatedEmployeesPage() {
                 {filteredList.map((person) => (
                   <tr key={`${person.sourceType}-${person.id}`} className="hover:bg-rose-500/5 transition-colors">
                     <td className="px-5 py-4">
-                      <div className="font-black text-slate-900 dark:text-slate-100">
+                      <Link
+                        href={person.profileUrl}
+                        className="font-black text-slate-900 dark:text-slate-100 hover:text-[#1167c9] transition-colors"
+                      >
                         {person.fullName}
-                      </div>
+                      </Link>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
                         <span
                           className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${

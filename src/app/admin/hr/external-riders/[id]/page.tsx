@@ -23,9 +23,12 @@ import {
   AlertTriangle,
   Info,
   ExternalLink,
+  ShieldCheck,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
+import { getEmployee } from "@/lib/workforce/api";
 import {
   getExternalRider,
   updateExternalRider,
@@ -39,6 +42,7 @@ import {
   ExternalRiderStatusBadge,
   getExternalRiderStatusInfo,
 } from "@/components/hr/ExternalRiderStatusBadge";
+import { EmployeeDocumentsInsurance } from "@/components/employees/EmployeeDocumentsInsurance";
 import { StaffDocumentChecklistPanel } from "@/components/documents/StaffDocumentChecklistPanel";
 import { getNationalityOptions } from "@/lib/constants/nationalities";
 import { Button } from "@/components/ui/Button";
@@ -46,6 +50,11 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
+
+export type RiderProfileData = ExternalRider & {
+  engagementType?: string;
+  isEmployee?: boolean;
+};
 
 export default function ExternalRiderProfilePage({
   params,
@@ -60,7 +69,7 @@ export default function ExternalRiderProfilePage({
   const isEn = locale === "en";
   const BackIcon = isEn ? ArrowLeft : ArrowRight;
 
-  const [rider, setRider] = useState<ExternalRider | null>(null);
+  const [rider, setRider] = useState<RiderProfileData | null>(null);
   const [cities, setCities] = useState<OperatingCityCatalogItem[]>([]);
   const [workTypes, setWorkTypes] = useState<OperationalWorkTypeCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +77,13 @@ export default function ExternalRiderProfilePage({
 
   // Tabs: "overview" | "documents"
   const [activeTab, setActiveTab] = useState<"overview" | "documents">("overview");
+  const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("tab=documents")) {
+      setActiveTab("documents");
+    }
+  }, []);
 
   // Copy state
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -102,24 +118,52 @@ export default function ExternalRiderProfilePage({
     setError("");
 
     try {
-      const [riderData, citiesData, workTypesData] = await Promise.all([
-        getExternalRider(employeeId),
+      const [citiesData, workTypesData] = await Promise.all([
         getOperatingCities().catch(() => []),
         getOperationalWorkTypes().catch(() => []),
       ]);
-
-      setRider(riderData);
       setCities(citiesData);
       setWorkTypes(workTypesData);
+
+      let riderData: RiderProfileData;
+      try {
+        const ext = await getExternalRider(employeeId);
+        riderData = {
+          ...ext,
+          engagementType: "OutsideRider",
+        };
+      } catch {
+        // Fallback to getEmployee (for sponsored riders)
+        const empDetails = await getEmployee(employeeId);
+        const emp = empDetails.employee;
+        riderData = {
+          employeeId: emp.id,
+          riderProfileId: empDetails.rider?.id || (emp as any).riderProfileId || emp.id,
+          iqamaNo: emp.iqamaNo || "",
+          fullNameAr: emp.fullNameAr,
+          nationality: emp.nationality,
+          iban: emp.iban,
+          address: emp.address,
+          primaryPhone: emp.primaryPhone || "",
+          operatingCityId: emp.operatingCityId || undefined,
+          operationalWorkTypeId: emp.operationalWorkTypeId || undefined,
+          status: emp.status,
+          rowVersion: (emp as any).rowVersion || "",
+          engagementType: emp.engagementType || "SponsoredInternal",
+          isEmployee: emp.isEmployee,
+        };
+      }
+
+      setRider(riderData);
     } catch (err: any) {
       const msg =
         err?.status === 404
           ? isEn
-            ? "External rider not found."
-            : "لم يتم العثور على المندوب الخارجي."
+            ? "Rider profile not found."
+            : "لم يتم العثور على ملف المندوب."
           : isEn
-          ? "Failed to load external rider profile."
-          : "تعذر تحميل ملف المندوب الخارجي.";
+          ? "Failed to load rider profile."
+          : "تعذر تحميل ملف المندوب.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -319,20 +363,36 @@ export default function ExternalRiderProfilePage({
       {/* Header & Breadcrumb */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link
-            href="/admin/hr/external-riders"
-            className="inline-flex items-center gap-2 text-xs font-bold text-[#1167c9] hover:underline mb-2 transition-colors"
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                window.history.back();
+              } else {
+                window.location.href =
+                  rider.status === "Terminated"
+                    ? "/admin/hr/terminated-employees"
+                    : "/admin/hr/external-riders";
+              }
+            }}
+            className="inline-flex items-center gap-2 text-xs font-bold text-[#1167c9] hover:underline mb-2 transition-colors cursor-pointer"
           >
             <BackIcon size={15} />
-            {isEn ? "Back to External Riders" : "العودة إلى المناديب الخارجيين"}
-          </Link>
+            {isEn ? "Back" : "العودة"}
+          </button>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
               {rider.fullNameAr}
             </h1>
-            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-[#1167c9] border border-blue-200">
+            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-xs font-bold text-[#1167c9] dark:text-blue-400 border border-blue-200 dark:border-blue-800">
               <User size={12} />
-              {isEn ? "External Rider" : "مندوب خارجي"}
+              {rider.engagementType === "SponsoredInternal"
+                ? isEn
+                  ? "Sponsored Rider"
+                  : "مندوب مكفول"
+                : isEn
+                ? "External Rider"
+                : "مندوب خارجي"}
             </span>
             <ExternalRiderStatusBadge status={rider.status} locale={locale} />
           </div>
@@ -348,6 +408,14 @@ export default function ExternalRiderProfilePage({
               {isEn ? "Edit Details" : "تعديل البيانات"}
             </Button>
           )}
+          <Button variant="secondary" onClick={() => setActiveModalTab("docs")}>
+            <FileText size={15} />
+            {isEn ? "Documents" : "الوثائق"}
+          </Button>
+          <Button variant="secondary" onClick={() => setActiveModalTab("insurance")}>
+            <ShieldCheck size={15} />
+            {isEn ? "Medical Insurance" : "التأمين الطبي"}
+          </Button>
           <Link href={`/admin/hr/documents?riderProfileId=${rider.riderProfileId || rider.employeeId}`}>
             <Button variant="secondary" className="text-[#1167c9] border-blue-200 bg-blue-50/50 hover:bg-blue-100">
               <ExternalLink size={15} />
@@ -400,11 +468,6 @@ export default function ExternalRiderProfilePage({
               {statusInfo.description}
             </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs font-mono">
-          <span className="text-[var(--muted)]">Rider Profile ID:</span>
-          <span className="font-bold">{rider.riderProfileId || "—"}</span>
         </div>
       </div>
 
@@ -574,10 +637,16 @@ export default function ExternalRiderProfilePage({
                 </span>
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {isEn ? "Outside Rider (Contractor / Not Company Sponsored)" : "مندوب خارجي (غير خاضع لكفالة الشركة)"}
+                    {rider.engagementType === "SponsoredInternal"
+                      ? isEn
+                        ? "Company Sponsored Rider"
+                        : "مندوب على كفالة الشركة"
+                      : isEn
+                      ? "Outside Rider (Contractor / Not Company Sponsored)"
+                      : "مندوب خارجي (غير خاضع لكفالة الشركة)"}
                   </span>
-                  <span className="rounded bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] font-bold">
-                    OutsideRider
+                  <span className="rounded bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 px-2 py-0.5 text-[10px] font-bold">
+                    {rider.engagementType || "OutsideRider"}
                   </span>
                 </div>
               </div>
@@ -704,7 +773,12 @@ export default function ExternalRiderProfilePage({
 
       {/* Tab 2: Documents & Checklist */}
       {activeTab === "documents" && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          <EmployeeDocumentsInsurance
+            employeeId={rider.employeeId}
+            riderProfileId={rider.riderProfileId || rider.employeeId}
+            activeTab="all"
+          />
           <StaffDocumentChecklistPanel
             employeeId={rider.employeeId}
             riderProfileId={rider.riderProfileId || rider.employeeId}
@@ -849,6 +923,62 @@ export default function ExternalRiderProfilePage({
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Documents & Medical Insurance Modal */}
+      {activeModalTab && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setActiveModalTab(null)}
+        >
+          <div
+            className="relative flex flex-col max-h-[90vh] w-full max-w-5xl rounded-2xl bg-[var(--surface)] p-6 shadow-2xl overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex flex-wrap items-center justify-between border-b border-[var(--border)] pb-3 gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveModalTab("docs")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                    activeModalTab === "docs"
+                      ? "bg-[#1167c9] text-white shadow-md"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <FileText size={18} />
+                  {isEn ? "Documents" : "الوثائق"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModalTab("insurance")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                    activeModalTab === "insurance"
+                      ? "bg-[#1167c9] text-white shadow-md"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <ShieldCheck size={18} />
+                  {isEn ? "Medical Insurance" : "التأمين الطبي"}
+                </button>
+              </div>
+              <button
+                onClick={() => setActiveModalTab(null)}
+                className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label={isEn ? "Close" : "إغلاق"}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1">
+              <EmployeeDocumentsInsurance
+                employeeId={rider.employeeId}
+                riderProfileId={rider.riderProfileId || rider.employeeId}
+                activeTab={activeModalTab}
+              />
+            </div>
           </div>
         </div>
       )}

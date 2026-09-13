@@ -673,7 +673,7 @@ export default function ExternalRidersPage() {
                               {locale === "en" ? "Profile" : "الملف"}
                             </Button>
                           </Link>
-                          <Link href={`/admin/hr/documents?riderProfileId=${rider.riderProfileId || rider.employeeId}`}>
+                          <Link href={`/admin/hr/external-riders/${rider.employeeId}?tab=documents`}>
                             <Button variant="secondary" className="h-8 px-2.5 text-xs text-[#1167c9] border-blue-200 bg-blue-50/50 hover:bg-blue-100">
                               <FileText size={14} />
                               {locale === "en" ? "Documents" : "الوثائق"}
