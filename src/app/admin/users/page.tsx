@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Pencil,
@@ -197,13 +197,23 @@ export default function UsersPage() {
     return () => window.clearTimeout(timer);
   }, [isLoading, canRead, load]);
 
+  // Initial load of archived users once auth is ready
   useEffect(() => {
     if (isLoading || !canRead) return;
-    if (viewTab === "archived") {
-      const timer = window.setTimeout(() => void loadArchived(archivedSearch), 350);
-      return () => window.clearTimeout(timer);
+    void loadArchived("");
+  }, [isLoading, canRead, loadArchived]);
+
+  // Debounced search for archived users (only triggers when archivedSearch changes, NOT on tab switch)
+  const isFirstArchivedSearch = useRef(true);
+  useEffect(() => {
+    if (isFirstArchivedSearch.current) {
+      isFirstArchivedSearch.current = false;
+      return;
     }
-  }, [isLoading, canRead, viewTab, archivedSearch, loadArchived]);
+    if (isLoading || !canRead) return;
+    const timer = window.setTimeout(() => void loadArchived(archivedSearch), 350);
+    return () => window.clearTimeout(timer);
+  }, [isLoading, canRead, archivedSearch, loadArchived]);
 
   const handleTabChange = (tab: "active" | "archived") => {
     setViewTab(tab);
@@ -1250,10 +1260,14 @@ export default function UsersPage() {
             </label>
             <Button
               variant="secondary"
-              onClick={() => (viewTab === "active" ? void load() : void loadArchived())}
+              onClick={() => (viewTab === "active" ? void load() : void loadArchived(archivedSearch))}
               aria-label={t("common.loading")}
+              disabled={viewTab === "active" ? loading : archivedLoading}
             >
-              <RefreshCw size={17} />
+              <RefreshCw
+                size={17}
+                className={(viewTab === "active" ? loading : archivedLoading) ? "animate-spin text-[#1167c9]" : ""}
+              />
             </Button>
           </div>
         </div>
@@ -1264,12 +1278,13 @@ export default function UsersPage() {
           </p>
         )}
 
-        {(viewTab === "active" ? loading : archivedLoading) ? (
+        {(viewTab === "active" ? loading && users.length === 0 : archivedLoading && archivedUsers.length === 0) ? (
           <div className="p-8 text-center text-sm text-[var(--muted)]">
             {t("common.loading")}
           </div>
         ) : (
-          <Table>
+          <div className={(viewTab === "active" ? loading : archivedLoading) ? "opacity-60 pointer-events-none transition-opacity duration-200" : "transition-opacity duration-200"}>
+            <Table>
             <thead className="border-b border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted)]">
               <tr>
                 <th className="px-5 py-4">{locale === "en" ? "Name" : "الاسم"}</th>
@@ -1431,6 +1446,7 @@ export default function UsersPage() {
               )}
             </tbody>
           </Table>
+          </div>
         )}
       </Card>
 
@@ -1440,9 +1456,7 @@ export default function UsersPage() {
         user={userToArchive}
         onSuccess={() => {
           void load();
-          if (hasLoadedArchivedOnce) {
-            void loadArchived();
-          }
+          void loadArchived(archivedSearch);
         }}
       />
 
@@ -1455,7 +1469,7 @@ export default function UsersPage() {
           void load();
         }}
         onConflict={() => {
-          void loadArchived();
+          void loadArchived(archivedSearch);
         }}
         onNotFound={(userId) => {
           setArchivedUsers((prev) => prev.filter((u) => u.id !== userId));
