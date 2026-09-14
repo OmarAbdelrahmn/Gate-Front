@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ShieldAlert, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   navigation,
   type NavItem,
@@ -40,6 +40,35 @@ export function Sidebar({
 
   // User manual toggle overrides: key is item.labelKey || item.label
   const [expandedOverrides, setExpandedOverrides] = useState<Record<string, boolean>>({});
+
+  // Hover state with grace period for collapsed flyout menu
+  const [hoveredFlyoutKey, setHoveredFlyoutKey] = useState<string | null>(null);
+  const flyoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnterFlyout = (key: string) => {
+    if (flyoutTimerRef.current) {
+      clearTimeout(flyoutTimerRef.current);
+      flyoutTimerRef.current = null;
+    }
+    setHoveredFlyoutKey(key);
+  };
+
+  const handleMouseLeaveFlyout = () => {
+    if (flyoutTimerRef.current) {
+      clearTimeout(flyoutTimerRef.current);
+    }
+    flyoutTimerRef.current = setTimeout(() => {
+      setHoveredFlyoutKey(null);
+    }, 200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (flyoutTimerRef.current) {
+        clearTimeout(flyoutTimerRef.current);
+      }
+    };
+  }, []);
 
   const resolveItemHref = (item: NavItem) => {
     if (item.labelKey === "nav.dashboard") return defaultRoute;
@@ -119,7 +148,7 @@ export function Sidebar({
             </div>
           )}
           {!isLoading &&
-            items.map((item) => {
+            items.map((item, index) => {
               const Icon = item.icon;
               const children =
                 item.children?.filter(
@@ -180,8 +209,20 @@ export function Sidebar({
                   ? expandedOverrides[itemKey]
                   : hasActiveChild;
 
+              const isFlyoutOpen = collapsed && hoveredFlyoutKey === itemKey;
+              const isLowerItem = index >= items.length - 3;
+
               return (
-                <div key={itemKey} className="relative group/navitem">
+                <div
+                  key={itemKey}
+                  className="relative group/navitem"
+                  onMouseEnter={() => {
+                    if (collapsed) handleMouseEnterFlyout(itemKey);
+                  }}
+                  onMouseLeave={() => {
+                    if (collapsed) handleMouseLeaveFlyout();
+                  }}
+                >
                   <button
                     type="button"
                     onClick={() => {
@@ -215,46 +256,53 @@ export function Sidebar({
                     />
                   </button>
 
-                  {/* Desktop Collapsed Floating Flyout */}
+                  {/* Desktop Collapsed Floating Flyout with Seamless Hover Bridge */}
                   {collapsed && (
                     <div
-                      className={`absolute top-0 z-50 hidden md:group-hover/navitem:flex flex-col min-w-[240px] max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 ${
+                      className={`absolute z-50 ${isLowerItem ? "bottom-0" : "top-0"} ${
+                        isFlyoutOpen ? "md:flex" : "hidden md:group-hover/navitem:flex"
+                      } flex-col ${
                         locale === "ar"
-                          ? "right-[calc(100%+8px)]"
-                          : "left-[calc(100%+8px)]"
+                          ? "right-full pr-2.5 before:absolute before:inset-y-0 before:-right-3 before:w-5 before:content-['']"
+                          : "left-full pl-2.5 before:absolute before:inset-y-0 before:-left-3 before:w-5 before:content-['']"
                       }`}
                     >
-                      <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs font-bold text-slate-400">
-                        <Icon size={16} className="shrink-0 text-[#1167c9]" />
-                        <span>{itemLabel}</span>
-                      </div>
-                      <div className="mt-1 space-y-1">
-                        {children.map((child, idx) => {
-                          const childHref = resolveItemHref(child);
-                          if (!childHref) return null;
-                          const ChildIcon = child.icon;
-                          const childActive = isChildActive(childHref);
-                          const childLabel = child.labelKey
-                            ? t(child.labelKey)
-                            : child.label;
-                          return (
-                            <Link
-                              key={`${child.label}-${childHref || idx}`}
-                              href={childHref}
-                              prefetch={false}
-                              onClick={onClose}
-                              aria-current={childActive ? "page" : undefined}
-                              className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-xs font-bold transition-all ${
-                                childActive
-                                  ? "bg-[#1167c9] text-white shadow-sm"
-                                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                              }`}
-                            >
-                              <ChildIcon size={15} className="shrink-0" />
-                              <span>{childLabel}</span>
-                            </Link>
-                          );
-                        })}
+                      <div className="flex flex-col min-w-[240px] max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs font-bold text-slate-400">
+                          <Icon size={16} className="shrink-0 text-[#1167c9]" />
+                          <span>{itemLabel}</span>
+                        </div>
+                        <div className="mt-1 space-y-1">
+                          {children.map((child, idx) => {
+                            const childHref = resolveItemHref(child);
+                            if (!childHref) return null;
+                            const ChildIcon = child.icon;
+                            const childActive = isChildActive(childHref);
+                            const childLabel = child.labelKey
+                              ? t(child.labelKey)
+                              : child.label;
+                            return (
+                              <Link
+                                key={`${child.label}-${childHref || idx}`}
+                                href={childHref}
+                                prefetch={false}
+                                onClick={() => {
+                                  setHoveredFlyoutKey(null);
+                                  onClose();
+                                }}
+                                aria-current={childActive ? "page" : undefined}
+                                className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-xs font-bold transition-all ${
+                                  childActive
+                                    ? "bg-[#1167c9] text-white shadow-sm"
+                                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                <ChildIcon size={15} className="shrink-0" />
+                                <span>{childLabel}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   )}
