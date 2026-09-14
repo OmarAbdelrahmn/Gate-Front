@@ -104,6 +104,37 @@ export function revokeUserSessions(userId: string, reason = "") {
 export function listRoles() {
   return authFetch<Role[]>("/api/users/roles");
 }
+export function getRole(roleId: string) {
+  return authFetch<Role>(`/api/users/roles/${encodeURIComponent(roleId)}`);
+}
+export function getRolePermissions(roleId: string) {
+  return authFetch<string[] | { permissionKeys: string[] }>(
+    `/api/users/roles/${encodeURIComponent(roleId)}/permissions`,
+  );
+}
+export async function getRolePermissionKeys(role: Role): Promise<string[]> {
+  if (Array.isArray(role.permissionKeys) && role.permissionKeys.length > 0) {
+    return role.permissionKeys;
+  }
+  try {
+    const detailed = await getRole(role.id);
+    if (Array.isArray(detailed?.permissionKeys) && detailed.permissionKeys.length > 0) {
+      return detailed.permissionKeys;
+    }
+  } catch {
+    // try fallback
+  }
+  try {
+    const perms = await getRolePermissions(role.id);
+    if (Array.isArray(perms)) return perms;
+    if (perms && Array.isArray((perms as any).permissionKeys)) {
+      return (perms as any).permissionKeys;
+    }
+  } catch {
+    // try fallback
+  }
+  return role.permissionKeys ?? [];
+}
 export function createRole(payload: RoleRequest) {
   return authFetch<Role>("/api/users/roles", {
     method: "POST",

@@ -22,6 +22,7 @@ import { ArchiveUserModal } from "../../../components/users/ArchiveUserModal";
 import {
   createUser,
   getPermissionCatalogue,
+  getRolePermissionKeys,
   listRoles,
   listUsers,
   resolveProfileImageUrl,
@@ -42,7 +43,12 @@ import { Input } from "../../../components/ui/Input";
 import { SearchableSelect } from "../../../components/ui/SearchableSelect";
 import { Table } from "../../../components/ui/Table";
 import { toast } from "../../../components/ui/Toast";
-import { groupPermissions, permissionGroup, permissionGroupLabel } from "../../../lib/permission-groups";
+import {
+  groupPermissions,
+  permissionGroup,
+  permissionGroupLabel,
+  permissionGroups,
+} from "../../../lib/permission-groups";
 import { permissionLabel } from "../../../lib/permission-labels";
 import { translate } from "../../../lib/i18n";
 
@@ -122,6 +128,8 @@ export default function UsersPage() {
   const [permissionSearch, setPermissionSearch] = useState("");
   const [selectedPermissionGroup, setSelectedPermissionGroup] = useState<string>("all");
   const [selectedPermissionKeys, setSelectedPermissionKeys] = useState<string[]>([]);
+  const [manuallyAddedKeys, setManuallyAddedKeys] = useState<Set<string>>(new Set());
+  const [manuallyRemovedKeys, setManuallyRemovedKeys] = useState<Set<string>>(new Set());
 
   // Roles selection state
   const [selectedRoles, setSelectedRoles] = useState<SelectedRoleState[]>([]);
@@ -183,6 +191,11 @@ export default function UsersPage() {
     if (nextShow) {
       setFormError("");
       setActiveTab("basic");
+      setForm(emptyForm);
+      setSelectedRoles([]);
+      setSelectedPermissionKeys([]);
+      setManuallyAddedKeys(new Set());
+      setManuallyRemovedKeys(new Set());
       void loadCatalogs();
     }
   };
@@ -211,6 +224,75 @@ export default function UsersPage() {
     ];
   }, [employees, locale]);
 
+  const primarySelectedRoleId = selectedRoles[0]?.roleId || "";
+  const primarySelectedRole = rolesCatalog.find((r) => r.id === primarySelectedRoleId);
+
+  const roleOptions = useMemo(() => {
+    return [
+      {
+        value: "",
+        label:
+          locale === "en"
+            ? "None (No role selected)"
+            : "بدون (لم يتم اختيار دور بعد)",
+      },
+      ...rolesCatalog.map((role) => ({
+        value: role.id,
+        label: locale === "en" && role.nameEn ? role.nameEn : role.nameAr,
+        sublabel: `${role.code} · ${role.permissionKeys?.length ?? 0} ${
+          locale === "en" ? "permissions" : "صلاحية"
+        }`,
+      })),
+    ];
+  }, [rolesCatalog, locale]);
+
+  const handlePrimaryRoleChange = async (roleId: string) => {
+    if (!roleId) {
+      const allRoleKeys = rolesCatalog.flatMap((r) => r.permissionKeys ?? []);
+      setSelectedRoles([]);
+      setSelectedPermissionKeys((prev) =>
+        prev.filter((k) => !allRoleKeys.includes(k) || manuallyAddedKeys.has(k)),
+      );
+      return;
+    }
+
+    const role = rolesCatalog.find((r) => r.id === roleId);
+    if (!role) return;
+
+    setSelectedRoles([
+      {
+        roleId,
+        startsAtUtc: "",
+        expiresAtUtc: "",
+        reason: "",
+        isAllHousingScope: true,
+        isAllClientScope: true,
+        includesFuturePlatformContracts: true,
+        scopes: [],
+      },
+    ]);
+
+    const rolePerms = await getRolePermissionKeys(role);
+    if (rolePerms.length > 0 && (!role.permissionKeys || role.permissionKeys.length === 0)) {
+      setRolesCatalog((prev) =>
+        prev.map((r) => (r.id === roleId ? { ...r, permissionKeys: rolePerms } : r)),
+      );
+    }
+
+    setSelectedPermissionKeys((prev) => {
+      const customAdded = prev.filter((k) => manuallyAddedKeys.has(k));
+      return Array.from(new Set([...customAdded, ...rolePerms]));
+    });
+    setManuallyRemovedKeys(new Set());
+
+    toast.success(
+      locale === "en" ? "Role Selected & Permissions Auto-Filled" : "تم اختيار الدور وتعبئة الصلاحيات",
+      locale === "en"
+        ? `Loaded ${rolePerms.length} permissions from "${role.nameEn || role.nameAr}". You can customize them in Direct Permissions.`
+        : `تمت تعبئة ${rolePerms.length} صلاحية تلقائياً من دور "${role.nameAr}". يمكنك تخصيصها في تبويب الصلاحيات المباشرة.`,
+    );
+  };
+
   const handleEmployeeChange = (employeeId: string) => {
     const selected = employees.find((e) => e.id === employeeId);
     if (selected) {
@@ -230,35 +312,100 @@ export default function UsersPage() {
     }
   };
 
-  // Role toggle
-  const toggleRoleSelection = (roleId: string) => {
-    setSelectedRoles((current) => {
-      const exists = current.some((r) => r.roleId === roleId);
-      if (exists) {
-        return current.filter((r) => r.roleId !== roleId);
-      } else {
-        return [
-          ...current,
-          {
-            roleId,
-            startsAtUtc: "",
-            expiresAtUtc: "",
-            reason: "",
-            isAllHousingScope: true,
-            isAllClientScope: true,
-            includesFuturePlatformContracts: true,
-            scopes: [],
-          },
-        ];
+  // Role toggle with automatic permission population
+  const toggleRoleSelection = async (roleId: string) => {
+    const role = rolesCatalog.find((r) => r.id === roleId);
+    if (!role) return;
+
+    const isAlreadySelected = selectedRoles.some((r) => r.roleId === roleId);
+
+    if (isAlreadySelected) {
+      // Uncheck role
+      const remainingRoles = selectedRoles.filter((r) => r.roleId !== roleId);
+      setSelectedRoles(remainingRoles);
+
+      // Collect permissions of remaining selected roles
+      const remainingRoleKeys = new Set(
+        remainingRoles.flatMap((r) => {
+          const matched = rolesCatalog.find((rc) => rc.id === r.roleId);
+          return matched?.permissionKeys ?? [];
+        }),
+      );
+
+      const thisRolePerms = role.permissionKeys ?? [];
+
+      // Remove this role's permissions UNLESS they belong to a remaining role or were manually added by user
+      setSelectedPermissionKeys((prev) =>
+        prev.filter(
+          (key) =>
+            remainingRoleKeys.has(key) ||
+            manuallyAddedKeys.has(key) ||
+            !thisRolePerms.includes(key),
+        ),
+      );
+    } else {
+      // Check role
+      const newRoleItem: SelectedRoleState = {
+        roleId,
+        startsAtUtc: "",
+        expiresAtUtc: "",
+        reason: "",
+        isAllHousingScope: true,
+        isAllClientScope: true,
+        includesFuturePlatformContracts: true,
+        scopes: [],
+      };
+      setSelectedRoles((prev) => [...prev, newRoleItem]);
+
+      // Fetch role permissions if missing or empty
+      const rolePerms = await getRolePermissionKeys(role);
+      if (rolePerms.length > 0 && (!role.permissionKeys || role.permissionKeys.length === 0)) {
+        setRolesCatalog((prev) =>
+          prev.map((r) => (r.id === roleId ? { ...r, permissionKeys: rolePerms } : r)),
+        );
       }
-    });
+
+      // Auto-fill role permissions into selectedPermissionKeys
+      setSelectedPermissionKeys((prev) => Array.from(new Set([...prev, ...rolePerms])));
+
+      // Clean up manuallyRemovedKeys for this role's permissions
+      setManuallyRemovedKeys((prev) => {
+        const next = new Set(prev);
+        rolePerms.forEach((k) => next.delete(k));
+        return next;
+      });
+
+      toast.success(
+        locale === "en" ? "Permissions Auto-Filled" : "تمت تعبئة الصلاحيات",
+        locale === "en"
+          ? `Auto-filled ${rolePerms.length} permissions from role "${role.nameEn || role.nameAr}". You can customize them in Direct Permissions.`
+          : `تمت تعبئة ${rolePerms.length} صلاحية تلقائياً من دور "${role.nameAr}". يمكنك تخصيصها بحرية في تبويب الصلاحيات المباشرة.`,
+      );
+    }
   };
 
-  // Direct Permission toggle
+  // Direct Permission toggle (Full user control)
   const togglePermissionKey = (key: string) => {
-    setSelectedPermissionKeys((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
-    );
+    setSelectedPermissionKeys((prev) => {
+      const exists = prev.includes(key);
+      if (exists) {
+        setManuallyRemovedKeys((m) => new Set(m).add(key));
+        setManuallyAddedKeys((m) => {
+          const next = new Set(m);
+          next.delete(key);
+          return next;
+        });
+        return prev.filter((k) => k !== key);
+      } else {
+        setManuallyAddedKeys((m) => new Set(m).add(key));
+        setManuallyRemovedKeys((m) => {
+          const next = new Set(m);
+          next.delete(key);
+          return next;
+        });
+        return [...prev, key];
+      }
+    });
   };
 
   // Direct Permission group toggle (Select / Deselect All in group)
@@ -266,10 +413,61 @@ export default function UsersPage() {
     const groupKeys = groupItems.map((item) => item.key);
     const allSelected = groupKeys.every((key) => selectedPermissionKeys.includes(key));
     if (allSelected) {
+      setManuallyRemovedKeys((m) => {
+        const next = new Set(m);
+        groupKeys.forEach((k) => next.add(k));
+        return next;
+      });
+      setManuallyAddedKeys((m) => {
+        const next = new Set(m);
+        groupKeys.forEach((k) => next.delete(k));
+        return next;
+      });
       setSelectedPermissionKeys((prev) => prev.filter((key) => !groupKeys.includes(key)));
     } else {
+      setManuallyAddedKeys((m) => {
+        const next = new Set(m);
+        groupKeys.forEach((k) => next.add(k));
+        return next;
+      });
+      setManuallyRemovedKeys((m) => {
+        const next = new Set(m);
+        groupKeys.forEach((k) => next.delete(k));
+        return next;
+      });
       setSelectedPermissionKeys((prev) => Array.from(new Set([...prev, ...groupKeys])));
     }
+  };
+
+  // Reset permissions to exact permissions defined by currently selected roles
+  const handleResetToRolePermissions = () => {
+    const allRolePerms = Array.from(
+      new Set(
+        selectedRoles.flatMap((r) => {
+          const matched = rolesCatalog.find((rc) => rc.id === r.roleId);
+          return matched?.permissionKeys ?? [];
+        }),
+      ),
+    );
+    setSelectedPermissionKeys(allRolePerms);
+    setManuallyAddedKeys(new Set());
+    setManuallyRemovedKeys(new Set());
+    toast.info(
+      locale === "en" ? "Permissions Reset" : "إعادة التعيين",
+      locale === "en"
+        ? `Reset permissions to match the ${allRolePerms.length} permissions defined by your selected role(s).`
+        : `تمت إعادة تعيين الصلاحيات لتطابق ${allRolePerms.length} صلاحية المحددة في الأدوار المختارة.`,
+    );
+  };
+
+  const handleClearAllPermissions = () => {
+    setSelectedPermissionKeys([]);
+    setManuallyAddedKeys(new Set());
+    const allRolePerms = selectedRoles.flatMap((r) => {
+      const matched = rolesCatalog.find((rc) => rc.id === r.roleId);
+      return matched?.permissionKeys ?? [];
+    });
+    setManuallyRemovedKeys(new Set(allRolePerms));
   };
 
 
@@ -368,6 +566,8 @@ export default function UsersPage() {
       setForm(emptyForm);
       setSelectedRoles([]);
       setSelectedPermissionKeys([]);
+      setManuallyAddedKeys(new Set());
+      setManuallyRemovedKeys(new Set());
       setShowForm(false);
       toast.success(
         locale === "en" ? "User Created" : "تم إنشاء المستخدم",
@@ -515,6 +715,49 @@ export default function UsersPage() {
                     }
                   />
                 </div>
+
+                {/* Primary Role / Role Preset */}
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-[var(--foreground)]">
+                      {locale === "en" ? "Role / Template (Optional)" : "الدور الوظيفي / القالب (اختياري)"}
+                    </label>
+                    <span className="text-[11px] text-[var(--muted)]">
+                      {locale === "en"
+                        ? "Choosing a role auto-fills its permissions into Direct Permissions"
+                        : "اختيار دور يعبئ الصلاحيات المرتبطة به تلقائياً في تبويب الصلاحيات"}
+                    </span>
+                  </div>
+                  <SearchableSelect
+                    value={primarySelectedRoleId}
+                    onChange={(val) => void handlePrimaryRoleChange(val)}
+                    options={roleOptions}
+                    placeholder={
+                      locale === "en"
+                        ? "Select Role (Auto-fills permissions)..."
+                        : "اختر الدور الوظيفي (تعبئة تلقائية للصلاحيات)..."
+                    }
+                  />
+                  {primarySelectedRole && (
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-500/20 bg-blue-50/50 p-3 dark:bg-blue-950/20">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck size={16} className="text-[#1167c9] shrink-0" />
+                        <span className="text-xs font-bold text-[#1167c9]">
+                          {locale === "en"
+                            ? `${selectedPermissionKeys.length} permissions auto-filled from "${primarySelectedRole.nameEn || primarySelectedRole.nameAr}"`
+                            : `تمت تعبئة ${selectedPermissionKeys.length} صلاحية تلقائياً من دور "${primarySelectedRole.nameAr}"`}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("permissions")}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-[#1167c9] hover:underline"
+                      >
+                        <span>{locale === "en" ? "Review & Customize Permissions →" : "مراجعة وتخصيص الصلاحيات ←"}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <Input
                   label={t("users.username")}
                   required
@@ -564,11 +807,27 @@ export default function UsersPage() {
             {/* TAB 2: ROLES */}
             {activeTab === "roles" && (
               <div className="space-y-4">
-                <p className="text-xs text-[var(--muted)]">
-                  {locale === "en"
-                    ? "Select initial roles for this account. If none selected, minimal USER role is assigned automatically."
-                    : "اختر الأدوار الأولية للحساب. في حال عدم الاختيار، سيتم تعيين دور المستخدم العادي تلقائياً."}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50/50 p-3 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40">
+                  <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                    <Shield size={16} className="text-[#1167c9] shrink-0" />
+                    <span>
+                      {locale === "en"
+                        ? "Selecting any role auto-fills its permissions into the Direct Permissions tab. You have full control to uncheck or select additional permissions."
+                        : "تحديد أي دور يقوم بتعبئة صلاحياته تلقائياً في تبويب الصلاحيات المباشرة. يمكنك تعديلها بحرية تامة وإلغاء أو إضافة أي صلاحية."}
+                    </span>
+                  </div>
+                  {selectedPermissionKeys.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("permissions")}
+                      className="text-xs font-bold text-[#1167c9] hover:underline"
+                    >
+                      {locale === "en"
+                        ? `Customize Permissions (${selectedPermissionKeys.length}) →`
+                        : `تخصيص الصلاحيات (${selectedPermissionKeys.length}) ←`}
+                    </button>
+                  )}
+                </div>
 
                 {catalogsLoading ? (
                   <p className="py-6 text-center text-sm text-[var(--muted)]">
@@ -579,6 +838,7 @@ export default function UsersPage() {
                     {rolesCatalog.map((role) => {
                       const selected = selectedRoles.find((r) => r.roleId === role.id);
                       const isChecked = Boolean(selected);
+                      const permsCount = role.permissionKeys?.length ?? 0;
                       return (
                         <label
                           key={role.id}
@@ -591,7 +851,7 @@ export default function UsersPage() {
                           <input
                             type="checkbox"
                             checked={isChecked}
-                            onChange={() => toggleRoleSelection(role.id)}
+                            onChange={() => void toggleRoleSelection(role.id)}
                             className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
                           />
                           <div className="flex-1">
@@ -606,6 +866,20 @@ export default function UsersPage() {
                             <p className="mt-1 text-xs text-[var(--muted)] font-normal">
                               {locale === "en" ? role.descriptionEn || role.descriptionAr : role.descriptionAr}
                             </p>
+                            <div className="mt-2.5 flex items-center justify-between gap-2">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-[var(--muted)]">
+                                <ShieldCheck size={12} className="text-[#1167c9]" />
+                                <span>
+                                  {permsCount}{" "}
+                                  {locale === "en" ? "permissions" : "صلاحية"}
+                                </span>
+                              </span>
+                              {isChecked && (
+                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                  {locale === "en" ? "✓ Permissions Loaded" : "✓ الصلاحيات معبأة"}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </label>
                       );
@@ -618,16 +892,37 @@ export default function UsersPage() {
             {/* TAB 3: DIRECT PERMISSION ASSIGNMENTS (SIMPLE SELECTION) */}
             {activeTab === "permissions" && (
               <div className="space-y-4">
+                {/* Auto-filled role alert */}
+                {selectedRoles.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-500/20 bg-blue-50/50 p-3 dark:bg-blue-950/20">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-[#1167c9] shrink-0" />
+                      <span className="text-xs text-[var(--foreground)]">
+                        {locale === "en"
+                          ? `Permissions auto-filled from ${selectedRoles.length} selected role(s). You have 100% control to uncheck or select new permissions below.`
+                          : `تمت تعبئة الصلاحيات تلقائياً من الأدوار المحددة (${selectedRoles.length}). لديك تحكم كامل لإلغاء تحديد أي منها أو إضافة صلاحيات جديدة.`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetToRolePermissions}
+                      className="rounded-lg border border-blue-300 bg-white px-2.5 py-1 text-xs font-bold text-[#1167c9] shadow-sm hover:bg-blue-50 dark:bg-slate-900 dark:border-blue-800 transition-colors"
+                    >
+                      {locale === "en" ? "Reset to Role Defaults" : "إعادة التعيين لصلاحيات الدور"}
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-[var(--muted)]">
                     {locale === "en"
-                      ? "Check the permissions you wish to grant directly to this user."
-                      : "حدد الصلاحيات التي ترغب بمنحها مباشرة لهذا المستخدم."}
+                      ? "Check or uncheck the permissions you wish to grant directly to this user."
+                      : "حدد أو ألغِ تحديد الصلاحيات التي ترغب بمنحها لهذا المستخدم."}
                   </p>
                   {selectedPermissionKeys.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setSelectedPermissionKeys([])}
+                      onClick={handleClearAllPermissions}
                       className="text-xs font-bold text-red-600 hover:underline"
                     >
                       {locale === "en" ? "Clear all selected" : "إلغاء تحديد الكل"}
@@ -693,7 +988,7 @@ export default function UsersPage() {
                     >
                       {locale === "en" ? "All" : "الكل"}
                     </button>
-                    {["Security", "Workforce", "Compliance", "Fleet", "Workflows", "Operations"].map((grp) => (
+                    {permissionGroups.map((grp) => (
                       <button
                         type="button"
                         key={grp}
