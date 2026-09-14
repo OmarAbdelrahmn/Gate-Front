@@ -378,6 +378,15 @@ export interface VehicleSummaryResponse {
   rowVersion: string;
 }
 
+export type RegisteredOwnerType = "Supplier" | "Sponsor" | null;
+
+export interface RegisteredOwnerOption {
+  id: string;
+  type: Exclude<RegisteredOwnerType, null>;
+  nameAr: string;
+  nameEn?: string | null;
+}
+
 export interface VehicleDetailResponse {
   summary: VehicleSummaryResponse;
   serialNumber?: string | null;
@@ -391,6 +400,7 @@ export interface VehicleDetailResponse {
   supplierName?: string | null;
   registeredOwnerSupplierId?: string | null;
   registeredOwnerSupplier?: string | null;
+  registeredOwnerType?: RegisteredOwnerType;
   registrationType: VehicleRegistrationType;
   vehicleManufacturerId: string;
   vehicleModelId: string;

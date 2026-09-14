@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   createVehicle,
   updateVehicle,
@@ -29,7 +28,7 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { listSponsors, type Sponsor } from "@/lib/workforce/api";
 import { getOperatingCities, type OperatingCityCatalogItem } from "@/lib/workforce/external-riders-api";
-import { Sparkles, Landmark, ShieldCheck } from "lucide-react";
+import { Sparkles, Landmark, ShieldCheck, Building2, Info, AlertCircle } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -37,6 +36,8 @@ interface Props {
   onSuccess: () => void;
   editingVehicle?: VehicleDetailResponse;
 }
+
+type RegisteredOwnerMode = "implicit" | "supplier" | "sponsor";
 
 const COMMON_VEHICLE_COLORS = [
   { ar: "أبيض", en: "White" },
@@ -48,21 +49,13 @@ const COMMON_VEHICLE_COLORS = [
   { ar: "كحلي", en: "Navy Blue" },
   { ar: "أزرق", en: "Blue" },
   { ar: "أحمر", en: "Red" },
-  { ar: "عنابي", en: "Maroon" },
-  { ar: "بني", en: "Brown" },
-  { ar: "بيج", en: "Beige" },
   { ar: "ذهبي", en: "Gold" },
-  { ar: "برونزي", en: "Bronze" },
-  { ar: "شامبين", en: "Champagne" },
-  { ar: "موكا", en: "Mocha" },
-  { ar: "أخضر", en: "Green" },
+  { ar: "بني", en: "Brown" },
   { ar: "أصفر", en: "Yellow" },
-  { ar: "برتقالي", en: "Orange" },
-  { ar: "بنفسجي", en: "Purple" },
+  { ar: "أخضر", en: "Green" },
 ];
 
 export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle }: Props) {
-  const { locale } = useAuth();
   const [isPending, startTransition] = useTransition();
 
   const [formData, setFormData] = useState<VehicleUpsertRequest>({
@@ -98,7 +91,8 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
     rowVersion: null,
   });
 
-  const [isFinancedOwner, setIsFinancedOwner] = useState<boolean>(false);
+  const [ownerMode, setOwnerMode] = useState<RegisteredOwnerMode>("implicit");
+  const [sponsorsForbidden, setSponsorsForbidden] = useState<boolean>(false);
 
   const [manufacturers, setManufacturers] = useState<VehicleManufacturerResponse[]>([]);
   const [allModels, setAllModels] = useState<VehicleModelResponse[]>([]);
@@ -108,36 +102,65 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
 
   useEffect(() => {
     if (isOpen) {
-      // Load dependencies
-      Promise.all([
-        getVehicleManufacturers(),
-        getVehicleModels(),
-        getVehicleSuppliers(),
-        listSponsors(),
-        getOperatingCities(),
-      ]).then(([mfg, mod, sup, spo, cit]) => {
-        const activeMfg = mfg.filter((m) => m.status === VehicleCatalogStatus.Active);
-        const activeMod = mod.filter((m) => m.status === VehicleCatalogStatus.Active);
-        const activeSup = sup.filter((s) => s.status === VehicleCatalogStatus.Active);
+      // Load dependencies safely without one failure aborting all
+      const mfgPromise = getVehicleManufacturers().catch(() => [] as VehicleManufacturerResponse[]);
+      const modPromise = getVehicleModels().catch(() => [] as VehicleModelResponse[]);
+      const supPromise = getVehicleSuppliers().catch(() => [] as VehicleSupplierResponse[]);
+      const citPromise = getOperatingCities().catch(() => [] as OperatingCityCatalogItem[]);
+      const spoPromise = listSponsors()
+        .then((res) => {
+          setSponsorsForbidden(false);
+          return res;
+        })
+        .catch((err: unknown) => {
+          const e = err as { status?: number };
+          if (e?.status === 403) {
+            setSponsorsForbidden(true);
+          }
+          return [] as Sponsor[];
+        });
 
-        setManufacturers(activeMfg);
-        setAllModels(activeMod);
-        setSuppliers(activeSup);
-        setSponsors(spo);
-        setCities(cit);
+      Promise.all([mfgPromise, modPromise, supPromise, spoPromise, citPromise]).then(
+        ([mfg, mod, sup, spo, cit]) => {
+          const activeMfg = mfg.filter((m) => m.status === VehicleCatalogStatus.Active);
+          const activeMod = mod.filter((m) => m.status === VehicleCatalogStatus.Active);
+          const activeSup = sup.filter((s) => s.status === VehicleCatalogStatus.Active);
 
-        if (!editingVehicle) {
-          // Pre-select default sponsor & city if available
-          setFormData((prev) => ({
-            ...prev,
-            sponsorId: prev.sponsorId || (spo.length > 0 ? spo[0].id : ""),
-            operatingCityId: prev.operatingCityId || (cit.length > 0 ? cit[0].id : ""),
-          }));
+          setManufacturers(activeMfg);
+          setAllModels(activeMod);
+          setSuppliers(activeSup);
+          setSponsors(spo);
+          setCities(cit);
+
+          if (!editingVehicle) {
+            // Pre-select default sponsor & city if available
+            setFormData((prev) => ({
+              ...prev,
+              sponsorId: prev.sponsorId || (spo.length > 0 ? spo[0].id : ""),
+              operatingCityId: prev.operatingCityId || (cit.length > 0 ? cit[0].id : ""),
+            }));
+          }
         }
-      });
+      );
 
       if (editingVehicle) {
-        setIsFinancedOwner(Boolean(editingVehicle.registeredOwnerSupplierId));
+        const currentOwnerId = editingVehicle.registeredOwnerSupplierId || null;
+        const currentOwnerType = editingVehicle.registeredOwnerType;
+
+        let initialMode: RegisteredOwnerMode = "implicit";
+        if (currentOwnerId) {
+          if (currentOwnerType === "Sponsor") {
+            initialMode = "sponsor";
+          } else if (currentOwnerType === "Supplier") {
+            initialMode = "supplier";
+          } else {
+            // Default fallback if type not provided
+            initialMode = "supplier";
+          }
+        }
+
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setOwnerMode(initialMode);
         setFormData({
           assetNumber: editingVehicle.summary.assetNumber,
           serialNumber: editingVehicle.serialNumber || "",
@@ -152,7 +175,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           sponsorId: editingVehicle.summary.sponsorId || "",
           operatingCityId: editingVehicle.summary.operatingCityId || "",
           purchasedFromSupplierId: editingVehicle.purchasedFromSupplierId || "",
-          registeredOwnerSupplierId: editingVehicle.registeredOwnerSupplierId || null,
+          registeredOwnerSupplierId: currentOwnerId,
           registrationType: editingVehicle.registrationType ?? editingVehicle.summary.registrationType,
           vehicleManufacturerId: editingVehicle.vehicleManufacturerId,
           vehicleModelId: editingVehicle.vehicleModelId,
@@ -171,7 +194,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           rowVersion: editingVehicle.summary.rowVersion,
         });
       } else {
-        setIsFinancedOwner(false);
+        setOwnerMode("implicit");
         setFormData({
           assetNumber: "",
           serialNumber: "",
@@ -209,8 +232,71 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
   }, [isOpen, editingVehicle]);
 
   const availableModels = allModels.filter((m) => m.vehicleManufacturerId === formData.vehicleManufacturerId);
+
+  // Computed options that preserve existing selections even if archived or 403 Forbidden
+  const operatingSponsorOptions = sponsors.map((s) => ({
+    value: s.id,
+    label: s.registryNameAr,
+    sublabel: s.registryNameEn || s.employerIdentityNumber || undefined,
+    keywords: `${s.registryNameEn || ""} ${s.employerIdentityNumber || ""}`,
+  }));
+  if (
+    editingVehicle?.summary?.sponsorId &&
+    !operatingSponsorOptions.some((o) => o.value === editingVehicle.summary.sponsorId)
+  ) {
+    operatingSponsorOptions.unshift({
+      value: editingVehicle.summary.sponsorId,
+      label: editingVehicle.summary.sponsorName || editingVehicle.summary.sponsorId,
+      sublabel: "(الكفيل المشغّل الحالي)",
+      keywords: "",
+    });
+  }
+
+  const supplierOptions = suppliers.map((s) => ({
+    value: s.id,
+    label: s.nameAr,
+    sublabel: s.nameEn || s.code || undefined,
+    keywords: `${s.nameEn || ""} ${s.code || ""} ${s.commercialRegistrationNumber || ""}`,
+  }));
+  if (
+    editingVehicle?.registeredOwnerSupplierId &&
+    ownerMode === "supplier" &&
+    !supplierOptions.some((o) => o.value === editingVehicle.registeredOwnerSupplierId)
+  ) {
+    supplierOptions.unshift({
+      value: editingVehicle.registeredOwnerSupplierId,
+      label: editingVehicle.registeredOwnerSupplier || editingVehicle.registeredOwnerSupplierId,
+      sublabel: "(المالك المسجل الحالي)",
+      keywords: "",
+    });
+  }
+
+  const sponsorOptions = sponsors.map((sp) => ({
+    value: sp.id,
+    label: sp.registryNameAr,
+    sublabel: sp.registryNameEn || sp.employerIdentityNumber || undefined,
+    keywords: `${sp.registryNameEn || ""} ${sp.employerIdentityNumber || ""} ${sp.commercialRegistrationNumber || ""}`,
+  }));
+  if (
+    editingVehicle?.registeredOwnerSupplierId &&
+    ownerMode === "sponsor" &&
+    !sponsorOptions.some((o) => o.value === editingVehicle.registeredOwnerSupplierId)
+  ) {
+    sponsorOptions.unshift({
+      value: editingVehicle.registeredOwnerSupplierId,
+      label: editingVehicle.registeredOwnerSupplier || editingVehicle.registeredOwnerSupplierId,
+      sublabel: "(المالك المسجل الحالي)",
+      keywords: "",
+    });
+  }
+
   const selectedSponsor = sponsors.find((s) => s.id === formData.sponsorId);
-  const selectedSponsorName = selectedSponsor?.registryNameAr || "الكفيل المختار";
+  const selectedSponsorName =
+    selectedSponsor?.registryNameAr ||
+    (editingVehicle && editingVehicle.summary.sponsorId === formData.sponsorId
+      ? editingVehicle.summary.sponsorName
+      : null) ||
+    "الكفيل المشغّل";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -260,9 +346,13 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
       return;
     }
 
-    // Required selection when financed/external registered owner is enabled
-    if (isFinancedOwner && !formData.registeredOwnerSupplierId) {
-      toast.error("خطأ في البيانات", "يرجى اختيار جهة التمويل / المالك المسجل للمركبة");
+    // Required selection when explicit supplier or sponsor owner is enabled
+    if (ownerMode === "supplier" && !formData.registeredOwnerSupplierId) {
+      toast.error("خطأ في البيانات", "يرجى اختيار جهة التمويل / المورد المالك المسجل");
+      return;
+    }
+    if (ownerMode === "sponsor" && !formData.registeredOwnerSupplierId) {
+      toast.error("خطأ في البيانات", "يرجى اختيار الكفيل المالك المسجل للمركبة");
       return;
     }
 
@@ -299,7 +389,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           sponsorId: formData.sponsorId || null,
           operatingCityId: formData.operatingCityId || null,
           purchasedFromSupplierId: formData.purchasedFromSupplierId || null,
-          registeredOwnerSupplierId: isFinancedOwner ? (formData.registeredOwnerSupplierId || null) : null,
+          registeredOwnerSupplierId: ownerMode === "implicit" ? null : (formData.registeredOwnerSupplierId || null),
           colorAr: formData.colorAr?.trim() || null,
           colorEn: formData.colorEn?.trim() || null,
           ownerName: formData.ownerName?.trim() || null,
@@ -325,7 +415,12 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           await createVehicle(payload);
         }
         onSuccess();
-      } catch (err) {}
+      } catch (err: unknown) {
+        const e = err as { status?: number; message?: string };
+        if (e?.status === 404) {
+          toast.error("خطأ في المالك المسجل", e.message || "المالك المسجل المحدد غير موجود أو تمت أرشفته");
+        }
+      }
     });
   };
 
@@ -607,14 +702,19 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                الكفيل / الكيان المالك <span className="text-red-500">*</span>
+                الكفيل المشغّل (المستخدم الفعلي) <span className="text-red-500">*</span>
               </label>
               <SearchableSelect
-                options={sponsors.map((s) => ({ value: s.id, label: s.registryNameAr }))}
+                options={operatingSponsorOptions}
                 value={formData.sponsorId || ""}
-                placeholder="اختر الكفيل..."
+                placeholder="اختر الكفيل المشغّل..."
                 onChange={(v) => setFormData({ ...formData, sponsorId: v })}
               />
+              {sponsorsForbidden && (
+                <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
+                  تنبيه: لا تملك صلاحية عرض قائمة الكفلاء (workforce.sponsors.read)
+                </span>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -660,87 +760,222 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 onChange={(v) => setFormData({ ...formData, purchasedFromSupplierId: v })}
               />
               <span className="mt-1 block text-[11px] text-slate-500 dark:text-slate-400">
-                مصدر شراء المركبة (يبقى محفوظاً ولا يتغير حتى بعد انتهاء التمويل)
+                مصدر شراء المركبة (يبقى محفوظاً ولا يتغير حتى بعد انتهاء التمويل أو تغيير المالك)
               </span>
             </div>
 
-            {/* Financed / External Registered Owner Section */}
-            <div className="col-span-1 md:col-span-3 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/60">
+            {/* Registered Owner Section (Polymorphic: Operating Sponsor, Supplier, or Sponsor) */}
+            <div className="col-span-1 md:col-span-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/60">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1167c9] dark:bg-blue-950/50 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50">
                     <Landmark className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      المالك المسجل (في استمارة المركبة)
+                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <span>المالك المسجل (في استمارة المركبة)</span>
+                      {ownerMode === "implicit" && (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          الكفيل المشغّل (تلقائي)
+                        </span>
+                      )}
+                      {ownerMode === "supplier" && (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          مورد / جهة تمويل (Supplier)
+                        </span>
+                      )}
+                      {ownerMode === "sponsor" && (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          كفيل رسمي (Sponsor)
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400">
-                      حدد ما إذا كانت المركبة مسجلة باسم بنك/جهة تمويلية أم باسم الكفيل المباشر
+                      حدد الجهة المسجلة رسمياً كمالك في الاستمارة (الكفيل المشغّل نفسه، جهة تمويل/مورد، أو كفيل مسجل آخر)
                     </div>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-3 self-end sm:self-auto">
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    تمويل / مالك مسجل خارجي:
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isFinancedOwner}
-                    onClick={() => {
-                      const next = !isFinancedOwner;
-                      setIsFinancedOwner(next);
-                      if (!next) {
-                        setFormData((prev) => ({ ...prev, registeredOwnerSupplierId: null }));
-                      }
-                    }}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      isFinancedOwner ? "bg-[#1167c9]" : "bg-slate-300 dark:bg-slate-600"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        isFinancedOwner
-                          ? (locale === "ar" ? "-translate-x-5" : "translate-x-5")
-                          : "translate-x-0"
-                      }`}
-                    />
-                  </button>
                 </div>
               </div>
 
-              {isFinancedOwner ? (
-                <div className="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800 space-y-2">
+              {/* Mode Selection Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-3.5">
+                {/* 1. Implicit (Operating Sponsor) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOwnerMode("implicit");
+                    setFormData((prev) => ({ ...prev, registeredOwnerSupplierId: null }));
+                  }}
+                  className={`flex items-start gap-2.5 p-3 rounded-xl border text-start transition-all cursor-pointer ${
+                    ownerMode === "implicit"
+                      ? "border-emerald-500 bg-emerald-50/70 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100 dark:border-emerald-600 ring-2 ring-emerald-500/20 shadow-sm"
+                      : "border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300"
+                  }`}
+                >
+                  <ShieldCheck
+                    className={`h-5 w-5 shrink-0 mt-0.5 ${
+                      ownerMode === "implicit" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                    }`}
+                  />
+                  <div>
+                    <div className="text-xs font-bold">الكفيل المشغّل (تلقائي)</div>
+                    <div className="text-[11px] opacity-80 mt-0.5">مسجلة مباشرة باسم الكفيل المستخدم أعلاه</div>
+                  </div>
+                </button>
+
+                {/* 2. Supplier */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOwnerMode("supplier");
+                    if (!suppliers.some((s) => s.id === formData.registeredOwnerSupplierId)) {
+                      setFormData((prev) => ({ ...prev, registeredOwnerSupplierId: null }));
+                    }
+                  }}
+                  className={`flex items-start gap-2.5 p-3 rounded-xl border text-start transition-all cursor-pointer ${
+                    ownerMode === "supplier"
+                      ? "border-amber-500 bg-amber-50/70 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-600 ring-2 ring-amber-500/20 shadow-sm"
+                      : "border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300"
+                  }`}
+                >
+                  <Building2
+                    className={`h-5 w-5 shrink-0 mt-0.5 ${
+                      ownerMode === "supplier" ? "text-amber-600 dark:text-amber-400" : "text-slate-400"
+                    }`}
+                  />
+                  <div>
+                    <div className="text-xs font-bold">مورد / جهة تمويل</div>
+                    <div className="text-[11px] opacity-80 mt-0.5">مسجلة باسم بنك أو جهة تمويل أو مورد</div>
+                  </div>
+                </button>
+
+                {/* 3. Sponsor */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOwnerMode("sponsor");
+                    if (!sponsors.some((sp) => sp.id === formData.registeredOwnerSupplierId)) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        registeredOwnerSupplierId: formData.sponsorId || null,
+                      }));
+                    }
+                  }}
+                  className={`flex items-start gap-2.5 p-3 rounded-xl border text-start transition-all cursor-pointer ${
+                    ownerMode === "sponsor"
+                      ? "border-indigo-500 bg-indigo-50/70 text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-100 dark:border-indigo-600 ring-2 ring-indigo-500/20 shadow-sm"
+                      : "border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300"
+                  }`}
+                >
+                  <Landmark
+                    className={`h-5 w-5 shrink-0 mt-0.5 ${
+                      ownerMode === "sponsor" ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"
+                    }`}
+                  />
+                  <div>
+                    <div className="text-xs font-bold">كفيل رسمي (Sponsor)</div>
+                    <div className="text-[11px] opacity-80 mt-0.5">مسجلة باسم كفيل (نفس المشغّل أو كفيل آخر)</div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Mode-specific Content */}
+              {ownerMode === "implicit" && (
+                <div className="mt-3.5 flex items-start gap-3 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/30 p-3.5 border border-emerald-200/80 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300">
+                  <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-sm">
+                      المالك المسجل المعتمد: {selectedSponsorName}
+                    </div>
+                    <p className="text-emerald-700/90 dark:text-emerald-400/90 text-xs mt-1">
+                      المركبة مسجلة رسمياً باسم الكفيل المشغّل المحدد أعلاه بدون وجود جهة تمويل أو كفيل مالك منفصل.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {ownerMode === "supplier" && (
+                <div className="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-slate-800 space-y-2">
                   <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    جهة التمويل / البنك المالك المسجل <span className="text-red-500">*</span>
+                    جهة التمويل / المورد المالك المسجل <span className="text-red-500">*</span>
                   </label>
                   <SearchableSelect
-                    options={suppliers.map((s) => ({ value: s.id, label: s.nameAr }))}
+                    options={supplierOptions}
                     value={formData.registeredOwnerSupplierId || ""}
-                    placeholder="اختر البنك أو جهة التمويل (مثال: مصرف الراجحي)..."
+                    placeholder="اختر البنك أو المورد (مثال: مصرف الراجحي، شركة التمويل)..."
                     onChange={(v) => setFormData({ ...formData, registeredOwnerSupplierId: v })}
                   />
                   <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50/90 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200/80 dark:border-amber-800/50">
-                    <span className="font-bold shrink-0">تنبيه:</span>
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                     <span>
-                      ستُسجل المركبة باسم جهة التمويل المختارة طوال فترة التمويل، ويبقى الكفيل المختار هو المستفيد المشغّل.
+                      ستُسجل المركبة باسم جهة التمويل/المورد المختارة كمالك مسجل، ويبقى الكفيل المختار أعلاه (
+                      <strong>{selectedSponsorName}</strong>) هو المستخدم المشغّل الفعلي.
                     </span>
                   </div>
                 </div>
-              ) : (
-                <div className="mt-3 flex items-center gap-2.5 rounded-lg bg-emerald-50/90 dark:bg-emerald-950/30 p-3 border border-emerald-200/80 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300">
-                  <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  <div>
-                    <span className="font-bold">المالك المسجل المعتمد: </span>
-                    <span className="font-semibold underline decoration-emerald-400 underline-offset-2">
-                      {selectedSponsorName}
-                    </span>
-                    <p className="text-emerald-700/90 dark:text-emerald-400/90 text-[11px] mt-0.5">
-                      المركبة مسجلة مباشرة باسم الكفيل المختار (غير ممولة، أو تم إنهاء تمويلها ونقل الملكية بالكامل).
-                    </p>
-                  </div>
+              )}
+
+              {ownerMode === "sponsor" && (
+                <div className="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-slate-800 space-y-2">
+                  {sponsorsForbidden ? (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                      <div>
+                        <div className="font-bold">تنبيه الصلاحيات (403 Forbidden):</div>
+                        <div>
+                          لا تملك صلاحية استعراض الكفلاء (
+                          <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">
+                            workforce.sponsors.read
+                          </code>
+                          ).
+                          {formData.registeredOwnerSupplierId && (
+                            <span className="block mt-1 font-semibold">
+                              تم الإبقاء على الكفيل المسجل الحالي المحفوظ في النظام.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        الكفيل المالك المسجل للمركبة <span className="text-red-500">*</span>
+                      </label>
+                      <SearchableSelect
+                        options={sponsorOptions}
+                        value={formData.registeredOwnerSupplierId || ""}
+                        placeholder="اختر الكفيل المالك المسجل..."
+                        onChange={(v) => setFormData({ ...formData, registeredOwnerSupplierId: v })}
+                      />
+                      {formData.registeredOwnerSupplierId && (
+                        <div
+                          className={`flex items-start gap-2 text-xs p-2.5 rounded-lg border ${
+                            formData.registeredOwnerSupplierId === formData.sponsorId
+                              ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50/90 dark:bg-emerald-950/30 border-emerald-200/80 dark:border-emerald-800/50"
+                              : "text-blue-800 dark:text-blue-300 bg-blue-50/90 dark:bg-blue-950/30 border-blue-200/80 dark:border-blue-800/50"
+                          }`}
+                        >
+                          <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>
+                            {formData.registeredOwnerSupplierId === formData.sponsorId ? (
+                              <>
+                                المالك المسجل صراحة هو <strong>نفس الكفيل المشغّل</strong> ({selectedSponsorName}).
+                              </>
+                            ) : (
+                              <>
+                                الكفيل المالك المسجل يختلف عن الكفيل المشغّل (المالك المسجل:{" "}
+                                <strong>
+                                  {sponsorOptions.find((s) => s.value === formData.registeredOwnerSupplierId)?.label ||
+                                    "الكفيل المختار"}
+                                </strong>{" "}
+                                | الكفيل المشغّل: <strong>{selectedSponsorName}</strong>).
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>

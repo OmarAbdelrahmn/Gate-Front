@@ -16,8 +16,8 @@ import {
   VehicleAccidentWorkflowStage,
   VehicleAccidentWorkflowAction,
   VehicleAccidentEvidenceType,
-  VehicleAccidentClaimType,
   VehicleAccidentRefundStatus,
+  RegisteredOwnerType,
 } from "./types";
 import { AppLocale, translate } from "../i18n";
 
@@ -486,32 +486,65 @@ export function formatCountdownTimer(remainingSeconds?: number | null): {
 
 /**
  * Resolves the authoritative registered owner according to the fleet ownership rule:
- * - registeredOwnerSupplierId != null => selected supplier/bank is the registered owner
- * - registeredOwnerSupplierId == null => the vehicle sponsor is the registered owner
+ * - registeredOwnerSupplierId != null => use registeredOwnerSupplier and registeredOwnerType ("Supplier" | "Sponsor")
+ * - registeredOwnerSupplierId == null => no explicit owner stored; fall back to vehicle sponsor
  */
 export function resolveVehicleRegisteredOwner(
   vehicle?: {
     registeredOwnerSupplierId?: string | null;
     registeredOwnerSupplier?: string | null;
-    summary?: { sponsorName?: string | null } | null;
+    registeredOwnerType?: RegisteredOwnerType;
+    summary?: { sponsorId?: string | null; sponsorName?: string | null } | null;
   } | null,
   fallback = "—"
 ): {
+  id: string | null;
+  name: string;
   ownerName: string;
+  type: RegisteredOwnerType;
+  isExplicit: boolean;
   isFinanced: boolean;
+  isOperatingSponsor: boolean;
 } {
   if (!vehicle) {
-    return { ownerName: fallback, isFinanced: false };
-  }
-  if (vehicle.registeredOwnerSupplierId && vehicle.registeredOwnerSupplier) {
     return {
-      ownerName: vehicle.registeredOwnerSupplier,
-      isFinanced: true,
+      id: null,
+      name: fallback,
+      ownerName: fallback,
+      type: null,
+      isExplicit: false,
+      isFinanced: false,
+      isOperatingSponsor: false,
     };
   }
+
+  if (vehicle.registeredOwnerSupplierId) {
+    const ownerName = vehicle.registeredOwnerSupplier || fallback;
+    const type: RegisteredOwnerType = vehicle.registeredOwnerType || "Supplier";
+    const isOperatingSponsor = Boolean(
+      vehicle.summary?.sponsorId && vehicle.registeredOwnerSupplierId === vehicle.summary.sponsorId
+    );
+
+    return {
+      id: vehicle.registeredOwnerSupplierId,
+      name: ownerName,
+      ownerName,
+      type,
+      isExplicit: true,
+      isFinanced: type === "Supplier",
+      isOperatingSponsor,
+    };
+  }
+
+  const sponsorName = vehicle.summary?.sponsorName || fallback;
   return {
-    ownerName: vehicle.summary?.sponsorName || fallback,
+    id: vehicle.summary?.sponsorId || null,
+    name: sponsorName,
+    ownerName: sponsorName,
+    type: "Sponsor",
+    isExplicit: false,
     isFinanced: false,
+    isOperatingSponsor: true,
   };
 }
 
