@@ -8,6 +8,7 @@ import type {
   PermissionCatalogItem,
   Role,
   RoleRequest,
+  RestoreManagedUserRequest,
   TemporaryCredential,
   UpdateManagedUserRequest,
 } from "./types";
@@ -16,8 +17,24 @@ export function listUsers(search = "") {
     `/api/users${search ? `?search=${encodeURIComponent(search)}` : ""}`,
   );
 }
+export function getArchivedUsers(search = "") {
+  const params = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+  return authFetch<ManagedUser[]>(`/api/users/archived${params}`);
+}
 export function getUser(userId: string) {
   return authFetch<ManagedUser>(`/api/users/${encodeURIComponent(userId)}`);
+}
+export function restoreUser(
+  userId: string,
+  request: RestoreManagedUserRequest,
+): Promise<ManagedUser> {
+  return authFetch<ManagedUser>(
+    `/api/users/${encodeURIComponent(userId)}/restore`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(request),
+    },
+  );
 }
 export async function createUser(payload: CreateManagedUserRequest): Promise<ManagedUser> {
   const res = await authFetch<{ user: ManagedUser } | ManagedUser>("/api/users", {

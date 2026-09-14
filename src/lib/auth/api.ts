@@ -92,6 +92,14 @@ export function getFriendlyErrorMessage(
 ): string {
   if (errorCode) {
     switch (errorCode) {
+      case "UserManagement.CurrentUserUnavailable":
+        return "تعذر التحقق من حساب المستخدم الحالي. يرجى تسجيل الدخول مرة أخرى.";
+      case "UserManagement.ProtectedAccount":
+        return "لا يمكن تنفيذ هذه العملية على حساب محمي أو لا تملك الصلاحية الكافية.";
+      case "UserManagement.NotFound":
+        return "المستخدم غير موجود أو تمت استعادته بالفعل.";
+      case "UserManagement.ConcurrencyConflict":
+        return "حدث تعارض في التحديث بالتزامن. تم تعديل بيانات المستخدم مسبقاً، يرجى إعادة المحاولة.";
       case "platform.payment_model_not_supported":
         return "نموذج الدفع غير مدعوم للمنصة المحددة. يرجى تحديث المنصة واختيار نموذج من النماذج المدعومة.";
       case "platform.payment_models_in_use":

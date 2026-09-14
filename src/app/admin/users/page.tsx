@@ -15,12 +15,15 @@ import {
   Archive,
   ZoomIn,
   ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 import { extractErrorMessageFromBody } from "../../../lib/auth/api";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { ArchiveUserModal } from "../../../components/users/ArchiveUserModal";
+import { RestoreUserModal } from "../../../components/users/RestoreUserModal";
 import {
   createUser,
+  getArchivedUsers,
   getPermissionCatalogue,
   getRolePermissionKeys,
   listRoles,
@@ -103,6 +106,16 @@ export default function UsersPage() {
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [userToArchive, setUserToArchive] = useState<ManagedUser | null>(null);
+  const [userToRestore, setUserToRestore] = useState<ManagedUser | null>(null);
+
+  // View tabs state (Active vs Archived)
+  const [viewTab, setViewTab] = useState<"active" | "archived">("active");
+  const [archivedUsers, setArchivedUsers] = useState<ManagedUser[]>([]);
+  const [archivedSearch, setArchivedSearch] = useState("");
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedError, setArchivedError] = useState("");
+  const [hasLoadedArchivedOnce, setHasLoadedArchivedOnce] = useState(false);
+
   const [previewImage, setPreviewImage] = useState<{
     url: string;
     title: string;
@@ -157,11 +170,47 @@ export default function UsersPage() {
     }
   }, [search, locale]);
 
+  const loadArchived = useCallback(
+    async (query = archivedSearch) => {
+      setArchivedLoading(true);
+      setArchivedError("");
+      try {
+        const data = await getArchivedUsers(query);
+        setArchivedUsers(data);
+        setHasLoadedArchivedOnce(true);
+      } catch {
+        setArchivedError(
+          locale === "en"
+            ? "Failed to load archived users. Verify API connection and permissions."
+            : "تعذر تحميل المستخدمين المؤرشفين. تأكد من اتصال واجهة API وصلاحياتك.",
+        );
+      } finally {
+        setArchivedLoading(false);
+      }
+    },
+    [archivedSearch, locale],
+  );
+
   useEffect(() => {
     if (isLoading || !canRead) return;
     const timer = window.setTimeout(() => void load(), 350);
     return () => window.clearTimeout(timer);
   }, [isLoading, canRead, load]);
+
+  useEffect(() => {
+    if (isLoading || !canRead) return;
+    if (viewTab === "archived") {
+      const timer = window.setTimeout(() => void loadArchived(archivedSearch), 350);
+      return () => window.clearTimeout(timer);
+    }
+  }, [isLoading, canRead, viewTab, archivedSearch, loadArchived]);
+
+  const handleTabChange = (tab: "active" | "archived") => {
+    setViewTab(tab);
+    if (tab === "archived" && !hasLoadedArchivedOnce) {
+      void loadArchived(archivedSearch);
+    }
+  };
 
   const loadCatalogs = useCallback(async () => {
     setCatalogsLoading(true);
@@ -1104,16 +1153,75 @@ export default function UsersPage() {
         </Card>
       )}
 
+      {/* View Switcher Tabs */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => handleTabChange("active")}
+          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold transition-all ${
+            viewTab === "active"
+              ? "bg-[#1167c9] text-white shadow-sm"
+              : "bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)] hover:bg-blue-500/10 hover:text-[#1167c9]"
+          }`}
+        >
+          <UsersRound size={17} />
+          <span>{t("users.activeUsers")}</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+              viewTab === "active"
+                ? "bg-white/20 text-white"
+                : "bg-slate-200/80 dark:bg-slate-800 text-[var(--foreground)]"
+            }`}
+          >
+            {users.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange("archived")}
+          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold transition-all ${
+            viewTab === "archived"
+              ? "bg-[#1167c9] text-white shadow-sm"
+              : "bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)] hover:bg-blue-500/10 hover:text-[#1167c9]"
+          }`}
+        >
+          <Archive size={17} />
+          <span>{t("users.archivedUsers")}</span>
+          {hasLoadedArchivedOnce && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                viewTab === "archived"
+                  ? "bg-white/20 text-white"
+                  : "bg-slate-200/80 dark:bg-slate-800 text-[var(--foreground)]"
+              }`}
+            >
+              {archivedUsers.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] p-5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-500/10 text-[#1167c9]">
-              <UsersRound size={20} />
+            <div
+              className={`grid h-10 w-10 place-items-center rounded-xl ${
+                viewTab === "active"
+                  ? "bg-blue-500/10 text-[#1167c9]"
+                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              {viewTab === "active" ? <UsersRound size={20} /> : <Archive size={20} />}
             </div>
             <div>
-              <h2 className="font-black">{t("users.title")}</h2>
+              <h2 className="font-black">
+                {viewTab === "active" ? t("users.title") : t("users.archivedUsers")}
+              </h2>
               <p className="text-xs text-[var(--muted)]">
-                {users.length} {locale === "en" ? "accounts" : "حساب"}
+                {viewTab === "active"
+                  ? `${users.length} ${locale === "en" ? "active accounts" : "حساب نشط"}`
+                  : `${archivedUsers.length} ${locale === "en" ? "archived accounts" : "حساب مؤرشف"}`}
               </p>
             </div>
           </div>
@@ -1121,16 +1229,28 @@ export default function UsersPage() {
             <label className="flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 text-[var(--muted)]">
               <Search size={17} />
               <input
-                aria-label={t("users.searchPlaceholder")}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("users.searchPlaceholder")}
+                aria-label={
+                  viewTab === "active"
+                    ? t("users.searchPlaceholder")
+                    : t("users.searchArchivedPlaceholder")
+                }
+                value={viewTab === "active" ? search : archivedSearch}
+                onChange={(e) =>
+                  viewTab === "active"
+                    ? setSearch(e.target.value)
+                    : setArchivedSearch(e.target.value)
+                }
+                placeholder={
+                  viewTab === "active"
+                    ? t("users.searchPlaceholder")
+                    : t("users.searchArchivedPlaceholder")
+                }
                 className="w-56 bg-transparent text-sm text-[var(--foreground)] outline-none sm:w-80"
               />
             </label>
             <Button
               variant="secondary"
-              onClick={() => void load()}
+              onClick={() => (viewTab === "active" ? void load() : void loadArchived())}
               aria-label={t("common.loading")}
             >
               <RefreshCw size={17} />
@@ -1138,13 +1258,13 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {error && (
+        {(viewTab === "active" ? error : archivedError) && (
           <p role="alert" className="m-5 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">
-            {error}
+            {viewTab === "active" ? error : archivedError}
           </p>
         )}
 
-        {loading ? (
+        {(viewTab === "active" ? loading : archivedLoading) ? (
           <div className="p-8 text-center text-sm text-[var(--muted)]">
             {t("common.loading")}
           </div>
@@ -1169,7 +1289,7 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {users.map((user) => {
+              {(viewTab === "active" ? users : archivedUsers).map((user) => {
                 const linkedEmp = user.employeeId
                   ? employees.find((e) => e.id === user.employeeId)
                   : null;
@@ -1233,17 +1353,23 @@ export default function UsersPage() {
                       {user.phoneNumber || "—"}
                     </td>
                     <td className="px-5 py-4">
-                      <Badge
-                        tone={
-                          user.status === "Active"
-                            ? "green"
-                            : user.status === "Locked"
-                              ? "red"
-                              : "orange"
-                        }
-                      >
-                        {statusLabels[user.status]?.[locale] ?? user.status}
-                      </Badge>
+                      {viewTab === "archived" ? (
+                        <Badge tone="gray">
+                          {statusLabels["Archived"]?.[locale] ?? "Archived"}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          tone={
+                            user.status === "Active"
+                              ? "green"
+                              : user.status === "Locked"
+                                ? "red"
+                                : "orange"
+                          }
+                        >
+                          {statusLabels[user.status]?.[locale] ?? user.status}
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-[var(--muted)]">
                       {formatDate(user.lastActivityAtUtc, locale)}
@@ -1262,7 +1388,7 @@ export default function UsersPage() {
                           <Pencil size={15} />
                           <span className="hidden sm:inline">{t("common.edit")}</span>
                         </Link>
-                        {can("users.archive") && user.status !== "Archived" && (
+                        {viewTab === "active" && can("users.archive") && user.status !== "Archived" && (
                           <button
                             type="button"
                             onClick={() => setUserToArchive(user)}
@@ -1274,20 +1400,32 @@ export default function UsersPage() {
                             <span className="hidden md:inline">{locale === "en" ? "Archive" : "أرشفة"}</span>
                           </button>
                         )}
+                        {viewTab === "archived" && can("users.archive") && (
+                          <button
+                            type="button"
+                            onClick={() => setUserToRestore(user)}
+                            aria-label={t("users.restoreUser")}
+                            title={t("users.restoreUser")}
+                            className="inline-flex min-h-9 items-center gap-1 rounded-xl px-2.5 text-xs font-bold text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+                          >
+                            <RotateCcw size={15} />
+                            <span className="hidden md:inline">{t("users.restore")}</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
                 );
               })}
-              {users.length === 0 && (
+              {(viewTab === "active" ? users : archivedUsers).length === 0 && (
                 <tr>
                   <td
                     colSpan={8}
                     className="px-5 py-10 text-center text-sm text-[var(--muted)]"
                   >
-                    {locale === "en"
-                      ? "No matching users found."
-                      : "لا توجد نتائج مطابقة."}
+                    {viewTab === "active"
+                      ? (locale === "en" ? "No matching users found." : "لا توجد نتائج مطابقة.")
+                      : (locale === "en" ? "No archived users found." : "لا يوجد مستخدمون مؤرشفون.")}
                   </td>
                 </tr>
               )}
@@ -1301,6 +1439,26 @@ export default function UsersPage() {
         onClose={() => setUserToArchive(null)}
         user={userToArchive}
         onSuccess={() => {
+          void load();
+          if (hasLoadedArchivedOnce) {
+            void loadArchived();
+          }
+        }}
+      />
+
+      <RestoreUserModal
+        isOpen={Boolean(userToRestore)}
+        onClose={() => setUserToRestore(null)}
+        user={userToRestore}
+        onSuccess={(restored) => {
+          setArchivedUsers((prev) => prev.filter((u) => u.id !== restored.id));
+          void load();
+        }}
+        onConflict={() => {
+          void loadArchived();
+        }}
+        onNotFound={(userId) => {
+          setArchivedUsers((prev) => prev.filter((u) => u.id !== userId));
           void load();
         }}
       />

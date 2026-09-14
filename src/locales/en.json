@@ -294,7 +294,12 @@
     "suspended": "Suspended",
     "archived": "Archived",
     "pendingPassword": "Password Change Required",
-    "searchPlaceholder": "Search by name, username, or email..."
+    "searchPlaceholder": "Search by name, username, or email...",
+    "activeUsers": "Active Users",
+    "archivedUsers": "Archived Users",
+    "restore": "Restore",
+    "restoreUser": "Restore User",
+    "searchArchivedPlaceholder": "Search archived by name, username, or email..."
   },
   "roles": {
     "title": "Roles & Permissions",

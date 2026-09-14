@@ -34,6 +34,7 @@ import { Input } from "../ui/Input";
 import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ArchiveUserModal } from "./ArchiveUserModal";
+import { RestoreUserModal } from "./RestoreUserModal";
 
 type Props = { user: ManagedUser; onChanged: (user: ManagedUser) => void };
 type Role = {
@@ -186,6 +187,7 @@ export function UserManagementPanel({ user, onChanged }: Props) {
   const [password, setPassword] = useState("");
   const [reason, setReason] = useState("");
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [status, setStatus] = useState(user.status);
   const [credential, setCredential] = useState<TemporaryCredential | null>(
     null,
@@ -468,11 +470,20 @@ export function UserManagementPanel({ user, onChanged }: Props) {
               {locale === "en" ? "Final Action" : "إجراء نهائي"}
             </h2>
             {user.status === "Archived" ? (
-              <p className="mt-3 text-xs font-bold text-[var(--muted)]">
-                {locale === "en"
-                  ? "This user account is currently archived."
-                  : "تمت أرشفة حساب هذا المستخدم مسبقاً."}
-              </p>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-[var(--muted)]">
+                  {locale === "en"
+                    ? "This user account is currently archived. You can restore it to reactivate login access."
+                    : "حساب هذا المستخدم مؤرشف حالياً. يمكنك استعادته لإعادة تفعيل صلاحيات الدخول."}
+                </p>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setIsRestoreModalOpen(true)}
+                >
+                  <RotateCcw size={16} />
+                  {locale === "en" ? "Restore User Account" : "استعادة حساب المستخدم"}
+                </Button>
+              </div>
             ) : (
               <>
                 <p className="mt-1 text-xs text-[var(--muted)]">
@@ -499,6 +510,15 @@ export function UserManagementPanel({ user, onChanged }: Props) {
           user={user}
           onSuccess={() => {
             onChanged({ ...user, status: "Archived" });
+          }}
+        />
+        <RestoreUserModal
+          isOpen={isRestoreModalOpen}
+          onClose={() => setIsRestoreModalOpen(false)}
+          user={user}
+          onSuccess={(restored) => {
+            onChanged(restored);
+            setStatus(restored.status);
           }}
         />
       </div>

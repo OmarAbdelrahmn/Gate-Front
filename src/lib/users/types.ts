@@ -16,6 +16,10 @@ export type ManagedUser = {
   rowVersion: string;
   profileImageUrl?: string | null;
 };
+export type ManagedUserResponse = ManagedUser;
+export type RestoreManagedUserRequest = {
+  rowVersion: string;
+};
 export type CreateManagedUserRequest = {
   userName: string;
   initialPassword: string;
