@@ -51,7 +51,6 @@ interface HousingFormState {
   nameAr: string;
   nameEn: string;
   cityId: string;
-  totalCapacity: string;
   contactPhone: string;
   buildingNumber: string;
   street: string;
@@ -73,7 +72,6 @@ const initialFormState: HousingFormState = {
   nameAr: "",
   nameEn: "",
   cityId: "",
-  totalCapacity: "50",
   contactPhone: "",
   buildingNumber: "",
   street: "",
@@ -198,7 +196,6 @@ export default function HousingPage() {
       nameAr: item.nameAr || "",
       nameEn: item.nameEn || "",
       cityId: item.cityId || "",
-      totalCapacity: String(item.totalCapacity ?? "0"),
       contactPhone: item.contactPhone || "",
       buildingNumber: item.address?.buildingNumber || "",
       street: item.address?.street || "",
@@ -230,11 +227,6 @@ export default function HousingPage() {
     }
     if (!formData.cityId) {
       return isEn ? "Please select a city" : "يرجى اختيار مدينة التشغيل";
-    }
-
-    const cap = Number(formData.totalCapacity);
-    if (isNaN(cap) || cap <= 0) {
-      return isEn ? "Total capacity must be greater than zero" : "السعة الاستيعابية يجب أن تكون أكبر من صفر";
     }
 
     if (formData.latitude.trim() !== "") {
@@ -300,7 +292,6 @@ export default function HousingPage() {
         address: addressObj,
         latitude: formData.latitude.trim() !== "" ? Number(formData.latitude) : null,
         longitude: formData.longitude.trim() !== "" ? Number(formData.longitude) : null,
-        totalCapacity: Number(formData.totalCapacity),
         contactPhone: formData.contactPhone.trim() || null,
         openedDate: formData.openedDate || new Date().toISOString().split("T")[0],
         closedDate: formData.closedDate || null,
@@ -318,7 +309,10 @@ export default function HousingPage() {
         toast.success(isEn ? "Success" : "تم بنجاح", isEn ? "Housing record updated" : "تم تحديث بيانات السكن بنجاح");
       } else {
         await createHousing(payload);
-        toast.success(isEn ? "Success" : "تم بنجاح", isEn ? "Housing record created" : "تم إضافة السكن بنجاح");
+        toast.success(
+          isEn ? "Success" : "تم بنجاح",
+          isEn ? "Housing created. You can now add rooms to define capacity." : "تم إضافة السكن بنجاح. يمكنك الآن إضافة الغرف لتحديد السعة الاستيعابية."
+        );
       }
 
       setOpenForm(false);
@@ -737,9 +731,9 @@ export default function HousingPage() {
                   <div className="mt-5 pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
                     <Link
                       href={`/admin/housing/${x.id}`}
-                      className="text-xs font-extrabold text-[#1167c9] hover:underline"
+                      className="text-xs font-extrabold text-[#1167c9] hover:underline flex items-center gap-1"
                     >
-                      {isEn ? "View Residents & Details →" : "عرض السكان والتفاصيل ←"}
+                      {isEn ? "Manage Rooms & Occupants →" : "إدارة الغرف والتسكين ←"}
                     </Link>
 
                     {manage && (
@@ -865,22 +859,6 @@ export default function HousingPage() {
                   </div>
 
                   <label className="grid gap-1.5 text-xs font-bold">
-                    <span>
-                      {isEn ? "Total Capacity (Beds)" : "السعة الاستيعابية (الأسرّة)"}{" "}
-                      <span className="text-rose-500">*</span>
-                    </span>
-                    <input
-                      type="number"
-                      min="1"
-                      required
-                      value={formData.totalCapacity}
-                      onChange={(e) => setFormData({ ...formData, totalCapacity: e.target.value })}
-                      placeholder="100"
-                      className={inputCls}
-                    />
-                  </label>
-
-                  <label className="grid gap-1.5 text-xs font-bold">
                     <span>{isEn ? "Contact Phone" : "رقم هاتف التواصل"}</span>
                     <input
                       type="tel"
@@ -890,6 +868,21 @@ export default function HousingPage() {
                       className={inputCls}
                     />
                   </label>
+
+                  {/* Room-based capacity callout */}
+                  <div className="col-span-full rounded-xl border border-blue-200/80 bg-blue-50/70 dark:border-blue-900/50 dark:bg-blue-950/30 p-3.5 flex items-start gap-2.5">
+                    <AlertCircle size={17} className="shrink-0 mt-0.5 text-[#1167c9]" />
+                    <div className="text-xs">
+                      <p className="font-black text-[#1167c9]">
+                        {isEn ? "Room-Based Capacity Management" : "إدارة السعة على مستوى الغرف"}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {isEn
+                          ? "Housing capacity and available beds are calculated automatically from its rooms. You can create and manage rooms in the facility details page."
+                          : "تُحتسب السعة الاستيعابية والأسرّة الشاغرة تلقائياً من واقع الغرف المسجلة. يمكنك إضافة وتعديل الغرف من صفحة تفاصيل السكن."}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

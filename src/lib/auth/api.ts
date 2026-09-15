@@ -114,8 +114,26 @@ export function getFriendlyErrorMessage(
         return "ملف المندوب غير متاح حالياً أو غير مؤهل لتعيين حساب منصة.";
       case "hr.concurrency_conflict":
         return "حدث تعارض في التحديث بالتزامن. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+      case "hr.conflict":
+        return "حدث تعارض في العملية. يرجى التحقق من صحة السجلات أو عدم وجود سكان قبل المتابعة.";
       case "hr.invalid_request":
         return "طلب غير صالح. يرجى التأكد من صحة البيانات والمدخلات.";
+      case "housing.not_found":
+        return "وحدة السكن المطلوبة غير موجودة.";
+      case "housing.room_not_found":
+        return "الغرفة المطلوبة غير موجودة.";
+      case "housing.room_occupied":
+        return "لا يمكن أرشفة غرفة بها سكان حاليون. يرجى نقل السكان أو إنهاء تسكينهم أولاً.";
+      case "housing.capacity_exceeded":
+        return "السعة الاستيعابية للغرفة مكتملة؛ لا توجد أسرّة شاغرة متاحة للتسكين.";
+      case "housing.employee_not_found":
+        return "لم يتم العثور على الموظف المحدد أو حسابه غير متاح.";
+      case "housing.rider_not_found":
+        return "لم يتم العثور على ملف السائق المحدد.";
+      case "housing.person_already_assigned":
+        return "هذا الشخص مسكن بالفعل في غرفة نشطة أخرى. يمكنك استخدام ميزة نقل الساكن.";
+      case "housing.not_active":
+        return "وحدة السكن غير نشطة حالياً، ولا يمكن تسكين أشخاص بها.";
       case "phone_sim.invalid_phone_number":
         return "رقم الهاتف غير صحيح. يرجى إدخال رقم هاتف صالح بالصيغة المحلية أو الدولية.";
       case "phone_sim.invalid_iccid":

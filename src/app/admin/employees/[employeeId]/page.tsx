@@ -33,9 +33,11 @@ import {
 } from "../../../../lib/fleet/types";
 import {
   listHousing,
-  assignResident,
+  listRooms,
+  assignEmployeeToRoom,
+  assignRiderToRoom,
   type Housing,
-  type AssignResidentPayload,
+  type Room,
 } from "../../../../lib/housing/api";
 import type {
   EmployeeDetails,
@@ -497,11 +499,12 @@ export default function EmployeeDetailsPage({
   const [housings, setHousings] = useState<Housing[]>([]);
   const [loadingHousings, setLoadingHousings] = useState(false);
   const [selectedHousingId, setSelectedHousingId] = useState("");
+  const [selectedRoomId, setSelectedRoomId] = useState("");
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
   const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split("T")[0]);
   const [moveInReason, setMoveInReason] = useState("");
   const [sourceReference, setSourceReference] = useState("");
-  const [capacityOverrideUsed, setCapacityOverrideUsed] = useState(false);
-  const [capacityOverrideReason, setCapacityOverrideReason] = useState("");
   const [housingBusy, setHousingBusy] = useState(false);
   const [housingError, setHousingError] = useState("");
 
@@ -509,11 +512,10 @@ export default function EmployeeDetailsPage({
     setHousingError("");
     setOpenHousingModal(true);
     setSelectedHousingId(details?.housing?.id || "");
+    setSelectedRoomId("");
     setEffectiveFrom(new Date().toISOString().split("T")[0]);
     setMoveInReason("");
     setSourceReference("");
-    setCapacityOverrideUsed(false);
-    setCapacityOverrideReason("");
     setLoadingHousings(true);
     try {
       const data = await listHousing();
@@ -525,6 +527,50 @@ export default function EmployeeDetailsPage({
     }
   };
 
+  useEffect(() => {
+    if (!selectedHousingId) {
+      setRooms([]);
+      setSelectedRoomId("");
+      return;
+    }
+    let active = true;
+    setLoadingRooms(true);
+    listRooms(selectedHousingId)
+      .then((data) => {
+        if (active) {
+          const list = data || [];
+          setRooms(list);
+          const firstVacant = list.find((r) => r.availableCapacity > 0);
+          if (firstVacant) setSelectedRoomId(firstVacant.id);
+        }
+      })
+      .catch(() => {
+        if (active) setRooms([]);
+      })
+      .finally(() => {
+        if (active) setLoadingRooms(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedHousingId]);
+
+  const roomOptions: SelectOption[] = useMemo(
+    () =>
+      rooms.map((r) => {
+        const isFull = r.availableCapacity <= 0;
+        return {
+          value: r.id,
+          label: isEn ? `Room ${r.name}` : `غرفة ${r.name}`,
+          sublabel: isFull
+            ? isEn ? "Full (0 beds vacant)" : "مكتملة (0 سرير متاح)"
+            : isEn ? `${r.availableCapacity} beds available` : `${r.availableCapacity} أسرّة شاغرة`,
+          disabled: isFull,
+        };
+      }),
+    [rooms, isEn]
+  );
+
   const handleAssignHousing = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!details?.employee) return;
@@ -532,16 +578,12 @@ export default function EmployeeDetailsPage({
       setHousingError(isEn ? "Please select a housing unit" : "يرجى اختيار وحدة السكن");
       return;
     }
-    if (!effectiveFrom) {
-      setHousingError(isEn ? "Effective date is required" : "تاريخ البداية مطلوب");
+    if (!selectedRoomId) {
+      setHousingError(isEn ? "Please select a room" : "يرجى اختيار الغرفة");
       return;
     }
-    if (capacityOverrideUsed && !capacityOverrideReason.trim()) {
-      setHousingError(
-        isEn
-          ? "Override reason is required when capacity override is used"
-          : "سبب التجاوز مطلوب عند استخدام تجاوز السعة",
-      );
+    if (!effectiveFrom) {
+      setHousingError(isEn ? "Effective date is required" : "تاريخ البداية مطلوب");
       return;
     }
 
@@ -549,16 +591,25 @@ export default function EmployeeDetailsPage({
     setHousingBusy(true);
 
     try {
-      const payload: AssignResidentPayload = {
-        employeeId: details.employee.id,
-        effectiveFrom,
-        moveInReason: moveInReason.trim() || null,
-        sourceReference: sourceReference.trim() || null,
-        capacityOverrideUsed,
-        capacityOverrideReason: capacityOverrideUsed ? capacityOverrideReason.trim() : null,
-      };
+      const riderProfileId = details.employee.rider?.id || details.employee.riderProfileId;
+      const isRider = Boolean(riderProfileId) && !details.employee.isEmployee;
 
-      await assignResident(selectedHousingId, payload);
+      if (isRider && riderProfileId) {
+        await assignRiderToRoom(selectedRoomId, {
+          riderProfileId,
+          effectiveFrom,
+          moveInReason: moveInReason.trim() || null,
+          sourceReference: sourceReference.trim() || null,
+        });
+      } else {
+        await assignEmployeeToRoom(selectedRoomId, {
+          employeeId: details.employee.id,
+          effectiveFrom,
+          moveInReason: moveInReason.trim() || null,
+          sourceReference: sourceReference.trim() || null,
+        });
+      }
+
       toast.success(
         isEn ? "Housing Assigned" : "تم تسكين الموظف",
         isEn
@@ -567,10 +618,9 @@ export default function EmployeeDetailsPage({
       );
       setOpenHousingModal(false);
       setSelectedHousingId("");
+      setSelectedRoomId("");
       setMoveInReason("");
       setSourceReference("");
-      setCapacityOverrideUsed(false);
-      setCapacityOverrideReason("");
 
       if (employeeId) {
         const updated = await getEmployee(employeeId);
@@ -583,9 +633,6 @@ export default function EmployeeDetailsPage({
           : isEn
           ? "Failed to assign resident"
           : "تعذر إسناد الساكن";
-      if (msg.includes("capacity_exceeded") || msg.toLowerCase().includes("capacity")) {
-        setCapacityOverrideUsed(true);
-      }
       setHousingError(msg);
     } finally {
       setHousingBusy(false);
@@ -1335,16 +1382,35 @@ export default function EmployeeDetailsPage({
                     value={selectedHousingId}
                     onChange={(val) => {
                       setSelectedHousingId(val);
-                      const target = housings.find((h) => h.id === val);
-                      if (target && target.availableCapacity <= 0) {
-                        setCapacityOverrideUsed(true);
-                      }
                     }}
                     placeholder={isEn ? "Choose housing..." : "اختر وحدة السكن..."}
                     searchPlaceholder={isEn ? "Search housing units..." : "ابحث في وحدات السكن..."}
                   />
                 )}
               </div>
+
+              {/* Room Selection */}
+              {selectedHousingId && (
+                <div>
+                  <label className="block text-xs font-bold mb-1.5 text-[var(--foreground)]">
+                    {isEn ? "Select Room" : "اختر الغرفة"} <span className="text-rose-500">*</span>
+                  </label>
+                  {loadingRooms ? (
+                    <div className="h-11 rounded-xl border bg-slate-50 flex items-center justify-center text-xs text-[var(--muted)] animate-pulse">
+                      {isEn ? "Loading rooms..." : "جاري تحميل الغرف..."}
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      options={roomOptions}
+                      value={selectedRoomId}
+                      onChange={setSelectedRoomId}
+                      placeholder={isEn ? "Choose room..." : "اختر الغرفة..."}
+                      searchPlaceholder={isEn ? "Search rooms..." : "ابحث في الغرف..."}
+                      required
+                    />
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold mb-1.5 text-[var(--foreground)]">
@@ -1383,35 +1449,6 @@ export default function EmployeeDetailsPage({
                   placeholder={isEn ? "Optional reference ID or document no." : "رقم مرجعي اختياري أو رقم العقد"}
                   className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium transition-all focus:border-[#1167c9] outline-none"
                 />
-              </div>
-
-              {/* Capacity Override Section */}
-              <div className="rounded-xl border p-3 bg-slate-50/50 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold select-none">
-                  <input
-                    type="checkbox"
-                    checked={capacityOverrideUsed}
-                    onChange={(e) => setCapacityOverrideUsed(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#1167c9] focus:ring-[#1167c9]"
-                  />
-                  <span>{isEn ? "Override Housing Capacity" : "تجاوز السعة الاستيعابية للسكن"}</span>
-                </label>
-
-                {capacityOverrideUsed && (
-                  <div>
-                    <label className="block text-[11px] font-bold mb-1 text-slate-600">
-                      {isEn ? "Override Reason" : "سبب تجاوز السعة"} <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={capacityOverrideReason}
-                      onChange={(e) => setCapacityOverrideReason(e.target.value)}
-                      placeholder={isEn ? "Reason for exceeding housing capacity..." : "سبب السماح بتجاوز سعة السكن..."}
-                      className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium focus:border-[#1167c9] outline-none"
-                      required={capacityOverrideUsed}
-                    />
-                  </div>
-                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t">
