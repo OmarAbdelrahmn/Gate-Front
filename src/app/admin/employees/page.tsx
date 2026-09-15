@@ -131,6 +131,39 @@ export default function EmployeesPage() {
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [engagementFilter, setEngagementFilter] = useState<string>("SponsoredInternal");
+
+    const EMPLOYEES_FILTERS_SESSION_KEY = "admin_employees_filters_session";
+    const isRestoredRef = useRef(false);
+
+    // Restore filters on mount for the current session only
+    useEffect(() => {
+        try {
+            const saved = sessionStorage.getItem(EMPLOYEES_FILTERS_SESSION_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (typeof parsed.search === "string") setSearch(parsed.search);
+                if (typeof parsed.statusFilter === "string") setStatusFilter(parsed.statusFilter);
+                if (typeof parsed.engagementFilter === "string") setEngagementFilter(parsed.engagementFilter);
+            }
+        } catch {
+            // ignore JSON parse or sessionStorage errors
+        } finally {
+            isRestoredRef.current = true;
+        }
+    }, []);
+
+    // Save filters to sessionStorage for the current session whenever filters change
+    useEffect(() => {
+        if (!isRestoredRef.current) return;
+        try {
+            sessionStorage.setItem(
+                EMPLOYEES_FILTERS_SESSION_KEY,
+                JSON.stringify({ search, statusFilter, engagementFilter })
+            );
+        } catch {
+            // ignore sessionStorage errors
+        }
+    }, [search, statusFilter, engagementFilter]);
     const [showFilterPopup, setShowFilterPopup] = useState(false);
     const filterBtnRef = useRef<HTMLButtonElement>(null);
     const [popupCoords, setPopupCoords] = useState<{ top: number; left?: number; right?: number } | null>(null);
@@ -430,6 +463,23 @@ export default function EmployeesPage() {
                                 ))}
                             </select>
                         </div>
+
+                        {(search || statusFilter !== "all" || engagementFilter !== "SponsoredInternal") && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSearch("");
+                                    setStatusFilter("all");
+                                    setEngagementFilter("SponsoredInternal");
+                                    try {
+                                        sessionStorage.removeItem(EMPLOYEES_FILTERS_SESSION_KEY);
+                                    } catch {}
+                                }}
+                                className="h-11 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors shrink-0"
+                            >
+                                {locale === "en" ? "Reset Filters" : "إعادة ضبط"}
+                            </button>
+                        )}
                     </div>
 
                     <span className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] shrink-0">
