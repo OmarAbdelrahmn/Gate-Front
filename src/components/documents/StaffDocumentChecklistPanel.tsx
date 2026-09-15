@@ -41,6 +41,7 @@ import { Card } from "../ui/Card";
 import { toast } from "../ui/Toast";
 import { systemPrompt } from "../ui/SystemDialog";
 import { DocumentPreviewModal } from "./DocumentPreviewModal";
+import { DualCalendarDateInput } from "../ui/DualCalendarDateInput";
 
 const fulfillmentConfig: Record<
   DocumentFulfillmentStatus,
@@ -756,13 +757,11 @@ export function StaffDocumentChecklistPanel({
                               </div>
 
                               <div>
-                                <label className="block text-xs font-bold mb-1">
-                                  {isEn ? "Expiry Date" : "تاريخ الانتهاء"}
-                                </label>
-                                <input
-                                  type="date"
+                                <DualCalendarDateInput
                                   name="expiryDate"
+                                  label={isEn ? "Expiry Date" : "تاريخ الانتهاء"}
                                   defaultValue={doc.expiryDate ? doc.expiryDate.slice(0, 10) : ""}
+                                  locale={locale}
                                   className="h-9 w-full rounded-lg border bg-white px-3 text-xs font-bold outline-none"
                                 />
                               </div>
@@ -933,13 +932,11 @@ export function StaffDocumentChecklistPanel({
               {/* Expiry Date field */}
               {uploadTargetItem.requiresExpiryDate && (
                 <div>
-                  <label className="block text-xs font-bold mb-1 text-[var(--foreground)]">
-                    {isEn ? "Expiry / End Date" : "تاريخ الانتهاء"} <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
+                  <DualCalendarDateInput
                     name="expiryDate"
+                    label={isEn ? "Expiry / End Date" : "تاريخ الانتهاء"}
                     required
+                    locale={locale}
                     className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium focus:border-[#1167c9] outline-none"
                   />
                 </div>

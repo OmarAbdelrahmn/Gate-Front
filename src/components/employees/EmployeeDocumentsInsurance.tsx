@@ -47,6 +47,7 @@ import { Card } from "../ui/Card";
 import { systemPrompt } from "../ui/SystemDialog";
 import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { DualCalendarDateInput } from "../ui/DualCalendarDateInput";
 
 function getExpiryBadge(expiryDate: string | null, locale: "ar" | "en" = "ar") {
   if (!expiryDate) {
@@ -630,10 +631,15 @@ export function EmployeeDocumentsInsurance({
                     <input name="issueDate" type="date" required className={cls} />
                   </label>
 
-                  <label className="grid gap-1 text-xs font-bold">
-                    {locale === "en" ? "Expiry Date *" : "تاريخ الانتهاء *"}
-                    <input name="expiryDate" type="date" required className={cls} />
-                  </label>
+                  <div className="grid gap-1 text-xs font-bold">
+                    <DualCalendarDateInput
+                      name="expiryDate"
+                      label={locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}
+                      required
+                      locale={locale}
+                      className={cls}
+                    />
+                  </div>
 
                   <label className="grid gap-1 text-xs font-bold sm:col-span-2">
                     {locale === "en" ? "File (PDF, JPG, PNG - max 11MB) *" : "الملف (PDF, JPG, PNG - أقصى 11 ميجابايت) *"}
@@ -803,16 +809,16 @@ export function EmployeeDocumentsInsurance({
                                 className="mt-1 h-9 w-full rounded-lg border bg-white px-2"
                               />
                             </label>
-                            <label className="font-bold">
-                              {locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}
-                              <input
+                            <div className="font-bold">
+                              <DualCalendarDateInput
                                 name="expiryDate"
-                                type="date"
+                                label={locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}
                                 defaultValue={doc.expiryDate ? doc.expiryDate.slice(0, 10) : ""}
                                 required
+                                locale={locale}
                                 className="mt-1 h-9 w-full rounded-lg border bg-white px-2"
                               />
-                            </label>
+                            </div>
                           </div>
                           <div className="flex justify-end gap-2">
                             <Button type="button" variant="secondary" onClick={() => setEditingDocId(null)}>
