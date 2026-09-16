@@ -10,10 +10,7 @@ import {
   Phone,
   Globe,
   MapPin,
-  CreditCard,
   ShieldAlert,
-  ArrowUpDown,
-  Filter,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -57,7 +54,6 @@ export default function TerminatedEmployeesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "Sponsored" | "ExternalRider">("all");
 
   const canReadEmployees = can("employees.read");
   const canReadRiders = can("riders.read");
@@ -193,9 +189,6 @@ export default function TerminatedEmployeesPage() {
 
   const filteredList = useMemo(() => {
     return terminatedList.filter((item) => {
-      if (typeFilter !== "all" && item.sourceType !== typeFilter) {
-        return false;
-      }
       if (!search.trim()) return true;
       return matchesArabicSearch(
         search,
@@ -210,11 +203,7 @@ export default function TerminatedEmployeesPage() {
         item.sourceType,
       );
     });
-  }, [terminatedList, search, typeFilter]);
-
-  const totalTerminated = terminatedList.length;
-  const sponsoredCount = terminatedList.filter((t) => t.sourceType === "Sponsored").length;
-  const externalRidersCount = terminatedList.filter((t) => t.sourceType === "ExternalRider").length;
+  }, [terminatedList, search]);
 
   return (
     <div className="space-y-6">
@@ -258,41 +247,10 @@ export default function TerminatedEmployeesPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTypeFilter("all")}
-              className={`rounded-xl px-3 py-2 text-xs font-bold transition-colors cursor-pointer ${
-                typeFilter === "all"
-                  ? "bg-rose-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-[var(--foreground)] hover:bg-slate-200"
-              }`}
-            >
-              {isEn ? "All" : "الكل"} ({totalTerminated})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTypeFilter("Sponsored")}
-              className={`rounded-xl px-3 py-2 text-xs font-bold transition-colors cursor-pointer ${
-                typeFilter === "Sponsored"
-                  ? "bg-rose-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-[var(--foreground)] hover:bg-slate-200"
-              }`}
-            >
-              {isEn ? "Sponsored" : "على الكفالة"} ({sponsoredCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTypeFilter("ExternalRider")}
-              className={`rounded-xl px-3 py-2 text-xs font-bold transition-colors cursor-pointer ${
-                typeFilter === "ExternalRider"
-                  ? "bg-rose-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-[var(--foreground)] hover:bg-slate-200"
-              }`}
-            >
-              {isEn ? "External Riders" : "المناديب الخارجيين"} ({externalRidersCount})
-            </button>
-          </div>
+          <span className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] shrink-0">
+            <UserX size={18} />
+            {filteredList.length} {isEn ? "terminated" : "منتهي خدمة"}
+          </span>
         </div>
 
         {error ? (

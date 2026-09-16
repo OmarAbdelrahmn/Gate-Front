@@ -125,6 +125,80 @@ function getDueStatusMeta(dueStatus: unknown, daysRemaining: number | null) {
   }
 }
 
+function getEmployeeStatusMeta(status: unknown) {
+  const s = String(status ?? "").trim();
+  const map: Record<string, { ar: string; en: string; badge: string }> = {
+    Active: {
+      ar: "نشط",
+      en: "Active",
+      badge: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+    },
+    Terminated: {
+      ar: "منتهي الخدمة",
+      en: "Terminated",
+      badge: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
+    },
+    Suspended: {
+      ar: "موقوف",
+      en: "Suspended",
+      badge: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+    },
+    OnLeave: {
+      ar: "في إجازة",
+      en: "On Leave",
+      badge: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
+    },
+    Probationary: {
+      ar: "تحت التجربة",
+      en: "Probationary",
+      badge: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+    },
+    Inactive: {
+      ar: "غير نشط",
+      en: "Inactive",
+      badge: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    },
+    Draft: {
+      ar: "مسودة",
+      en: "Draft",
+      badge: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    },
+    Onboarding: {
+      ar: "قيد التهيئة",
+      en: "Onboarding",
+      badge: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800",
+    },
+    Archived: {
+      ar: "مؤرشف",
+      en: "Archived",
+      badge: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    },
+    Fleeing: {
+      ar: "هروب / انقطاع",
+      en: "Fleeing",
+      badge: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800",
+    },
+    Accident: {
+      ar: "حادث",
+      en: "Accident",
+      badge: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800",
+    },
+    Sick: {
+      ar: "إجازة مرضية",
+      en: "Sick",
+      badge: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800",
+    },
+  };
+
+  return (
+    map[s] || {
+      ar: s || "غير محدد",
+      en: s || "Unspecified",
+      badge: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    }
+  );
+}
+
 export default function ExpiryCompliancePage() {
   const { locale } = useAuth();
   const t = (key: string) => translate(locale, key);
@@ -195,13 +269,18 @@ export default function ExpiryCompliancePage() {
     const nonGeneralItems = data.items.filter((x) => !isGeneralDocument(x));
     if (!search.trim()) return nonGeneralItems;
     const q = search.toLowerCase().trim();
-    return nonGeneralItems.filter(
-      (x) =>
+    return nonGeneralItems.filter((x) => {
+      const empStatus = getEmployeeStatusMeta(x.employeeStatus);
+      return (
         x.employeeNameAr.toLowerCase().includes(q) ||
         x.categoryNameAr.toLowerCase().includes(q) ||
         (x.categoryNameEn && x.categoryNameEn.toLowerCase().includes(q)) ||
-        (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)),
-    );
+        (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
+        (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
+        empStatus.ar.toLowerCase().includes(q) ||
+        empStatus.en.toLowerCase().includes(q)
+      );
+    });
   }, [data, search]);
 
   const summary: ExpiryComplianceSummary = useMemo(() => {
@@ -507,9 +586,15 @@ export default function ExpiryCompliancePage() {
                 options={[
                   { value: "all", label: locale === "en" ? "All Employee Statuses" : "جميع حالات الموظفين" },
                   { value: "Active", label: locale === "en" ? "Active" : "نشط" },
-                  { value: "Inactive", label: locale === "en" ? "Inactive" : "غير نشط" },
+                  { value: "Terminated", label: locale === "en" ? "Terminated" : "منتهي الخدمة" },
+                  { value: "Suspended", label: locale === "en" ? "Suspended" : "موقوف" },
                   { value: "OnLeave", label: locale === "en" ? "On Leave" : "في إجازة" },
                   { value: "Probationary", label: locale === "en" ? "Probationary" : "تحت التجربة" },
+                  { value: "Onboarding", label: locale === "en" ? "Onboarding" : "قيد التهيئة" },
+                  { value: "Inactive", label: locale === "en" ? "Inactive" : "غير نشط" },
+                  { value: "Fleeing", label: locale === "en" ? "Fleeing" : "هروب / انقطاع" },
+                  { value: "Archived", label: locale === "en" ? "Archived" : "مؤرشف" },
+                  { value: "Draft", label: locale === "en" ? "Draft" : "مسودة" },
                 ]}
                 placeholder={locale === "en" ? "All Employee Statuses" : "جميع حالات الموظفين"}
               />
@@ -601,6 +686,7 @@ export default function ExpiryCompliancePage() {
                 {items.map((item) => {
                   const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
                   const StatusIcon = statusMeta.icon;
+                  const empStatusMeta = getEmployeeStatusMeta(item.employeeStatus);
 
                   return (
                     <tr key={`${item.sourceId}-${item.categoryCode}`} className="hover:bg-slate-50/60">
@@ -615,10 +701,10 @@ export default function ExpiryCompliancePage() {
                           </div>
                           <div>
                             <span className="block truncate">{item.employeeNameAr}</span>
-                            <span className="block text-[11px] text-[var(--muted)]">
-                              {item.employeeStatus === "Active"
-                                ? t("common.active")
-                                : item.employeeStatus}
+                            <span
+                              className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold border ${empStatusMeta.badge}`}
+                            >
+                              {locale === "en" ? empStatusMeta.en : empStatusMeta.ar}
                             </span>
                           </div>
                         </Link>

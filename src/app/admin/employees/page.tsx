@@ -131,6 +131,7 @@ export default function EmployeesPage() {
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [engagementFilter, setEngagementFilter] = useState<string>("SponsoredInternal");
+    const [roleFilter, setRoleFilter] = useState<"all" | "employees" | "riders">("all");
 
     const EMPLOYEES_FILTERS_SESSION_KEY = "admin_employees_filters_session";
     const isRestoredRef = useRef(false);
@@ -144,6 +145,9 @@ export default function EmployeesPage() {
                 if (typeof parsed.search === "string") setSearch(parsed.search);
                 if (typeof parsed.statusFilter === "string") setStatusFilter(parsed.statusFilter);
                 if (typeof parsed.engagementFilter === "string") setEngagementFilter(parsed.engagementFilter);
+                if (typeof parsed.roleFilter === "string" && ["all", "employees", "riders"].includes(parsed.roleFilter)) {
+                    setRoleFilter(parsed.roleFilter as "all" | "employees" | "riders");
+                }
             }
         } catch {
             // ignore JSON parse or sessionStorage errors
@@ -158,12 +162,12 @@ export default function EmployeesPage() {
         try {
             sessionStorage.setItem(
                 EMPLOYEES_FILTERS_SESSION_KEY,
-                JSON.stringify({ search, statusFilter, engagementFilter })
+                JSON.stringify({ search, statusFilter, engagementFilter, roleFilter })
             );
         } catch {
             // ignore sessionStorage errors
         }
-    }, [search, statusFilter, engagementFilter]);
+    }, [search, statusFilter, engagementFilter, roleFilter]);
     const [showFilterPopup, setShowFilterPopup] = useState(false);
     const filterBtnRef = useRef<HTMLButtonElement>(null);
     const [popupCoords, setPopupCoords] = useState<{ top: number; left?: number; right?: number } | null>(null);
@@ -269,6 +273,13 @@ export default function EmployeesPage() {
                 }
 
                 if (statusFilter !== "all" && item.status !== statusFilter) {
+                    return false;
+                }
+
+                if (roleFilter === "employees" && !item.isEmployee) {
+                    return false;
+                }
+                if (roleFilter === "riders" && item.isEmployee) {
                     return false;
                 }
 
@@ -400,7 +411,7 @@ export default function EmployeesPage() {
                     rawValues,
                 );
             }),
-        [employees, search, cities, workTypes, locale, statusFilter, engagementFilter],
+        [employees, search, cities, workTypes, locale, statusFilter, engagementFilter, roleFilter],
     );
 
     return (
@@ -427,7 +438,7 @@ export default function EmployeesPage() {
 
             <Card className="overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] p-4 bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1 max-w-4xl">
+                    <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1 max-w-5xl">
                         {/* Search Input */}
                         <div className="relative flex-1 min-w-[240px]">
                             <Search
@@ -447,14 +458,14 @@ export default function EmployeesPage() {
                         </div>
 
                         {/* Top Status Filter */}
-                        <div className="min-w-[160px]">
+                        <div className="w-[95px] shrink-0">
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--foreground)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1167c9]"
+                                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-bold text-[var(--foreground)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1167c9]"
                             >
                                 <option value="all">
-                                    {locale === "en" ? "Status: All" : "الحالة: جميع الحالات"}
+                                    {locale === "en" ? "Status" : "الحالة"}
                                 </option>
                                 {Object.entries(statusLabel).map(([key, val]) => (
                                     <option key={key} value={key}>
@@ -464,13 +475,33 @@ export default function EmployeesPage() {
                             </select>
                         </div>
 
-                        {(search || statusFilter !== "all" || engagementFilter !== "SponsoredInternal") && (
+                        {/* Role Filter (Employees / Riders / All) */}
+                        <div className="w-[95px] shrink-0">
+                            <select
+                                value={roleFilter}
+                                onChange={(e) => setRoleFilter(e.target.value as "all" | "employees" | "riders")}
+                                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-bold text-[var(--foreground)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1167c9]"
+                            >
+                                <option value="all">
+                                    {locale === "en" ? "Role" : "العمل"}
+                                </option>
+                                <option value="employees">
+                                    {locale === "en" ? "Staff" : "إداري"}
+                                </option>
+                                <option value="riders">
+                                    {locale === "en" ? "Riders" : "مناديب"}
+                                </option>
+                            </select>
+                        </div>
+
+                        {(search || statusFilter !== "all" || engagementFilter !== "SponsoredInternal" || roleFilter !== "all") && (
                             <button
                                 type="button"
                                 onClick={() => {
                                     setSearch("");
                                     setStatusFilter("all");
                                     setEngagementFilter("SponsoredInternal");
+                                    setRoleFilter("all");
                                     try {
                                         sessionStorage.removeItem(EMPLOYEES_FILTERS_SESSION_KEY);
                                     } catch {}
