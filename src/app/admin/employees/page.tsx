@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Filter, Plus, Search, UsersRound } from "lucide-react";
+import { Check, Filter, Plus, Search, UsersRound, FileText } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { translate } from "../../../lib/i18n";
 import { hrCatalogApi, type HrRow } from "../../../lib/hr/api";
@@ -428,12 +428,20 @@ export default function EmployeesPage() {
                             : "إدارة بيانات الإداريين والمناديب وملفاتهم التشغيلية."}
                     </p>
                 </div>
-                <Link href="/admin/employees/new">
-                    <Button>
-                        <Plus size={17} />
-                        {t("employees.newEmployee")}
-                    </Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                    <Link href="/admin/hr/forms">
+                        <Button variant="secondary">
+                            <FileText size={17} />
+                            {locale === "en" ? "HR Forms & Clearance" : "نماذج الموارد البشرية والمخالصات"}
+                        </Button>
+                    </Link>
+                    <Link href="/admin/employees/new">
+                        <Button>
+                            <Plus size={17} />
+                            {t("employees.newEmployee")}
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <Card className="overflow-hidden">

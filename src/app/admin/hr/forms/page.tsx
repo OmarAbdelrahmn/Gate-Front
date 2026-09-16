@@ -45,6 +45,8 @@ import { WorkCommencementView } from "@/components/hr/forms/WorkCommencementView
 import { DisciplinaryActionView } from "@/components/hr/forms/DisciplinaryActionView";
 import { AnnualEntitlementsReceiptView } from "@/components/hr/forms/AnnualEntitlementsReceiptView";
 import { SimHandoverReceiptView } from "@/components/hr/forms/SimHandoverReceiptView";
+import { InterviewFormView } from "@/components/hr/forms/InterviewFormView";
+import { OperationsEvaluationView } from "@/components/hr/forms/OperationsEvaluationView";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -57,6 +59,8 @@ interface PersonItem {
   nationality: string;
   phone?: string;
   source: "employee" | "externalRider";
+  jobTitle?: string;
+  birthDate?: string;
 }
 
 export default function HrFormsPage() {
@@ -91,7 +95,7 @@ export default function HrFormsPage() {
   const [date, setDate] = useState<string>("");
   const [issueCity, setIssueCity] = useState<string>("مدينة جده");
   const [paymentCity, setPaymentCity] = useState<string>("مدينة جده");
-  const [companyName, setCompanyName] = useState<string>("شركة اكسبرس جابت");
+  const [companyName, setCompanyName] = useState<string>("شركة اكسبرس جايت");
   const [companyCr, setCompanyCr] = useState<string>("4030362130");
   const [dueDate, setDueDate] = useState<string>("عند الطلب");
   const [showDoubleVoucher, setShowDoubleVoucher] = useState<boolean>(true);
@@ -138,6 +142,36 @@ export default function HrFormsPage() {
   const [periodFrom, setPeriodFrom] = useState<string>("2025/09/01");
   const [periodTo, setPeriodTo] = useState<string>("2026/09/01");
 
+  // Interview Form Specific States
+  const [relativePhoneInside, setRelativePhoneInside] = useState<string>("");
+  const [phoneOutside, setPhoneOutside] = useState<string>("");
+  const [birthDate, setBirthDate] = useState<string>("");
+  const [transferCount, setTransferCount] = useState<string>("1");
+  const [transferCost, setTransferCost] = useState<string>("2000");
+  const [riderCost, setRiderCost] = useState<string>("2000");
+  const [iqamaExpiryDate, setIqamaExpiryDate] = useState<string>("");
+  const [iqamaRenewalCost, setIqamaRenewalCost] = useState<string>("650");
+  const [licenseCost, setLicenseCost] = useState<string>("500");
+  const [professionChangeCost, setProfessionChangeCost] = useState<string>("1000");
+  const [totalCostOnRider, setTotalCostOnRider] = useState<string>("2000");
+  const [totalExpenses, setTotalExpenses] = useState<string>("4150");
+  const [vehicleType, setVehicleType] = useState<"motorcycle" | "car" | "">("motorcycle");
+  const [licenseStatus, setLicenseStatus] = useState<"valid" | "expired" | "">("valid");
+  const [licenseType, setLicenseType] = useState<string>("دراجة نارية");
+
+  // Operations Evaluation State
+  const [knowledgeAppsMaps, setKnowledgeAppsMaps] = useState<"excellent" | "good" | "weak" | "">("good");
+  const [previousExperience, setPreviousExperience] = useState<string>("");
+  const [workUnderPressure, setWorkUnderPressure] = useState<"yes" | "no" | "">("yes");
+  const [immediateReadiness, setImmediateReadiness] = useState<"yes" | "no" | "">("yes");
+  const [deliveryExperience, setDeliveryExperience] = useState<"yes" | "no" | "">("yes");
+  const [operationsRating, setOperationsRating] = useState<"excellent" | "good" | "acceptable" | "weak" | "">("good");
+  const [recommendationByExp, setRecommendationByExp] = useState<string>("تطبيقات التوصيل السريع");
+  const [operationsNotes, setOperationsNotes] = useState<string>("");
+  const [interviewResult, setInterviewResult] = useState<"accepted" | "rejected" | "deferred" | "">("accepted");
+  const [operationsManagerName, setOperationsManagerName] = useState<string>("مشرف إدارة التشغيل");
+  const [interviewPageView, setInterviewPageView] = useState<"both" | "hr" | "operations">("both");
+
   // Initialize today's date and default Tafreet
   useEffect(() => {
     const today = new Date();
@@ -149,6 +183,19 @@ export default function HrFormsPage() {
     setContractStartDate(formattedDate);
     setActualStartDate(formattedDate);
     setAmountInWords(tafreetArabicNumber(15000, false));
+
+    // Support URL search params e.g. /admin/hr/forms?template=final_settlement&personId=...
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tplParam = params.get("template");
+      if (tplParam && FORM_TEMPLATES.some((t) => t.id === tplParam)) {
+        setSelectedTemplateId(tplParam);
+      }
+      const personParam = params.get("personId");
+      if (personParam) {
+        setSelectedPersonId(personParam);
+      }
+    }
   }, []);
 
   // Update amount in words when template changes
@@ -158,6 +205,19 @@ export default function HrFormsPage() {
       setAmountInWords(tafreetArabicNumber(num, selectedTemplateId !== "cash_disbursement"));
     }
   }, [selectedTemplateId, amount]);
+
+  // Auto-calculate interview expenses when sub-costs change
+  useEffect(() => {
+    if (selectedTemplateId !== "hr_interview") return;
+    const tCost = parseFloat(transferCost) || 0;
+    const iCost = parseFloat(iqamaRenewalCost) || 0;
+    const lCost = parseFloat(licenseCost) || 0;
+    const pCost = parseFloat(professionChangeCost) || 0;
+    const sum = tCost + iCost + lCost + pCost;
+    if (sum > 0) {
+      setTotalExpenses(sum.toString());
+    }
+  }, [transferCost, iqamaRenewalCost, licenseCost, professionChangeCost, selectedTemplateId]);
 
   // Fetch employees and external riders
   useEffect(() => {
@@ -178,6 +238,8 @@ export default function HrFormsPage() {
             if (emp.fullNameAr) {
               const iq = emp.iqamaNo || "";
               if (iq) seenIqamas.add(iq);
+              const empJob = emp.workingForMeAs || emp.residencyProfession || (emp.isEmployee ? "موظف إداري" : "مندوب توصيل");
+              const bDate = (emp as Record<string, unknown>).birthDate as string || "";
               combined.push({
                 id: emp.id || `emp-${Math.random()}`,
                 fullNameAr: emp.fullNameAr,
@@ -185,6 +247,8 @@ export default function HrFormsPage() {
                 nationality: emp.nationality || "غير محدد",
                 phone: emp.primaryPhone || undefined,
                 source: "employee",
+                jobTitle: empJob,
+                birthDate: bDate,
               });
             }
           });
@@ -202,6 +266,7 @@ export default function HrFormsPage() {
                   nationality: rider.nationality || "غير محدد",
                   phone: rider.primaryPhone || undefined,
                   source: "externalRider",
+                  jobTitle: "سائق مندوب توصيل",
                 });
               }
             }
@@ -242,8 +307,39 @@ export default function HrFormsPage() {
       setRiderName(found.fullNameAr);
       setIqamaNo(found.iqamaNo);
       setNationality(found.nationality);
+      if (found.jobTitle) {
+        setJobTitle(found.jobTitle);
+      } else {
+        setJobTitle(found.source === "employee" ? "موظف إداري" : "مندوب توصيل");
+      }
+      if (found.phone) {
+        setMobile(found.phone);
+      }
+      if (found.birthDate) {
+        setBirthDate(found.birthDate);
+      }
     }
   };
+
+  // Sync person details if selectedPersonId was initialized before people loaded
+  useEffect(() => {
+    if (!selectedPersonId || !people.length) return;
+    const found = people.find((p) => p.id === selectedPersonId);
+    if (found) {
+      setRiderName(found.fullNameAr);
+      setIqamaNo(found.iqamaNo);
+      setNationality(found.nationality);
+      if (found.jobTitle) {
+        setJobTitle(found.jobTitle);
+      }
+      if (found.phone) {
+        setMobile(found.phone);
+      }
+      if (found.birthDate) {
+        setBirthDate(found.birthDate);
+      }
+    }
+  }, [selectedPersonId, people]);
 
   // Handle amount change & auto Tafreet
   const handleAmountChange = (val: string) => {
@@ -862,7 +958,7 @@ export default function HrFormsPage() {
                     label="اسم الشركة"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="شركة اكسبرس جابت"
+                    placeholder="شركة اكسبرس جايت"
                   />
                   <div className="grid grid-cols-2 gap-3">
                     <Input
@@ -881,6 +977,471 @@ export default function HrFormsPage() {
                     value={vacationEndDate}
                     onChange={(e) => setVacationEndDate(e.target.value)}
                     placeholder="YYYY/MM/DD"
+                  />
+                </div>
+              )}
+
+              {/* HR Interview specific fields */}
+              {selectedTemplateId === "hr_interview" && (
+                <div className="space-y-4 pt-2 border-t border-[var(--border)]">
+                  {/* Page view switch */}
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted)] mb-1.5">
+                      عرض وطباعة النموذج
+                    </label>
+                    <div className="flex items-center gap-1.5 p-1 bg-[var(--background)] rounded-xl border border-[var(--border)]">
+                      <button
+                        type="button"
+                        onClick={() => setInterviewPageView("both")}
+                        className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition ${interviewPageView === "both" ? "bg-[#1167c9] text-white shadow-xs" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}
+                      >
+                        الكل (صفحتين)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInterviewPageView("hr")}
+                        className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition ${interviewPageView === "hr" ? "bg-[#1167c9] text-white shadow-xs" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}
+                      >
+                        1. الموارد البشرية
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInterviewPageView("operations")}
+                        className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition ${interviewPageView === "operations" ? "bg-[#1167c9] text-white shadow-xs" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}
+                      >
+                        2. إدارة التشغيل
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="رقم الجوال الشخصي"
+                      value={mobile}
+                      onChange={(e) => setMobile(e.target.value)}
+                      placeholder="05XXXXXXXX"
+                    />
+                    <Input
+                      label="تاريخ الميلاد"
+                      value={birthDate}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="جوال أحد الأقارب داخل المملكة"
+                      value={relativePhoneInside}
+                      onChange={(e) => setRelativePhoneInside(e.target.value)}
+                      placeholder="05XXXXXXXX"
+                    />
+                    <Input
+                      label="رقم الجوال خارج المملكة"
+                      value={phoneOutside}
+                      onChange={(e) => setPhoneOutside(e.target.value)}
+                      placeholder="+XXXXXXXXXXX"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="المهنة في الإقامة"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      placeholder="سائق مندوب توصيل"
+                    />
+                    <Input
+                      label="عدد مرات نقل الخدمات"
+                      value={transferCount}
+                      onChange={(e) => setTransferCount(e.target.value)}
+                      placeholder="مثال: 1"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="تكلفة نقل الخدمات (ريال)"
+                      value={transferCost}
+                      onChange={(e) => setTransferCost(e.target.value)}
+                      placeholder="2000"
+                    />
+                    <Input
+                      label="التكلفة على المندوب (ريال)"
+                      value={riderCost}
+                      onChange={(e) => setRiderCost(e.target.value)}
+                      placeholder="2000"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="تاريخ انتهاء الإقامة"
+                      value={iqamaExpiryDate}
+                      onChange={(e) => setIqamaExpiryDate(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                    <Input
+                      label="تكلفة تجديد الإقامة (ريال)"
+                      value={iqamaRenewalCost}
+                      onChange={(e) => setIqamaRenewalCost(e.target.value)}
+                      placeholder="650"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="تكاليف إصدار الرخصة (ريال)"
+                      value={licenseCost}
+                      onChange={(e) => setLicenseCost(e.target.value)}
+                      placeholder="500"
+                    />
+                    <Input
+                      label="تكاليف تغيير المهنة (ريال)"
+                      value={professionChangeCost}
+                      onChange={(e) => setProfessionChangeCost(e.target.value)}
+                      placeholder="1000"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="إجمالي التكلفة المحملة على المندوب"
+                      value={totalCostOnRider}
+                      onChange={(e) => setTotalCostOnRider(e.target.value)}
+                      placeholder="2000"
+                    />
+                    <Input
+                      label="إجمالي المصاريف"
+                      value={totalExpenses}
+                      onChange={(e) => setTotalExpenses(e.target.value)}
+                      placeholder="4150"
+                    />
+                  </div>
+
+                  {/* Vehicle Type selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted)] mb-1.5">
+                      نوع المركبة
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                        <input
+                          type="radio"
+                          name="vehicleType"
+                          checked={vehicleType === "motorcycle"}
+                          onChange={() => {
+                            setVehicleType("motorcycle");
+                            setLicenseType("دراجة نارية");
+                          }}
+                          className="text-[#1167c9]"
+                        />
+                        <span>دباب (دراجة نارية)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                        <input
+                          type="radio"
+                          name="vehicleType"
+                          checked={vehicleType === "car"}
+                          onChange={() => {
+                            setVehicleType("car");
+                            setLicenseType("خصوصي");
+                          }}
+                          className="text-[#1167c9]"
+                        />
+                        <span>سيارة</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* License Status selection */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1.5">
+                        حالة رخصة القيادة
+                      </label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                          <input
+                            type="radio"
+                            name="licenseStatus"
+                            checked={licenseStatus === "valid"}
+                            onChange={() => setLicenseStatus("valid")}
+                            className="text-[#1167c9]"
+                          />
+                          <span>سارية</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                          <input
+                            type="radio"
+                            name="licenseStatus"
+                            checked={licenseStatus === "expired"}
+                            onChange={() => setLicenseStatus("expired")}
+                            className="text-[#1167c9]"
+                          />
+                          <span>غير سارية</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <Input
+                      label="نوع رخصة القيادة"
+                      value={licenseType}
+                      onChange={(e) => setLicenseType(e.target.value)}
+                      placeholder="دراجة نارية / خصوصي / نقل خفيف"
+                    />
+                  </div>
+
+                  {/* Operations Evaluation embedded when viewing both or operations */}
+                  {(interviewPageView === "both" || interviewPageView === "operations") && (
+                    <div className="space-y-4 pt-3 border-t-2 border-dashed border-[var(--border)]">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#1167c9]" />
+                        <h3 className="text-xs font-black text-[#1167c9]">بيانات تقييم وإقرار إدارة التشغيل</h3>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                            تطبيقات التوصيل والخرائط
+                          </label>
+                          <select
+                            value={knowledgeAppsMaps}
+                            onChange={(e) => setKnowledgeAppsMaps(e.target.value as any)}
+                            className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                          >
+                            <option value="excellent">ممتاز</option>
+                            <option value="good">جيد</option>
+                            <option value="weak">ضعيف</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                            القدرة على العمل تحت الضغط
+                          </label>
+                          <select
+                            value={workUnderPressure}
+                            onChange={(e) => setWorkUnderPressure(e.target.value as any)}
+                            className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                          >
+                            <option value="yes">نعم</option>
+                            <option value="no">لا</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                            الجاهزية للعمل فوراً
+                          </label>
+                          <select
+                            value={immediateReadiness}
+                            onChange={(e) => setImmediateReadiness(e.target.value as any)}
+                            className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                          >
+                            <option value="yes">نعم</option>
+                            <option value="no">لا</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                            خبرة سابقة في التوصيل
+                          </label>
+                          <select
+                            value={deliveryExperience}
+                            onChange={(e) => setDeliveryExperience(e.target.value as any)}
+                            className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                          >
+                            <option value="yes">نعم</option>
+                            <option value="no">لا</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <Input
+                        label="تفاصيل الخبرات السابقة"
+                        value={previousExperience}
+                        onChange={(e) => setPreviousExperience(e.target.value)}
+                        placeholder="عمل سابقاً مع تطبيقات هنقرستيشن / جاهز سنتين..."
+                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                            التقييم (إدارة التشغيل)
+                          </label>
+                          <select
+                            value={operationsRating}
+                            onChange={(e) => setOperationsRating(e.target.value as any)}
+                            className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                          >
+                            <option value="excellent">ممتاز</option>
+                            <option value="good">جيد</option>
+                            <option value="acceptable">مقبول</option>
+                            <option value="weak">ضعيف</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                            نتيجة المقابلة
+                          </label>
+                          <select
+                            value={interviewResult}
+                            onChange={(e) => setInterviewResult(e.target.value as any)}
+                            className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                          >
+                            <option value="accepted">مقبول</option>
+                            <option value="rejected">مرفوض</option>
+                            <option value="deferred">مؤجل</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <Input
+                        label="الترشيح حسب الخبرة"
+                        value={recommendationByExp}
+                        onChange={(e) => setRecommendationByExp(e.target.value)}
+                        placeholder="ترشيح لمنصة هنقرستيشن / جاهز..."
+                      />
+
+                      <Input
+                        label="ملاحظات إدارة التشغيل"
+                        value={operationsNotes}
+                        onChange={(e) => setOperationsNotes(e.target.value)}
+                        placeholder="أي ملاحظات فنية أو تشغيلية..."
+                      />
+
+                      <Input
+                        label="مسؤول اعتماد إدارة التشغيل"
+                        value={operationsManagerName}
+                        onChange={(e) => setOperationsManagerName(e.target.value)}
+                        placeholder="مشرف إدارة التشغيل"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Standalone Operations Evaluation specific fields */}
+              {selectedTemplateId === "operations_evaluation" && (
+                <div className="space-y-4 pt-2 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        تطبيقات التوصيل والخرائط
+                      </label>
+                      <select
+                        value={knowledgeAppsMaps}
+                        onChange={(e) => setKnowledgeAppsMaps(e.target.value as any)}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="excellent">ممتاز</option>
+                        <option value="good">جيد</option>
+                        <option value="weak">ضعيف</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        القدرة على العمل تحت الضغط
+                      </label>
+                      <select
+                        value={workUnderPressure}
+                        onChange={(e) => setWorkUnderPressure(e.target.value as any)}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="yes">نعم</option>
+                        <option value="no">لا</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        الجاهزية للعمل فوراً
+                      </label>
+                      <select
+                        value={immediateReadiness}
+                        onChange={(e) => setImmediateReadiness(e.target.value as any)}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="yes">نعم</option>
+                        <option value="no">لا</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        خبرة سابقة في التوصيل
+                      </label>
+                      <select
+                        value={deliveryExperience}
+                        onChange={(e) => setDeliveryExperience(e.target.value as any)}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="yes">نعم</option>
+                        <option value="no">لا</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <Input
+                    label="تفاصيل الخبرات السابقة"
+                    value={previousExperience}
+                    onChange={(e) => setPreviousExperience(e.target.value)}
+                    placeholder="عمل سابقاً مع تطبيقات هنقرستيشن / جاهز..."
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        التقييم (إدارة التشغيل)
+                      </label>
+                      <select
+                        value={operationsRating}
+                        onChange={(e) => setOperationsRating(e.target.value as any)}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="excellent">ممتاز</option>
+                        <option value="good">جيد</option>
+                        <option value="acceptable">مقبول</option>
+                        <option value="weak">ضعيف</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        نتيجة المقابلة
+                      </label>
+                      <select
+                        value={interviewResult}
+                        onChange={(e) => setInterviewResult(e.target.value as any)}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="accepted">مقبول</option>
+                        <option value="rejected">مرفوض</option>
+                        <option value="deferred">مؤجل</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <Input
+                    label="الترشيح حسب الخبرة"
+                    value={recommendationByExp}
+                    onChange={(e) => setRecommendationByExp(e.target.value)}
+                    placeholder="ترشيح لمنصة هنقرستيشن / جاهز..."
+                  />
+
+                  <Input
+                    label="ملاحظات إدارة التشغيل"
+                    value={operationsNotes}
+                    onChange={(e) => setOperationsNotes(e.target.value)}
+                    placeholder="أي ملاحظات فنية أو تشغيلية..."
+                  />
+
+                  <Input
+                    label="مسؤول اعتماد إدارة التشغيل"
+                    value={operationsManagerName}
+                    onChange={(e) => setOperationsManagerName(e.target.value)}
+                    placeholder="مشرف إدارة التشغيل"
                   />
                 </div>
               )}
@@ -1082,7 +1643,7 @@ export default function HrFormsPage() {
               )}
 
               {/* City for templates requiring city */}
-              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
+              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
                 <Input
                   label="المدينة / الفرع"
                   value={issueCity}
@@ -1106,7 +1667,7 @@ export default function HrFormsPage() {
               )}
 
               {/* Generic Document notes */}
-              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
+              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
                 <div className="pt-2 border-t border-[var(--border)]">
                   <label className="block text-xs font-bold text-[var(--muted)] mb-1">
                     ملاحظات إضافية (اختياري)
@@ -1245,19 +1806,80 @@ export default function HrFormsPage() {
             )}
 
             {selectedTemplateId === "final_settlement" && (
-              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
-                <FinalSettlementView
-                  data={{
-                    employeeName: riderName,
-                    iqamaNo,
-                    nationality,
-                    jobTitle,
-                    companyName,
-                    endDate: vacationEndDate,
-                    date,
-                  }}
-                />
-              </LetterheadFrame>
+              <FinalSettlementView
+                data={{
+                  employeeName: riderName,
+                  iqamaNo,
+                  nationality,
+                  jobTitle,
+                  companyName,
+                  endDate: vacationEndDate,
+                  date,
+                  letterheadId: selectedLetterhead,
+                }}
+              />
+            )}
+
+            {selectedTemplateId === "hr_interview" && (
+              <InterviewFormView
+                data={{
+                  candidateName: riderName,
+                  personalPhone: mobile,
+                  iqamaNo,
+                  relativePhoneInside,
+                  phoneOutside,
+                  profession: jobTitle,
+                  birthDate,
+                  transferCount,
+                  transferCost,
+                  riderCost,
+                  iqamaExpiryDate,
+                  iqamaRenewalCost,
+                  licenseCost,
+                  professionChangeCost,
+                  totalCostOnRider,
+                  totalExpenses,
+                  vehicleType,
+                  licenseStatus,
+                  licenseType,
+                  interviewDate: date,
+                  date,
+                  knowledgeAppsMaps,
+                  previousExperience,
+                  workUnderPressure,
+                  immediateReadiness,
+                  deliveryExperience,
+                  operationsRating,
+                  recommendationByExp,
+                  operationsNotes,
+                  interviewResult,
+                  operationsManagerName,
+                  pageView: interviewPageView,
+                  companyName,
+                  letterheadId: selectedLetterhead,
+                }}
+              />
+            )}
+
+            {selectedTemplateId === "operations_evaluation" && (
+              <OperationsEvaluationView
+                data={{
+                  candidateName: riderName,
+                  date,
+                  knowledgeAppsMaps,
+                  previousExperience,
+                  workUnderPressure,
+                  immediateReadiness,
+                  deliveryExperience,
+                  operationsRating,
+                  recommendationByExp,
+                  operationsNotes,
+                  interviewResult,
+                  operationsManagerName,
+                  companyName,
+                  letterheadId: selectedLetterhead,
+                }}
+              />
             )}
 
             {selectedTemplateId === "financial_advance" && (
@@ -1377,7 +1999,7 @@ export default function HrFormsPage() {
               />
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && (
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{

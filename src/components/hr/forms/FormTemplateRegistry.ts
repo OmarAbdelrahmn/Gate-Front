@@ -13,6 +13,7 @@ import {
   Briefcase,
   Layers,
   Smartphone,
+  ClipboardCheck,
 } from "lucide-react";
 
 export type FormCategory = "financial" | "custody" | "employment" | "leave" | "administrative";
@@ -122,6 +123,18 @@ export const FORM_TEMPLATES: FormTemplate[] = [
     requiresRider: true,
   },
   {
+    id: "final_settlement",
+    titleAr: "نموذج / إقرار المخالصة النهائية",
+    titleEn: "Final Clearance & Settlement",
+    category: "custody",
+    categoryNameAr: "العهد والتسليم",
+    descriptionAr: "إقرار وتعهد باستلام كافة الحقوق والمستحقات النظامية وإبراء ذمة الشركة ونقل الكفالة مدة أقصاها 30 يوماً.",
+    icon: FileCheck,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "مخالصة نهائية",
+  },
+  {
     id: "custody_receipt",
     titleAr: "إقرار وتعهد استلام عهدة",
     titleEn: "Custody Receipt & Undertaking",
@@ -154,6 +167,30 @@ export const FORM_TEMPLATES: FormTemplate[] = [
     icon: UserCheck,
     requiresDate: true,
     requiresRider: true,
+  },
+  {
+    id: "hr_interview",
+    titleAr: "نموذج مقابلة (خاص بالموارد البشرية)",
+    titleEn: "HR Interview Form",
+    category: "employment",
+    categoryNameAr: "التوظيف والمناصب",
+    descriptionAr: "نموذج مقابلة مرشح جديد وتحديد تكاليف نقل الخدمات، الإقامة، رخصة القيادة، وتغيير المهنة.",
+    icon: UserCheck,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "مقابلة توظيف",
+  },
+  {
+    id: "operations_evaluation",
+    titleAr: "نموذج تقييم وإقرار - إدارة التشغيل",
+    titleEn: "Operations Evaluation & Undertaking Form",
+    category: "employment",
+    categoryNameAr: "التوظيف والمناصب",
+    descriptionAr: "نموذج تقييم إدارة التشغيل للمندوب وتطبيقات التوصيل والخرائط، التقييم النهائي، والإقرار والتعهد.",
+    icon: ClipboardCheck,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "إدارة التشغيل",
   },
   {
     id: "job_offer",

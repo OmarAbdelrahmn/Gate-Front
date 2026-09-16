@@ -11,6 +11,7 @@ import {
   Globe,
   MapPin,
   ShieldAlert,
+  FileCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -331,12 +332,20 @@ export default function TerminatedEmployeesPage() {
                     </td>
 
                     <td className="px-5 py-4 text-center">
-                      <Link href={person.profileUrl}>
-                        <Button variant="secondary" className="h-8 px-3 text-xs">
-                          <Eye size={14} />
-                          {isEn ? "View Profile" : "عرض الملف"}
-                        </Button>
-                      </Link>
+                      <div className="flex items-center justify-center gap-2">
+                        <Link href={`/admin/hr/forms?template=final_settlement&personId=${person.id}`}>
+                          <Button variant="secondary" className="h-8 px-2.5 text-xs text-[#1167c9] hover:bg-blue-50 border-blue-200">
+                            <FileCheck size={14} />
+                            {isEn ? "Clearance" : "إقرار المخالصة"}
+                          </Button>
+                        </Link>
+                        <Link href={person.profileUrl}>
+                          <Button variant="secondary" className="h-8 px-3 text-xs">
+                            <Eye size={14} />
+                            {isEn ? "View Profile" : "عرض الملف"}
+                          </Button>
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
