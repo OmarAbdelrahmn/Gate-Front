@@ -15,7 +15,19 @@ export interface ClearanceFormData {
 
 export function ClearanceFormView({ data }: { data: ClearanceFormData }) {
   const currentReason = data.reason || "resignation";
-  const iqamaDigits = (data.iqamaNo || "").padEnd(10, " ").slice(0, 10).split("");
+  const cleanIqama = (data.iqamaNo || "")
+    .replace(/[٠۰]/g, "0")
+    .replace(/[١۱]/g, "1")
+    .replace(/[٢۲]/g, "2")
+    .replace(/[٣۳]/g, "3")
+    .replace(/[٤۴]/g, "4")
+    .replace(/[٥۵]/g, "5")
+    .replace(/[٦۶]/g, "6")
+    .replace(/[٧۷]/g, "7")
+    .replace(/[٨۸]/g, "8")
+    .replace(/[٩۹]/g, "9")
+    .replace(/\D/g, "");
+  const iqamaDigits = cleanIqama.padEnd(10, " ").slice(0, 10).split("");
 
   return (
     <div className="bg-white text-black p-4 md:p-6 rounded-xl border-2 border-black font-sans leading-tight text-right dir-rtl shadow-xs page-break-inside-avoid print-container text-xs">
@@ -40,15 +52,17 @@ export function ClearanceFormView({ data }: { data: ClearanceFormData }) {
             <tr className="border-b border-black">
               <td className="p-1.5 border-l border-black bg-gray-50/80 w-1/4">رقم الإقامة</td>
               <td colSpan={3} className="p-1.5">
-                <div dir="rtl" className="flex items-center gap-1 justify-start dir-rtl">
-                  {iqamaDigits.map((digit, index) => (
-                    <span
-                      key={index}
-                      className="w-5 h-5 border border-black inline-flex items-center justify-center font-black text-xs bg-white"
-                    >
-                      {digit.trim()}
-                    </span>
-                  ))}
+                <div className="flex items-center justify-start">
+                  <div dir="ltr" className="inline-flex items-center gap-1">
+                    {iqamaDigits.map((digit, index) => (
+                      <span
+                        key={index}
+                        className="w-5 h-5 border border-black inline-flex items-center justify-center font-black text-xs bg-white"
+                      >
+                        {digit.trim()}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </td>
             </tr>
