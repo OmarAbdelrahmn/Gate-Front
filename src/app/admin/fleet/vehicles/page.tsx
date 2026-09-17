@@ -1,26 +1,119 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicles } from "@/lib/fleet/api";
-import { VehicleOperationalStatus, type VehicleSummaryResponse } from "@/lib/fleet/types";
-import { formatVehicleType } from "@/lib/fleet/formatters";
+import { VehicleOperationalStatus, VehicleRegistrationType, type VehicleSummaryResponse } from "@/lib/fleet/types";
+import { formatVehicleType, formatVehicleRegistrationType } from "@/lib/fleet/formatters";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Car, Search, Plus, RefreshCw, AlertTriangle, ChevronRight, Filter } from "lucide-react";
+import { Car, Search, Plus, RefreshCw, AlertTriangle, ChevronRight, Filter, X } from "lucide-react";
 import { VehicleUpsertModal } from "./components/VehicleUpsertModal";
+
+function normalizeText(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel/diacritics
+    .replace(/\u0640/g, "") // remove tatweel
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632)); // normalize eastern arabic numbers to 0-9
+}
+
+function getStatusArabicText(status: VehicleOperationalStatus): string {
+  switch (status) {
+    case VehicleOperationalStatus.Available:
+      return "متاح Available";
+    case VehicleOperationalStatus.Assigned:
+      return "معين معيّن مستخدم Assigned";
+    case VehicleOperationalStatus.ProblemHold:
+      return "إيقاف ايقاف مشكلة ProblemHold";
+    case VehicleOperationalStatus.AccidentHold:
+      return "إيقاف ايقاف حادث AccidentHold";
+    case VehicleOperationalStatus.Stolen:
+      return "مسروق Stolen";
+    case VehicleOperationalStatus.OutOfService:
+      return "خارج الخدمة OutOfService";
+    case VehicleOperationalStatus.Decommissioned:
+      return "مستبعد Decommissioned";
+    default:
+      return String(status);
+  }
+}
+
+function getRegistrationTypeSearchText(reg: VehicleRegistrationType): string {
+  switch (Number(reg)) {
+    case VehicleRegistrationType.PublicTransport:
+      return "نقل عام عامة Public Transport PublicTransport";
+    case VehicleRegistrationType.PrivateTransport:
+      return "نقل خاص خاصة Private Transport PrivateTransport";
+    case VehicleRegistrationType.Private:
+      return "خصوصي Private";
+    case VehicleRegistrationType.Taxi:
+      return "أجرة اجره Taxi";
+    case VehicleRegistrationType.SmallBus:
+      return "حافلة صغيرة باص صغير SmallBus";
+    case VehicleRegistrationType.PublicBus:
+      return "حافلة عامة باص عام PublicBus";
+    case VehicleRegistrationType.Motorcycle:
+      return "دراجة آلية دراجة نارية دباب سيكل Motorcycle";
+    case VehicleRegistrationType.PublicWorks:
+      return "أشغال عامة اشغال عامة معدات PublicWorks";
+    default:
+      return String(reg);
+  }
+}
+
+function getVehicleSearchableText(item: VehicleSummaryResponse): string {
+  const parts: (string | number | null | undefined)[] = [
+    item.plateNumberAr,
+    item.plateNumberEn,
+    item.plateLettersAr,
+    item.plateLettersEn,
+    item.plateDigits,
+    item.plateNumberAr ? item.plateNumberAr.replace(/\s+/g, "") : "",
+    item.plateNumberEn ? item.plateNumberEn.replace(/\s+/g, "") : "",
+    !item.plateNumberAr ? "بدون لوحة" : "",
+    item.serialNumber,
+    item.assetNumber,
+    item.chassisNumber,
+    item.manufacturer,
+    item.model,
+    formatVehicleType(item.vehicleType),
+    formatVehicleRegistrationType(item.registrationType),
+    getRegistrationTypeSearchText(item.registrationType),
+    getStatusArabicText(item.status),
+    !item.isReadyForAssignment && item.status === VehicleOperationalStatus.Available ? "غير جاهزة للتسليم" : "",
+    item.operatingCity,
+    item.sponsorName,
+    item.currentRiderName,
+    item.actualRider?.actualRiderName,
+    item.actualRider?.actualRiderIqamaNo,
+    item.currentOdometer,
+    item.currentOdometer ? `${item.currentOdometer} كم` : "",
+  ];
+
+  return parts
+    .filter(Boolean)
+    .map((p) => normalizeText(String(p)))
+    .join(" ");
+}
 
 export default function VehiclesPage() {
   const { can } = useAuth();
-  const [data, setData] = useState<VehicleSummaryResponse[]>([]);
+  const [allVehicles, setAllVehicles] = useState<VehicleSummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [total, setTotal] = useState(0);
+  const [registrationFilter, setRegistrationFilter] = useState("");
 
   const [isUpsertOpen, setIsUpsertOpen] = useState(false);
 
@@ -28,33 +121,83 @@ export default function VehiclesPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getVehicles({
-        search: search || undefined,
-        status: statusFilter || undefined,
-        pageSize: 1000,
+      const firstRes = await getVehicles({
+        page: 1,
+        pageSize: 200,
       });
-      setData(res?.items || []);
-      setTotal(res?.totalCount ?? res?.items?.length ?? 0);
+
+      let allItems = firstRes?.items || [];
+      const totalCount = firstRes?.totalCount ?? allItems.length;
+
+      // The backend clamps pageSize to 200. If totalCount exceeds 200, fetch remaining pages concurrently to display all vehicles.
+      if (totalCount > allItems.length) {
+        const pageSize = firstRes.pageSize || 200;
+        const totalPages = Math.ceil(totalCount / pageSize);
+        const pagePromises = [];
+        for (let p = 2; p <= totalPages; p++) {
+          pagePromises.push(
+            getVehicles({
+              page: p,
+              pageSize,
+            })
+          );
+        }
+        const remainingResults = await Promise.all(pagePromises);
+        for (const r of remainingResults) {
+          if (r?.items) {
+            allItems = allItems.concat(r.items);
+          }
+        }
+      }
+
+      setAllVehicles(allItems);
     } catch (e: any) {
       console.warn("Failed to load vehicles data:", e);
       setError(e?.message || "تعذر جلب بيانات المركبات من الخادم.");
-      setData([]);
-      setTotal(0);
+      setAllVehicles([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search, statusFilter]);
+    loadData();
+  }, []);
+
+  const filteredData = useMemo(() => {
+    return allVehicles.filter((item) => {
+      // 1. Status Filter
+      if (statusFilter) {
+        const itemStatusStr = String(item.status);
+        const enumKey = String((VehicleOperationalStatus as Record<string, any>)[item.status] || "");
+        if (itemStatusStr !== statusFilter && enumKey !== statusFilter) {
+          return false;
+        }
+      }
+
+      // 2. Registration Type Filter
+      if (
+        registrationFilter &&
+        String(item.registrationType) !== registrationFilter &&
+        Number(item.registrationType) !== Number(registrationFilter)
+      ) {
+        return false;
+      }
+
+      // 3. Search Query across all fields
+      if (!search.trim()) return true;
+
+      const searchableText = getVehicleSearchableText(item);
+      const queryTokens = normalizeText(search).split(/\s+/).filter(Boolean);
+
+      return queryTokens.every((token) => searchableText.includes(token));
+    });
+  }, [allVehicles, search, statusFilter, registrationFilter]);
+
+  const isFiltered = Boolean(search.trim() || statusFilter || registrationFilter);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    loadData();
   };
 
   if (!can("fleet.vehicles.read")) {
@@ -86,9 +229,9 @@ export default function VehiclesPage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
             <Car className="h-7 w-7 text-[#1167c9]" />
             أسطول المركبات
-            {total > 0 && (
+            {allVehicles.length > 0 && (
               <span className="text-sm font-normal text-slate-500 mr-2">
-                ({total} مركبة)
+                ({isFiltered ? `${filteredData.length} من ${allVehicles.length}` : `${allVehicles.length}`} مركبة)
               </span>
             )}
           </h1>
@@ -110,18 +253,48 @@ export default function VehiclesPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث برقم اللوحة، الرقم التسلسلي، أو الهيكل..."
-              className="pr-10"
+              placeholder="بحث شامل: اللوحة، التسلسلي، الهيكل، الموديل، نوع التسجيل، الكفيل، المدينة، الحالة..."
+              className="pr-10 pl-9"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                title="مسح البحث"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <Button type="submit" variant="secondary">بحث</Button>
         </form>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+            <Filter className="h-4 w-4" /> نوع التسجيل:
+          </div>
+          <div className="w-36">
+            <SearchableSelect
+              options={[
+                { value: "", label: "الكل" },
+                { value: String(VehicleRegistrationType.PublicTransport), label: "نقل عام" },
+                { value: String(VehicleRegistrationType.PrivateTransport), label: "نقل خاص" },
+                { value: String(VehicleRegistrationType.Private), label: "خصوصي" },
+                { value: String(VehicleRegistrationType.Taxi), label: "أجرة" },
+                { value: String(VehicleRegistrationType.SmallBus), label: "حافلة صغيرة" },
+                { value: String(VehicleRegistrationType.PublicBus), label: "حافلة عامة" },
+                { value: String(VehicleRegistrationType.Motorcycle), label: "دراجة آلية" },
+                { value: String(VehicleRegistrationType.PublicWorks), label: "أشغال عامة" },
+              ]}
+              value={registrationFilter}
+              onChange={(v) => setRegistrationFilter(v)}
+            />
+          </div>
+
+          <div className="flex items-center gap-2 text-sm text-[var(--muted)] mr-2">
             <Filter className="h-4 w-4" /> الحالة:
           </div>
-          <div className="w-40">
+          <div className="w-36">
             <SearchableSelect
               options={[
                 { value: "", label: "الكل" },
@@ -137,7 +310,8 @@ export default function VehiclesPage() {
               onChange={(v) => setStatusFilter(v)}
             />
           </div>
-          <Button variant="secondary" onClick={loadData} disabled={loading} className="px-3">
+
+          <Button variant="secondary" onClick={loadData} disabled={loading} className="px-3" title="تحديث البيانات">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
@@ -158,10 +332,23 @@ export default function VehiclesPage() {
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
         {loading ? (
           <div className="p-8 text-center text-[var(--muted)]">جارٍ التحميل...</div>
-        ) : data.length === 0 ? (
+        ) : filteredData.length === 0 ? (
           <div className="p-12 text-center text-[var(--muted)]">
             <Car className="mx-auto mb-3 h-12 w-12 opacity-30" />
-            <p className="text-lg font-bold">{error ? "لا توجد بيانات متاحة حالياً" : "لا توجد مركبات مطابقة"}</p>
+            <p className="text-lg font-bold">{error ? "لا توجد بيانات متاحة حالياً" : "لا توجد مركبات مطابقة لمعايير البحث"}</p>
+            {isFiltered && (
+              <Button
+                variant="secondary"
+                className="mt-4 gap-1 text-xs px-3 py-1.5"
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("");
+                  setRegistrationFilter("");
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية والبحث
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -170,6 +357,7 @@ export default function VehiclesPage() {
                 <tr>
                   <th className="px-6 py-4">رقم اللوحة</th>
                   <th className="px-6 py-4">الموديل</th>
+                  <th className="px-6 py-4">نوع التسجيل</th>
                   <th className="px-6 py-4">المدينة / الكفيل</th>
                   <th className="px-6 py-4">عداد الكيلومترات</th>
                   <th className="px-6 py-4">الحالة</th>
@@ -177,7 +365,7 @@ export default function VehiclesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {data.map((item) => (
+                {filteredData.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-6 py-4">
                       <Link href={`/admin/fleet/vehicles/${item.id}`} className="group block">
@@ -205,6 +393,17 @@ export default function VehiclesPage() {
                       <div className="text-xs text-[var(--muted)]">النوع: {formatVehicleType(item.vehicleType)}</div>
                     </td>
                     <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                        item.registrationType === VehicleRegistrationType.PublicTransport || Number(item.registrationType) === VehicleRegistrationType.PublicTransport
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                          : item.registrationType === VehicleRegistrationType.PrivateTransport || Number(item.registrationType) === VehicleRegistrationType.PrivateTransport
+                          ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                          : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                      }`}>
+                        {formatVehicleRegistrationType(item.registrationType)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
                       <div>{item.operatingCity || "—"}</div>
                       <div className="text-xs text-[var(--muted)]">{item.sponsorName || "—"}</div>
                     </td>
@@ -230,9 +429,32 @@ export default function VehiclesPage() {
             </table>
           </div>
         )}
-        {data.length > 0 && (
+        {allVehicles.length > 0 && (
           <div className="flex items-center justify-between border-t border-[var(--border)] px-6 py-3 text-xs text-[var(--muted)] font-medium">
-            <span>إجمالي المركبات المعروضة: {data.length} {total > data.length ? `من أصل ${total}` : ""}</span>
+            <span>
+              {isFiltered ? (
+                <>
+                  نتائج البحث: <strong className="text-slate-800 dark:text-slate-200">{filteredData.length}</strong> من أصل <strong className="text-slate-800 dark:text-slate-200">{allVehicles.length}</strong> مركبة
+                </>
+              ) : (
+                <>
+                  إجمالي المركبات في الأسطول: <strong className="text-slate-800 dark:text-slate-200">{allVehicles.length}</strong> مركبة
+                </>
+              )}
+            </span>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("");
+                  setRegistrationFilter("");
+                }}
+                className="text-[#1167c9] hover:underline"
+              >
+                إلغاء التصفية
+              </button>
+            )}
           </div>
         )}
       </div>

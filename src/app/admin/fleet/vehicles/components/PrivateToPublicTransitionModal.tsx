@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { transitionVehicleRegistration } from "@/lib/fleet/api";
 import { VehicleRegistrationType, type VehicleDetailResponse } from "@/lib/fleet/types";
+import { formatVehicleRegistrationType } from "@/lib/fleet/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -55,16 +56,18 @@ export function PrivateToPublicTransitionModal({
   const [operationCardFile, setOperationCardFile] = useState<File | null>(null);
 
   // Requirements checks
-  const isPrivateTransport =
-    vehicle.registrationType === VehicleRegistrationType.PrivateTransport ||
-    summary.registrationType === VehicleRegistrationType.PrivateTransport;
+  const currentRegType = vehicle.registrationType ?? summary.registrationType;
+  const isAlreadyPublicTransport =
+    currentRegType === VehicleRegistrationType.PublicTransport ||
+    Number(currentRegType) === VehicleRegistrationType.PublicTransport ||
+    currentRegType === VehicleRegistrationType.PublicBus ||
+    Number(currentRegType) === VehicleRegistrationType.PublicBus;
 
   const hasActiveAssignment = Boolean(
     summary.currentAssignmentId || summary.currentRiderProfileId
   );
 
-  const isValidType = isPrivateTransport;
-  const isEligible = isValidType && !hasActiveAssignment;
+  const isEligible = !isAlreadyPublicTransport && !hasActiveAssignment;
 
   const handleReset = () => {
     setPlateNumberAr(summary.plateNumberAr || "");
@@ -168,10 +171,10 @@ export function PrivateToPublicTransitionModal({
             </div>
             <div className="space-y-1">
               <h4 className="font-bold text-indigo-950 dark:text-indigo-200 text-base">
-                تحويل نوع التسجيل من (نقل خاص) إلى (النقل العام)
+                تحويل نوع التسجيل إلى (النقل العام)
               </h4>
               <p className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
-                يقوم هذا الإجراء بتحويل نوع تسجيل المركبة الرسمية إلى <span className="font-bold">نقل عام (PublicTransport)</span> وتسجيل التغيير في سجلات تراخيص الأسطول.
+                يقوم هذا الإجراء بتحويل نوع تسجيل المركبة الرسمي من ({formatVehicleRegistrationType(currentRegType)}) إلى <span className="font-bold">نقل عام (PublicTransport)</span> وتسجيل التغيير في سجلات تراخيص الأسطول.
               </p>
             </div>
           </div>
@@ -180,18 +183,18 @@ export function PrivateToPublicTransitionModal({
         {/* Requirements Status Checklist */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className={`p-3 rounded-xl border flex items-center gap-3 ${
-            isPrivateTransport
+            !isAlreadyPublicTransport
               ? "border-emerald-200 bg-emerald-50/50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300"
               : "border-amber-200 bg-amber-50/50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"
           }`}>
-            {isPrivateTransport ? (
+            {!isAlreadyPublicTransport ? (
               <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             ) : (
               <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
             )}
             <div className="text-xs">
               <div className="font-bold">نوع التسجيل الحالي</div>
-              <div>{isPrivateTransport ? "نقل خاص (مؤهل للتحويل)" : "ليس نقل خاص (غير مؤهل)"}</div>
+              <div>{formatVehicleRegistrationType(currentRegType)} {!isAlreadyPublicTransport ? "(مؤهل للتحويل)" : "(مسجلة بالفعل كنقل عام)"}</div>
             </div>
           </div>
 
@@ -216,7 +219,9 @@ export function PrivateToPublicTransitionModal({
           <div className="p-3.5 rounded-xl border border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 text-xs font-semibold flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <span>
-              تعذر البدء بتحويل نوع التسجيل: يجب أن تكون المركبة مسجلة بنوع (نقل خاص) وألا تكون مسلّمة لأي مندوب حالياً.
+              {isAlreadyPublicTransport
+                ? "لا يمكن تحويل المركبة: نوع تسجيل المركبة هو (نقل عام) بالفعل."
+                : "تعذر البدء بتحويل نوع التسجيل: يجب إنهاء عهدة المندوب الحالية للمركبة أولاً."}
             </span>
           </div>
         )}

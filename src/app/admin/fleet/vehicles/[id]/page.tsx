@@ -401,7 +401,7 @@ export default function VehicleDetailPage() {
                   <span className="font-bold text-slate-900 dark:text-slate-100">
                     {formatVehicleRegistrationType(vehicle.registrationType || summary.registrationType)}
                   </span>
-                  {(vehicle.registrationType === VehicleRegistrationType.PrivateTransport || summary.registrationType === VehicleRegistrationType.PrivateTransport) && (
+                  {!isPublicTransport && (
                     <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
                       قابل للتحويل لنقل عام
                     </Badge>
