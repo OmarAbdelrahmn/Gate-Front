@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicles } from "@/lib/fleet/api";
@@ -9,9 +9,14 @@ import { formatVehicleType, formatVehicleRegistrationType } from "@/lib/fleet/fo
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { Car, Search, Plus, RefreshCw, AlertTriangle, ChevronRight, Filter, X } from "lucide-react";
 import { VehicleUpsertModal } from "./components/VehicleUpsertModal";
+import { listSponsors, type Sponsor } from "@/lib/workforce/api";
+import {
+  TableHeaderColumnFilter,
+  TableHeaderCitySponsorFilter,
+  type FilterOption,
+} from "./components/TableHeaderFilter";
 
 function normalizeText(text: string | null | undefined): string {
   if (!text) return "";
@@ -109,11 +114,76 @@ function getVehicleSearchableText(item: VehicleSummaryResponse): string {
 export default function VehiclesPage() {
   const { can } = useAuth();
   const [allVehicles, setAllVehicles] = useState<VehicleSummaryResponse[]>([]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [registryFilter, setRegistryFilter] = useState("");
   const [registrationFilter, setRegistrationFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
+
+  const VEHICLES_FILTERS_SESSION_KEY = "admin_fleet_vehicles_filters_session";
+  const [isRestored, setIsRestored] = useState(false);
+
+  // Restore filters on mount for the current session
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(VEHICLES_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string" && parsed.search) setSearch(parsed.search);
+        if (typeof parsed.statusFilter === "string" && parsed.statusFilter) setStatusFilter(parsed.statusFilter);
+        if (typeof parsed.registryFilter === "string" && parsed.registryFilter) setRegistryFilter(parsed.registryFilter);
+        if (typeof parsed.registrationFilter === "string" && parsed.registrationFilter) setRegistrationFilter(parsed.registrationFilter);
+        if (typeof parsed.modelFilter === "string" && parsed.modelFilter) setModelFilter(parsed.modelFilter);
+        if (typeof parsed.cityFilter === "string" && parsed.cityFilter) setCityFilter(parsed.cityFilter);
+      }
+    } catch {
+      // ignore JSON parse or sessionStorage errors
+    } finally {
+      setIsRestored(true);
+    }
+  }, []);
+
+  // Save filters to sessionStorage whenever filters change (only after initial restoration)
+  useEffect(() => {
+    if (!isRestored) return;
+    try {
+      if (search || statusFilter || registryFilter || registrationFilter || modelFilter || cityFilter) {
+        sessionStorage.setItem(
+          VEHICLES_FILTERS_SESSION_KEY,
+          JSON.stringify({
+            search,
+            statusFilter,
+            registryFilter,
+            registrationFilter,
+            modelFilter,
+            cityFilter,
+          })
+        );
+      } else {
+        sessionStorage.removeItem(VEHICLES_FILTERS_SESSION_KEY);
+      }
+    } catch {
+      // ignore sessionStorage errors
+    }
+  }, [isRestored, search, statusFilter, registryFilter, registrationFilter, modelFilter, cityFilter]);
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setStatusFilter("");
+    setRegistryFilter("");
+    setRegistrationFilter("");
+    setModelFilter("");
+    setCityFilter("");
+    try {
+      sessionStorage.removeItem(VEHICLES_FILTERS_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+  };
 
   const [isUpsertOpen, setIsUpsertOpen] = useState(false);
 
@@ -121,10 +191,20 @@ export default function VehiclesPage() {
     setLoading(true);
     setError(null);
     try {
-      const firstRes = await getVehicles({
-        page: 1,
-        pageSize: 200,
-      });
+      const [firstRes, sponsorsData] = await Promise.all([
+        getVehicles({
+          page: 1,
+          pageSize: 200,
+        }),
+        listSponsors().catch((err) => {
+          console.warn("Failed to load sponsors list:", err);
+          return [] as Sponsor[];
+        }),
+      ]);
+
+      if (sponsorsData) {
+        setSponsors(sponsorsData);
+      }
 
       let allItems = firstRes?.items || [];
       const totalCount = firstRes?.totalCount ?? allItems.length;
@@ -164,6 +244,187 @@ export default function VehiclesPage() {
     loadData();
   }, []);
 
+  const registryOptions = useMemo(() => {
+    const opts: { value: string; label: string; sublabel?: string }[] = [
+      { value: "", label: "الكل" },
+    ];
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+
+    for (const s of sponsors) {
+      if (!s.id || seenIds.has(s.id)) continue;
+      seenIds.add(s.id);
+      if (s.registryNameAr) seenNames.add(normalizeText(s.registryNameAr));
+      if (s.registryNameEn) seenNames.add(normalizeText(s.registryNameEn));
+
+      opts.push({
+        value: s.id,
+        label: s.registryNameAr,
+        sublabel: s.commercialRegistrationNumber
+          ? `سجل: ${s.commercialRegistrationNumber}`
+          : (s.registryNameEn || undefined),
+      });
+    }
+
+    // Also include any sponsors present on vehicles if not in sponsors API
+    for (const v of allVehicles) {
+      if (v.sponsorId && !seenIds.has(v.sponsorId)) {
+        seenIds.add(v.sponsorId);
+        if (v.sponsorName) seenNames.add(normalizeText(v.sponsorName));
+        opts.push({
+          value: v.sponsorId,
+          label: v.sponsorName || v.sponsorId,
+        });
+      } else if (!v.sponsorId && v.sponsorName && !seenNames.has(normalizeText(v.sponsorName))) {
+        seenNames.add(normalizeText(v.sponsorName));
+        opts.push({
+          value: v.sponsorName,
+          label: v.sponsorName,
+        });
+      }
+    }
+
+    // Preserve restored value if sponsors is still loading
+    if (registryFilter && !opts.some((o) => o.value === registryFilter)) {
+      opts.push({
+        value: registryFilter,
+        label: registryFilter,
+      });
+    }
+
+    return opts;
+  }, [sponsors, allVehicles, registryFilter]);
+
+  const registrationTypeOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const v of allVehicles) {
+      if (v.registrationType !== undefined && v.registrationType !== null) {
+        const key = String(v.registrationType);
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+
+    const opts: { value: string; label: string; sublabel?: string }[] = [
+      { value: "", label: "الكل" },
+    ];
+
+    // Sort by count descending so most popular types come first
+    const sortedTypes = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+
+    for (const [typeKey, count] of sortedTypes) {
+      const num = Number(typeKey);
+      const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
+      opts.push({
+        value: typeKey,
+        label,
+        sublabel: `${count} مركبة`,
+      });
+    }
+
+    // Preserve restored value if allVehicles is still loading
+    if (registrationFilter && !opts.some((o) => o.value === registrationFilter)) {
+      const num = Number(registrationFilter);
+      const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
+      opts.push({
+        value: registrationFilter,
+        label,
+      });
+    }
+
+    return opts;
+  }, [allVehicles, registrationFilter]);
+
+  const modelOptions = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+
+    for (const v of allVehicles) {
+      const mfg = (v.manufacturer || "").trim();
+      const mdl = (v.model || "").trim();
+      const label = [mfg, mdl].filter(Boolean).join(" ").trim();
+      if (!label) continue;
+
+      const existing = counts.get(label);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(label, { label, count: 1 });
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+
+    // Sort by count descending so most popular models come first
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1].count - a[1].count);
+
+    for (const [key, item] of sorted) {
+      opts.push({
+        value: key,
+        label: item.label,
+        sublabel: `${item.count} مركبة`,
+        count: item.count,
+      });
+    }
+
+    // Preserve restored value if allVehicles is still loading
+    if (modelFilter && !opts.some((o) => o.value === modelFilter)) {
+      opts.push({
+        value: modelFilter,
+        label: modelFilter,
+      });
+    }
+
+    return opts;
+  }, [allVehicles, modelFilter]);
+
+  const cityOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const v of allVehicles) {
+      const city = (v.operatingCity || "").trim();
+      if (city) {
+        counts.set(city, (counts.get(city) || 0) + 1);
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+
+    const sortedCities = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+
+    for (const [city, count] of sortedCities) {
+      opts.push({
+        value: city,
+        label: city,
+        sublabel: `${count} مركبة`,
+        count,
+      });
+    }
+
+    // Preserve restored value if allVehicles is still loading
+    if (cityFilter && !opts.some((o) => o.value === cityFilter)) {
+      opts.push({
+        value: cityFilter,
+        label: cityFilter,
+      });
+    }
+
+    return opts;
+  }, [allVehicles, cityFilter]);
+
+  const statusOptions: FilterOption[] = useMemo(
+    () => [
+      { value: "", label: "الكل" },
+      { value: "Available", label: "متاح" },
+      { value: "Assigned", label: "معيّن" },
+      { value: "ProblemHold", label: "إيقاف (مشكلة)" },
+      { value: "AccidentHold", label: "إيقاف (حادث)" },
+      { value: "OutOfService", label: "خارج الخدمة" },
+      { value: "Stolen", label: "مسروق" },
+      { value: "Decommissioned", label: "مستبعد" },
+    ],
+    []
+  );
+
   const filteredData = useMemo(() => {
     return allVehicles.filter((item) => {
       // 1. Status Filter
@@ -175,16 +436,53 @@ export default function VehiclesPage() {
         }
       }
 
-      // 2. Registration Type Filter
-      if (
-        registrationFilter &&
-        String(item.registrationType) !== registrationFilter &&
-        Number(item.registrationType) !== Number(registrationFilter)
-      ) {
-        return false;
+      // 2. Model Filter
+      if (modelFilter) {
+        const itemModelCombined = [item.manufacturer, item.model].filter(Boolean).join(" ").trim();
+        const normFilter = normalizeText(modelFilter);
+        const matchesCombined = normalizeText(itemModelCombined).includes(normFilter);
+        const matchesModel = item.model ? normalizeText(item.model).includes(normFilter) : false;
+        const matchesMfg = item.manufacturer ? normalizeText(item.manufacturer).includes(normFilter) : false;
+        if (!matchesCombined && !matchesModel && !matchesMfg) {
+          return false;
+        }
       }
 
-      // 3. Search Query across all fields
+      // 3. Registration Type Filter (Dynamic from backend data)
+      if (registrationFilter) {
+        if (
+          String(item.registrationType) !== registrationFilter &&
+          Number(item.registrationType) !== Number(registrationFilter)
+        ) {
+          return false;
+        }
+      }
+
+      // 4. City Filter
+      if (cityFilter) {
+        if (!item.operatingCity || normalizeText(item.operatingCity) !== normalizeText(cityFilter)) {
+          return false;
+        }
+      }
+
+      // 5. Registry (Sponsor) Filter
+      if (registryFilter) {
+        const selectedSponsor = sponsors.find((s) => s.id === registryFilter);
+        const matchesId = item.sponsorId === registryFilter;
+        const matchesName = Boolean(
+          selectedSponsor &&
+          item.sponsorName &&
+          (normalizeText(item.sponsorName) === normalizeText(selectedSponsor.registryNameAr) ||
+           (selectedSponsor.registryNameEn && normalizeText(item.sponsorName) === normalizeText(selectedSponsor.registryNameEn)))
+        );
+        const matchesDirectName = Boolean(item.sponsorName && normalizeText(item.sponsorName) === normalizeText(registryFilter));
+
+        if (!matchesId && !matchesName && !matchesDirectName) {
+          return false;
+        }
+      }
+
+      // 6. Search Query across all fields
       if (!search.trim()) return true;
 
       const searchableText = getVehicleSearchableText(item);
@@ -192,9 +490,16 @@ export default function VehiclesPage() {
 
       return queryTokens.every((token) => searchableText.includes(token));
     });
-  }, [allVehicles, search, statusFilter, registrationFilter]);
+  }, [allVehicles, sponsors, search, statusFilter, modelFilter, registrationFilter, cityFilter, registryFilter]);
 
-  const isFiltered = Boolean(search.trim() || statusFilter || registrationFilter);
+  const isFiltered = Boolean(
+    search.trim() ||
+    statusFilter ||
+    modelFilter ||
+    registrationFilter ||
+    cityFilter ||
+    registryFilter
+  );
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,75 +551,77 @@ export default function VehiclesPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <form onSubmit={handleSearch} className="flex flex-1 min-w-[280px] gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث شامل: اللوحة، التسلسلي، الهيكل، الموديل، نوع التسجيل، الكفيل، المدينة، الحالة..."
-              className="pr-10 pl-9"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                title="مسح البحث"
-              >
-                <X className="h-4 w-4" />
-              </button>
+      <div className="flex flex-col gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <form onSubmit={handleSearch} className="flex flex-1 min-w-[240px] gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="بحث شامل: اللوحة، التسلسلي، الهيكل، الموديل، نوع التسجيل، السجل، المدينة، الحالة..."
+                className="pr-8 pl-7 h-9 text-xs rounded-lg"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                  title="مسح البحث"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </form>
+
+          {isFiltered && (
+            <Button
+              variant="secondary"
+              onClick={clearAllFilters}
+              className="gap-1.5 text-xs h-9 min-h-0 px-3 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 dark:border-rose-900/50 dark:hover:bg-rose-950/30"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> مسح الفلاتر
+            </Button>
+          )}
+        </div>
+
+        {/* Active Filters Summary */}
+        {(modelFilter || registrationFilter || cityFilter || registryFilter || statusFilter) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border)] text-xs">
+            <span className="text-[var(--muted)] text-[11px] font-semibold ml-1">الفلاتر النشطة:</span>
+            {modelFilter && (
+              <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
+                الموديل: {modelFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setModelFilter("")} />
+              </Badge>
+            )}
+            {registrationFilter && (
+              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 gap-1 pl-1.5 font-medium">
+                نوع التسجيل: {formatVehicleRegistrationType(Number(registrationFilter) as VehicleRegistrationType)}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistrationFilter("")} />
+              </Badge>
+            )}
+            {cityFilter && (
+              <Badge className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
+                المدينة: {cityFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCityFilter("")} />
+              </Badge>
+            )}
+            {registryFilter && (
+              <Badge className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800 gap-1 pl-1.5 font-medium">
+                الكفيل: {sponsors.find((s) => s.id === registryFilter)?.registryNameAr || registryFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistryFilter("")} />
+              </Badge>
+            )}
+            {statusFilter && (
+              <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 gap-1 pl-1.5 font-medium">
+                الحالة: {statusOptions.find((s) => s.value === statusFilter)?.label || statusFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setStatusFilter("")} />
+              </Badge>
             )}
           </div>
-        </form>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
-            <Filter className="h-4 w-4" /> نوع التسجيل:
-          </div>
-          <div className="w-36">
-            <SearchableSelect
-              options={[
-                { value: "", label: "الكل" },
-                { value: String(VehicleRegistrationType.PublicTransport), label: "نقل عام" },
-                { value: String(VehicleRegistrationType.PrivateTransport), label: "نقل خاص" },
-                { value: String(VehicleRegistrationType.Private), label: "خصوصي" },
-                { value: String(VehicleRegistrationType.Taxi), label: "أجرة" },
-                { value: String(VehicleRegistrationType.SmallBus), label: "حافلة صغيرة" },
-                { value: String(VehicleRegistrationType.PublicBus), label: "حافلة عامة" },
-                { value: String(VehicleRegistrationType.Motorcycle), label: "دراجة آلية" },
-                { value: String(VehicleRegistrationType.PublicWorks), label: "أشغال عامة" },
-              ]}
-              value={registrationFilter}
-              onChange={(v) => setRegistrationFilter(v)}
-            />
-          </div>
-
-          <div className="flex items-center gap-2 text-sm text-[var(--muted)] mr-2">
-            <Filter className="h-4 w-4" /> الحالة:
-          </div>
-          <div className="w-36">
-            <SearchableSelect
-              options={[
-                { value: "", label: "الكل" },
-                { value: "Available", label: "متاح" },
-                { value: "Assigned", label: "معيّن" },
-                { value: "ProblemHold", label: "إيقاف (مشكلة)" },
-                { value: "AccidentHold", label: "إيقاف (حادث)" },
-                { value: "OutOfService", label: "خارج الخدمة" },
-                { value: "Stolen", label: "مسروق" },
-                { value: "Decommissioned", label: "مستبعد" },
-              ]}
-              value={statusFilter}
-              onChange={(v) => setStatusFilter(v)}
-            />
-          </div>
-
-          <Button variant="secondary" onClick={loadData} disabled={loading} className="px-3" title="تحديث البيانات">
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
+        )}
       </div>
 
       {error && (
@@ -340,11 +647,7 @@ export default function VehiclesPage() {
               <Button
                 variant="secondary"
                 className="mt-4 gap-1 text-xs px-3 py-1.5"
-                onClick={() => {
-                  setSearch("");
-                  setStatusFilter("");
-                  setRegistrationFilter("");
-                }}
+                onClick={clearAllFilters}
               >
                 <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية والبحث
               </Button>
@@ -355,13 +658,58 @@ export default function VehiclesPage() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">رقم اللوحة</th>
-                  <th className="px-6 py-4">الموديل</th>
-                  <th className="px-6 py-4">نوع التسجيل</th>
-                  <th className="px-6 py-4">المدينة / الكفيل</th>
-                  <th className="px-6 py-4">عداد الكيلومترات</th>
-                  <th className="px-6 py-4">الحالة</th>
-                  <th className="px-6 py-4 text-center">التفاصيل</th>
+                  <th className="px-6 py-3.5 whitespace-nowrap">رقم اللوحة</th>
+                  <th className="px-6 py-3.5 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>الموديل</span>
+                      <TableHeaderColumnFilter
+                        label="الموديل"
+                        value={modelFilter}
+                        onChange={setModelFilter}
+                        options={modelOptions}
+                        placeholder="تصفية بالموديل..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-6 py-3.5 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>نوع التسجيل</span>
+                      <TableHeaderColumnFilter
+                        label="نوع التسجيل"
+                        value={registrationFilter}
+                        onChange={setRegistrationFilter}
+                        options={registrationTypeOptions}
+                        placeholder="تصفية بنوع التسجيل..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-6 py-3.5 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>المدينة / الكفيل</span>
+                      <TableHeaderCitySponsorFilter
+                        cityValue={cityFilter}
+                        onCityChange={setCityFilter}
+                        cityOptions={cityOptions}
+                        sponsorValue={registryFilter}
+                        onSponsorChange={setRegistryFilter}
+                        sponsorOptions={registryOptions}
+                      />
+                    </div>
+                  </th>
+                  <th className="px-6 py-3.5 whitespace-nowrap">عداد الكيلومترات</th>
+                  <th className="px-6 py-3.5 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>الحالة</span>
+                      <TableHeaderColumnFilter
+                        label="الحالة"
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        options={statusOptions}
+                        placeholder="تصفية بالحالة..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-6 py-3.5 text-center whitespace-nowrap">التفاصيل</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -445,11 +793,7 @@ export default function VehiclesPage() {
             {isFiltered && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearch("");
-                  setStatusFilter("");
-                  setRegistrationFilter("");
-                }}
+                onClick={clearAllFilters}
                 className="text-[#1167c9] hover:underline"
               >
                 إلغاء التصفية

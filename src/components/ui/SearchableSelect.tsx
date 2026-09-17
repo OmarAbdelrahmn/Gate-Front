@@ -22,6 +22,7 @@ export interface SearchableSelectProps {
   required?: boolean;
   disabled?: boolean;
   className?: string;
+  size?: "sm" | "md";
 }
 
 export function SearchableSelect({
@@ -35,6 +36,7 @@ export function SearchableSelect({
   required = false,
   disabled = false,
   className = "",
+  size = "md",
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -192,16 +194,22 @@ export function SearchableSelect({
           type="button"
           disabled={disabled}
           onClick={() => setIsOpen(true)}
-          className={`flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-start text-sm font-bold shadow-sm transition-all outline-none focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${
+          className={`flex ${
+            size === "sm"
+              ? "h-9 rounded-lg px-2.5 text-xs"
+              : "h-11 rounded-xl px-3 text-sm"
+          } w-full items-center justify-between gap-1.5 border border-[var(--border)] bg-[var(--surface)] text-start font-bold shadow-sm transition-all outline-none focus:border-[#1167c9] focus:ring-2 focus:ring-blue-100 ${
             disabled ? "opacity-60 cursor-not-allowed bg-slate-50" : "cursor-pointer hover:border-slate-400"
           }`}
         >
           <span className="truncate">
             {selectedOption ? (
-              <span className="flex items-center gap-2">
-                <span className="text-[var(--foreground)]">{selectedOption.label}</span>
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="text-[var(--foreground)] truncate">{selectedOption.label}</span>
                 {selectedOption.sublabel && (
-                  <span className="text-xs text-[var(--muted)] font-mono">({selectedOption.sublabel})</span>
+                  <span className={`text-[10px] text-[var(--muted)] font-mono shrink-0 ${size === "sm" ? "hidden sm:inline" : ""}`}>
+                    ({selectedOption.sublabel})
+                  </span>
                 )}
               </span>
             ) : (
@@ -217,22 +225,26 @@ export function SearchableSelect({
                   e.stopPropagation();
                   onChange("");
                 }}
-                className="p-1 rounded-md hover:bg-slate-200 hover:text-slate-700"
+                className="p-0.5 rounded hover:bg-slate-200 hover:text-slate-700"
                 title="تفريغ"
               >
-                <X size={14} />
+                <X size={size === "sm" ? 12 : 14} />
               </span>
             )}
-            <ChevronDown size={18} />
+            <ChevronDown size={size === "sm" ? 14 : 18} />
           </div>
         </button>
       ) : (
         /* Search Bar Input Container (Open) */
         <div
-          className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[#1167c9] bg-[var(--surface)] px-3 text-start text-sm font-bold shadow-sm ring-4 ring-blue-100 transition-all"
+          className={`flex ${
+            size === "sm"
+              ? "h-9 rounded-lg px-2.5 text-xs"
+              : "h-11 rounded-xl px-3 text-sm"
+          } w-full items-center justify-between gap-1.5 border border-[#1167c9] bg-[var(--surface)] text-start font-bold shadow-sm ring-2 ring-blue-100 transition-all`}
         >
-          <div className="flex-1 flex items-center gap-2 min-w-0">
-            <Search size={16} className="text-[var(--muted)] shrink-0" />
+          <div className="flex-1 flex items-center gap-1.5 min-w-0">
+            <Search size={size === "sm" ? 14 : 16} className="text-[var(--muted)] shrink-0" />
             <input
               ref={searchInputRef}
               type="text"
@@ -247,7 +259,7 @@ export function SearchableSelect({
                   handleSelect(filteredOptions[0].value);
                 }
               }}
-              className="w-full bg-transparent text-sm font-bold text-[var(--foreground)] placeholder:text-[var(--muted)] placeholder:font-normal border-0 outline-none focus:outline-none focus:ring-0 focus:border-0 shadow-none text-start"
+              className={`w-full bg-transparent ${size === "sm" ? "text-xs" : "text-sm"} font-bold text-[var(--foreground)] placeholder:text-[var(--muted)] placeholder:font-normal border-0 outline-none focus:outline-none focus:ring-0 focus:border-0 shadow-none text-start`}
               style={{ outline: "none", boxShadow: "none" }}
             />
             {query && (
@@ -257,18 +269,18 @@ export function SearchableSelect({
                   setQuery("");
                   searchInputRef.current?.focus();
                 }}
-                className="text-[var(--muted)] hover:text-slate-700 shrink-0 p-1"
+                className="text-[var(--muted)] hover:text-slate-700 shrink-0 p-0.5"
               >
-                <X size={14} />
+                <X size={size === "sm" ? 12 : 14} />
               </button>
             )}
           </div>
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="flex items-center justify-center shrink-0 text-[#1167c9] p-1 rounded-md hover:bg-slate-100"
+            className="flex items-center justify-center shrink-0 text-[#1167c9] p-0.5 rounded-md hover:bg-slate-100"
           >
-            <ChevronDown size={18} className="rotate-180" />
+            <ChevronDown size={size === "sm" ? 14 : 18} className="rotate-180" />
           </button>
         </div>
       )}

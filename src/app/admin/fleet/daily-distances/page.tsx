@@ -326,7 +326,7 @@ export default function VehicleDailyDistancesPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="البحث برقم الأصل، اللوحة..."
+                placeholder="البحث باللوحة..."
                 className="pr-9 pl-8 text-xs"
               />
               {searchQuery && (
@@ -488,7 +488,6 @@ export default function VehicleDailyDistancesPage() {
             <table className="w-full text-right text-xs dir-rtl">
               <thead className="bg-[#1167c9]/10 text-xs font-extrabold text-[var(--muted)] border-b border-[var(--border)]">
                 <tr>
-                  <th className="px-4 py-3.5">رقم الأصل</th>
                   <th className="px-4 py-3.5">اللوحة (عربي/إنجليزي)</th>
                   <th className="px-4 py-3.5 text-center">مسافة GPS</th>
                   <th className="px-4 py-3.5 text-center">قراءة العداد اليدوية</th>
@@ -506,20 +505,15 @@ export default function VehicleDailyDistancesPage() {
 
                   return (
                     <tr key={item.vehicleId} className="hover:bg-[var(--subtle-bg)] transition-colors">
-                      {/* Asset Number */}
-                      <td className="px-4 py-3 font-mono font-bold text-[#1167c9]">
-                        <Link
-                          href={`/admin/fleet/vehicles/${item.vehicleId}`}
-                          className="hover:underline flex items-center gap-1"
-                        >
-                          <span>{item.assetNumber}</span>
-                        </Link>
-                      </td>
-
                       {/* Plate Number */}
                       <td className="px-4 py-3">
-                        <div className="font-bold text-[var(--foreground)]">{item.plateNumberAr || "—"}</div>
-                        <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
+                        <Link
+                          href={`/admin/fleet/vehicles/${item.vehicleId}`}
+                          className="group hover:underline inline-block"
+                        >
+                          <div className="font-bold text-[var(--foreground)] group-hover:text-[#1167c9] transition-colors">{item.plateNumberAr || "—"}</div>
+                          <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
+                        </Link>
                       </td>
 
                       {/* GPS Distance */}
