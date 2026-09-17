@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicleComplianceDue } from "@/lib/fleet/api";
-import { VehicleComplianceDueStatus, type VehicleComplianceDueResponse } from "@/lib/fleet/types";
+import { getVehicleComplianceDue, getVehicles } from "@/lib/fleet/api";
+import { VehicleComplianceDueStatus, type VehicleComplianceDueResponse, type VehicleSummaryResponse } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
@@ -24,6 +24,7 @@ function formatDate(dateStr?: string | null): string {
 export default function CompliancePage() {
   const { can } = useAuth();
   const [data, setData] = useState<VehicleComplianceDueResponse[]>([]);
+  const [vehiclesMap, setVehiclesMap] = useState<Record<string, VehicleSummaryResponse>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checkDate, setCheckDate] = useState<string>(new Date().toISOString().split("T")[0]);
@@ -33,9 +34,25 @@ export default function CompliancePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getVehicleComplianceDue(checkDate || undefined);
-      console.log("Compliance Due API Response:", res);
-      setData(res || []);
+      const [res, vehiclesRes] = await Promise.allSettled([
+        getVehicleComplianceDue(checkDate || undefined),
+        getVehicles({ pageSize: 1000 }),
+      ]);
+
+      if (vehiclesRes.status === "fulfilled" && vehiclesRes.value?.items) {
+        const vMap: Record<string, VehicleSummaryResponse> = {};
+        vehiclesRes.value.items.forEach((v) => {
+          if (v.id) vMap[v.id] = v;
+        });
+        setVehiclesMap(vMap);
+      }
+
+      if (res.status === "fulfilled") {
+        console.log("Compliance Due API Response:", res.value);
+        setData(res.value || []);
+      } else {
+        throw res.reason;
+      }
     } catch (e: any) {
       console.error("Failed to load compliance data:", e);
       setError(e?.message || "تعذر جلب بيانات متابعة تجديد التراخيص.");
@@ -73,6 +90,7 @@ export default function CompliancePage() {
         list.push({
           vehicleId: item.vehicleId,
           assetNumber: item.assetNumber,
+          serialNumber: item.serialNumber,
           plateNumber: item.plateNumber,
           plateNumberAr: item.plateNumberAr,
           plateNumberEn: item.plateNumberEn,
@@ -91,14 +109,23 @@ export default function CompliancePage() {
   const filtered = useMemo(() => {
     return displayItems.filter((item) => {
       if (!search) return true;
-      const searchLower = search.toLowerCase();
-      const plate = (item.plateNumberAr || item.plateNumber || item.plateNumberEn || "").toLowerCase();
+      const searchLower = search.trim().toLowerCase();
+      const v = vehiclesMap[item.vehicleId];
+      const plateAr = item.plateNumberAr || item.plateNumber || v?.plateNumberAr || "";
+      const plateEn = item.plateNumberEn || v?.plateNumberEn || "";
+      const plateCombined = v?.plateLettersAr && v?.plateDigits ? `${v.plateLettersAr} ${v.plateDigits}` : "";
+      const serial = item.serialNumber || v?.serialNumber || v?.chassisNumber || "";
+      const asset = item.assetNumber || "";
+
       return (
-        item.assetNumber.toLowerCase().includes(searchLower) ||
-        plate.includes(searchLower)
+        plateAr.toLowerCase().includes(searchLower) ||
+        plateEn.toLowerCase().includes(searchLower) ||
+        plateCombined.toLowerCase().includes(searchLower) ||
+        serial.toLowerCase().includes(searchLower) ||
+        asset.toLowerCase().includes(searchLower)
       );
     });
-  }, [displayItems, search]);
+  }, [displayItems, search, vehiclesMap]);
 
   const expiredOrMissingCount = useMemo(() => {
     return displayItems.filter(
@@ -198,7 +225,7 @@ export default function CompliancePage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث بالرقم المرجعي أو اللوحة..."
+              placeholder="بحث برقم اللوحة أو الرقم التسلسلي..."
               className="pr-10"
             />
           </div>
@@ -249,7 +276,7 @@ export default function CompliancePage() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">المركبة</th>
+                  <th className="px-6 py-4">اللوحة / الرقم التسلسلي</th>
                   <th className="px-6 py-4">نوع الوثيقة</th>
                   <th className="px-6 py-4">تاريخ الانتهاء</th>
                   <th className="px-6 py-4">الحالة</th>
@@ -263,20 +290,42 @@ export default function CompliancePage() {
                     className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
                   >
                     <td className="px-6 py-4">
-                      <div className="font-mono font-bold text-[#1167c9]">
-                        <Link href={`/admin/fleet/vehicles/${item.vehicleId}`}>
-                          {item.assetNumber}
-                        </Link>
-                      </div>
-                      <div className="mt-1">
-                        {item.plateNumberAr || item.plateNumber || item.plateNumberEn ? (
-                          <span className="font-bold border border-slate-300 rounded px-2 py-0.5 text-xs shadow-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
-                            {item.plateNumberAr || item.plateNumber || item.plateNumberEn}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-[var(--muted)]">بدون لوحة</span>
-                        )}
-                      </div>
+                      {(() => {
+                        const v = vehiclesMap[item.vehicleId];
+                        const plateAr = item.plateNumberAr || item.plateNumber || v?.plateNumberAr;
+                        const plateLettersDigits = v?.plateLettersAr && v?.plateDigits ? `${v.plateLettersAr} ${v.plateDigits}` : null;
+                        const plateDisplay = plateAr || plateLettersDigits || item.plateNumberEn || v?.plateNumberEn;
+                        const plateEn = item.plateNumberEn || v?.plateNumberEn;
+                        const serialDisplay = item.serialNumber || v?.serialNumber || v?.chassisNumber;
+
+                        return (
+                          <Link
+                            href={`/admin/fleet/vehicles/${item.vehicleId}`}
+                            className="group block space-y-1 hover:opacity-90"
+                          >
+                            <div>
+                              {plateDisplay ? (
+                                <div className="flex flex-col items-start gap-0.5">
+                                  <span className="font-bold border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-xs shadow-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 group-hover:border-[#1167c9] group-hover:text-[#1167c9] transition-colors">
+                                    {plateDisplay}
+                                  </span>
+                                  {plateEn && plateEn !== plateDisplay && (
+                                    <span className="text-[11px] text-[var(--muted)] font-mono">{plateEn}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-[var(--muted)]">بدون لوحة</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="text-[11px] text-[var(--muted)]">الرقم التسلسلي:</span>
+                              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 group-hover:text-[#1167c9]">
+                                {serialDisplay || "—"}
+                              </span>
+                            </div>
+                          </Link>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">
                       {getDocTypeName(item.type)}

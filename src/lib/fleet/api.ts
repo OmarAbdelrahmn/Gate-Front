@@ -65,6 +65,43 @@ export const updateVehicleModel = (id: string, payload: T.VehicleModelRequest) =
   });
 
 // ---------------------------
+// Driver License Categories
+// ---------------------------
+export const getDriverLicenseCategories = () =>
+  authFetch<T.DriverLicenseCategoryResponse[]>("/api/hr-catalogs/driver-license-categories");
+
+export const createDriverLicenseCategory = (payload: T.DriverLicenseCategoryRequest) =>
+  authFetch<T.DriverLicenseCategoryResponse>("/api/hr-catalogs/driver-license-categories", {
+    method: "POST",
+    body: JSON.stringify({
+      code: payload.code,
+      nameAr: payload.nameAr,
+      nameEn: payload.nameEn || null,
+      status: payload.status,
+      descriptionAr: payload.descriptionAr || null,
+      descriptionEn: payload.descriptionEn || null,
+      rowVersion: null,
+    }),
+    notifySuccess: "تم إنشاء فئة رخصة القيادة بنجاح",
+  });
+
+export const updateDriverLicenseCategory = (id: string, payload: T.DriverLicenseCategoryRequest) =>
+  authFetch<T.DriverLicenseCategoryResponse>(`/api/hr-catalogs/driver-license-categories/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      code: payload.code,
+      nameAr: payload.nameAr,
+      nameEn: payload.nameEn || null,
+      status: payload.status,
+      descriptionAr: payload.descriptionAr || null,
+      descriptionEn: payload.descriptionEn || null,
+      rowVersion: payload.rowVersion,
+    }),
+    notifySuccess: "تم تحديث فئة رخصة القيادة بنجاح",
+  });
+
+
+// ---------------------------
 // Suppliers
 // ---------------------------
 export const getVehicleSuppliers = () =>

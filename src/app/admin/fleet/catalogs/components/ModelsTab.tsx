@@ -179,7 +179,6 @@ export function ModelsTab() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">رمز الموديل</th>
                   <th className="px-6 py-4">الاسم (عربي)</th>
                   <th className="px-6 py-4">الصانع</th>
                   <th className="px-6 py-4">النوع / الوقود</th>
@@ -190,8 +189,7 @@ export function ModelsTab() {
               <tbody className="divide-y divide-[var(--border)]">
                 {filtered.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-blue-500/5">
-                    <td className="px-6 py-4 font-mono font-bold">{item.code}</td>
-                    <td className="px-6 py-4">{item.nameAr} <span className="text-xs text-[var(--muted)]">({item.nameEn})</span></td>
+                    <td className="px-6 py-4 font-medium">{item.nameAr} <span className="text-xs text-[var(--muted)]">({item.nameEn})</span></td>
                     <td className="px-6 py-4">{getManufacturerName(item.vehicleManufacturerId)}</td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1 text-xs text-[var(--muted)]">

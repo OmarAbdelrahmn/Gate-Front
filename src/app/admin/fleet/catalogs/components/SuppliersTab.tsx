@@ -201,7 +201,7 @@ export function SuppliersTab() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث بالرمز أو الاسم..."
+            placeholder="بحث بالاسم..."
             className="pr-10"
           />
         </div>
@@ -227,7 +227,6 @@ export function SuppliersTab() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">الرمز</th>
                   <th className="px-6 py-4">الاسم (عربي/انجليزي)</th>
                   <th className="px-6 py-4">السجل التجاري</th>
                   <th className="px-6 py-4">الهاتف</th>
@@ -238,9 +237,8 @@ export function SuppliersTab() {
               <tbody className="divide-y divide-[var(--border)]">
                 {filtered.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-blue-500/5">
-                    <td className="px-6 py-4 font-mono font-bold">{item.code}</td>
                     <td className="px-6 py-4">
-                      {item.nameAr}
+                      <span className="font-medium">{item.nameAr}</span>
                       <div className="text-xs text-[var(--muted)]">{item.nameEn}</div>
                     </td>
                     <td className="px-6 py-4 text-xs">

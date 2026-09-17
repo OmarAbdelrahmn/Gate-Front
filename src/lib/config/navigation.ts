@@ -315,7 +315,7 @@ export const navigation: NavItem[] = [
         href: "/admin/fleet/catalogs",
         icon: BookOpen,
         roles: ["admin", "manager", "member", "accountant"],
-        permission: "fleet.vehicles.read",
+        permissionsAny: ["fleet.vehicles.read", "licenses.read"],
       },
     ],
   },

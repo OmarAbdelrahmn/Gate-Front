@@ -142,7 +142,7 @@ export function ManufacturersTab() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث بالرمز أو الاسم..."
+            placeholder="بحث بالاسم..."
             className="pr-10"
           />
         </div>
@@ -168,7 +168,6 @@ export function ManufacturersTab() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">الرمز</th>
                   <th className="px-6 py-4">الاسم (عربي)</th>
                   <th className="px-6 py-4">الاسم (انجليزي)</th>
                   <th className="px-6 py-4">الترتيب</th>
@@ -179,8 +178,7 @@ export function ManufacturersTab() {
               <tbody className="divide-y divide-[var(--border)]">
                 {filtered.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-blue-500/5">
-                    <td className="px-6 py-4 font-mono font-bold">{item.code}</td>
-                    <td className="px-6 py-4">{item.nameAr}</td>
+                    <td className="px-6 py-4 font-medium">{item.nameAr}</td>
                     <td className="px-6 py-4">{item.nameEn}</td>
                     <td className="px-6 py-4">{item.displayOrder}</td>
                     <td className="px-6 py-4">{renderStatusBadge(item.status)}</td>

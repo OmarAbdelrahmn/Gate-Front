@@ -281,6 +281,29 @@ export interface VehicleModelRequest {
   rowVersion?: string | null;
 }
 
+export interface DriverLicenseCategoryResponse {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  status: string;
+  descriptionAr?: string | null;
+  descriptionEn?: string | null;
+  rowVersion?: string | null;
+  [key: string]: unknown;
+}
+
+export interface DriverLicenseCategoryRequest {
+  code: string;
+  nameAr: string;
+  nameEn?: string | null;
+  status: string;
+  descriptionAr?: string | null;
+  descriptionEn?: string | null;
+  rowVersion?: string | null;
+}
+
+
 // ---------------------------
 // Suppliers
 // ---------------------------
@@ -794,6 +817,7 @@ export interface VehicleOperationCardRequest {
 export interface VehicleComplianceDueResponse {
   vehicleId: string;
   assetNumber: string;
+  serialNumber?: string | null;
   plateNumber?: string | null;
   plateNumberAr?: string | null;
   plateNumberEn?: string | null;

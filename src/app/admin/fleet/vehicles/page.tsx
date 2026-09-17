@@ -20,7 +20,6 @@ export default function VehiclesPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
   const [isUpsertOpen, setIsUpsertOpen] = useState(false);
@@ -32,11 +31,10 @@ export default function VehiclesPage() {
       const res = await getVehicles({
         search: search || undefined,
         status: statusFilter || undefined,
-        page,
-        pageSize: 50,
+        pageSize: 1000,
       });
       setData(res?.items || []);
-      setTotal(res?.totalCount || 0);
+      setTotal(res?.totalCount ?? res?.items?.length ?? 0);
     } catch (e: any) {
       console.warn("Failed to load vehicles data:", e);
       setError(e?.message || "تعذر جلب بيانات المركبات من الخادم.");
@@ -52,11 +50,10 @@ export default function VehiclesPage() {
       loadData();
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, page, statusFilter]);
+  }, [search, statusFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setPage(1);
     loadData();
   };
 
@@ -89,6 +86,11 @@ export default function VehiclesPage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
             <Car className="h-7 w-7 text-[#1167c9]" />
             أسطول المركبات
+            {total > 0 && (
+              <span className="text-sm font-normal text-slate-500 mr-2">
+                ({total} مركبة)
+              </span>
+            )}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             إدارة المركبات، الاستمارات، وتتبع العهدة
@@ -107,11 +109,8 @@ export default function VehiclesPage() {
             <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
             <Input
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="بحث بالرقم الداخلي، اللوحة، أو الهيكل..."
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث برقم اللوحة، الرقم التسلسلي، أو الهيكل..."
               className="pr-10"
             />
           </div>
@@ -131,9 +130,11 @@ export default function VehiclesPage() {
                 { value: "ProblemHold", label: "إيقاف (مشكلة)" },
                 { value: "AccidentHold", label: "إيقاف (حادث)" },
                 { value: "OutOfService", label: "خارج الخدمة" },
+                { value: "Stolen", label: "مسروق" },
+                { value: "Decommissioned", label: "مستبعد" },
               ]}
               value={statusFilter}
-              onChange={(v) => { setStatusFilter(v); setPage(1); }}
+              onChange={(v) => setStatusFilter(v)}
             />
           </div>
           <Button variant="secondary" onClick={loadData} disabled={loading} className="px-3">
@@ -167,7 +168,6 @@ export default function VehiclesPage() {
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">الرقم المرجعي (Asset)</th>
                   <th className="px-6 py-4">رقم اللوحة</th>
                   <th className="px-6 py-4">الموديل</th>
                   <th className="px-6 py-4">المدينة / الكفيل</th>
@@ -179,20 +179,26 @@ export default function VehiclesPage() {
               <tbody className="divide-y divide-[var(--border)]">
                 {data.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-6 py-4 font-mono font-bold text-[#1167c9]">
-                      <Link href={`/admin/fleet/vehicles/${item.id}`}>{item.assetNumber}</Link>
-                    </td>
                     <td className="px-6 py-4">
-                      {item.plateNumberAr ? (
-                        <div className="flex flex-col">
-                          <span className="font-bold border border-slate-300 rounded px-2 py-0.5 w-fit shadow-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
-                            {item.plateNumberAr}
-                          </span>
-                          <span className="text-xs text-[var(--muted)] mt-1">{item.plateNumberEn}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[var(--muted)]">بدون لوحة</span>
-                      )}
+                      <Link href={`/admin/fleet/vehicles/${item.id}`} className="group block">
+                        {item.plateNumberAr ? (
+                          <div className="flex flex-col items-start">
+                            <span className="font-bold border border-slate-300 dark:border-slate-700 rounded px-2.5 py-0.5 w-fit text-xs shadow-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 group-hover:border-[#1167c9] group-hover:text-[#1167c9] transition-colors">
+                              {item.plateNumberAr}
+                            </span>
+                            {item.plateNumberEn && (
+                              <span className="text-xs text-[var(--muted)] mt-1">{item.plateNumberEn}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="font-bold text-slate-600 dark:text-slate-300 group-hover:text-[#1167c9] text-xs">بدون لوحة</span>
+                        )}
+                        {item.serialNumber && (
+                          <div className="text-[11px] text-[var(--muted)] font-mono mt-1">
+                            الرقم التسلسلي: <span className="font-bold text-slate-700 dark:text-slate-300">{item.serialNumber}</span>
+                          </div>
+                        )}
+                      </Link>
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-bold">{item.manufacturer} {item.model}</div>
@@ -222,6 +228,11 @@ export default function VehiclesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {data.length > 0 && (
+          <div className="flex items-center justify-between border-t border-[var(--border)] px-6 py-3 text-xs text-[var(--muted)] font-medium">
+            <span>إجمالي المركبات المعروضة: {data.length} {total > data.length ? `من أصل ${total}` : ""}</span>
           </div>
         )}
       </div>

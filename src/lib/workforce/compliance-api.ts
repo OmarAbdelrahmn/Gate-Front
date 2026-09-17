@@ -402,7 +402,7 @@ export const archiveInsurancePolicy = (id: string, reason: string, rowVersion: s
     body: JSON.stringify({ reason, rowVersion }),
   });
 
-export type SourceTypeEnum = 0 | 1 | 2 | 3 | 4;
+export type SourceTypeEnum = 0 | 1 | 2 | 3 | 4 | number;
 export type DueStatusEnum = 0 | 1 | 2 | 3 | 4;
 
 export type ExpiryComplianceItem = {
@@ -445,6 +445,8 @@ export type ExpiryComplianceParams = {
   employeeId?: string;
   riderProfileId?: string;
   sourceType?: string;
+  categoryCode?: string;
+  documentTypeId?: string;
   dueStatus?: string;
   employeeStatus?: string;
   operatingCityId?: string;
@@ -459,6 +461,8 @@ export function getComplianceExpiries(params: ExpiryComplianceParams = {}) {
   if (params.employeeId) query.set("employeeId", params.employeeId);
   if (params.riderProfileId) query.set("riderProfileId", params.riderProfileId);
   if (params.sourceType && params.sourceType !== "all") query.set("sourceType", params.sourceType);
+  if (params.categoryCode && params.categoryCode !== "all") query.set("categoryCode", params.categoryCode);
+  if (params.documentTypeId && params.documentTypeId !== "all") query.set("documentTypeId", params.documentTypeId);
   if (params.dueStatus && params.dueStatus !== "all") query.set("dueStatus", params.dueStatus);
   if (params.employeeStatus && params.employeeStatus !== "all") query.set("employeeStatus", params.employeeStatus);
   if (params.operatingCityId && params.operatingCityId !== "all") query.set("operatingCityId", params.operatingCityId);

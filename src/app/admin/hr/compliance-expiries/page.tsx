@@ -21,6 +21,10 @@ import {
   type ExpiryComplianceResponse,
   type ExpiryComplianceSummary,
 } from "../../../../lib/workforce/compliance-api";
+import {
+  getDocumentTypes,
+  type DocumentType,
+} from "../../../../lib/workforce/documents-api";
 import { listSponsors, type Sponsor } from "../../../../lib/workforce/api";
 import { hrCatalogApi, type HrRow } from "../../../../lib/hr/api";
 import { Card } from "../../../../components/ui/Card";
@@ -52,7 +56,7 @@ function isGeneralDocument(item: { categoryNameAr?: string; categoryNameEn?: str
   );
 }
 
-function formatCategoryName(nameAr: string, nameEn: string, locale: string) {
+function formatCategoryName(nameAr: string, nameEn: string, locale: string, documentTypes?: DocumentType[]) {
   const ar = (nameAr || "").trim();
   const en = (nameEn || "").trim();
   const lowerAr = ar.toLowerCase();
@@ -63,7 +67,18 @@ function formatCategoryName(nameAr: string, nameEn: string, locale: string) {
   }
 
   if (locale === "en") {
-    return en || ar;
+    if (en) return en;
+    if (documentTypes) {
+      const match = documentTypes.find((d) => d.nameAr?.trim() === ar);
+      if (match?.nameEn) return match.nameEn;
+    }
+    return ar || en;
+  }
+
+  if (ar) return ar;
+  if (documentTypes) {
+    const match = documentTypes.find((d) => d.nameEn?.trim().toLowerCase() === lowerEn);
+    if (match?.nameAr) return match.nameAr;
   }
   return ar || en;
 }
@@ -226,19 +241,85 @@ export default function ExpiryCompliancePage() {
 
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [cities, setCities] = useState<HrRow[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
 
   useEffect(() => {
     void listSponsors().then(setSponsors).catch(() => { });
     void hrCatalogApi.list("operating-cities").then(setCities).catch(() => { });
+    void getDocumentTypes()
+      .then((res) => setDocumentTypes(res || []))
+      .catch(() => { });
   }, []);
+
+  const documentTypeOptions = useMemo(() => {
+    const opts: { value: string; label: string; sublabel?: string }[] = [
+      { value: "all", label: locale === "en" ? "All Document Types" : "جميع أنواع الوثائق" },
+    ];
+
+    const seenValues = new Set<string>();
+
+    // 1. Add all document types from backend catalog (/api/hr-catalogs/document-types)
+    for (const dt of documentTypes) {
+      if (dt.status === "Disabled" || dt.status === "Archived") continue;
+      const key = (dt.code || dt.id || "").trim();
+      if (!key || seenValues.has(key.toLowerCase())) continue;
+      seenValues.add(key.toLowerCase());
+
+      const label = locale === "en" ? dt.nameEn || dt.nameAr : dt.nameAr || dt.nameEn;
+      opts.push({
+        value: dt.code || dt.id,
+        label,
+        sublabel: dt.code || undefined,
+      });
+    }
+
+    // 2. Also dynamically include any categories present in current compliance data items
+    // (e.g. Driver License, Medical Insurance, etc., so they are available dynamically if returned by backend)
+    if (data?.items) {
+      for (const item of data.items) {
+        if (isGeneralDocument(item)) continue;
+        const catCode = (item.categoryCode || "").trim();
+        const catNameAr = (item.categoryNameAr || "").trim();
+        const catNameEn = (item.categoryNameEn || "").trim();
+        const label = formatCategoryName(catNameAr, catNameEn, locale, documentTypes);
+
+        const matchFound = documentTypes.some((dt) => {
+          const dtCode = (dt.code || "").trim().toLowerCase();
+          const dtNameAr = (dt.nameAr || "").trim().toLowerCase();
+          const dtNameEn = (dt.nameEn || "").trim().toLowerCase();
+          return (
+            (catCode && dtCode === catCode.toLowerCase()) ||
+            (catNameAr && dtNameAr === catNameAr.toLowerCase()) ||
+            (catNameEn && dtNameEn === catNameEn.toLowerCase())
+          );
+        });
+
+        const key = catCode || catNameAr;
+        if (!matchFound && key && !seenValues.has(key.toLowerCase()) && !seenValues.has(label.toLowerCase())) {
+          seenValues.add(key.toLowerCase());
+          seenValues.add(label.toLowerCase());
+          opts.push({
+            value: key,
+            label,
+            sublabel: catCode || undefined,
+          });
+        }
+      }
+    }
+
+    return opts;
+  }, [documentTypes, data?.items, locale]);
 
   const loadData = async () => {
     setLoading(true);
     setError("");
     try {
+      const isKnownSourceType = ["EmployeeDocument", "DriverLicense", "RiderCard", "HealthCard", "MedicalInsurance"].includes(sourceType);
+
       const res = await getComplianceExpiries({
         checkDate,
-        sourceType,
+        sourceType: isKnownSourceType ? sourceType : undefined,
+        categoryCode: !isKnownSourceType && sourceType !== "all" ? sourceType : undefined,
         dueStatus,
         employeeStatus,
         operatingCityId,
@@ -266,22 +347,55 @@ export default function ExpiryCompliancePage() {
 
   const items = useMemo(() => {
     if (!data?.items) return [];
-    const nonGeneralItems = data.items.filter((x) => !isGeneralDocument(x));
-    if (!search.trim()) return nonGeneralItems;
+    let filtered = data.items.filter((x) => !isGeneralDocument(x));
+
+    // Filter by selected document type / category
+    if (sourceType && sourceType !== "all") {
+      const target = sourceType.trim().toLowerCase();
+      const matchedDocType = documentTypes.find(
+        (dt) =>
+          (dt.code && dt.code.toLowerCase() === target) ||
+          (dt.id && dt.id.toLowerCase() === target) ||
+          (dt.nameAr && dt.nameAr.toLowerCase() === target) ||
+          (dt.nameEn && dt.nameEn.toLowerCase() === target)
+      );
+
+      filtered = filtered.filter((x) => {
+        const itemCode = (x.categoryCode || "").trim().toLowerCase();
+        const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
+        const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
+        const itemSourceTypeStr = String(x.sourceType ?? "").trim().toLowerCase();
+
+        if (itemCode === target || itemNameAr === target || itemNameEn === target) return true;
+        if (itemSourceTypeStr === target) return true;
+
+        if (matchedDocType) {
+          if (matchedDocType.code && itemCode === matchedDocType.code.toLowerCase()) return true;
+          if (matchedDocType.nameAr && itemNameAr === matchedDocType.nameAr.toLowerCase()) return true;
+          if (matchedDocType.nameEn && itemNameEn === matchedDocType.nameEn.toLowerCase()) return true;
+        }
+
+        return false;
+      });
+    }
+
+    if (!search.trim()) return filtered;
     const q = search.toLowerCase().trim();
-    return nonGeneralItems.filter((x) => {
+    return filtered.filter((x) => {
       const empStatus = getEmployeeStatusMeta(x.employeeStatus);
+      const catFormatted = formatCategoryName(x.categoryNameAr, x.categoryNameEn, locale, documentTypes).toLowerCase();
       return (
         x.employeeNameAr.toLowerCase().includes(q) ||
         x.categoryNameAr.toLowerCase().includes(q) ||
         (x.categoryNameEn && x.categoryNameEn.toLowerCase().includes(q)) ||
+        catFormatted.includes(q) ||
         (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
         (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
         empStatus.ar.toLowerCase().includes(q) ||
         empStatus.en.toLowerCase().includes(q)
       );
     });
-  }, [data, search]);
+  }, [data, search, sourceType, documentTypes, locale]);
 
   const summary: ExpiryComplianceSummary = useMemo(() => {
     const rawSummary = data?.summary ?? {
@@ -292,6 +406,20 @@ export default function ExpiryCompliancePage() {
       missing: 0,
     };
     if (!data?.items) return rawSummary;
+
+    // If a specific document type is selected, compute summary dynamically from filtered items
+    if (sourceType && sourceType !== "all") {
+      const s = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
+      for (const item of items) {
+        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
+        if (meta.en === "Valid") s.valid++;
+        else if (meta.en === "Upcoming") s.upcoming++;
+        else if (meta.en === "Due Today") s.dueToday++;
+        else if (meta.en === "Expired") s.expired++;
+        else if (meta.en === "Missing") s.missing++;
+      }
+      return s;
+    }
 
     const ignoredByStatus = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
     for (const item of data.items) {
@@ -312,14 +440,17 @@ export default function ExpiryCompliancePage() {
       expired: Math.max(0, rawSummary.expired - ignoredByStatus.expired),
       missing: Math.max(0, rawSummary.missing - ignoredByStatus.missing),
     };
-  }, [data]);
+  }, [data, items, sourceType]);
 
   const ignoredInCurrentPage = useMemo(() => {
     if (!data?.items) return 0;
     return data.items.filter(isGeneralDocument).length;
   }, [data]);
 
-  const totalCount = Math.max(0, (data?.totalCount ?? 0) - ignoredInCurrentPage);
+  const totalCount =
+    sourceType !== "all"
+      ? items.length
+      : Math.max(0, (data?.totalCount ?? 0) - ignoredInCurrentPage);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const resetFilters = () => {
@@ -549,7 +680,7 @@ export default function ExpiryCompliancePage() {
               />
             </div>
 
-            {/* Source Type Filter */}
+            {/* Document Type Filter */}
             <div>
               <label className="mb-1 block text-xs font-bold text-[var(--muted)]">
                 {locale === "en" ? "Document Type" : "نوع الوثيقة"}
@@ -560,15 +691,8 @@ export default function ExpiryCompliancePage() {
                   setSourceType(v);
                   setPage(1);
                 }}
-                options={[
-                  { value: "all", label: locale === "en" ? "All Source Types" : "جميع أنواع الوثائق" },
-                  { value: "EmployeeDocument", label: locale === "en" ? "Employee Document" : "وثيقة موظف" },
-                  { value: "DriverLicense", label: locale === "en" ? "Driver License" : "رخصة قيادة" },
-                  { value: "RiderCard", label: locale === "en" ? "Rider Card" : "بطاقة مندوب" },
-                  { value: "HealthCard", label: locale === "en" ? "Health Card" : "شهادة صحية" },
-                  { value: "MedicalInsurance", label: locale === "en" ? "Medical Insurance" : "تأمين طبي" },
-                ]}
-                placeholder={locale === "en" ? "All Source Types" : "جميع أنواع الوثائق"}
+                options={documentTypeOptions}
+                placeholder={locale === "en" ? "All Document Types" : "جميع أنواع الوثائق"}
               />
             </div>
 
@@ -712,7 +836,7 @@ export default function ExpiryCompliancePage() {
 
                       {/* Document Type / Category */}
                       <td className="px-4 py-3.5 font-bold text-[var(--foreground)]">
-                        {formatCategoryName(item.categoryNameAr, item.categoryNameEn, locale)}
+                        {formatCategoryName(item.categoryNameAr, item.categoryNameEn, locale, documentTypes)}
                       </td>
 
                       {/* Expiry Date */}
