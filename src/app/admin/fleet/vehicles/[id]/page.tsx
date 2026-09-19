@@ -21,6 +21,7 @@ import {
   formatVehicleIssueStatus,
   formatVehicleRegistrationType,
   resolveVehicleRegisteredOwner,
+  formatDate,
 } from "@/lib/fleet/formatters";
 import { VehicleRegistrationType } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
@@ -54,16 +55,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "—";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toISOString().split("T")[0];
-  } catch {
-    return dateStr;
-  }
-}
 
 export default function VehicleDetailPage() {
   const params = useParams();
@@ -578,7 +569,7 @@ export default function VehicleDetailPage() {
                   <div>
                     <div className="font-bold text-sm text-slate-800 dark:text-slate-200">{item.label}</div>
                     <div className="text-xs text-slate-500 mt-1">
-                      تنتهي في: {formatDate(item.date)}
+                      تنتهي في: <span dir="ltr" className="font-mono font-bold">{formatDate(item.date)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -646,7 +637,7 @@ export default function VehicleDetailPage() {
                       </div>
                       <div className="text-xs text-slate-500 line-clamp-1">{issue.description}</div>
                       <div className="flex items-center justify-between mt-2">
-                        <div className="text-xs text-slate-400">{formatDate(issue.reportedAtUtc)}</div>
+                        <div className="text-xs text-slate-400 font-mono" dir="ltr">{formatDate(issue.reportedAtUtc)}</div>
                         <span className="text-[11px] text-[#1167c9] font-semibold hover:underline">عرض التفاصيل والأدلة</span>
                       </div>
                     </div>

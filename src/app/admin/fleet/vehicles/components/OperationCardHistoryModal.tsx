@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getVehicleOperationCards } from "@/lib/fleet/api";
-import { formatVehicleComplianceDueStatus } from "@/lib/fleet/formatters";
+import { formatVehicleComplianceDueStatus, formatDate } from "@/lib/fleet/formatters";
 import type { VehicleOperationCardResponse } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
@@ -15,16 +15,6 @@ interface Props {
   vehicleId: string;
 }
 
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "—";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toISOString().split("T")[0];
-  } catch {
-    return dateStr;
-  }
-}
 
 export function OperationCardHistoryModal({ isOpen, onClose, vehicleId }: Props) {
   const [cards, setCards] = useState<VehicleOperationCardResponse[]>([]);
@@ -129,14 +119,14 @@ export function OperationCardHistoryModal({ isOpen, onClose, vehicleId }: Props)
                     <span className="text-slate-400 block mb-0.5">تاريخ الإصدار</span>
                     <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                      {formatDate(card.issueDate)}
+                      <span dir="ltr">{formatDate(card.issueDate)}</span>
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 block mb-0.5">تاريخ الانتهاء</span>
                     <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                       <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-                      {formatDate(card.expiryDate)}
+                      <span dir="ltr">{formatDate(card.expiryDate)}</span>
                     </span>
                   </div>
                   {card.notes && (

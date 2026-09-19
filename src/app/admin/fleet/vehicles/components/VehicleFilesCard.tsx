@@ -18,13 +18,14 @@ import {
   type VehicleOperationCardRequest,
   type VehicleOperationCardResponse,
 } from "@/lib/fleet/types";
-import { formatVehicleFileKind } from "@/lib/fleet/formatters";
+import { formatVehicleFileKind, formatDate } from "@/lib/fleet/formatters";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
+import { DateInput } from "@/components/ui/DateInput";
 import { toast } from "@/components/ui/Toast";
 import {
   FileText,
@@ -42,16 +43,6 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "—";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toISOString().split("T")[0];
-  } catch {
-    return dateStr;
-  }
-}
 
 interface Props {
   vehicleId: string;
@@ -473,7 +464,7 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 dark:text-slate-400">تاريخ البداية (الإصدار):</span>
-                      <span className="font-medium text-slate-700 dark:text-slate-300">{formatDate(currentOpCard.issueDate)}</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300 font-mono" dir="ltr">{formatDate(currentOpCard.issueDate)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 dark:text-slate-400">تاريخ النهاية (الانتهاء):</span>
@@ -814,10 +805,9 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
                 <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                   تاريخ البداية (الإصدار) <span className="text-red-500">*</span>
                 </label>
-                <Input
-                  type="date"
+                <DateInput
                   value={opCardForm.issueDate}
-                  onChange={(e) => setOpCardForm({ ...opCardForm, issueDate: e.target.value })}
+                  onChange={(val) => setOpCardForm({ ...opCardForm, issueDate: val })}
                   required
                 />
               </div>
@@ -825,10 +815,9 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
                 <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                   تاريخ النهاية (الانتهاء) <span className="text-red-500">*</span>
                 </label>
-                <Input
-                  type="date"
+                <DateInput
                   value={opCardForm.expiryDate}
-                  onChange={(e) => setOpCardForm({ ...opCardForm, expiryDate: e.target.value })}
+                  onChange={(val) => setOpCardForm({ ...opCardForm, expiryDate: val })}
                   required
                 />
               </div>

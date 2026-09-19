@@ -18,6 +18,7 @@ import {
 } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
+import { DateInput } from "@/components/ui/DateInput";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
@@ -300,10 +301,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ الإصدار <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={regForm.issueDate}
-                    onChange={(e) => setRegForm({ ...regForm, issueDate: e.target.value })}
+                    onChange={(val) => setRegForm({ ...regForm, issueDate: val })}
                     required
                   />
                 </div>
@@ -311,10 +311,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ الانتهاء <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={regForm.expiryDate}
-                    onChange={(e) => setRegForm({ ...regForm, expiryDate: e.target.value })}
+                    onChange={(val) => setRegForm({ ...regForm, expiryDate: val })}
                     required
                   />
                 </div>
@@ -420,10 +419,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ بداية التغطية <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={insForm.effectiveFrom}
-                    onChange={(e) => setInsForm({ ...insForm, effectiveFrom: e.target.value })}
+                    onChange={(val) => setInsForm({ ...insForm, effectiveFrom: val })}
                     required
                   />
                 </div>
@@ -431,10 +429,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ انتهاء التغطية <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={insForm.expiryDate}
-                    onChange={(e) => setInsForm({ ...insForm, expiryDate: e.target.value })}
+                    onChange={(val) => setInsForm({ ...insForm, expiryDate: val })}
                     required
                   />
                 </div>
@@ -515,10 +512,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ الفحص <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={inspForm.inspectionDate}
-                    onChange={(e) => setInspForm({ ...inspForm, inspectionDate: e.target.value })}
+                    onChange={(val) => setInspForm({ ...inspForm, inspectionDate: val })}
                     required
                   />
                 </div>
@@ -526,10 +522,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ الانتهاء <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={inspForm.expiryDate}
-                    onChange={(e) => setInspForm({ ...inspForm, expiryDate: e.target.value })}
+                    onChange={(val) => setInspForm({ ...inspForm, expiryDate: val })}
                     required
                   />
                 </div>
@@ -584,10 +579,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ الإصدار <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={opCardForm.issueDate}
-                    onChange={(e) => setOpCardForm({ ...opCardForm, issueDate: e.target.value })}
+                    onChange={(val) => setOpCardForm({ ...opCardForm, issueDate: val })}
                     required
                   />
                 </div>
@@ -595,10 +589,9 @@ export function AddComplianceModal({
                   <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                     تاريخ الانتهاء <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={opCardForm.expiryDate}
-                    onChange={(e) => setOpCardForm({ ...opCardForm, expiryDate: e.target.value })}
+                    onChange={(val) => setOpCardForm({ ...opCardForm, expiryDate: val })}
                     required
                   />
                 </div>

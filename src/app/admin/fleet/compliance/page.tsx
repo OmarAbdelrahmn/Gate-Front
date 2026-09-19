@@ -21,12 +21,14 @@ import {
   getVehicleComplianceFileLabel,
   getVehicleComplianceDateLabel,
   getVehicleComplianceCombinedLabel,
+  formatDate,
 } from "@/lib/fleet/formatters";
 import { TableHeaderColumnFilter, type FilterOption } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
 import { AddComplianceModal, type ComplianceTabType } from "@/app/admin/fleet/vehicles/components/AddComplianceModal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { DateInput } from "@/components/ui/DateInput";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import {
@@ -50,16 +52,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "—";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toISOString().split("T")[0];
-  } catch {
-    return dateStr;
-  }
-}
 
 function formatFileSize(bytes?: number | null): string {
   if (!bytes) return "—";
@@ -895,12 +887,12 @@ export default function CompliancePage() {
 
     return (
       <div className="space-y-1">
-        <div className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
+        <div className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200" dir="ltr">
           {formatDate(expiryDate)}
         </div>
         {effectiveDate && (
           <div className="text-[11px] text-slate-400 font-mono">
-            من: {formatDate(effectiveDate)}
+            من: <span dir="ltr">{formatDate(effectiveDate)}</span>
           </div>
         )}
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -1005,7 +997,7 @@ export default function CompliancePage() {
               <Filter className="h-4 w-4" /> فحص الرصيد لتاريخ:
             </div>
             <div>
-              <Input type="date" value={checkDate} onChange={(e) => setCheckDate(e.target.value)} />
+              <DateInput value={checkDate} onChange={setCheckDate} className="h-10 text-xs w-36" />
             </div>
           </div>
           <div className="flex flex-1 min-w-[280px] gap-2">
