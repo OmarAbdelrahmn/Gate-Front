@@ -149,7 +149,7 @@ export function DateInput({
           {label} {required && <span className="text-red-500">*</span>}
         </label>
       )}
-      <div className="relative flex items-center w-full">
+      <div className="relative flex items-center w-full" dir="ltr">
         {/* Visible LTR formatted input */}
         <input
           id={id}
@@ -162,7 +162,7 @@ export function DateInput({
           placeholder={placeholder}
           disabled={disabled}
           required={required}
-          className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 pe-10 font-mono text-sm text-[var(--foreground)] outline-none placeholder:text-slate-400 focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${className}`}
+          className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-3 pr-10 font-mono text-sm text-[var(--foreground)] outline-none placeholder:text-slate-400 focus:border-[#1167c9] focus:ring-4 focus:ring-blue-100 ${className}`}
         />
 
         {/* Hidden native date input used for showPicker() */}
@@ -186,7 +186,7 @@ export function DateInput({
           disabled={disabled}
           onClick={handleOpenPicker}
           title="اختيار التاريخ من التقويم"
-          className="absolute end-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-[#1167c9] hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-[#1167c9] hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
         >
           <Calendar className="h-4 w-4" />
         </button>
