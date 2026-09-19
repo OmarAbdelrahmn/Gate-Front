@@ -130,6 +130,22 @@ export function getFriendlyErrorMessage(
         return "تعذر التحقق من حساب المستخدم الحالي، يرجى إعادة تسجيل الدخول.";
       case "hr.not_found":
         return "السجل المطلوب غير موجود في النظام.";
+      case "legal_cases.not_found":
+        return "القضية القانونية أو الجلسة أو الملف غير موجود.";
+      case "legal_cases.invalid_request":
+        return "طلب غير صالح. يرجى التحقق من صحة البيانات وتواريخ الجلسات وسبب التعديل.";
+      case "legal_cases.duplicate_case_number":
+        return "رقم القضية مستخدم بالفعل لقضية نشطة أخرى.";
+      case "legal_cases.invalid_person":
+        return "نوع الشخص والبيانات المرتبطة به غير متطابقة.";
+      case "legal_cases.sponsor_not_found":
+        return "الكفيل المحدد غير موجود أو غير نشط.";
+      case "legal_cases.responsible_user_not_found":
+        return "المستخدم المسؤول المحدد غير موجود أو غير نشط.";
+      case "legal_cases.hearing_file_limit":
+        return "تم الوصول للحد الأقصى من الملفات النشطة للجلسة (5 ملفات كحد أقصى).";
+      case "legal_cases.concurrency_conflict":
+        return "تم تعديل بيانات القضية أو الجلسة بواسطة مستخدم آخر. يرجى إعادة تحميل الصفحة والمحاولة مجدداً.";
       case "housing.not_found":
         return "وحدة السكن المطلوبة غير موجودة.";
       case "housing.room_not_found":

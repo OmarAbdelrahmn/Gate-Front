@@ -28,12 +28,19 @@ import {
   RotateCcw,
   Ban,
   Calendar,
+  Settings2,
+  Tag,
+  ShieldCheck,
+  FileCheck,
+  Plane,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { authFetch } from "../../lib/auth/api";
 import { hrWorkflowApi } from "../../lib/hr/api";
 import type {
   LeaveTypeResponse,
+  LeaveTypeUpsertRequest,
+  LeaveTypeStatus,
   LeaveRequestResponse,
   LeaveRequestUpsertRequest,
   LeaveDateChangeRequest,
@@ -96,6 +103,15 @@ const HR_STATUS_STYLES: Record<
   Completed: { labelAr: "مكتمل", labelEn: "Completed", bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
 };
 
+const LEAVE_TYPE_STATUS_STYLES: Record<
+  LeaveTypeStatus,
+  { labelAr: string; labelEn: string; bg: string; text: string; border: string }
+> = {
+  Active: { labelAr: "نشط", labelEn: "Active", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  Disabled: { labelAr: "معطّل", labelEn: "Disabled", bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
+  Archived: { labelAr: "مؤرشف", labelEn: "Archived", bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+};
+
 const DOC_KIND_LABELS: Record<LeaveDocumentKind, { labelAr: string; labelEn: string }> = {
   Ticket: { labelAr: "تذكرة سفر", labelEn: "Ticket" },
   ExitReentryVisa: { labelAr: "تأشيرة خروج وعودة", labelEn: "Exit / Re-entry Visa" },
@@ -108,13 +124,16 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
   const isEn = locale === "en";
   const t = (key: string) => translate(locale, key);
 
+  // Top Tabs: "requests" (طلبات الإجازات) vs "types" (أنواع الإجازات)
+  const [activeTopTab, setActiveTopTab] = useState<"requests" | "types">("requests");
+
   // Permissions
   const canManage = can("leave_requests.manage");
   const canApprove = can("leave_requests.approve");
   const canUploadDoc = can("documents.upload");
   const canDownloadDoc = can("documents.download_sensitive");
 
-  // State
+  // Data States
   const [requests, setRequests] = useState<LeaveRequestResponse[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeResponse[]>([]);
   const [employees, setEmployees] = useState<{ value: string; label: string; labelEn?: string }[]>([]);
@@ -125,11 +144,11 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [employeeFilter, setEmployeeFilter] = useState<string>("");
 
-  // Drawer / Modals State
+  // Drawer / Modals State for Requests
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequestResponse | null>(null);
   const [drawerTab, setDrawerTab] = useState<"overview" | "dateChanges" | "cancellations" | "documents">("overview");
 
-  // Create / Edit Modal State
+  // Create / Edit Leave Request Modal State
   const [formOpen, setFormOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<LeaveRequestResponse | null>(null);
   const [formData, setFormData] = useState<LeaveRequestUpsertRequest>({
@@ -176,6 +195,24 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
 
   const [docEditMetaModalOpen, setDocEditMetaModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<LeaveDocumentResponse | null>(null);
+
+  // Leave Type Create / Edit Modal State
+  const [leaveTypeModalOpen, setLeaveTypeModalOpen] = useState(false);
+  const [editingLeaveType, setEditingLeaveType] = useState<LeaveTypeResponse | null>(null);
+  const [leaveTypeForm, setLeaveTypeForm] = useState<LeaveTypeUpsertRequest>({
+    code: "",
+    nameAr: "",
+    nameEn: "",
+    descriptionAr: "",
+    descriptionEn: "",
+    requiresBalance: true,
+    requiresHrDocuments: false,
+    requiresExitReentryVisa: false,
+    maximumCalendarDays: null,
+    status: "Active",
+    rowVersion: null,
+  });
+  const [leaveTypeError, setLeaveTypeError] = useState("");
 
   // Load Leave Types & Lookup catalogs
   const loadCatalogs = useCallback(async () => {
@@ -320,7 +357,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     });
   }, [requests, statusFilter, search, leaveTypeMap]);
 
-  // Stats
+  // Stats for Requests
   const stats = useMemo(() => {
     return {
       total: requests.length,
@@ -331,7 +368,17 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     };
   }, [requests]);
 
-  // Handle Open Create / Edit Modal
+  // Stats for Leave Types
+  const leaveTypeStats = useMemo(() => {
+    return {
+      total: leaveTypes.length,
+      active: leaveTypes.filter((t) => t.status === "Active").length,
+      disabled: leaveTypes.filter((t) => t.status === "Disabled").length,
+      archived: leaveTypes.filter((t) => t.status === "Archived").length,
+    };
+  }, [leaveTypes]);
+
+  // Handle Open Create / Edit Modal for Leave Requests
   const openCreateModal = () => {
     setEditingRequest(null);
     setFormData({
@@ -378,6 +425,99 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     });
     setFormError("");
     setFormOpen(true);
+  };
+
+  // Leave Type Modals
+  const openCreateLeaveTypeModal = () => {
+    setEditingLeaveType(null);
+    setLeaveTypeForm({
+      code: "",
+      nameAr: "",
+      nameEn: "",
+      descriptionAr: "",
+      descriptionEn: "",
+      requiresBalance: true,
+      requiresHrDocuments: false,
+      requiresExitReentryVisa: false,
+      maximumCalendarDays: null,
+      status: "Active",
+      rowVersion: null,
+    });
+    setLeaveTypeError("");
+    setLeaveTypeModalOpen(true);
+  };
+
+  const openEditLeaveTypeModal = (lt: LeaveTypeResponse) => {
+    setEditingLeaveType(lt);
+    setLeaveTypeForm({
+      code: lt.code,
+      nameAr: lt.nameAr,
+      nameEn: lt.nameEn,
+      descriptionAr: lt.descriptionAr || "",
+      descriptionEn: lt.descriptionEn || "",
+      requiresBalance: lt.requiresBalance,
+      requiresHrDocuments: lt.requiresHrDocuments,
+      requiresExitReentryVisa: lt.requiresExitReentryVisa,
+      maximumCalendarDays: lt.maximumCalendarDays,
+      status: lt.status,
+      rowVersion: lt.rowVersion,
+    });
+    setLeaveTypeError("");
+    setLeaveTypeModalOpen(true);
+  };
+
+  const handleSaveLeaveType = async (e: FormEvent) => {
+    e.preventDefault();
+    setLeaveTypeError("");
+
+    if (!leaveTypeForm.code.trim()) {
+      setLeaveTypeError(isEn ? "Code is required" : "رمز نوع الإجازة مطلوب");
+      return;
+    }
+    if (!leaveTypeForm.nameAr.trim()) {
+      setLeaveTypeError(isEn ? "Arabic Name is required" : "الاسم العربي مطلوب");
+      return;
+    }
+    if (!leaveTypeForm.nameEn.trim()) {
+      setLeaveTypeError(isEn ? "English Name is required" : "الاسم الإنجليزي مطلوب");
+      return;
+    }
+    if (leaveTypeForm.maximumCalendarDays != null && Number(leaveTypeForm.maximumCalendarDays) <= 0) {
+      setLeaveTypeError(isEn ? "Maximum calendar days must be greater than zero" : "الحد الأقصى للأيام يجب أن يكون أكبر من الصفر");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const payload: LeaveTypeUpsertRequest = {
+        code: leaveTypeForm.code.trim().toUpperCase(),
+        nameAr: leaveTypeForm.nameAr.trim(),
+        nameEn: leaveTypeForm.nameEn.trim(),
+        descriptionAr: leaveTypeForm.descriptionAr?.trim() || null,
+        descriptionEn: leaveTypeForm.descriptionEn?.trim() || null,
+        requiresBalance: Boolean(leaveTypeForm.requiresBalance),
+        requiresHrDocuments: Boolean(leaveTypeForm.requiresHrDocuments),
+        requiresExitReentryVisa: Boolean(leaveTypeForm.requiresExitReentryVisa),
+        maximumCalendarDays: leaveTypeForm.maximumCalendarDays ? Number(leaveTypeForm.maximumCalendarDays) : null,
+        status: leaveTypeForm.status,
+        rowVersion: editingLeaveType ? editingLeaveType.rowVersion : null,
+      };
+
+      if (editingLeaveType) {
+        await hrWorkflowApi.updateLeaveType(editingLeaveType.id, payload);
+        toast.success(isEn ? "Updated" : "تم التحديث", isEn ? "Leave type updated successfully." : "تم تحديث نوع الإجازة بنجاح.");
+      } else {
+        await hrWorkflowApi.createLeaveType(payload);
+        toast.success(isEn ? "Created" : "تم الإنشاء", isEn ? "Leave type created successfully." : "تم إنشاء نوع الإجازة بنجاح.");
+      }
+
+      setLeaveTypeModalOpen(false);
+      await loadCatalogs();
+    } catch (err: any) {
+      setLeaveTypeError(err.message || (isEn ? "Failed to save leave type" : "فشل حفظ نوع الإجازة"));
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Form Date Changes & Auto Days Calculation
@@ -825,225 +965,570 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
       <header className={`flex flex-wrap items-end justify-between gap-4 ${embedded ? "rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4" : ""}`}>
         <div>
           {!embedded && <p className="text-sm font-bold text-[#1167c9]">{t("nav.hrManagement")}</p>}
-          <h1 className="mt-1 text-3xl font-black">{isEn ? "Leave Requests" : "طلبات الإجازات"}</h1>
+          <h1 className="mt-1 text-3xl font-black">{isEn ? "Vacation & Leave Management" : "إدارة الإجازات ومسارات العمل"}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
             {isEn
-              ? "Create requests, track approval workflows, manage date changes, handle cancellations, and maintain attached documents."
-              : "إنشاء الطلبات، متابعة مسارات الاعتماد، معالجة تغيير المواعيد والإلغاء، وإدارة الوثائق المرفقة."}
+              ? "Manage employee leave requests, configure leave types, track approvals, and handle documents."
+              : "إدارة طلبات الإجازات، تهيئة وضبط أنواع الإجازات، متابعة مسارات الاعتماد، وإدارة الوثائق."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" onClick={() => void loadRequests()} loading={loading}>
+          <Button variant="secondary" onClick={() => { void loadCatalogs(); void loadRequests(); }} loading={loading}>
             <RefreshCw size={17} />
             {isEn ? "Refresh" : "تحديث"}
           </Button>
-          {canManage && (
+          {canManage && activeTopTab === "requests" && (
             <Button onClick={openCreateModal}>
               <Plus size={18} />
               {isEn ? "New Leave Request" : "طلب إجازة جديد"}
             </Button>
           )}
+          {canManage && activeTopTab === "types" && (
+            <Button onClick={openCreateLeaveTypeModal}>
+              <Plus size={18} />
+              {isEn ? "New Leave Type" : "إضافة نوع إجازة"}
+            </Button>
+          )}
         </div>
       </header>
 
-      {/* KPI Stats Bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
-          <span className="text-xs font-semibold text-[var(--muted)] block">{isEn ? "Total Requests" : "إجمالي الطلبات"}</span>
-          <span className="mt-1 text-2xl font-black text-slate-900 dark:text-white font-mono block">{stats.total}</span>
-        </div>
-        <div className={`rounded-2xl border p-4 shadow-xs ${stats.pending > 0 ? "border-amber-300 bg-amber-50/50 dark:bg-amber-950/20" : "border-[var(--border)] bg-[var(--surface)]"}`}>
-          <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 block">{isEn ? "Pending Approval" : "قيد الاعتماد"}</span>
-          <span className="mt-1 text-2xl font-black text-amber-900 dark:text-amber-200 font-mono block">{stats.pending}</span>
-        </div>
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
-          <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 block">{isEn ? "Active Leaves" : "إجازات سارية"}</span>
-          <span className="mt-1 text-2xl font-black text-blue-900 dark:text-blue-200 font-mono block">{stats.active}</span>
-        </div>
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
-          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 block">{isEn ? "Approved" : "معتمدة"}</span>
-          <span className="mt-1 text-2xl font-black text-emerald-900 dark:text-emerald-200 font-mono block">{stats.approved}</span>
-        </div>
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
-          <span className="text-xs font-semibold text-orange-700 dark:text-orange-400 block">{isEn ? "Returned for Changes" : "معاد للتعديل"}</span>
-          <span className="mt-1 text-2xl font-black text-orange-900 dark:text-orange-200 font-mono block">{stats.returned}</span>
-        </div>
+      {/* Top Module Tabs Switcher: Requests vs Leave Types */}
+      <div className="flex gap-2 border-b border-[var(--border)] pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTopTab("requests")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
+            activeTopTab === "requests"
+              ? "bg-[#1167c9] text-white shadow-xs"
+              : "text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800"
+          }`}
+        >
+          <CalendarCheck size={16} />
+          {isEn ? "Leave Requests" : "طلبات الإجازات"}
+          <span className={`rounded-full px-2 py-0.5 text-xs ${activeTopTab === "requests" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"}`}>
+            {requests.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTopTab("types")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
+            activeTopTab === "types"
+              ? "bg-[#1167c9] text-white shadow-xs"
+              : "text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800"
+          }`}
+        >
+          <Settings2 size={16} />
+          {isEn ? "Leave Types (نوع الإجازة)" : "أنواع الإجازات (إعدادات الكتالوج)"}
+          <span className={`rounded-full px-2 py-0.5 text-xs ${activeTopTab === "types" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"}`}>
+            {leaveTypes.length}
+          </span>
+        </button>
       </div>
 
-      {/* Main Table Card */}
-      <Card className="overflow-hidden">
-        {/* Search & Filters */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] p-4">
-          <label className="relative min-w-[260px] flex-1">
-            <Search className={`absolute top-3 text-[var(--muted)] ${isEn ? "left-3" : "right-3"}`} size={18} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={isEn ? "Search by request #, employee, reason..." : "ابحث برقم الطلب، اسم الموظف، السبب..."}
-              className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] ${isEn ? "pl-10 pr-3" : "pr-10 pl-3"}`}
-            />
-          </label>
-          <div className="w-64">
-            <SearchableSelect
-              value={employeeFilter}
-              onChange={(val) => setEmployeeFilter(val)}
-              options={[{ value: "", label: isEn ? "All Employees" : "جميع الموظفين" }, ...employees]}
-              placeholder={isEn ? "Filter Employee..." : "فلترة حسب الموظف..."}
-            />
+      {/* ==================== TAB 1: LEAVE REQUESTS ==================== */}
+      {activeTopTab === "requests" && (
+        <div className="space-y-6">
+          {/* KPI Stats Bar */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
+              <span className="text-xs font-semibold text-[var(--muted)] block">{isEn ? "Total Requests" : "إجمالي الطلبات"}</span>
+              <span className="mt-1 text-2xl font-black text-slate-900 dark:text-white font-mono block">{stats.total}</span>
+            </div>
+            <div className={`rounded-2xl border p-4 shadow-xs ${stats.pending > 0 ? "border-amber-300 bg-amber-50/50 dark:bg-amber-950/20" : "border-[var(--border)] bg-[var(--surface)]"}`}>
+              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 block">{isEn ? "Pending Approval" : "قيد الاعتماد"}</span>
+              <span className="mt-1 text-2xl font-black text-amber-900 dark:text-amber-200 font-mono block">{stats.pending}</span>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
+              <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 block">{isEn ? "Active Leaves" : "إجازات سارية"}</span>
+              <span className="mt-1 text-2xl font-black text-blue-900 dark:text-blue-200 font-mono block">{stats.active}</span>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 block">{isEn ? "Approved" : "معتمدة"}</span>
+              <span className="mt-1 text-2xl font-black text-emerald-900 dark:text-emerald-200 font-mono block">{stats.approved}</span>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
+              <span className="text-xs font-semibold text-orange-700 dark:text-orange-400 block">{isEn ? "Returned for Changes" : "معاد للتعديل"}</span>
+              <span className="mt-1 text-2xl font-black text-orange-900 dark:text-orange-200 font-mono block">{stats.returned}</span>
+            </div>
           </div>
-        </div>
 
-        {/* Status Pills Tab Filter */}
-        <div className="flex gap-1.5 overflow-x-auto border-b border-[var(--border)] bg-slate-50/50 p-2 text-xs">
-          {[
-            { key: "ALL", labelAr: "الكل", labelEn: "All" },
-            { key: "PendingApproval", labelAr: "قيد الاعتماد", labelEn: "Pending Approval" },
-            { key: "Approved", labelAr: "معتمد", labelEn: "Approved" },
-            { key: "Active", labelAr: "ساري", labelEn: "Active" },
-            { key: "ReturnedForChanges", labelAr: "معاد للتعديل", labelEn: "Returned" },
-            { key: "Draft", labelAr: "مسودة", labelEn: "Draft" },
-            { key: "Completed", labelAr: "مكتمل", labelEn: "Completed" },
-            { key: "CancellationPending", labelAr: "طلب إلغاء", labelEn: "Cancellation Pending" },
-            { key: "Cancelled", labelAr: "ملغي", labelEn: "Cancelled" },
-            { key: "Rejected", labelAr: "مرفوض", labelEn: "Rejected" },
-          ].map((pill) => (
-            <button
-              key={pill.key}
-              onClick={() => setStatusFilter(pill.key)}
-              className={`rounded-lg px-3 py-1.5 font-bold transition-colors whitespace-nowrap ${
-                statusFilter === pill.key
-                  ? "bg-[#1167c9] text-white shadow-xs"
-                  : "text-[var(--muted)] hover:bg-slate-200/60 dark:hover:bg-slate-800"
-              }`}
-            >
-              {isEn ? pill.labelEn : pill.labelAr}
-            </button>
-          ))}
-        </div>
+          {/* Main Table Card */}
+          <Card className="overflow-hidden">
+            {/* Search & Filters */}
+            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] p-4">
+              <label className="relative min-w-[260px] flex-1">
+                <Search className={`absolute top-3 text-[var(--muted)] ${isEn ? "left-3" : "right-3"}`} size={18} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={isEn ? "Search by request #, employee, reason..." : "ابحث برقم الطلب، اسم الموظف، السبب..."}
+                  className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] ${isEn ? "pl-10 pr-3" : "pr-10 pl-3"}`}
+                />
+              </label>
+              <div className="w-64">
+                <SearchableSelect
+                  value={employeeFilter}
+                  onChange={(val) => setEmployeeFilter(val)}
+                  options={[{ value: "", label: isEn ? "All Employees" : "جميع الموظفين" }, ...employees]}
+                  placeholder={isEn ? "Filter Employee..." : "فلترة حسب الموظف..."}
+                />
+              </div>
+            </div>
 
-        {/* Table */}
-        {loading ? (
-          <div className="space-y-3 p-5">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
-            ))}
+            {/* Status Pills Tab Filter */}
+            <div className="flex gap-1.5 overflow-x-auto border-b border-[var(--border)] bg-slate-50/50 p-2 text-xs">
+              {[
+                { key: "ALL", labelAr: "الكل", labelEn: "All" },
+                { key: "PendingApproval", labelAr: "قيد الاعتماد", labelEn: "Pending Approval" },
+                { key: "Approved", labelAr: "معتمد", labelEn: "Approved" },
+                { key: "Active", labelAr: "ساري", labelEn: "Active" },
+                { key: "ReturnedForChanges", labelAr: "معاد للتعديل", labelEn: "Returned" },
+                { key: "Draft", labelAr: "مسودة", labelEn: "Draft" },
+                { key: "Completed", labelAr: "مكتمل", labelEn: "Completed" },
+                { key: "CancellationPending", labelAr: "طلب إلغاء", labelEn: "Cancellation Pending" },
+                { key: "Cancelled", labelAr: "ملغي", labelEn: "Cancelled" },
+                { key: "Rejected", labelAr: "مرفوض", labelEn: "Rejected" },
+              ].map((pill) => (
+                <button
+                  key={pill.key}
+                  type="button"
+                  onClick={() => setStatusFilter(pill.key)}
+                  className={`rounded-lg px-3 py-1.5 font-bold transition-colors whitespace-nowrap ${
+                    statusFilter === pill.key
+                      ? "bg-[#1167c9] text-white shadow-xs"
+                      : "text-[var(--muted)] hover:bg-slate-200/60 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {isEn ? pill.labelEn : pill.labelAr}
+                </button>
+              ))}
+            </div>
+
+            {/* Table */}
+            {loading ? (
+              <div className="space-y-3 p-5">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[840px] text-sm text-start">
+                  <thead className="bg-slate-50 text-[var(--muted)] dark:bg-slate-900/50">
+                    <tr>
+                      <th className="px-4 py-3 text-start">{isEn ? "Request #" : "رقم الطلب"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "Employee" : "الموظف"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "Leave Type" : "نوع الإجازة"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "Period & Days" : "الفترة والأيام"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "Expected Return" : "العودة المتوقعة"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "Status" : "الحالة"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "HR Status" : "حالة HR"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "Actions" : "الإجراءات"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRequests.map((row) => {
+                      const statusInfo = STATUS_STYLES[row.status] || {
+                        labelAr: row.status,
+                        labelEn: row.status,
+                        bg: "bg-slate-100",
+                        text: "text-slate-700",
+                        border: "border-slate-200",
+                      };
+                      const hrStatusInfo = HR_STATUS_STYLES[row.hrStatus] || {
+                        labelAr: row.hrStatus,
+                        labelEn: row.hrStatus,
+                        bg: "bg-slate-100",
+                        text: "text-slate-700",
+                        border: "border-slate-200",
+                      };
+                      const resolvedType = leaveTypeMap.get(row.leaveTypeId);
+                      const typeLabel = isEn ? resolvedType?.nameEn || row.leaveTypeNameAr : row.leaveTypeNameAr;
+
+                      return (
+                        <tr
+                          key={row.id}
+                          className="border-t border-[var(--border)] transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-900/20"
+                        >
+                          <td className="px-4 py-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                            {row.requestNumber}
+                          </td>
+                          <td className="px-4 py-3 font-medium">
+                            <div className="flex items-center gap-2">
+                              <div className="grid size-7 place-items-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                <User size={14} />
+                              </div>
+                              <span>{row.employeeNameAr}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-[#1167c9]">
+                            {typeLabel}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs font-mono">
+                                {row.startDate ? row.startDate.slice(0, 10) : "—"} → {row.endDate ? row.endDate.slice(0, 10) : "—"}
+                              </span>
+                              <span className="inline-flex w-fit items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                {row.calendarDays} {isEn ? "days" : "أيام"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs font-mono text-[var(--muted)]">
+                            {row.expectedReturnDate ? row.expectedReturnDate.slice(0, 10) : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${statusInfo.bg} ${statusInfo.text} ${statusInfo.border}`}>
+                              {isEn ? statusInfo.labelEn : statusInfo.labelAr}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${hrStatusInfo.bg} ${hrStatusInfo.text} ${hrStatusInfo.border}`}>
+                              {isEn ? hrStatusInfo.labelEn : hrStatusInfo.labelAr}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedRequest(row);
+                                  setDrawerTab("overview");
+                                }}
+                                className="inline-flex h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                <Info size={14} />
+                                {isEn ? "Details" : "التفاصيل"}
+                              </button>
+                              {canManage && (row.status === "Draft" || row.status === "ReturnedForChanges") && (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(row)}
+                                  className="grid size-9 place-items-center rounded-lg border border-[var(--border)] text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                                  title={isEn ? "Edit Request" : "تعديل الطلب"}
+                                >
+                                  <Edit3 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!filteredRequests.length && (
+                      <tr>
+                        <td colSpan={8} className="p-12 text-center text-sm text-[var(--muted)]">
+                          {isEn ? "No matching leave requests found." : "لا توجد طلبات إجازة مطابقة."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* ==================== TAB 2: LEAVE TYPES MANAGEMENT ==================== */}
+      {activeTopTab === "types" && (
+        <div className="space-y-6">
+          {/* Leave Types KPI Cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xs">
+              <span className="text-xs font-semibold text-[var(--muted)] block">{isEn ? "Total Leave Types" : "إجمالي أنواع الإجازات"}</span>
+              <span className="mt-1 text-2xl font-black text-slate-900 dark:text-white font-mono block">{leaveTypeStats.total}</span>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs dark:bg-emerald-950/20">
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 block">{isEn ? "Active Types (Available in dropdown)" : "أنواع نشطة (تظهر في القائمة)"}</span>
+              <span className="mt-1 text-2xl font-black text-emerald-900 dark:text-emerald-200 font-mono block">{leaveTypeStats.active}</span>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 shadow-xs dark:bg-slate-900/30">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block">{isEn ? "Disabled Types" : "أنواع معطّلة"}</span>
+              <span className="mt-1 text-2xl font-black text-slate-800 dark:text-slate-200 font-mono block">{leaveTypeStats.disabled}</span>
+            </div>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-4 shadow-xs dark:bg-rose-950/20">
+              <span className="text-xs font-semibold text-rose-700 dark:text-rose-400 block">{isEn ? "Archived Types" : "أنواع مؤرشفة"}</span>
+              <span className="mt-1 text-2xl font-black text-rose-900 dark:text-rose-200 font-mono block">{leaveTypeStats.archived}</span>
+            </div>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[840px] text-sm text-start">
-              <thead className="bg-slate-50 text-[var(--muted)] dark:bg-slate-900/50">
-                <tr>
-                  <th className="px-4 py-3 text-start">{isEn ? "Request #" : "رقم الطلب"}</th>
-                  <th className="px-4 py-3 text-start">{isEn ? "Employee" : "الموظف"}</th>
-                  <th className="px-4 py-3 text-start">{isEn ? "Leave Type" : "نوع الإجازة"}</th>
-                  <th className="px-4 py-3 text-start">{isEn ? "Period & Days" : "الفترة والأيام"}</th>
-                  <th className="px-4 py-3 text-start">{isEn ? "Expected Return" : "العودة المتوقعة"}</th>
-                  <th className="px-4 py-3 text-start">{isEn ? "Status" : "الحالة"}</th>
-                  <th className="px-4 py-3 text-start">{isEn ? "HR Status" : "حالة HR"}</th>
-                  <th className="px-4 py-3 text-start">{isEn ? "Actions" : "الإجراءات"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRequests.map((row) => {
-                  const statusInfo = STATUS_STYLES[row.status] || {
-                    labelAr: row.status,
-                    labelEn: row.status,
-                    bg: "bg-slate-100",
-                    text: "text-slate-700",
-                    border: "border-slate-200",
-                  };
-                  const hrStatusInfo = HR_STATUS_STYLES[row.hrStatus] || {
-                    labelAr: row.hrStatus,
-                    labelEn: row.hrStatus,
-                    bg: "bg-slate-100",
-                    text: "text-slate-700",
-                    border: "border-slate-200",
-                  };
-                  const resolvedType = leaveTypeMap.get(row.leaveTypeId);
-                  const typeLabel = isEn ? resolvedType?.nameEn || row.leaveTypeNameAr : row.leaveTypeNameAr;
 
-                  return (
-                    <tr
-                      key={row.id}
-                      className="border-t border-[var(--border)] transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-900/20"
-                    >
-                      <td className="px-4 py-3 font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {row.requestNumber}
-                      </td>
-                      <td className="px-4 py-3 font-medium">
-                        <div className="flex items-center gap-2">
-                          <div className="grid size-7 place-items-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                            <User size={14} />
+          {/* Leave Types Table Card */}
+          <Card className="overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] p-4">
+              <div>
+                <h3 className="text-base font-black">{isEn ? "Configured Leave Types" : "أنواع الإجازات المعرفة"}</h3>
+                <p className="text-xs text-[var(--muted)] mt-0.5">
+                  {isEn
+                    ? "Control which leave types are Active for employee requests, configure balances, and set maximum calendar days."
+                    : "التحكم في أنواع الإجازات المتاحة للموظفين، شروط الرصيد والوثائق، والحد الأقصى للأيام."}
+                </p>
+              </div>
+              {canManage && (
+                <Button onClick={openCreateLeaveTypeModal}>
+                  <Plus size={16} />
+                  {isEn ? "Add Leave Type" : "إضافة نوع جديد"}
+                </Button>
+              )}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm text-start">
+                <thead className="bg-slate-50 text-[var(--muted)] dark:bg-slate-900/50">
+                  <tr>
+                    <th className="px-4 py-3 text-start">{isEn ? "Code" : "الرمز"}</th>
+                    <th className="px-4 py-3 text-start">{isEn ? "Arabic Name" : "الاسم العربي"}</th>
+                    <th className="px-4 py-3 text-start">{isEn ? "English Name" : "الاسم الإنجليزي"}</th>
+                    <th className="px-4 py-3 text-start">{isEn ? "Max Days" : "الحد الأقصى"}</th>
+                    <th className="px-4 py-3 text-start">{isEn ? "Rules & Flags" : "الشروط والمتطلبات"}</th>
+                    <th className="px-4 py-3 text-start">{isEn ? "Status" : "الحالة"}</th>
+                    <th className="px-4 py-3 text-start">{isEn ? "Actions" : "الإجراءات"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaveTypes.map((lt) => {
+                    const stInfo = LEAVE_TYPE_STATUS_STYLES[lt.status] || {
+                      labelAr: lt.status,
+                      labelEn: lt.status,
+                      bg: "bg-slate-100",
+                      text: "text-slate-700",
+                      border: "border-slate-200",
+                    };
+                    return (
+                      <tr key={lt.id} className="border-t border-[var(--border)] hover:bg-slate-50/50 dark:hover:bg-slate-900/20">
+                        <td className="px-4 py-3 font-mono font-bold text-[#1167c9]">
+                          {lt.code}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
+                          {lt.nameAr}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">
+                          {lt.nameEn}
+                        </td>
+                        <td className="px-4 py-3 font-mono">
+                          {lt.maximumCalendarDays ? `${lt.maximumCalendarDays} ${isEn ? "days" : "يوم"}` : <span className="text-[var(--muted)]">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {lt.requiresBalance && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200/50">
+                                <ShieldCheck size={11} /> {isEn ? "Balance" : "رصيد"}
+                              </span>
+                            )}
+                            {lt.requiresHrDocuments && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200/50">
+                                <FileCheck size={11} /> {isEn ? "HR Docs" : "وثائق"}
+                              </span>
+                            )}
+                            {lt.requiresExitReentryVisa && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 border border-purple-200/50">
+                                <Plane size={11} /> {isEn ? "Visa" : "تأشيرة"}
+                              </span>
+                            )}
+                            {!lt.requiresBalance && !lt.requiresHrDocuments && !lt.requiresExitReentryVisa && (
+                              <span className="text-xs text-[var(--muted)]">—</span>
+                            )}
                           </div>
-                          <span>{row.employeeNameAr}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-[#1167c9]">
-                        {typeLabel}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-xs font-mono">
-                            {row.startDate ? row.startDate.slice(0, 10) : "—"} → {row.endDate ? row.endDate.slice(0, 10) : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${stInfo.bg} ${stInfo.text} ${stInfo.border}`}>
+                            {isEn ? stInfo.labelEn : stInfo.labelAr}
                           </span>
-                          <span className="inline-flex w-fit items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                            {row.calendarDays} {isEn ? "days" : "أيام"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono text-[var(--muted)]">
-                        {row.expectedReturnDate ? row.expectedReturnDate.slice(0, 10) : "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${statusInfo.bg} ${statusInfo.text} ${statusInfo.border}`}>
-                          {isEn ? statusInfo.labelEn : statusInfo.labelAr}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${hrStatusInfo.bg} ${hrStatusInfo.text} ${hrStatusInfo.border}`}>
-                          {isEn ? hrStatusInfo.labelEn : hrStatusInfo.labelAr}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => {
-                              setSelectedRequest(row);
-                              setDrawerTab("overview");
-                            }}
-                            className="inline-flex h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                          >
-                            <Info size={14} />
-                            {isEn ? "Details" : "التفاصيل"}
-                          </button>
-                          {canManage && (row.status === "Draft" || row.status === "ReturnedForChanges") && (
+                        </td>
+                        <td className="px-4 py-3">
+                          {canManage && (
                             <button
-                              onClick={() => openEditModal(row)}
-                              className="grid size-9 place-items-center rounded-lg border border-[var(--border)] text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                              title={isEn ? "Edit Request" : "تعديل الطلب"}
+                              type="button"
+                              onClick={() => openEditLeaveTypeModal(lt)}
+                              className="inline-flex h-8 items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 text-xs font-bold text-[#1167c9] hover:bg-blue-50"
                             >
-                              <Edit3 size={14} />
+                              <Edit3 size={13} />
+                              {isEn ? "Edit" : "تعديل"}
                             </button>
                           )}
-                        </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!leaveTypes.length && (
+                    <tr>
+                      <td colSpan={7} className="p-12 text-center text-sm text-[var(--muted)]">
+                        {isEn ? "No leave types configured." : "لا توجد أنواع إجازات مضافة."}
                       </td>
                     </tr>
-                  );
-                })}
-                {!filteredRequests.length && (
-                  <tr>
-                    <td colSpan={8} className="p-12 text-center text-sm text-[var(--muted)]">
-                      {isEn ? "No matching leave requests found." : "لا توجد طلبات إجازة مطابقة."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
 
-      {/* Create / Edit Modal */}
+      {/* ==================== CREATE / EDIT LEAVE TYPE MODAL ==================== */}
+      {leaveTypeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+              <h2 className="text-xl font-black">
+                {editingLeaveType
+                  ? isEn
+                    ? "Edit Leave Type"
+                    : "تعديل نوع الإجازة"
+                  : isEn
+                    ? "New Leave Type"
+                    : "إضافة نوع إجازة جديد"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setLeaveTypeModalOpen(false)}
+                className="grid size-9 place-items-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {leaveTypeError && (
+              <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
+                {leaveTypeError}
+              </p>
+            )}
+
+            <form onSubmit={handleSaveLeaveType} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">{isEn ? "Code (e.g. ANNUAL) *" : "الرمز (مثل ANNUAL) *"}</label>
+                  <input
+                    type="text"
+                    required
+                    value={leaveTypeForm.code}
+                    onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                    placeholder="ANNUAL"
+                    className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-mono uppercase"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">{isEn ? "Arabic Name *" : "الاسم العربي *"}</label>
+                  <input
+                    type="text"
+                    required
+                    value={leaveTypeForm.nameAr}
+                    onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, nameAr: e.target.value }))}
+                    placeholder="إجازة سنوية"
+                    className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">{isEn ? "English Name *" : "الاسم الإنجليزي *"}</label>
+                  <input
+                    type="text"
+                    required
+                    value={leaveTypeForm.nameEn}
+                    onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, nameEn: e.target.value }))}
+                    placeholder="Annual Leave"
+                    className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">{isEn ? "Status *" : "الحالة *"}</label>
+                  <select
+                    value={leaveTypeForm.status}
+                    onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, status: e.target.value as LeaveTypeStatus }))}
+                    className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-bold"
+                  >
+                    <option value="Active">{isEn ? "Active (Available for requests)" : "نشط (متاح لطلبات الموظفين)"}</option>
+                    <option value="Disabled">{isEn ? "Disabled (Temporarily unavailable)" : "معطّل (غير متاح مؤقتاً)"}</option>
+                    <option value="Archived">{isEn ? "Archived (Discontinued)" : "مؤرشف (ملغي)"}</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">{isEn ? "Maximum Calendar Days (Optional)" : "الحد الأقصى للأيام (اختياري)"}</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={leaveTypeForm.maximumCalendarDays ?? ""}
+                    onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, maximumCalendarDays: e.target.value ? Number(e.target.value) : null }))}
+                    placeholder="e.g. 30"
+                    className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Requirement Checkboxes */}
+              <div className="rounded-xl border border-[var(--border)] p-3 space-y-2">
+                <span className="text-xs font-bold text-[var(--muted)] block">{isEn ? "Requirements & Rules" : "الاشتراطات والمتطلبات"}</span>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <label className="flex items-center gap-2 text-xs font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={leaveTypeForm.requiresBalance}
+                      onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, requiresBalance: e.target.checked }))}
+                      className="size-4 rounded accent-[#1167c9]"
+                    />
+                    {isEn ? "Requires Balance" : "يتطلب رصيداً"}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={leaveTypeForm.requiresHrDocuments}
+                      onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, requiresHrDocuments: e.target.checked }))}
+                      className="size-4 rounded accent-[#1167c9]"
+                    />
+                    {isEn ? "Requires HR Documents" : "يتطلب وثائق موارد بشرية"}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={leaveTypeForm.requiresExitReentryVisa}
+                      onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, requiresExitReentryVisa: e.target.checked }))}
+                      className="size-4 rounded accent-[#1167c9]"
+                    />
+                    {isEn ? "Requires Exit/Reentry Visa" : "يتطلب تأشيرة خروج وعودة"}
+                  </label>
+                </div>
+              </div>
+
+              {/* Descriptions */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">{isEn ? "Arabic Description" : "الوصف العربي"}</label>
+                  <textarea
+                    rows={2}
+                    value={leaveTypeForm.descriptionAr || ""}
+                    onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, descriptionAr: e.target.value }))}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">{isEn ? "English Description" : "الوصف الإنجليزي"}</label>
+                  <textarea
+                    rows={2}
+                    value={leaveTypeForm.descriptionEn || ""}
+                    onChange={(e) => setLeaveTypeForm((prev) => ({ ...prev, descriptionEn: e.target.value }))}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+                <Button type="button" variant="secondary" onClick={() => setLeaveTypeModalOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" loading={busy}>
+                  <Check size={18} />
+                  {t("common.save")}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ==================== CREATE / EDIT LEAVE REQUEST MODAL ==================== */}
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 space-y-5">
@@ -1085,9 +1570,21 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 />
               </div>
 
-              {/* Leave Type (Active Only) */}
+              {/* Leave Type (Active Only) with quick create/manage button */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold">{isEn ? "Leave Type (Active only) *" : "نوع الإجازة (النشطة فقط) *"}</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold">{isEn ? "Leave Type (Active only) *" : "نوع الإجازة (النشطة فقط) *"}</label>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => openCreateLeaveTypeModal()}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1167c9] hover:underline"
+                    >
+                      <Plus size={12} />
+                      {isEn ? "Add Leave Type" : "إضافة نوع إجازة"}
+                    </button>
+                  )}
+                </div>
                 <SearchableSelect
                   value={formData.leaveTypeId}
                   onChange={(val) => setFormData((prev) => ({ ...prev, leaveTypeId: val }))}
@@ -1247,7 +1744,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
         </div>
       )}
 
-      {/* Details Drawer / Modal */}
+      {/* ==================== DETAILS DRAWER / MODAL FOR LEAVE REQUEST ==================== */}
       {selectedRequest && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
           <div className="flex h-full w-full max-w-2xl flex-col bg-[var(--surface)] shadow-2xl transition-all">
@@ -1361,6 +1858,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 return (
                   <button
                     key={tItem.key}
+                    type="button"
                     onClick={() => setDrawerTab(tItem.key as any)}
                     className={`flex items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-bold transition-all ${
                       active
@@ -1656,6 +2154,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                               <div className="flex items-center gap-1.5">
                                 {canDownloadDoc && (
                                   <button
+                                    type="button"
                                     onClick={() => handleDownloadDoc(doc)}
                                     className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-slate-700 hover:bg-slate-100 dark:text-slate-300"
                                     title={isEn ? "Download" : "تنزيل"}
@@ -1665,6 +2164,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                                 )}
                                 {canUploadDoc && (
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setDocUploadVersionDocId(doc.id);
                                       setDocFile(null);
@@ -1678,6 +2178,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                                 )}
                                 {canManage && (
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setEditingDoc(doc);
                                       setDocEditMetaModalOpen(true);
@@ -1690,6 +2191,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                                 )}
                                 {canManage && (
                                   <button
+                                    type="button"
                                     onClick={() => handleArchiveDoc(doc)}
                                     className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-rose-600 hover:bg-rose-50"
                                     title={isEn ? "Archive" : "أرشفة"}
@@ -1724,7 +2226,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
           <Card className="w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
               <h3 className="text-base font-black">{isEn ? "Request Date Change" : "طلب تغيير موعد الإجازة"}</h3>
-              <button onClick={() => setDateChangeModalOpen(false)}>
+              <button type="button" onClick={() => setDateChangeModalOpen(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -1779,7 +2281,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
           <Card className="w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
               <h3 className="text-base font-black">{isEn ? "Request Cancellation" : "طلب إلغاء الإجازة"}</h3>
-              <button onClick={() => setCancellationModalOpen(false)}>
+              <button type="button" onClick={() => setCancellationModalOpen(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -1822,7 +2324,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                     ? "Upload Leave Document"
                     : "إرفاق وثيقة إجازة"}
               </h3>
-              <button onClick={() => setDocUploadModalOpen(false)}>
+              <button type="button" onClick={() => setDocUploadModalOpen(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -1913,7 +2415,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
           <Card className="w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
               <h3 className="text-base font-black">{isEn ? "Edit Document Metadata" : "تعديل بيانات الوثيقة"}</h3>
-              <button onClick={() => setDocEditMetaModalOpen(false)}>
+              <button type="button" onClick={() => setDocEditMetaModalOpen(false)}>
                 <X size={18} />
               </button>
             </div>

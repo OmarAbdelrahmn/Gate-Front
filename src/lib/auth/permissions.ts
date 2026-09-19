@@ -140,6 +140,11 @@ export const PERMISSIONS = [
   // HR forms
   "hr_forms.templates.read",
   "hr_forms.templates.manage",
+
+  // Legal cases
+  "legal_cases.read",
+  "legal_cases.manage",
+  "legal_cases.files.download",
 ] as const;
 export type Permission=typeof PERMISSIONS[number]; export type UserStatus="PendingTemporaryPassword"|"Active"|"Locked"|"Suspended"|"Archived";
 export type AuthorizationSnapshot={userId?:string;status?:UserStatus;requiresPasswordChange?:boolean;authorizationVersion:number;permissions?:string[];effectivePermissions?:string[];effectivePermissionKeys?:string[];roles?:string[];directGrants?:string[];directPermissions?:string[];directDenies?:string[];deniedPermissionKeys?:string[]};

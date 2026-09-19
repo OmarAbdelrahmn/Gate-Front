@@ -37,6 +37,7 @@ import {
   Truck,
   PackageCheck,
   ShoppingBag,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 
@@ -184,6 +185,14 @@ export const navigation: NavItem[] = [
         icon: Users,
         roles: ["admin", "manager", "member", "accountant"],
         permission: "riders.read",
+      },
+      {
+        label: "القضايا القانونية",
+        labelKey: "nav.legalCases",
+        href: "/admin/hr/legal-cases",
+        icon: Scale,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "legal_cases.read",
       },
     ],
   },
