@@ -51,6 +51,7 @@ import {
   TableHeaderColumnFilter,
   type FilterOption,
 } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
+import { getVehicles } from "@/lib/fleet/api";
 
 function getRiyadhDateStr(daysOffset = 0): string {
   const now = new Date();
@@ -174,6 +175,49 @@ export default function VehicleDailyDistancesPage() {
   const [isLogsModalOpen, setIsLogsModalOpen] = useState<boolean>(false);
   const [logs, setLogs] = useState<GpsImportLogItem[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
+
+  // Mapping of vehicleId -> operatingCity from vehicle data
+  const [vehicleCities, setVehicleCities] = useState<Record<string, string>>({});
+
+  // Load all vehicle cities to enrich daily distances table
+  useEffect(() => {
+    let isMounted = true;
+    async function loadVehicleCities() {
+      try {
+        const firstRes = await getVehicles({ page: 1, pageSize: 200 });
+        let allItems = firstRes?.items || [];
+        const totalCount = firstRes?.totalCount ?? allItems.length;
+        if (totalCount > allItems.length) {
+          const pageSize = firstRes.pageSize || 200;
+          const totalPages = Math.ceil(totalCount / pageSize);
+          const pagePromises = [];
+          for (let p = 2; p <= totalPages; p++) {
+            pagePromises.push(getVehicles({ page: p, pageSize }));
+          }
+          const remainingResults = await Promise.all(pagePromises);
+          remainingResults.forEach((res) => {
+            if (res?.items) allItems = allItems.concat(res.items);
+          });
+        }
+        if (isMounted) {
+          const cityMap: Record<string, string> = {};
+          allItems.forEach((v) => {
+            const city = v.operatingCity || (v as any).operatingCityNameAr || (v as any).city;
+            if (v.id && city) {
+              cityMap[v.id] = city;
+            }
+          });
+          setVehicleCities(cityMap);
+        }
+      } catch (err) {
+        console.warn("Failed to load vehicle cities:", err);
+      }
+    }
+    loadVehicleCities();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const fetchDailyDistances = async (query = debouncedSearchQuery) => {
     setLoading(true);
@@ -439,14 +483,14 @@ export default function VehicleDailyDistancesPage() {
 
       const rows = filteredItems.map((item, idx) => {
         const sourceInfo = getAppliedSourceInfo(item.appliedSource);
-        const cityName = item.operatingCity || item.operatingCityNameAr || item.city || "—";
+        const cityName = item.operatingCity || item.operatingCityNameAr || item.city || vehicleCities[item.vehicleId] || "—";
 
         if (locale === "en") {
           return {
             "#": idx + 1,
-            "City": cityName,
-            "Plate (Ar)": item.plateNumberAr || "—",
+            "Vehicle (Plate Ar)": item.plateNumberAr || "—",
             "Plate (En)": item.plateNumberEn || "—",
+            "City": cityName,
             "GPS Distance (KM)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
             "Manual Odometer": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
             "Manual Baseline": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
@@ -465,9 +509,9 @@ export default function VehicleDailyDistancesPage() {
 
         return {
           "م": idx + 1,
-          "المدينة": cityName,
-          "اللوحة (عربي)": item.plateNumberAr || "—",
+          "المركبة (اللوحة عربي)": item.plateNumberAr || "—",
           "اللوحة (إنجليزي)": item.plateNumberEn || "—",
+          "المدينة": cityName,
           "مسافة GPS (كم)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
           "قراءة العداد اليدوية": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
           "قراءة الأساس اليدوية": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
@@ -541,7 +585,7 @@ export default function VehicleDailyDistancesPage() {
     if (!data?.items) return [];
     const map = new Map<string, number>();
     data.items.forEach((item) => {
-      const city = item.operatingCity || item.operatingCityNameAr || item.city;
+      const city = item.operatingCity || item.operatingCityNameAr || item.city || vehicleCities[item.vehicleId];
       if (city) {
         map.set(city, (map.get(city) || 0) + 1);
       }
@@ -553,7 +597,7 @@ export default function VehicleDailyDistancesPage() {
         label: city,
         count,
       }));
-  }, [data?.items]);
+  }, [data?.items, vehicleCities]);
 
   const plateOptions = useMemo<FilterOption[]>(() => {
     if (!data?.items) return [];
@@ -645,7 +689,13 @@ export default function VehicleDailyDistancesPage() {
     return data.items.filter((item) => {
       if (headerCityFilter) {
         const c = headerCityFilter.toLowerCase();
-        const itemCity = (item.operatingCity || item.operatingCityNameAr || item.city || "").toLowerCase();
+        const itemCity = (
+          item.operatingCity ||
+          item.operatingCityNameAr ||
+          item.city ||
+          vehicleCities[item.vehicleId] ||
+          ""
+        ).toLowerCase();
         if (itemCity !== c && !itemCity.includes(c)) return false;
       }
       if (headerPlateFilter) {
@@ -670,7 +720,7 @@ export default function VehicleDailyDistancesPage() {
       }
       return true;
     });
-  }, [data?.items, headerCityFilter, headerPlateFilter, headerSourceFilter, headerGpsStatusFilter, headerManualStatusFilter]);
+  }, [data?.items, headerCityFilter, headerPlateFilter, headerSourceFilter, headerGpsStatusFilter, headerManualStatusFilter, vehicleCities]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -964,6 +1014,18 @@ export default function VehicleDailyDistancesPage() {
                 <tr>
                   <th className="px-3.5 py-3.5 whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">
+                      <span>المركبة</span>
+                      <TableHeaderColumnFilter
+                        label="المركبة"
+                        value={headerPlateFilter}
+                        onChange={setHeaderPlateFilter}
+                        options={plateOptions}
+                        placeholder="بحث في المركبات..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-3.5 py-3.5 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
                       <span>المدينة</span>
                       <TableHeaderColumnFilter
                         label="المدينة"
@@ -971,18 +1033,6 @@ export default function VehicleDailyDistancesPage() {
                         onChange={setHeaderCityFilter}
                         options={cityOptions}
                         placeholder="بحث في المدن..."
-                      />
-                    </div>
-                  </th>
-                  <th className="px-3.5 py-3.5 whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
-                      <span>اللوحة (عربي/إنجليزي)</span>
-                      <TableHeaderColumnFilter
-                        label="اللوحة"
-                        value={headerPlateFilter}
-                        onChange={setHeaderPlateFilter}
-                        options={plateOptions}
-                        placeholder="بحث في اللوحات..."
                       />
                     </div>
                   </th>
@@ -1037,12 +1087,7 @@ export default function VehicleDailyDistancesPage() {
 
                   return (
                     <tr key={item.vehicleId} className="hover:bg-[var(--subtle-bg)] transition-colors">
-                      {/* City */}
-                      <td className="px-3.5 py-3 whitespace-nowrap font-medium text-slate-800 dark:text-slate-200">
-                        {item.operatingCity || item.operatingCityNameAr || item.city || "—"}
-                      </td>
-
-                      {/* Plate Number */}
+                      {/* Vehicle */}
                       <td className="px-3.5 py-3 whitespace-nowrap">
                         <Link
                           href={`/admin/fleet/vehicles/${item.vehicleId}`}
@@ -1051,6 +1096,11 @@ export default function VehicleDailyDistancesPage() {
                           <div className="font-bold text-[var(--foreground)] group-hover:text-[#1167c9] transition-colors">{item.plateNumberAr || "—"}</div>
                           <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
                         </Link>
+                      </td>
+
+                      {/* City */}
+                      <td className="px-3.5 py-3 whitespace-nowrap font-medium text-slate-800 dark:text-slate-200">
+                        {item.operatingCity || item.operatingCityNameAr || item.city || vehicleCities[item.vehicleId] || "—"}
                       </td>
 
                       {/* GPS Distance */}
