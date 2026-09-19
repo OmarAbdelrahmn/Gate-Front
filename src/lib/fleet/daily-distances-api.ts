@@ -16,6 +16,11 @@ export type VehicleDailyDistanceItem = {
   appliedDistanceKm: number | null;
   appliedSource: "None" | "Manual" | "Gps" | 0 | 1 | 2 | string;
   effectiveOdometerAfterKm?: number | null;
+  operatingCity?: string | null;
+  operatingCityId?: string | null;
+  operatingCityNameAr?: string | null;
+  operatingCityNameEn?: string | null;
+  city?: string | null;
   gpsImportedAtUtc: string | null;
   lastGpsImportId?: string | null;
   gpsImportedByUserId?: string | null;

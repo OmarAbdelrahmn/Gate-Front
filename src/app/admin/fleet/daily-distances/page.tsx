@@ -70,6 +70,7 @@ export default function VehicleDailyDistancesPage() {
   const [sourceFilter, setSourceFilter] = useState<"gps" | "manual" | "missing" | "">("");
 
   // Table Header Column Filters
+  const [headerCityFilter, setHeaderCityFilter] = useState<string>("");
   const [headerPlateFilter, setHeaderPlateFilter] = useState<string>("");
   const [headerSourceFilter, setHeaderSourceFilter] = useState<string>("");
   const [headerGpsStatusFilter, setHeaderGpsStatusFilter] = useState<string>("");
@@ -84,6 +85,7 @@ export default function VehicleDailyDistancesPage() {
       const saved = sessionStorage.getItem(GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (typeof parsed.headerCityFilter === "string") setHeaderCityFilter(parsed.headerCityFilter);
         if (typeof parsed.headerPlateFilter === "string") setHeaderPlateFilter(parsed.headerPlateFilter);
         if (typeof parsed.headerSourceFilter === "string") setHeaderSourceFilter(parsed.headerSourceFilter);
         if (typeof parsed.headerGpsStatusFilter === "string") setHeaderGpsStatusFilter(parsed.headerGpsStatusFilter);
@@ -103,6 +105,7 @@ export default function VehicleDailyDistancesPage() {
     if (!isRestored) return;
     try {
       if (
+        headerCityFilter ||
         headerPlateFilter ||
         headerSourceFilter ||
         headerGpsStatusFilter ||
@@ -113,6 +116,7 @@ export default function VehicleDailyDistancesPage() {
         sessionStorage.setItem(
           GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY,
           JSON.stringify({
+            headerCityFilter,
             headerPlateFilter,
             headerSourceFilter,
             headerGpsStatusFilter,
@@ -129,6 +133,7 @@ export default function VehicleDailyDistancesPage() {
     }
   }, [
     isRestored,
+    headerCityFilter,
     headerPlateFilter,
     headerSourceFilter,
     headerGpsStatusFilter,
@@ -424,20 +429,22 @@ export default function VehicleDailyDistancesPage() {
 
   // Export current table records as Excel
   const handleExportTableExcel = async () => {
-    if (!data || !data.items.length) {
-      toast.error("لا توجد بيانات", "لا توجد سجلات مسافات لتصديرها لهذا اليوم.");
+    if (!data || !filteredItems.length) {
+      toast.error("لا توجد بيانات", "لا توجد سجلات مسافات لتصديرها لهذا اليوم وفق الفلاتر المحددة.");
       return;
     }
 
     try {
       const XLSX = await import("xlsx");
 
-      const rows = data.items.map((item, idx) => {
+      const rows = filteredItems.map((item, idx) => {
         const sourceInfo = getAppliedSourceInfo(item.appliedSource);
+        const cityName = item.operatingCity || item.operatingCityNameAr || item.city || "—";
+
         if (locale === "en") {
           return {
             "#": idx + 1,
-            "Asset Number": item.assetNumber || "—",
+            "City": cityName,
             "Plate (Ar)": item.plateNumberAr || "—",
             "Plate (En)": item.plateNumberEn || "—",
             "GPS Distance (KM)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
@@ -458,7 +465,7 @@ export default function VehicleDailyDistancesPage() {
 
         return {
           "م": idx + 1,
-          "رقم الأصل": item.assetNumber || "—",
+          "المدينة": cityName,
           "اللوحة (عربي)": item.plateNumberAr || "—",
           "اللوحة (إنجليزي)": item.plateNumberEn || "—",
           "مسافة GPS (كم)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
@@ -480,7 +487,7 @@ export default function VehicleDailyDistancesPage() {
       const worksheet = XLSX.utils.json_to_sheet(rows);
       worksheet["!cols"] = [
         { wch: 6 },
-        { wch: 14 },
+        { wch: 18 }, // City
         { wch: 16 },
         { wch: 16 },
         { wch: 18 },
@@ -505,7 +512,7 @@ export default function VehicleDailyDistancesPage() {
         locale === "en" ? "Daily Distances" : "المسافات اليومية"
       );
 
-      const fileName = `daily-distances-${workDate}${sourceFilter ? `-${sourceFilter}` : ""}.xlsx`;
+      const fileName = `daily-distances-${workDate}${headerCityFilter ? `-${headerCityFilter}` : ""}${sourceFilter ? `-${sourceFilter}` : ""}.xlsx`;
       XLSX.writeFile(workbook, fileName);
 
       toast.success("تم التصدير", "تم تنزيل سجلات المسافات اليومية بنجاح بصيغة Excel");
@@ -530,6 +537,24 @@ export default function VehicleDailyDistancesPage() {
     }
   };
   // Options for Table Header Filters
+  const cityOptions = useMemo<FilterOption[]>(() => {
+    if (!data?.items) return [];
+    const map = new Map<string, number>();
+    data.items.forEach((item) => {
+      const city = item.operatingCity || item.operatingCityNameAr || item.city;
+      if (city) {
+        map.set(city, (map.get(city) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([city, count]) => ({
+        value: city,
+        label: city,
+        count,
+      }));
+  }, [data?.items]);
+
   const plateOptions = useMemo<FilterOption[]>(() => {
     if (!data?.items) return [];
     const map = new Map<string, number>();
@@ -598,6 +623,7 @@ export default function VehicleDailyDistancesPage() {
   }, [data?.items]);
 
   const clearHeaderFilters = () => {
+    setHeaderCityFilter("");
     setHeaderPlateFilter("");
     setHeaderSourceFilter("");
     setHeaderGpsStatusFilter("");
@@ -610,13 +636,18 @@ export default function VehicleDailyDistancesPage() {
   };
 
   const isHeaderFiltered = Boolean(
-    headerPlateFilter || headerSourceFilter || headerGpsStatusFilter || headerManualStatusFilter
+    headerCityFilter || headerPlateFilter || headerSourceFilter || headerGpsStatusFilter || headerManualStatusFilter
   );
 
   // Client-filtered items based on table header filters
   const filteredItems = useMemo(() => {
     if (!data?.items) return [];
     return data.items.filter((item) => {
+      if (headerCityFilter) {
+        const c = headerCityFilter.toLowerCase();
+        const itemCity = (item.operatingCity || item.operatingCityNameAr || item.city || "").toLowerCase();
+        if (itemCity !== c && !itemCity.includes(c)) return false;
+      }
       if (headerPlateFilter) {
         const p = headerPlateFilter.toLowerCase();
         const matchAr = item.plateNumberAr?.toLowerCase().includes(p);
@@ -639,7 +670,7 @@ export default function VehicleDailyDistancesPage() {
       }
       return true;
     });
-  }, [data?.items, headerPlateFilter, headerSourceFilter, headerGpsStatusFilter, headerManualStatusFilter]);
+  }, [data?.items, headerCityFilter, headerPlateFilter, headerSourceFilter, headerGpsStatusFilter, headerManualStatusFilter]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -854,6 +885,12 @@ export default function VehicleDailyDistancesPage() {
       {isHeaderFiltered && (
         <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs">
           <span className="text-[var(--muted)] font-bold">فلاتر أعمدة الجدول النشطة:</span>
+          {headerCityFilter && (
+            <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 gap-1 pl-1.5 font-medium">
+              المدينة: {headerCityFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderCityFilter("")} />
+            </Badge>
+          )}
           {headerPlateFilter && (
             <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 gap-1 pl-1.5 font-medium">
               اللوحة: {headerPlateFilter}
@@ -925,7 +962,18 @@ export default function VehicleDailyDistancesPage() {
             <table className="w-full text-right text-xs dir-rtl">
               <thead className="bg-[#1167c9]/10 text-xs font-extrabold text-[var(--muted)] border-b border-[var(--border)]">
                 <tr>
-                  <th className="px-3.5 py-3.5 whitespace-nowrap">رقم الأصل</th>
+                  <th className="px-3.5 py-3.5 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>المدينة</span>
+                      <TableHeaderColumnFilter
+                        label="المدينة"
+                        value={headerCityFilter}
+                        onChange={setHeaderCityFilter}
+                        options={cityOptions}
+                        placeholder="بحث في المدن..."
+                      />
+                    </div>
+                  </th>
                   <th className="px-3.5 py-3.5 whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">
                       <span>اللوحة (عربي/إنجليزي)</span>
@@ -989,20 +1037,20 @@ export default function VehicleDailyDistancesPage() {
 
                   return (
                     <tr key={item.vehicleId} className="hover:bg-[var(--subtle-bg)] transition-colors">
-                      {/* Asset Number */}
-                      <td className="px-3.5 py-3 font-mono font-bold whitespace-nowrap">
-                        <Link
-                          href={`/admin/fleet/vehicles/${item.vehicleId}`}
-                          className="text-[#1167c9] dark:text-blue-400 hover:underline inline-flex items-center gap-1"
-                        >
-                          <span>{item.assetNumber || "—"}</span>
-                        </Link>
+                      {/* City */}
+                      <td className="px-3.5 py-3 whitespace-nowrap font-medium text-slate-800 dark:text-slate-200">
+                        {item.operatingCity || item.operatingCityNameAr || item.city || "—"}
                       </td>
 
                       {/* Plate Number */}
                       <td className="px-3.5 py-3 whitespace-nowrap">
-                        <div className="font-bold text-[var(--foreground)]">{item.plateNumberAr || "—"}</div>
-                        <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
+                        <Link
+                          href={`/admin/fleet/vehicles/${item.vehicleId}`}
+                          className="group hover:underline inline-block"
+                        >
+                          <div className="font-bold text-[var(--foreground)] group-hover:text-[#1167c9] transition-colors">{item.plateNumberAr || "—"}</div>
+                          <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
+                        </Link>
                       </td>
 
                       {/* GPS Distance */}
