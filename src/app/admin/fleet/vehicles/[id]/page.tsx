@@ -7,6 +7,8 @@ import { getVehicleDetail, getVehicleIssues, updateVehicle } from "@/lib/fleet/a
 import {
   VehicleOperationalStatus,
   VehicleComplianceDueStatus,
+  VehicleRegistrationType,
+  VehicleType,
   type VehicleDetailResponse,
   type VehicleIssueSummaryResponse,
   type VehicleUpsertRequest,
@@ -23,7 +25,6 @@ import {
   resolveVehicleRegisteredOwner,
   formatDate,
 } from "@/lib/fleet/formatters";
-import { VehicleRegistrationType } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -198,6 +199,14 @@ export default function VehicleDetailPage() {
     Number(regType) === VehicleRegistrationType.PublicTransport ||
     Number(regType) === VehicleRegistrationType.PublicBus;
 
+  const isMotorcycle =
+    regType === VehicleRegistrationType.Motorcycle ||
+    Number(regType) === VehicleRegistrationType.Motorcycle ||
+    summary.vehicleType === VehicleType.Motorcycle ||
+    Number(summary.vehicleType) === VehicleType.Motorcycle;
+
+  const isOperationCardEligible = isPublicTransport || isMotorcycle;
+
   const complianceItems: {
     label: string;
     type: ComplianceTabType;
@@ -230,9 +239,9 @@ export default function VehicleDetailPage() {
     },
   ];
 
-  if (isPublicTransport) {
+  if (isOperationCardEligible) {
     complianceItems.push({
-      label: "كرت التشغيل (النقل العام)",
+      label: isMotorcycle ? "كرت التشغيل (دراجة نارية)" : "كرت التشغيل (النقل العام)",
       type: "OperationCard",
       date: summary.operationCardExpiryDate,
       status: summary.operationCardStatus,
@@ -509,6 +518,7 @@ export default function VehicleDetailPage() {
           <VehicleFilesCard
             vehicleId={id}
             registrationType={vehicle.registrationType || summary.registrationType}
+            vehicleType={summary.vehicleType}
             onComplianceUpdated={loadData}
           />
         </div>
@@ -552,7 +562,7 @@ export default function VehicleDetailPage() {
                 <ShieldCheck className="h-5 w-5 text-emerald-500" />
                 <h3 className="font-bold text-slate-800 dark:text-slate-200">الالتزام والتراخيص</h3>
               </div>
-              {isPublicTransport && (
+              {isOperationCardEligible && (
                 <Button
                   variant="ghost"
                   className="text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 gap-1 px-2 py-1 h-auto"
@@ -666,6 +676,7 @@ export default function VehicleDetailPage() {
         vehicleId={id}
         initialType={complianceType}
         registrationType={vehicle.registrationType || summary.registrationType}
+        vehicleType={summary.vehicleType}
       />
 
       <OperationCardHistoryModal

@@ -13,6 +13,7 @@ import { authPreviewBlob } from "@/lib/auth/api";
 import {
   VehicleFileKind,
   VehicleRegistrationType,
+  VehicleType,
   type VehicleAttachmentResponse,
   type VehicleAttachmentVersionResponse,
   type VehicleOperationCardRequest,
@@ -43,10 +44,10 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-
 interface Props {
   vehicleId: string;
   registrationType?: VehicleRegistrationType | number | null;
+  vehicleType?: VehicleType | number | null;
   onComplianceUpdated?: () => void;
 }
 
@@ -60,14 +61,14 @@ interface SlotItem {
 
 const FILE_SLOTS: SlotItem[] = [
   { kind: VehicleFileKind.Istimara, kindName: "Istimara", label: "استمارة السير", isPhoto: false, requiresPublicTransport: false },
-  { kind: VehicleFileKind.OperationCard, kindName: "OperationCard", label: "كرت التشغيل (النقل العام)", isPhoto: false, requiresPublicTransport: true },
+  { kind: VehicleFileKind.OperationCard, kindName: "OperationCard", label: "كرت التشغيل", isPhoto: false, requiresPublicTransport: true },
   { kind: VehicleFileKind.FrontImage, kindName: "FrontImage", label: "صورة المقدمة (أمام)", isPhoto: true, requiresPublicTransport: false },
   { kind: VehicleFileKind.RearImage, kindName: "RearImage", label: "صورة المؤخرة (خلف)", isPhoto: true, requiresPublicTransport: false },
   { kind: VehicleFileKind.LeftImage, kindName: "LeftImage", label: "صورة الجانب الأيسر", isPhoto: true, requiresPublicTransport: false },
   { kind: VehicleFileKind.RightImage, kindName: "RightImage", label: "صورة الجانب الأيمن", isPhoto: true, requiresPublicTransport: false },
 ];
 
-export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpdated }: Props) {
+export function VehicleFilesCard({ vehicleId, registrationType, vehicleType, onComplianceUpdated }: Props) {
   const { can } = useAuth();
   const [files, setFiles] = useState<VehicleAttachmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,11 +116,15 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
     attachmentId: null,
   });
 
-  const isPublicTransport =
+  const isOperationCardEligible =
     registrationType === VehicleRegistrationType.PublicTransport ||
     registrationType === VehicleRegistrationType.PublicBus ||
+    registrationType === VehicleRegistrationType.Motorcycle ||
+    vehicleType === VehicleType.Motorcycle ||
     Number(registrationType) === VehicleRegistrationType.PublicTransport ||
-    Number(registrationType) === VehicleRegistrationType.PublicBus;
+    Number(registrationType) === VehicleRegistrationType.PublicBus ||
+    Number(registrationType) === VehicleRegistrationType.Motorcycle ||
+    Number(vehicleType) === VehicleType.Motorcycle;
 
   const loadFiles = async () => {
     if (!can("fleet.files.read")) return;
@@ -203,11 +208,11 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
   useEffect(() => {
     if (vehicleId) {
       loadFiles();
-      if (isPublicTransport) {
+      if (isOperationCardEligible) {
         loadOpCard();
       }
     }
-  }, [vehicleId, isPublicTransport]);
+  }, [vehicleId, isOperationCardEligible]);
 
   useEffect(() => {
     if (!files || !files.length) return;
@@ -363,7 +368,7 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
       <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {FILE_SLOTS.map((slot) => {
           const att = getAttachmentForKind(slot.kind);
-          const isDisabledSlot = slot.requiresPublicTransport && !isPublicTransport;
+          const isDisabledSlot = slot.requiresPublicTransport && !isOperationCardEligible;
           const isUploading = uploadingKind === slot.kindName;
 
           return (
@@ -409,7 +414,7 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
                     </div>
                   </div>
                 ) : isDisabledSlot ? (
-                  <p className="text-xs text-slate-400 mt-2">متاح فقط لمركبات النقل العام.</p>
+                  <p className="text-xs text-slate-400 mt-2">متاح فقط لمركبات النقل العام والدراجات النارية.</p>
                 ) : (
                   <p className="text-xs text-slate-400 mt-2">لم يتم رفع هذا الملف بعد.</p>
                 )}
@@ -456,7 +461,7 @@ export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpda
                 ) : null}
 
                 {/* Operation Card Details Card in Slot */}
-                {slot.kind === VehicleFileKind.OperationCard && isPublicTransport && currentOpCard && (
+                {slot.kind === VehicleFileKind.OperationCard && isOperationCardEligible && currentOpCard && (
                   <div className="mt-3 p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-1.5">
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 dark:text-slate-400">رقم الكرت:</span>

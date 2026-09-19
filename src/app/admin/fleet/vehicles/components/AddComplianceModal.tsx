@@ -11,6 +11,7 @@ import {
 import {
   VehicleInspectionResult,
   VehicleRegistrationType,
+  VehicleType,
   type VehicleRegistrationRequest,
   type VehicleInsuranceRequest,
   type VehicleInspectionRequest,
@@ -33,6 +34,7 @@ interface Props {
   vehicleId: string;
   initialType?: ComplianceTabType;
   registrationType?: VehicleRegistrationType | number | null;
+  vehicleType?: VehicleType | number | null;
 }
 
 export function AddComplianceModal({
@@ -42,15 +44,20 @@ export function AddComplianceModal({
   vehicleId,
   initialType = "InsurancePolicy",
   registrationType,
+  vehicleType,
 }: Props) {
   const [activeTab, setActiveTab] = useState<ComplianceTabType>(initialType);
   const [isPending, setIsPending] = useState(false);
 
-  const isPublicTransport =
+  const isOperationCardEligible =
     registrationType === VehicleRegistrationType.PublicTransport ||
     registrationType === VehicleRegistrationType.PublicBus ||
+    registrationType === VehicleRegistrationType.Motorcycle ||
+    vehicleType === VehicleType.Motorcycle ||
     Number(registrationType) === VehicleRegistrationType.PublicTransport ||
-    Number(registrationType) === VehicleRegistrationType.PublicBus;
+    Number(registrationType) === VehicleRegistrationType.PublicBus ||
+    Number(registrationType) === VehicleRegistrationType.Motorcycle ||
+    Number(vehicleType) === VehicleType.Motorcycle;
 
   // Attached File State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -255,7 +262,7 @@ export function AddComplianceModal({
             <Wrench className="h-4 w-4 text-orange-500" />
             <span>الفحص الدوري</span>
           </button>
-          {isPublicTransport && (
+          {isOperationCardEligible && (
             <button
               type="button"
               onClick={() => setActiveTab("OperationCard")}
