@@ -38,8 +38,55 @@ export function Sidebar({
 
   const defaultRoute = getDefaultRouteForUser(user);
 
-  // User manual toggle overrides: key is item.labelKey || item.label
-  const [expandedOverrides, setExpandedOverrides] = useState<Record<string, boolean>>({});
+  const resolveItemHref = (item: NavItem) => {
+    if (item.labelKey === "nav.dashboard") return defaultRoute;
+    return item.href;
+  };
+
+  const allHrefs = navigation
+    .flatMap((item) => [
+      resolveItemHref(item),
+      ...(item.children?.map((child) => resolveItemHref(child)) || []),
+    ])
+    .filter((h): h is string => Boolean(h));
+
+  const isChildActive = (href?: string) => {
+    if (!href) return false;
+    const targetHref = href === "/admin" && defaultRoute !== "/admin" ? defaultRoute : href;
+    if (path === targetHref) return true;
+    if (targetHref === "/admin/fleet/vehicle-account-assignments") {
+      return path === "/admin/fleet/vehicle-account-assignments";
+    }
+    if (targetHref === "/admin/maintenance" || targetHref === "/admin/maintenance/dashboard") {
+      return path === "/admin/maintenance" || path === "/admin/maintenance/dashboard";
+    }
+    if (!path.startsWith(`${targetHref}/`)) return false;
+    return !allHrefs.some(
+      (otherHref) =>
+        otherHref !== targetHref &&
+        otherHref.length > targetHref.length &&
+        (path === otherHref || path.startsWith(`${otherHref}/`))
+    );
+  };
+
+  const findActiveParentKey = () => {
+    const parent = navigation.find(
+      (item) =>
+        permitted(item, role, can) &&
+        item.children?.some(
+          (child) => permitted(child, role, can) && isChildActive(resolveItemHref(child)),
+        ),
+    );
+    return parent ? (parent.labelKey || parent.label) : null;
+  };
+
+  // Accordion rule: only one nav can be open at a time
+  const [openKey, setOpenKey] = useState<string | null>(() => findActiveParentKey());
+
+  useEffect(() => {
+    if (isLoading) return;
+    setOpenKey(findActiveParentKey());
+  }, [path, defaultRoute, isLoading]);
 
   // Hover state with grace period for collapsed flyout menu
   const [hoveredFlyoutKey, setHoveredFlyoutKey] = useState<string | null>(null);
@@ -70,35 +117,13 @@ export function Sidebar({
     };
   }, []);
 
-  const resolveItemHref = (item: NavItem) => {
-    if (item.labelKey === "nav.dashboard") return defaultRoute;
-    return item.href;
-  };
-
-  const allHrefs = navigation
-    .flatMap((item) => [
-      resolveItemHref(item),
-      ...(item.children?.map((child) => resolveItemHref(child)) || []),
-    ])
-    .filter((h): h is string => Boolean(h));
-
-  const isChildActive = (href?: string) => {
-    if (!href) return false;
-    const targetHref = href === "/admin" && defaultRoute !== "/admin" ? defaultRoute : href;
-    if (path === targetHref) return true;
-    if (targetHref === "/admin/fleet/vehicle-account-assignments") {
-      return path === "/admin/fleet/vehicle-account-assignments";
+  const handleToggleNav = (itemKey: string) => {
+    if (collapsed) {
+      setCollapsed(false);
+      setOpenKey(itemKey);
+    } else {
+      setOpenKey((prev) => (prev === itemKey ? null : itemKey));
     }
-    if (targetHref === "/admin/maintenance" || targetHref === "/admin/maintenance/dashboard") {
-      return path === "/admin/maintenance" || path === "/admin/maintenance/dashboard";
-    }
-    if (!path.startsWith(`${targetHref}/`)) return false;
-    return !allHrefs.some(
-      (otherHref) =>
-        otherHref !== targetHref &&
-        otherHref.length > targetHref.length &&
-        (path === otherHref || path.startsWith(`${otherHref}/`))
-    );
   };
 
   const items =
@@ -201,13 +226,7 @@ export function Sidebar({
                 );
 
               // Parent item with sub-menu
-              const hasActiveChild = children.some((child) =>
-                isChildActive(resolveItemHref(child)),
-              );
-              const isOpen =
-                expandedOverrides[itemKey] !== undefined
-                  ? expandedOverrides[itemKey]
-                  : hasActiveChild;
+              const isOpen = openKey === itemKey;
 
               const isFlyoutOpen = collapsed && hoveredFlyoutKey === itemKey;
               const isLowerItem = index >= items.length - 3;
@@ -225,20 +244,7 @@ export function Sidebar({
                 >
                   <button
                     type="button"
-                    onClick={() => {
-                      if (collapsed) {
-                        setCollapsed(false);
-                        setExpandedOverrides((current) => ({
-                          ...current,
-                          [itemKey]: true,
-                        }));
-                      } else {
-                        setExpandedOverrides((current) => ({
-                          ...current,
-                          [itemKey]: !isOpen,
-                        }));
-                      }
-                    }}
+                    onClick={() => handleToggleNav(itemKey)}
                     aria-expanded={isOpen}
                     className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-right text-sm font-bold transition-colors ${
                       active

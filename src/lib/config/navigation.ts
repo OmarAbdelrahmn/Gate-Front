@@ -155,14 +155,6 @@ export const navigation: NavItem[] = [
         permission: "leave_requests.read",
       },
       {
-        label: "طلبات تغيير الحالة",
-        labelKey: "nav.statusChangeRequests",
-        href: "/admin/hr/employee-status-change-requests",
-        icon: ClipboardList,
-        roles: ["admin", "manager", "member", "accountant"],
-        permission: "employee_status_changes.read",
-      },
-      {
         label: "نماذج الموارد البشرية",
         labelKey: "nav.hrForms",
         href: "/admin/hr/forms",
