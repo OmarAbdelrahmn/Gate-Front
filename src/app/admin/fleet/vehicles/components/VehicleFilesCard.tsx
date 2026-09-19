@@ -6,6 +6,8 @@ import {
   uploadVehicleFile,
   downloadVehicleFile,
   getVehicleFileVersions,
+  renewVehicleOperationCard,
+  getVehicleOperationCards,
 } from "@/lib/fleet/api";
 import { authPreviewBlob } from "@/lib/auth/api";
 import {
@@ -13,6 +15,8 @@ import {
   VehicleRegistrationType,
   type VehicleAttachmentResponse,
   type VehicleAttachmentVersionResponse,
+  type VehicleOperationCardRequest,
+  type VehicleOperationCardResponse,
 } from "@/lib/fleet/types";
 import { formatVehicleFileKind } from "@/lib/fleet/formatters";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -20,6 +24,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
 import { toast } from "@/components/ui/Toast";
 import {
   FileText,
@@ -32,11 +37,26 @@ import {
   RefreshCw,
   Eye,
   Loader2,
+  X,
+  Edit3,
+  CheckCircle2,
 } from "lucide-react";
+
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toISOString().split("T")[0];
+  } catch {
+    return dateStr;
+  }
+}
 
 interface Props {
   vehicleId: string;
   registrationType?: VehicleRegistrationType | number | null;
+  onComplianceUpdated?: () => void;
 }
 
 interface SlotItem {
@@ -56,11 +76,24 @@ const FILE_SLOTS: SlotItem[] = [
   { kind: VehicleFileKind.RightImage, kindName: "RightImage", label: "صورة الجانب الأيمن", isPhoto: true, requiresPublicTransport: false },
 ];
 
-export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
+export function VehicleFilesCard({ vehicleId, registrationType, onComplianceUpdated }: Props) {
   const { can } = useAuth();
   const [files, setFiles] = useState<VehicleAttachmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadingKind, setUploadingKind] = useState<string | null>(null);
+
+  // Operation Card State & Modal
+  const [currentOpCard, setCurrentOpCard] = useState<VehicleOperationCardResponse | null>(null);
+  const [isOpCardModalOpen, setIsOpCardModalOpen] = useState(false);
+  const [opCardFile, setOpCardFile] = useState<File | null>(null);
+  const [submittingOpCard, setSubmittingOpCard] = useState(false);
+  const [opCardForm, setOpCardForm] = useState<VehicleOperationCardRequest>({
+    cardNumber: "",
+    issuingAuthority: "الهيئة العامة للنقل",
+    issueDate: new Date().toISOString().split("T")[0],
+    expiryDate: "",
+    notes: "",
+  });
 
   // Version History Modal
   const [selectedAttachment, setSelectedAttachment] = useState<VehicleAttachmentResponse | null>(null);
@@ -110,9 +143,80 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
     }
   };
 
+  const loadOpCard = async () => {
+    if (!vehicleId) return;
+    try {
+      const res = await getVehicleOperationCards(vehicleId);
+      if (res && res.length > 0) {
+        const current = res.find((c) => c.isCurrent) || res[0];
+        setCurrentOpCard(current);
+        setOpCardForm({
+          cardNumber: current.cardNumber || "",
+          issuingAuthority: current.issuingAuthority || "الهيئة العامة للنقل",
+          issueDate: current.issueDate ? current.issueDate.split("T")[0] : new Date().toISOString().split("T")[0],
+          expiryDate: current.expiryDate ? current.expiryDate.split("T")[0] : "",
+          notes: current.notes || "",
+        });
+      }
+    } catch (e) {
+      console.error("Failed to load operation cards:", e);
+    }
+  };
+
+  const handleOpCardSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!opCardForm.cardNumber.trim()) {
+      toast.error("خطأ في البيانات", "يرجى إدخال رقم كرت التشغيل");
+      return;
+    }
+    if (!opCardForm.issueDate || !opCardForm.expiryDate) {
+      toast.error("خطأ في البيانات", "يرجى اختيار تاريخ البداية وتاريخ الانتهاء");
+      return;
+    }
+    if (opCardFile && opCardFile.size > 10 * 1024 * 1024) {
+      toast.error("الملف كبير جداً", "الحجم الأقصى المسموح به للملف هو 10 ميجابايت.");
+      return;
+    }
+
+    setSubmittingOpCard(true);
+    try {
+      await renewVehicleOperationCard(vehicleId, {
+        cardNumber: opCardForm.cardNumber.trim(),
+        issuingAuthority: opCardForm.issuingAuthority?.trim() || null,
+        issueDate: opCardForm.issueDate,
+        expiryDate: opCardForm.expiryDate,
+        notes: opCardForm.notes?.trim() || null,
+      });
+
+      if (opCardFile) {
+        const formData = new FormData();
+        formData.append("file", opCardFile);
+        await uploadVehicleFile(vehicleId, "OperationCard", formData);
+      }
+
+      toast.success("تم بنجاح", "تم حفظ بيانات كرت التشغيل وتحديث الملف بنجاح.");
+      setIsOpCardModalOpen(false);
+      setOpCardFile(null);
+      setPreviews({});
+      await loadFiles();
+      await loadOpCard();
+      onComplianceUpdated?.();
+    } catch (err: any) {
+      console.error("Failed to update operation card:", err);
+      toast.error("فشل التحديث", err?.message || "حدث خطأ أثناء حفظ بيانات كرت التشغيل.");
+    } finally {
+      setSubmittingOpCard(false);
+    }
+  };
+
   useEffect(() => {
-    if (vehicleId) loadFiles();
-  }, [vehicleId]);
+    if (vehicleId) {
+      loadFiles();
+      if (isPublicTransport) {
+        loadOpCard();
+      }
+    }
+  }, [vehicleId, isPublicTransport]);
 
   useEffect(() => {
     if (!files || !files.length) return;
@@ -359,29 +463,89 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
                     <span>لم يتم رفع الملف بعد</span>
                   </div>
                 ) : null}
+
+                {/* Operation Card Details Card in Slot */}
+                {slot.kind === VehicleFileKind.OperationCard && isPublicTransport && currentOpCard && (
+                  <div className="mt-3 p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 dark:text-slate-400">رقم الكرت:</span>
+                      <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">{currentOpCard.cardNumber}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 dark:text-slate-400">تاريخ البداية (الإصدار):</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{formatDate(currentOpCard.issueDate)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 dark:text-slate-400">تاريخ النهاية (الانتهاء):</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{formatDate(currentOpCard.expiryDate)}</span>
+                    </div>
+                    {currentOpCard.issuingAuthority && (
+                      <div className="flex justify-between items-center text-[11px] text-slate-400">
+                        <span>جهة الإصدار:</span>
+                        <span>{currentOpCard.issuingAuthority}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Action Toolbar */}
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between gap-2">
                 {can("fleet.files.upload") && !isDisabledSlot && (
-                  <label className={`cursor-pointer inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
-                    isUploading
-                      ? "opacity-50 pointer-events-none"
-                      : "bg-[#1167c9] text-white hover:bg-[#0e56a8] border-transparent shadow-sm"
-                  }`}>
-                    <UploadCloud className="h-3.5 w-3.5" />
-                    <span>{isUploading ? "جارٍ الرفع..." : att ? "استبدال" : "رفع ملف"}</span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept={slot.isPhoto ? "image/*" : ".pdf,.jpg,.jpeg,.png"}
-                      disabled={isUploading}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleFileUpload(slot, f);
-                      }}
-                    />
-                  </label>
+                  slot.kind === VehicleFileKind.OperationCard ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <label className={`cursor-pointer inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                        isUploading || submittingOpCard
+                          ? "opacity-50 pointer-events-none"
+                          : "bg-[#1167c9] text-white hover:bg-[#0e56a8] border-transparent shadow-sm"
+                      }`}>
+                        <UploadCloud className="h-3.5 w-3.5" />
+                        <span>{submittingOpCard ? "جارٍ الحفظ..." : att ? "استبدال الملف والبيانات" : "رفع الملف والبيانات"}</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          disabled={isUploading || submittingOpCard}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setOpCardFile(f);
+                              setIsOpCardModalOpen(true);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                      </label>
+                      <Button
+                        variant="secondary"
+                        className="text-xs px-2.5 py-1.5 h-auto min-h-0 gap-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 border-slate-200 dark:border-slate-700"
+                        onClick={() => setIsOpCardModalOpen(true)}
+                        title="تعديل أرقام وتواريخ كرت التشغيل"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        <span>تعديل البيانات</span>
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className={`cursor-pointer inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                      isUploading
+                        ? "opacity-50 pointer-events-none"
+                        : "bg-[#1167c9] text-white hover:bg-[#0e56a8] border-transparent shadow-sm"
+                    }`}>
+                      <UploadCloud className="h-3.5 w-3.5" />
+                      <span>{isUploading ? "جارٍ الرفع..." : att ? "استبدال" : "رفع ملف"}</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept={slot.isPhoto ? "image/*" : ".pdf,.jpg,.jpeg,.png"}
+                        disabled={isUploading}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFileUpload(slot, f);
+                        }}
+                      />
+                    </label>
+                  )
                 )}
 
                 {att && (
@@ -555,6 +719,167 @@ export function VehicleFilesCard({ vehicleId, registrationType }: Props) {
               </Button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Operation Card Modal */}
+      {isOpCardModalOpen && (
+        <Modal
+          isOpen={isOpCardModalOpen}
+          onClose={() => {
+            if (!submittingOpCard) {
+              setIsOpCardModalOpen(false);
+              setOpCardFile(null);
+            }
+          }}
+          title="بيانات وملف كرت التشغيل (النقل العام)"
+          maxWidth="max-w-lg"
+        >
+          <form onSubmit={handleOpCardSubmit} className="space-y-4 pt-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                ملف كرت التشغيل (المستند)
+              </label>
+              {opCardFile ? (
+                <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20 p-3">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <FileText className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <div className="truncate text-right">
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                        {opCardFile.name}
+                      </div>
+                      <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">
+                        {(opCardFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer text-xs text-[#1167c9] hover:underline font-bold">
+                      تغيير
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) setOpCardFile(f);
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setOpCardFile(null)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                      title="إزالة الملف"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 p-4 text-center cursor-pointer hover:border-[#1167c9] hover:bg-blue-50/30 transition-all">
+                  <UploadCloud className="h-6 w-6 text-[#1167c9] mb-1" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    اضغط لاختيار ملف كرت التشغيل (PDF أو صورة)
+                  </span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">
+                    (حد أقصى 10 ميجابايت - اختياري إذا كنت تقوم بتحديث البيانات فقط)
+                  </span>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setOpCardFile(f);
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  رقم كرت التشغيل <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={opCardForm.cardNumber}
+                  onChange={(e) => setOpCardForm({ ...opCardForm, cardNumber: e.target.value })}
+                  placeholder="مثال: OPC-998877"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  تاريخ البداية (الإصدار) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="date"
+                  value={opCardForm.issueDate}
+                  onChange={(e) => setOpCardForm({ ...opCardForm, issueDate: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  تاريخ النهاية (الانتهاء) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="date"
+                  value={opCardForm.expiryDate}
+                  onChange={(e) => setOpCardForm({ ...opCardForm, expiryDate: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  جهة الإصدار
+                </label>
+                <Input
+                  value={opCardForm.issuingAuthority || ""}
+                  onChange={(e) => setOpCardForm({ ...opCardForm, issuingAuthority: e.target.value })}
+                  placeholder="مثال: الهيئة العامة للنقل"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  ملاحظات
+                </label>
+                <Input
+                  value={opCardForm.notes || ""}
+                  onChange={(e) => setOpCardForm({ ...opCardForm, notes: e.target.value })}
+                  placeholder="ملاحظات اختيارية..."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setIsOpCardModalOpen(false);
+                  setOpCardFile(null);
+                }}
+                disabled={submittingOpCard}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                disabled={submittingOpCard}
+                className="bg-[#1167c9] hover:bg-[#0e56a8] text-white gap-2"
+              >
+                {submittingOpCard ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                <span>{submittingOpCard ? "جارٍ الحفظ والرفع..." : "حفظ وتأكيد كرت التشغيل"}</span>
+              </Button>
+            </div>
+          </form>
         </Modal>
       )}
     </Card>

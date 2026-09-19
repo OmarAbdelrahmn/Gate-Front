@@ -3,11 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicleComplianceDue, getVehicles } from "@/lib/fleet/api";
-import { VehicleComplianceDueStatus, type VehicleComplianceDueResponse, type VehicleSummaryResponse } from "@/lib/fleet/types";
+import {
+  VehicleComplianceDueStatus,
+  VehicleRegistrationType,
+  type VehicleComplianceDueResponse,
+  type VehicleSummaryResponse,
+} from "@/lib/fleet/types";
+import { formatVehicleRegistrationType } from "@/lib/fleet/formatters";
+import { TableHeaderColumnFilter, type FilterOption } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
-import { ShieldCheck, RefreshCw, AlertTriangle, Filter, Search } from "lucide-react";
+import { ShieldCheck, RefreshCw, AlertTriangle, Filter, Search, X } from "lucide-react";
 import Link from "next/link";
 
 function formatDate(dateStr?: string | null): string {
@@ -29,30 +36,110 @@ export default function CompliancePage() {
   const [error, setError] = useState<string | null>(null);
   const [checkDate, setCheckDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [search, setSearch] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [registrationFilter, setRegistrationFilter] = useState("");
+  const [docTypeFilter, setDocTypeFilter] = useState("");
+
+  const COMPLIANCE_FILTERS_SESSION_KEY = "admin_fleet_compliance_filters_session";
+  const [isRestored, setIsRestored] = useState(false);
+
+  // Restore filters on mount for the current session (like vehicles/employees table)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(COMPLIANCE_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string" && parsed.search) setSearch(parsed.search);
+        if (typeof parsed.modelFilter === "string" && parsed.modelFilter) setModelFilter(parsed.modelFilter);
+        if (typeof parsed.registrationFilter === "string" && parsed.registrationFilter) setRegistrationFilter(parsed.registrationFilter);
+        if (typeof parsed.docTypeFilter === "string" && parsed.docTypeFilter) setDocTypeFilter(parsed.docTypeFilter);
+      }
+    } catch {
+      // ignore JSON parse or sessionStorage errors
+    } finally {
+      setIsRestored(true);
+    }
+  }, []);
+
+  // Save filters to sessionStorage whenever filters change (only after initial restoration)
+  useEffect(() => {
+    if (!isRestored) return;
+    try {
+      if (search || modelFilter || registrationFilter || docTypeFilter) {
+        sessionStorage.setItem(
+          COMPLIANCE_FILTERS_SESSION_KEY,
+          JSON.stringify({
+            search,
+            modelFilter,
+            registrationFilter,
+            docTypeFilter,
+          })
+        );
+      } else {
+        sessionStorage.removeItem(COMPLIANCE_FILTERS_SESSION_KEY);
+      }
+    } catch {
+      // ignore sessionStorage errors
+    }
+  }, [isRestored, search, modelFilter, registrationFilter, docTypeFilter]);
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setModelFilter("");
+    setRegistrationFilter("");
+    setDocTypeFilter("");
+    try {
+      sessionStorage.removeItem(COMPLIANCE_FILTERS_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [res, vehiclesRes] = await Promise.allSettled([
+      const [dueData, firstVehiclesRes] = await Promise.all([
         getVehicleComplianceDue(checkDate || undefined),
-        getVehicles({ pageSize: 1000 }),
+        getVehicles({ pageSize: 200 }).catch((err) => {
+          console.warn("Failed to load vehicles list:", err);
+          return null;
+        }),
       ]);
 
-      if (vehiclesRes.status === "fulfilled" && vehiclesRes.value?.items) {
+      if (firstVehiclesRes?.items) {
+        let allVehicles: VehicleSummaryResponse[] = [...firstVehiclesRes.items];
+        const totalCount = firstVehiclesRes.totalCount ?? allVehicles.length;
+        const pageSize = firstVehiclesRes.pageSize || 200;
+
+        if (totalCount > allVehicles.length) {
+          const totalPages = Math.ceil(totalCount / pageSize);
+          const pagePromises: Promise<any>[] = [];
+          for (let p = 2; p <= totalPages; p++) {
+            pagePromises.push(
+              getVehicles({ page: p, pageSize }).catch((err) => {
+                console.warn(`Failed to load vehicles page ${p}:`, err);
+                return null;
+              })
+            );
+          }
+          const remaining = await Promise.all(pagePromises);
+          for (const r of remaining) {
+            if (r?.items) {
+              allVehicles = allVehicles.concat(r.items);
+            }
+          }
+        }
+
         const vMap: Record<string, VehicleSummaryResponse> = {};
-        vehiclesRes.value.items.forEach((v) => {
+        allVehicles.forEach((v) => {
           if (v.id) vMap[v.id] = v;
         });
         setVehiclesMap(vMap);
       }
 
-      if (res.status === "fulfilled") {
-        console.log("Compliance Due API Response:", res.value);
-        setData(res.value || []);
-      } else {
-        throw res.reason;
-      }
+      console.log("Compliance Due API Response:", dueData);
+      setData(dueData || []);
     } catch (e: any) {
       console.error("Failed to load compliance data:", e);
       setError(e?.message || "تعذر جلب بيانات متابعة تجديد التراخيص.");
@@ -106,46 +193,210 @@ export default function CompliancePage() {
     return list;
   }, [data]);
 
+  const modelOptions = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number; vehicleIds: Set<string> }>();
+
+    for (const item of displayItems) {
+      const v = vehiclesMap[item.vehicleId];
+      if (!v) continue;
+      const mfg = (v.manufacturer || "").trim();
+      const mdl = (v.model || "").trim();
+      const label = [mfg, mdl].filter(Boolean).join(" ").trim();
+      if (!label) continue;
+
+      const existing = counts.get(label);
+      if (existing) {
+        existing.count += 1;
+        existing.vehicleIds.add(item.vehicleId);
+      } else {
+        counts.set(label, { label, count: 1, vehicleIds: new Set([item.vehicleId]) });
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1].count - a[1].count);
+
+    for (const [key, item] of sorted) {
+      opts.push({
+        value: key,
+        label: item.label,
+        sublabel: `${item.vehicleIds.size} مركبة (${item.count} تنبيه)`,
+        count: item.count,
+      });
+    }
+
+    if (modelFilter && !opts.some((o) => o.value === modelFilter)) {
+      opts.push({
+        value: modelFilter,
+        label: modelFilter,
+      });
+    }
+
+    return opts;
+  }, [displayItems, vehiclesMap, modelFilter]);
+
+  const registrationTypeOptions = useMemo(() => {
+    const counts = new Map<string, { count: number; vehicleIds: Set<string> }>();
+
+    for (const item of displayItems) {
+      const v = vehiclesMap[item.vehicleId];
+      if (!v || v.registrationType === undefined || v.registrationType === null) continue;
+      const key = String(v.registrationType);
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.vehicleIds.add(item.vehicleId);
+      } else {
+        counts.set(key, { count: 1, vehicleIds: new Set([item.vehicleId]) });
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+    const sortedTypes = Array.from(counts.entries()).sort((a, b) => b[1].count - a[1].count);
+
+    for (const [typeKey, d] of sortedTypes) {
+      const num = Number(typeKey);
+      const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
+      opts.push({
+        value: typeKey,
+        label,
+        sublabel: `${d.vehicleIds.size} مركبة (${d.count} تنبيه)`,
+      });
+    }
+
+    if (registrationFilter && !opts.some((o) => o.value === registrationFilter)) {
+      const num = Number(registrationFilter);
+      const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
+      opts.push({
+        value: registrationFilter,
+        label,
+      });
+    }
+
+    return opts;
+  }, [displayItems, vehiclesMap, registrationFilter]);
+
+  const getDocTypeInfo = (type: string): { key: string; label: string } => {
+    switch (type) {
+      case "Registration":
+      case "Istimara":
+        return { key: "Istimara", label: "استمارة سير" };
+      case "InsurancePolicy":
+      case "Insurance":
+        return { key: "Insurance", label: "بوليصة تأمين" };
+      case "Inspection":
+      case "Fahs":
+        return { key: "Inspection", label: "فحص دوري" };
+      case "OperationCard":
+        return { key: "OperationCard", label: "كرت تشغيل" };
+      case "Permit":
+      case "Permission":
+      case "VehiclePermit":
+      case "RiderPermit":
+        return { key: "Permit", label: "تصريح / تفويض" };
+      default:
+        return { key: type, label: type };
+    }
+  };
+
+  const docTypeOptions = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+
+    for (const item of displayItems) {
+      const { key, label } = getDocTypeInfo(item.type);
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(key, { label, count: 1 });
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1].count - a[1].count);
+
+    for (const [key, d] of sorted) {
+      opts.push({
+        value: key,
+        label: d.label,
+        sublabel: `${d.count} تنبيه`,
+        count: d.count,
+      });
+    }
+
+    if (docTypeFilter && !opts.some((o) => o.value === docTypeFilter)) {
+      const { label } = getDocTypeInfo(docTypeFilter);
+      opts.push({
+        value: docTypeFilter,
+        label,
+      });
+    }
+
+    return opts;
+  }, [displayItems, docTypeFilter]);
+
   const filtered = useMemo(() => {
     return displayItems.filter((item) => {
+      const v = vehiclesMap[item.vehicleId];
+
+      if (modelFilter) {
+        const mfg = (v?.manufacturer || "").trim();
+        const mdl = (v?.model || "").trim();
+        const label = [mfg, mdl].filter(Boolean).join(" ").trim();
+        if (label !== modelFilter) return false;
+      }
+
+      if (registrationFilter) {
+        if (v?.registrationType === undefined || v?.registrationType === null) return false;
+        if (String(v.registrationType) !== registrationFilter) return false;
+      }
+
+      if (docTypeFilter) {
+        const { key } = getDocTypeInfo(item.type);
+        if (key !== docTypeFilter) return false;
+      }
+
       if (!search) return true;
       const searchLower = search.trim().toLowerCase();
-      const v = vehiclesMap[item.vehicleId];
       const plateAr = item.plateNumberAr || item.plateNumber || v?.plateNumberAr || "";
       const plateEn = item.plateNumberEn || v?.plateNumberEn || "";
       const plateCombined = v?.plateLettersAr && v?.plateDigits ? `${v.plateLettersAr} ${v.plateDigits}` : "";
       const serial = item.serialNumber || v?.serialNumber || v?.chassisNumber || "";
       const asset = item.assetNumber || "";
+      const mfg = v?.manufacturer || "";
+      const mdl = v?.model || "";
 
       return (
         plateAr.toLowerCase().includes(searchLower) ||
         plateEn.toLowerCase().includes(searchLower) ||
         plateCombined.toLowerCase().includes(searchLower) ||
         serial.toLowerCase().includes(searchLower) ||
-        asset.toLowerCase().includes(searchLower)
+        asset.toLowerCase().includes(searchLower) ||
+        mfg.toLowerCase().includes(searchLower) ||
+        mdl.toLowerCase().includes(searchLower)
       );
     });
-  }, [displayItems, search, vehiclesMap]);
+  }, [displayItems, search, vehiclesMap, modelFilter, registrationFilter, docTypeFilter]);
 
   const expiredOrMissingCount = useMemo(() => {
-    return displayItems.filter(
+    return filtered.filter(
       (i) =>
         (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.Expired ||
         (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.Missing
     ).length;
-  }, [displayItems]);
+  }, [filtered]);
 
   const dueTodayCount = useMemo(() => {
-    return displayItems.filter(
+    return filtered.filter(
       (i) => (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.DueToday
     ).length;
-  }, [displayItems]);
+  }, [filtered]);
 
   const upcomingCount = useMemo(() => {
-    return displayItems.filter(
+    return filtered.filter(
       (i) => (i.status ?? i.permitStatus) === VehicleComplianceDueStatus.Upcoming
     ).length;
-  }, [displayItems]);
+  }, [filtered]);
 
   if (!can("fleet.compliance.read")) {
     return (
@@ -174,26 +425,7 @@ export default function CompliancePage() {
   };
 
   const getDocTypeName = (type: string) => {
-    switch (type) {
-      case "Registration":
-      case "Istimara":
-        return "استمارة سير";
-      case "InsurancePolicy":
-      case "Insurance":
-        return "بوليصة تأمين";
-      case "Inspection":
-      case "Fahs":
-        return "فحص دوري";
-      case "OperationCard":
-        return "كرت تشغيل";
-      case "Permit":
-      case "Permission":
-      case "VehiclePermit":
-      case "RiderPermit":
-        return "تصريح / تفويض";
-      default:
-        return type;
-    }
+    return getDocTypeInfo(type).label;
   };
 
   return (
@@ -210,29 +442,63 @@ export default function CompliancePage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
-            <Filter className="h-4 w-4" /> فحص الرصيد لتاريخ:
+      <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <Filter className="h-4 w-4" /> فحص الرصيد لتاريخ:
+            </div>
+            <div>
+              <Input type="date" value={checkDate} onChange={(e) => setCheckDate(e.target.value)} />
+            </div>
           </div>
-          <div>
-            <Input type="date" value={checkDate} onChange={(e) => setCheckDate(e.target.value)} />
+          <div className="flex flex-1 min-w-[280px] gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="بحث برقم اللوحة أو الموديل أو الصانع أو الرقم التسلسلي..."
+                className="pr-10"
+              />
+            </div>
+            <Button variant="secondary" onClick={loadData} disabled={loading} className="px-3">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> تحديث
+            </Button>
           </div>
         </div>
-        <div className="flex flex-1 min-w-[280px] gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث برقم اللوحة أو الرقم التسلسلي..."
-              className="pr-10"
-            />
+
+        {/* Active Filters Bar */}
+        {(modelFilter || registrationFilter || docTypeFilter) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border)] text-xs">
+            <span className="text-[var(--muted)] text-[11px] font-semibold ml-1">الفلاتر النشطة:</span>
+            {modelFilter && (
+              <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
+                الموديل: {modelFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setModelFilter("")} />
+              </Badge>
+            )}
+            {registrationFilter && (
+              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 gap-1 pl-1.5 font-medium">
+                نوع التسجيل: {formatVehicleRegistrationType(Number(registrationFilter) as VehicleRegistrationType)}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistrationFilter("")} />
+              </Badge>
+            )}
+            {docTypeFilter && (
+              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 gap-1 pl-1.5 font-medium">
+                نوع الوثيقة: {docTypeOptions.find((o) => o.value === docTypeFilter)?.label || docTypeFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setDocTypeFilter("")} />
+              </Badge>
+            )}
+            <Button
+              variant="secondary"
+              onClick={clearAllFilters}
+              className="gap-1.5 text-xs h-7 min-h-0 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 dark:border-rose-900/50 dark:hover:bg-rose-950/30 mr-auto"
+            >
+              <RefreshCw className="h-3 w-3" /> مسح الفلاتر
+            </Button>
           </div>
-          <Button variant="secondary" onClick={loadData} disabled={loading} className="px-3">
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> تحديث
-          </Button>
-        </div>
+        )}
       </div>
 
       {error && (
@@ -269,18 +535,66 @@ export default function CompliancePage() {
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-[var(--muted)]">
             <ShieldCheck className="mx-auto mb-3 h-12 w-12 opacity-30" />
-            <p className="text-lg font-bold">جميع التراخيص سارية أو لا توجد تنبيهات</p>
+            <p className="text-lg font-bold">
+              {search || modelFilter || registrationFilter || docTypeFilter
+                ? "لا توجد تنبيهات مطابقة لمعايير البحث والتصفية"
+                : "جميع التراخيص سارية أو لا توجد تنبيهات"}
+            </p>
+            {(search || modelFilter || registrationFilter || docTypeFilter) && (
+              <Button
+                variant="secondary"
+                className="mt-4 gap-1 text-xs px-3 py-1.5 mx-auto"
+                onClick={clearAllFilters}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية والبحث
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">اللوحة / الرقم التسلسلي</th>
-                  <th className="px-6 py-4">نوع الوثيقة</th>
-                  <th className="px-6 py-4">تاريخ الانتهاء</th>
-                  <th className="px-6 py-4">الحالة</th>
-                  <th className="px-6 py-4 text-center">إجراء</th>
+                  <th className="px-6 py-4 whitespace-nowrap">اللوحة / الرقم التسلسلي</th>
+                  <th className="px-6 py-4 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>الموديل / الصانع</span>
+                      <TableHeaderColumnFilter
+                        label="الموديل"
+                        value={modelFilter}
+                        onChange={setModelFilter}
+                        options={modelOptions}
+                        placeholder="تصفية بالموديل..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>نوع التسجيل</span>
+                      <TableHeaderColumnFilter
+                        label="نوع التسجيل"
+                        value={registrationFilter}
+                        onChange={setRegistrationFilter}
+                        options={registrationTypeOptions}
+                        placeholder="تصفية بنوع التسجيل..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>نوع الوثيقة</span>
+                      <TableHeaderColumnFilter
+                        label="نوع الوثيقة"
+                        value={docTypeFilter}
+                        onChange={setDocTypeFilter}
+                        options={docTypeOptions}
+                        placeholder="تصفية بنوع الوثيقة..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 whitespace-nowrap">تاريخ الانتهاء</th>
+                  <th className="px-6 py-4 whitespace-nowrap">الحالة</th>
+                  <th className="px-6 py-4 text-center whitespace-nowrap">إجراء</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -324,6 +638,42 @@ export default function CompliancePage() {
                               </span>
                             </div>
                           </Link>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const v = vehiclesMap[item.vehicleId];
+                        const mfg = v?.manufacturer?.trim() || "";
+                        const mdl = v?.model?.trim() || "";
+                        const fullModel = [mfg, mdl].filter(Boolean).join(" ");
+                        return fullModel ? (
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{fullModel}</span>
+                        ) : (
+                          <span className="text-xs text-[var(--muted)]">—</span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const v = vehiclesMap[item.vehicleId];
+                        if (v?.registrationType === undefined || v?.registrationType === null) {
+                          return <span className="text-xs text-[var(--muted)]">—</span>;
+                        }
+                        return (
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                              v.registrationType === VehicleRegistrationType.PublicTransport ||
+                              Number(v.registrationType) === VehicleRegistrationType.PublicTransport
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                                : v.registrationType === VehicleRegistrationType.PrivateTransport ||
+                                  Number(v.registrationType) === VehicleRegistrationType.PrivateTransport
+                                ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                                : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                            }`}
+                          >
+                            {formatVehicleRegistrationType(v.registrationType)}
+                          </span>
                         );
                       })()}
                     </td>

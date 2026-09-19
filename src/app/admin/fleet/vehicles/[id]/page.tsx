@@ -78,7 +78,7 @@ export default function VehicleDetailPage() {
   const [isComplianceOpen, setIsComplianceOpen] = useState(false);
   const [isTransitionOpen, setIsTransitionOpen] = useState(false);
   const [isOpCardHistoryOpen, setIsOpCardHistoryOpen] = useState(false);
-  const [complianceType, setComplianceType] = useState<ComplianceTabType>("Registration");
+  const [complianceType, setComplianceType] = useState<ComplianceTabType>("InsurancePolicy");
   const [selectedIssue, setSelectedIssue] = useState<VehicleIssueSummaryResponse | null>(null);
   const [isFinancingTransferOpen, setIsFinancingTransferOpen] = useState(false);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState(false);
@@ -208,7 +208,6 @@ export default function VehicleDetailPage() {
     Number(regType) === VehicleRegistrationType.PublicBus;
 
   const complianceItems: { label: string; type: ComplianceTabType; date?: string | null; status?: VehicleComplianceDueStatus | number | null }[] = [
-    { label: "استمارة السير", type: "Registration", date: summary.registrationExpiryDate, status: summary.registrationStatus },
     { label: "بوليصة التأمين", type: "InsurancePolicy", date: summary.insuranceExpiryDate, status: summary.insuranceStatus },
     { label: "الفحص الدوري", type: "Inspection", date: summary.inspectionExpiryDate, status: summary.inspectionStatus },
   ];
@@ -487,7 +486,11 @@ export default function VehicleDetailPage() {
           </Card>
 
           {/* Documents and Files */}
-          <VehicleFilesCard vehicleId={id} registrationType={vehicle.registrationType} />
+          <VehicleFilesCard
+            vehicleId={id}
+            registrationType={vehicle.registrationType || summary.registrationType}
+            onComplianceUpdated={loadData}
+          />
         </div>
 
         {/* Right Column - Status & Links */}
