@@ -421,6 +421,10 @@ export type ExpiryComplianceItem = {
   daysRemaining: number | null;
   dueStatus: DueStatusEnum;
   employeeDocumentId: string | null;
+  iqamaNo?: string | null;
+  iqamaNumber?: string | null;
+  employeeIqamaNo?: string | null;
+  nationalId?: string | null;
 };
 
 export type ExpiryComplianceSummary = {

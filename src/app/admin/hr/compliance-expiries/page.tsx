@@ -10,6 +10,7 @@ import {
   Clock,
   Eye,
   FileQuestion,
+  FileSpreadsheet,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   getComplianceExpiries,
+  type ExpiryComplianceItem,
   type ExpiryComplianceResponse,
   type ExpiryComplianceSummary,
 } from "../../../../lib/workforce/compliance-api";
@@ -25,13 +27,20 @@ import {
   getDocumentTypes,
   type DocumentType,
 } from "../../../../lib/workforce/documents-api";
-import { listSponsors, type Sponsor } from "../../../../lib/workforce/api";
+import {
+  listSponsors,
+  listEmployees,
+  listRiders,
+  type Sponsor,
+} from "../../../../lib/workforce/api";
+import type { Employee, Rider } from "../../../../lib/workforce/types";
 import { hrCatalogApi, type HrRow } from "../../../../lib/hr/api";
 import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { SearchableSelect } from "../../../../components/ui/SearchableSelect";
+import { toast } from "../../../../components/ui/Toast";
 
 function isGeneralDocument(item: { categoryNameAr?: string; categoryNameEn?: string; categoryCode?: string }) {
   const ar = (item.categoryNameAr || "").trim().toLowerCase();
@@ -242,6 +251,9 @@ export default function ExpiryCompliancePage() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [cities, setCities] = useState<HrRow[]>([]);
   const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [riders, setRiders] = useState<Rider[]>([]);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     void listSponsors().then(setSponsors).catch(() => { });
@@ -249,7 +261,56 @@ export default function ExpiryCompliancePage() {
     void getDocumentTypes()
       .then((res) => setDocumentTypes(res || []))
       .catch(() => { });
+    void listEmployees().then((res) => setEmployees(res || [])).catch(() => { });
+    void listRiders().then((res) => setRiders(res || [])).catch(() => { });
   }, []);
+
+  const employeeMap = useMemo(() => {
+    const map = new Map<string, { iqamaNo?: string | null; employeeNumber?: string | null; name?: string }>();
+    for (const emp of employees) {
+      map.set(emp.id, { iqamaNo: emp.iqamaNo, employeeNumber: emp.employeeNumber, name: emp.fullNameAr });
+    }
+    return map;
+  }, [employees]);
+
+  const riderMap = useMemo(() => {
+    const map = new Map<string, { iqamaNo?: string | null }>();
+    for (const r of riders) {
+      if (r.id) map.set(r.id, { iqamaNo: r.iqamaNo });
+      if (r.employeeId) map.set(r.employeeId, { iqamaNo: r.iqamaNo });
+    }
+    return map;
+  }, [riders]);
+
+  const getIqamaNumber = (item: ExpiryComplianceItem): string => {
+    const direct = item.iqamaNo || item.iqamaNumber || item.employeeIqamaNo || item.nationalId;
+    if (direct && String(direct).trim()) return String(direct).trim();
+
+    if (item.employeeId) {
+      const emp = employeeMap.get(item.employeeId);
+      if (emp?.iqamaNo && emp.iqamaNo.trim()) return emp.iqamaNo.trim();
+    }
+
+    if (item.riderProfileId) {
+      const rider = riderMap.get(item.riderProfileId);
+      if (rider?.iqamaNo && rider.iqamaNo.trim()) return rider.iqamaNo.trim();
+    }
+    if (item.employeeId) {
+      const rider = riderMap.get(item.employeeId);
+      if (rider?.iqamaNo && rider.iqamaNo.trim()) return rider.iqamaNo.trim();
+    }
+
+    const catCode = (item.categoryCode || "").toLowerCase();
+    const catAr = item.categoryNameAr || "";
+    if (
+      (catCode === "residencypermit" || catCode === "iqama" || catAr.includes("إقامة") || catAr.includes("اقامة")) &&
+      item.referenceMasked
+    ) {
+      return item.referenceMasked;
+    }
+
+    return "";
+  };
 
   const documentTypeOptions = useMemo(() => {
     const opts: { value: string; label: string; sublabel?: string }[] = [
@@ -384,8 +445,10 @@ export default function ExpiryCompliancePage() {
     return filtered.filter((x) => {
       const empStatus = getEmployeeStatusMeta(x.employeeStatus);
       const catFormatted = formatCategoryName(x.categoryNameAr, x.categoryNameEn, locale, documentTypes).toLowerCase();
+      const iqama = getIqamaNumber(x).toLowerCase();
       return (
         x.employeeNameAr.toLowerCase().includes(q) ||
+        iqama.includes(q) ||
         x.categoryNameAr.toLowerCase().includes(q) ||
         (x.categoryNameEn && x.categoryNameEn.toLowerCase().includes(q)) ||
         catFormatted.includes(q) ||
@@ -395,7 +458,182 @@ export default function ExpiryCompliancePage() {
         empStatus.en.toLowerCase().includes(q)
       );
     });
-  }, [data, search, sourceType, documentTypes, locale]);
+  }, [data, search, sourceType, documentTypes, locale, employeeMap, riderMap]);
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const isKnownSourceType = ["EmployeeDocument", "DriverLicense", "RiderCard", "HealthCard", "MedicalInsurance"].includes(sourceType);
+
+      // Fetch all records with current filters
+      const res = await getComplianceExpiries({
+        checkDate,
+        sourceType: isKnownSourceType ? sourceType : undefined,
+        categoryCode: !isKnownSourceType && sourceType !== "all" ? sourceType : undefined,
+        dueStatus,
+        employeeStatus,
+        operatingCityId,
+        sponsorId,
+        page: 1,
+        pageSize: 10000,
+      });
+
+      let exportItems = (res.items || []).filter((x) => !isGeneralDocument(x));
+
+      // Filter by document type / category if custom
+      if (sourceType && sourceType !== "all") {
+        const target = sourceType.trim().toLowerCase();
+        const matchedDocType = documentTypes.find(
+          (dt) =>
+            (dt.code && dt.code.toLowerCase() === target) ||
+            (dt.id && dt.id.toLowerCase() === target) ||
+            (dt.nameAr && dt.nameAr.toLowerCase() === target) ||
+            (dt.nameEn && dt.nameEn.toLowerCase() === target)
+        );
+
+        exportItems = exportItems.filter((x) => {
+          const itemCode = (x.categoryCode || "").trim().toLowerCase();
+          const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
+          const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
+          const itemSourceTypeStr = String(x.sourceType ?? "").trim().toLowerCase();
+
+          if (itemCode === target || itemNameAr === target || itemNameEn === target) return true;
+          if (itemSourceTypeStr === target) return true;
+
+          if (matchedDocType) {
+            if (matchedDocType.code && itemCode === matchedDocType.code.toLowerCase()) return true;
+            if (matchedDocType.nameAr && itemNameAr === matchedDocType.nameAr.toLowerCase()) return true;
+            if (matchedDocType.nameEn && itemNameEn === matchedDocType.nameEn.toLowerCase()) return true;
+          }
+
+          return false;
+        });
+      }
+
+      // Apply search filter if user searched
+      if (search.trim()) {
+        const q = search.toLowerCase().trim();
+        exportItems = exportItems.filter((x) => {
+          const empStatus = getEmployeeStatusMeta(x.employeeStatus);
+          const catFormatted = formatCategoryName(x.categoryNameAr, x.categoryNameEn, locale, documentTypes).toLowerCase();
+          const iqama = getIqamaNumber(x).toLowerCase();
+          return (
+            x.employeeNameAr.toLowerCase().includes(q) ||
+            iqama.includes(q) ||
+            x.categoryNameAr.toLowerCase().includes(q) ||
+            (x.categoryNameEn && x.categoryNameEn.toLowerCase().includes(q)) ||
+            catFormatted.includes(q) ||
+            (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
+            (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
+            empStatus.ar.toLowerCase().includes(q) ||
+            empStatus.en.toLowerCase().includes(q)
+          );
+        });
+      }
+
+      if (exportItems.length === 0) {
+        toast.show(
+          "warning",
+          locale === "en" ? "No records to export" : "لا توجد سجلات لتصديرها",
+          locale === "en" ? "Please adjust your filters." : "يرجى تعديل الفلاتر المحددة."
+        );
+        return;
+      }
+
+      // Dynamically import xlsx
+      const XLSX = await import("xlsx");
+
+      const rows = exportItems.map((item, idx) => {
+        const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
+        const empStatusMeta = getEmployeeStatusMeta(item.employeeStatus);
+        const docTypeMeta = getSourceTypeMeta(item.sourceType);
+        const iqama = getIqamaNumber(item);
+
+        if (locale === "en") {
+          return {
+            "#": idx + 1,
+            "Employee / Rider": item.employeeNameAr,
+            "Iqama / ID No": iqama || "—",
+            "Document Type": formatCategoryName(item.categoryNameAr, item.categoryNameEn, "en", documentTypes),
+            "Expiry Date": item.expiryDate || "—",
+            "Days Remaining": item.daysRemaining !== null ? item.daysRemaining : "—",
+            "Due Status": statusMeta.en,
+            "Employee Status": empStatusMeta.en,
+            "Source Category": docTypeMeta.en,
+            "Reference": item.referenceMasked || "—",
+          };
+        }
+
+        return {
+          "م": idx + 1,
+          "الموظف / المندوب": item.employeeNameAr,
+          "رقم الإقامة / الهوية": iqama || "—",
+          "نوع الوثيقة": formatCategoryName(item.categoryNameAr, item.categoryNameEn, "ar", documentTypes),
+          "تاريخ الانتهاء": item.expiryDate || "—",
+          "الأيام المتبقية": item.daysRemaining !== null ? item.daysRemaining : "—",
+          "حالة الامتثال": statusMeta.ar,
+          "حالة الموظف": empStatusMeta.ar,
+          "تصنيف المصدر": docTypeMeta.ar,
+          "الرقم المرجعي": item.referenceMasked || "—",
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+
+      // Set column widths
+      worksheet["!cols"] = [
+        { wch: 6 },  // #
+        { wch: 32 }, // Employee Name
+        { wch: 22 }, // Iqama No
+        { wch: 28 }, // Document Type
+        { wch: 16 }, // Expiry Date
+        { wch: 16 }, // Days Remaining
+        { wch: 18 }, // Due Status
+        { wch: 16 }, // Employee Status
+        { wch: 20 }, // Source Category
+        { wch: 20 }, // Reference
+      ];
+
+      // Ensure Iqama / ID number column is treated strictly as text string
+      const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:J1");
+      const iqamaColIndex = 2; // Column C (0-indexed 2)
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: iqamaColIndex });
+        const cell = worksheet[cellAddress];
+        if (cell) {
+          cell.t = "s"; // string type
+          cell.z = "@"; // text format in Excel
+        }
+      }
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        locale === "en" ? "Compliance Expiries" : "تنبيهات الوثائق"
+      );
+
+      const fileName = `compliance-expiries-${checkDate}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      toast.show(
+        "success",
+        locale === "en" ? "Excel Exported Successfully" : "تم تصدير ملف الإكسل بنجاح",
+        locale === "en"
+          ? `Exported ${exportItems.length} records.`
+          : `تم تصدير ${exportItems.length} سجل بنجاح.`
+      );
+    } catch (err: any) {
+      console.error("Export error:", err);
+      toast.show(
+        "error",
+        locale === "en" ? "Export Failed" : "فشل التصدير",
+        err?.message || (locale === "en" ? "An error occurred while exporting." : "حدث خطأ أثناء تصدير البيانات.")
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const summary: ExpiryComplianceSummary = useMemo(() => {
     const rawSummary = data?.summary ?? {
@@ -489,7 +727,7 @@ export default function ExpiryCompliancePage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-bold shadow-sm">
             <Calendar size={16} className="text-[#1167c9]" />
             <span className="text-xs text-[var(--muted)]">
@@ -506,6 +744,17 @@ export default function ExpiryCompliancePage() {
           <Button variant="secondary" onClick={() => void loadData()} className="inline-flex items-center gap-2">
             <RefreshCw size={16} />
             {t("common.refresh")}
+          </Button>
+
+          <Button
+            variant="primary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+          >
+            <FileSpreadsheet size={16} />
+            {locale === "en" ? "Export Excel" : "تصدير إكسل"}
           </Button>
         </div>
       </div>
@@ -783,25 +1032,28 @@ export default function ExpiryCompliancePage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] table-fixed text-sm">
+            <table className="w-full min-w-[950px] table-fixed text-sm">
               <thead className="bg-slate-50 text-xs font-bold text-[var(--muted)]">
                 <tr>
-                  <th className="px-4 py-3.5 text-start w-[260px]">
+                  <th className="px-4 py-3.5 text-start w-[240px]">
                     {locale === "en" ? "Employee / Rider" : "الموظف / المندوب"}
                   </th>
-                  <th className="px-4 py-3.5 text-start w-[220px]">
+                  <th className="px-4 py-3.5 text-start w-[160px]">
+                    {locale === "en" ? "Iqama / ID No" : "رقم الإقامة / الهوية"}
+                  </th>
+                  <th className="px-4 py-3.5 text-start w-[210px]">
                     {locale === "en" ? "Document / Category" : "نوع الوثيقة"}
                   </th>
-                  <th className="px-4 py-3.5 text-start w-[140px]">
+                  <th className="px-4 py-3.5 text-start w-[130px]">
                     {locale === "en" ? "Expiry Date" : "تاريخ الانتهاء"}
                   </th>
-                  <th className="px-4 py-3.5 text-start w-[150px]">
+                  <th className="px-4 py-3.5 text-start w-[140px]">
                     {locale === "en" ? "Days Remaining" : "الأيام المتبقية"}
                   </th>
-                  <th className="px-4 py-3.5 text-start w-[140px]">
+                  <th className="px-4 py-3.5 text-start w-[130px]">
                     {locale === "en" ? "Due Status" : "حالة الامتثال"}
                   </th>
-                  <th className="px-4 py-3.5 text-start w-[90px]">
+                  <th className="px-4 py-3.5 text-start w-[80px]">
                     {t("common.actions")}
                   </th>
                 </tr>
@@ -811,6 +1063,7 @@ export default function ExpiryCompliancePage() {
                   const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
                   const StatusIcon = statusMeta.icon;
                   const empStatusMeta = getEmployeeStatusMeta(item.employeeStatus);
+                  const iqamaNo = getIqamaNumber(item);
 
                   return (
                     <tr key={`${item.sourceId}-${item.categoryCode}`} className="hover:bg-slate-50/60">
@@ -832,6 +1085,17 @@ export default function ExpiryCompliancePage() {
                             </span>
                           </div>
                         </Link>
+                      </td>
+
+                      {/* Iqama / ID No */}
+                      <td className="px-4 py-3.5 font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {iqamaNo ? (
+                          <span className="inline-flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 border border-slate-200 dark:border-slate-700">
+                            {iqamaNo}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--muted)] font-normal">—</span>
+                        )}
                       </td>
 
                       {/* Document Type / Category */}
@@ -898,7 +1162,7 @@ export default function ExpiryCompliancePage() {
 
                 {!items.length && (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-sm text-[var(--muted)]">
+                    <td colSpan={7} className="p-12 text-center text-sm text-[var(--muted)]">
                       {locale === "en"
                         ? "No compliance expiry records matching criteria."
                         : "لا توجد سجلات تنبيهات وثائق مطابقة للشروط."}
