@@ -244,25 +244,27 @@ export function HrSectionManager({
           const data = await authFetch<HrRow[]>(paths[source]);
           return [
             source,
-            data.map((row) => ({
-              value: row.id,
-              label: String(
-                row.fullNameAr ??
-                  row.nameAr ??
-                  row.platformNameAr ??
-                  row.contractNameAr ??
-                  row.code ??
-                  row.id,
-              ),
-              labelEn: String(
-                row.fullNameEn ??
-                  row.nameEn ??
-                  row.platformNameEn ??
-                  row.contractNameEn ??
-                  row.code ??
-                  row.id,
-              ),
-            })),
+            data
+              .filter((row) => source !== "leave-types" || row.status === "Active")
+              .map((row) => ({
+                value: row.id,
+                label: String(
+                  row.fullNameAr ??
+                    row.nameAr ??
+                    row.platformNameAr ??
+                    row.contractNameAr ??
+                    row.code ??
+                    row.id,
+                ),
+                labelEn: String(
+                  row.fullNameEn ??
+                    row.nameEn ??
+                    row.platformNameEn ??
+                    row.contractNameEn ??
+                    row.code ??
+                    row.id,
+                ),
+              })),
           ] as const;
         } catch {
           return [source, []] as const;
@@ -294,6 +296,25 @@ export function HrSectionManager({
     setError("");
     try {
       const payload = toPayload(section, values, editing);
+      if (section.resource === "leave-types") {
+        if (!payload.code || !payload.nameAr || !payload.nameEn) {
+          throw new Error(
+            locale === "en"
+              ? "Code, Arabic Name, and English Name are required."
+              : "الرمز والاسم العربي والاسم الإنجليزي حقول إلزامية.",
+          );
+        }
+        if (
+          payload.maximumCalendarDays != null &&
+          Number(payload.maximumCalendarDays) <= 0
+        ) {
+          throw new Error(
+            locale === "en"
+              ? "Maximum calendar days must be greater than zero."
+              : "الحد الأقصى للأيام يجب أن يكون أكبر من الصفر.",
+          );
+        }
+      }
       if (editing)
         await (workflowResources.has(section.resource)
           ? hrWorkflowApi.update(section.resource, editing.id, payload)

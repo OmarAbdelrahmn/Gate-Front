@@ -115,9 +115,21 @@ export function getFriendlyErrorMessage(
       case "hr.concurrency_conflict":
         return "حدث تعارض في التحديث بالتزامن. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
       case "hr.conflict":
-        return "حدث تعارض في العملية. يرجى التحقق من صحة السجلات أو عدم وجود سكان قبل المتابعة.";
+        return "حدث تعارض في العملية. يرجى التحقق من صحة السجلات أو عدم وجود تعارض قبل المتابعة.";
       case "hr.invalid_request":
         return "طلب غير صالح. يرجى التأكد من صحة البيانات والمدخلات.";
+      case "leave.approval_forbidden":
+        return "عفواً، لا تملك الصلاحية أو النطاق المطلوب لاعتماد هذا الإجراء في مسار الموافقة.";
+      case "documents.invalid_file":
+        return "الملف المرفق غير صالح أو تجاوز الحد الأقصى المسموح (10 ميجابايت).";
+      case "documents.file_missing":
+        return "الملف المطلوب غير موجود أو تعذر الوصول إليه.";
+      case "hr.duplicate":
+        return "السجل أو الرمز مستخدم بالفعل ومكرر في النظام.";
+      case "hr.current_user_unavailable":
+        return "تعذر التحقق من حساب المستخدم الحالي، يرجى إعادة تسجيل الدخول.";
+      case "hr.not_found":
+        return "السجل المطلوب غير موجود في النظام.";
       case "housing.not_found":
         return "وحدة السكن المطلوبة غير موجودة.";
       case "housing.room_not_found":
