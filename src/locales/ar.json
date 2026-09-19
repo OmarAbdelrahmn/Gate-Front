@@ -529,7 +529,8 @@
       "upcoming": "قريب الانتهاء",
       "dueToday": "ينتهي اليوم",
       "expired": "منتهي",
-      "missing": "غير مضاف"
+      "missing": "غير مضاف",
+      "uploadedWithoutDates": "مرفوع — التواريخ غير مسجلة"
     },
     "accidentSeverities": {
       "minor": "طفيف",

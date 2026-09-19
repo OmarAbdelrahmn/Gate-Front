@@ -529,7 +529,8 @@
       "upcoming": "Expiring Soon",
       "dueToday": "Expires Today",
       "expired": "Expired",
-      "missing": "Not Added"
+      "missing": "Not Added",
+      "uploadedWithoutDates": "Uploaded — dates not entered"
     },
     "accidentSeverities": {
       "minor": "Minor",

@@ -207,9 +207,36 @@ export default function VehicleDetailPage() {
     Number(regType) === VehicleRegistrationType.PublicTransport ||
     Number(regType) === VehicleRegistrationType.PublicBus;
 
-  const complianceItems: { label: string; type: ComplianceTabType; date?: string | null; status?: VehicleComplianceDueStatus | number | null }[] = [
-    { label: "بوليصة التأمين", type: "InsurancePolicy", date: summary.insuranceExpiryDate, status: summary.insuranceStatus },
-    { label: "الفحص الدوري", type: "Inspection", date: summary.inspectionExpiryDate, status: summary.inspectionStatus },
+  const complianceItems: {
+    label: string;
+    type: ComplianceTabType;
+    date?: string | null;
+    status?: VehicleComplianceDueStatus | number | null;
+    hasFileSlot: boolean;
+    fileUploaded?: boolean;
+  }[] = [
+    {
+      label: "استمارة السير",
+      type: "Registration",
+      date: summary.registrationExpiryDate,
+      status: summary.registrationStatus,
+      hasFileSlot: true,
+      fileUploaded: summary.registrationFileUploaded,
+    },
+    {
+      label: "بوليصة التأمين",
+      type: "InsurancePolicy",
+      date: summary.insuranceExpiryDate,
+      status: summary.insuranceStatus,
+      hasFileSlot: false,
+    },
+    {
+      label: "الفحص الدوري",
+      type: "Inspection",
+      date: summary.inspectionExpiryDate,
+      status: summary.inspectionStatus,
+      hasFileSlot: false,
+    },
   ];
 
   if (isPublicTransport) {
@@ -218,6 +245,8 @@ export default function VehicleDetailPage() {
       type: "OperationCard",
       date: summary.operationCardExpiryDate,
       status: summary.operationCardStatus,
+      hasFileSlot: true,
+      fileUploaded: summary.operationCardFileUploaded,
     });
   }
 
@@ -553,8 +582,31 @@ export default function VehicleDetailPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {item.status && (
-                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                    {item.hasFileSlot && (
+                      item.fileUploaded ? (
+                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                          الملف مرفوع
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-slate-100 text-slate-600 border-slate-200">
+                          الملف غير مرفوع
+                        </Badge>
+                      )
+                    )}
+                    {item.status !== undefined && item.status !== null && (
+                      <Badge className={
+                        item.status === VehicleComplianceDueStatus.Valid
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : item.status === VehicleComplianceDueStatus.Upcoming
+                          ? "bg-blue-50 text-blue-700 border-blue-200"
+                          : item.status === VehicleComplianceDueStatus.DueToday
+                          ? "bg-orange-50 text-orange-700 border-orange-200"
+                          : item.status === VehicleComplianceDueStatus.Expired
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : item.status === VehicleComplianceDueStatus.UploadedWithoutDates
+                          ? "bg-sky-50 text-sky-700 border-sky-200"
+                          : "bg-slate-100 text-slate-700 border-slate-300"
+                      }>
                         {formatVehicleComplianceDueStatus(item.status)}
                       </Badge>
                     )}

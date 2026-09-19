@@ -73,6 +73,7 @@ export enum VehicleComplianceDueStatus {
   DueToday = 3,
   Expired = 4,
   Missing = 5,
+  UploadedWithoutDates = 6,
 }
 
 export enum VehicleFileKind {
@@ -389,12 +390,14 @@ export interface VehicleSummaryResponse {
   actualRider?: ActualRiderDetail | null;
   registrationExpiryDate?: string | null;
   registrationStatus?: VehicleComplianceDueStatus | null;
+  registrationFileUploaded?: boolean;
   insuranceExpiryDate?: string | null;
   insuranceStatus?: VehicleComplianceDueStatus | null;
   inspectionExpiryDate?: string | null;
   inspectionStatus?: VehicleComplianceDueStatus | null;
   operationCardExpiryDate?: string | null;
   operationCardStatus?: VehicleComplianceDueStatus | null;
+  operationCardFileUploaded?: boolean;
   permitEndDate?: string | null;
   permitStatus?: VehicleComplianceDueStatus | null;
   isReadyForAssignment: boolean;
@@ -814,18 +817,61 @@ export interface VehicleOperationCardRequest {
   notes?: string | null;
 }
 
-export interface VehicleComplianceDueResponse {
+export type VehicleComplianceType =
+  | "Registration"
+  | "Insurance"
+  | "Inspection"
+  | "Permit"
+  | "OperationCard";
+
+export interface VehicleComplianceUploadedFile {
+  attachmentId: string;
+  versionId: string;
+  originalFileName: string;
+  contentType: string;
+  fileSizeBytes: number;
+  uploadedAtUtc: string;
+}
+
+export interface VehicleComplianceDueItem {
   vehicleId: string;
   assetNumber: string;
   serialNumber?: string | null;
   plateNumber?: string | null;
   plateNumberAr?: string | null;
   plateNumberEn?: string | null;
-  type: string;
-  expiryDate: string;
+  type: VehicleComplianceType | string;
+  recordId?: string | null;
+  effectiveFrom?: string | null; // YYYY-MM-DD
+  expiryDate?: string | null; // YYYY-MM-DD
+  dateStatus?: VehicleComplianceDueStatus;
   status: VehicleComplianceDueStatus;
+  daysRemaining?: number | null;
+  hasUploadedFile?: boolean;
+  uploadedFile?: VehicleComplianceUploadedFile | null;
   permitEndDate?: string | null;
   permitStatus?: VehicleComplianceDueStatus | null;
+}
+
+export type VehicleComplianceDueResponse = VehicleComplianceDueItem;
+
+export interface VehicleComplianceSummaryFields {
+  registrationExpiryDate: string | null;
+  registrationStatus: VehicleComplianceDueStatus;
+  registrationFileUploaded: boolean;
+
+  insuranceExpiryDate: string | null;
+  insuranceStatus: VehicleComplianceDueStatus;
+
+  inspectionExpiryDate: string | null;
+  inspectionStatus: VehicleComplianceDueStatus;
+
+  permitEndDate: string | null;
+  permitStatus: VehicleComplianceDueStatus;
+
+  operationCardExpiryDate: string | null;
+  operationCardStatus: VehicleComplianceDueStatus;
+  operationCardFileUploaded: boolean;
 }
 
 // ---------------------------

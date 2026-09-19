@@ -241,9 +241,55 @@ export function formatVehicleComplianceDueStatus(st?: VehicleComplianceDueStatus
       return translate(locale, "fleet.complianceStatuses.expired");
     case VehicleComplianceDueStatus.Missing:
       return translate(locale, "fleet.complianceStatuses.missing");
+    case VehicleComplianceDueStatus.UploadedWithoutDates:
+      return translate(locale, "fleet.complianceStatuses.uploadedWithoutDates");
     default:
       return String(st);
   }
+}
+
+export function getVehicleComplianceFileLabel(hasUploadedFile?: boolean, locale: AppLocale = "ar"): string {
+  if (locale === "ar") {
+    return hasUploadedFile ? "تم الرفع" : "غير مرفوع";
+  }
+  return hasUploadedFile ? "Uploaded" : "Not uploaded";
+}
+
+export function getVehicleComplianceDateLabel(
+  item: { effectiveFrom?: string | null; expiryDate?: string | null; dateStatus?: VehicleComplianceDueStatus | number | null },
+  locale: AppLocale = "ar"
+): string {
+  if (!item.effectiveFrom && !item.expiryDate) {
+    return locale === "ar" ? "التواريخ غير مسجلة" : "Dates not entered";
+  }
+
+  switch (Number(item.dateStatus)) {
+    case VehicleComplianceDueStatus.Valid:
+      return translate(locale, "fleet.complianceStatuses.valid");
+    case VehicleComplianceDueStatus.Upcoming:
+      return translate(locale, "fleet.complianceStatuses.upcoming");
+    case VehicleComplianceDueStatus.DueToday:
+      return translate(locale, "fleet.complianceStatuses.dueToday");
+    case VehicleComplianceDueStatus.Expired:
+      return translate(locale, "fleet.complianceStatuses.expired");
+    default:
+      return locale === "ar" ? "التواريخ مفقودة" : "Dates missing";
+  }
+}
+
+export function getVehicleComplianceCombinedLabel(
+  item: {
+    status?: VehicleComplianceDueStatus | number | null;
+    effectiveFrom?: string | null;
+    expiryDate?: string | null;
+    dateStatus?: VehicleComplianceDueStatus | number | null;
+  },
+  locale: AppLocale = "ar"
+): string {
+  if (Number(item.status) === VehicleComplianceDueStatus.UploadedWithoutDates) {
+    return translate(locale, "fleet.complianceStatuses.uploadedWithoutDates");
+  }
+  return getVehicleComplianceDateLabel(item, locale);
 }
 
 export function formatVehicleAccidentSeverity(sev?: VehicleAccidentSeverity | number | null, locale: AppLocale = "ar"): string {
