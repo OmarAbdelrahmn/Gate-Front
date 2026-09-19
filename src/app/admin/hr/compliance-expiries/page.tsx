@@ -234,6 +234,9 @@ export default function ExpiryCompliancePage() {
     return riyadh.toISOString().slice(0, 10);
   };
 
+  const HR_COMPLIANCE_FILTERS_SESSION_KEY = "admin_hr_compliance_expiries_filters_session";
+  const [isRestored, setIsRestored] = useState(false);
+
   const [checkDate, setCheckDate] = useState(getTodayRiyadh);
   const [search, setSearch] = useState("");
   const [sourceType, setSourceType] = useState("all");
@@ -254,6 +257,67 @@ export default function ExpiryCompliancePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
   const [exporting, setExporting] = useState(false);
+
+  // Restore filters on mount for the current session
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(HR_COMPLIANCE_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string") setSearch(parsed.search);
+        if (typeof parsed.sourceType === "string") setSourceType(parsed.sourceType);
+        if (typeof parsed.dueStatus === "string") setDueStatus(parsed.dueStatus);
+        if (typeof parsed.employeeStatus === "string") setEmployeeStatus(parsed.employeeStatus);
+        if (typeof parsed.operatingCityId === "string") setOperatingCityId(parsed.operatingCityId);
+        if (typeof parsed.sponsorId === "string") setSponsorId(parsed.sponsorId);
+        if (typeof parsed.checkDate === "string" && parsed.checkDate) setCheckDate(parsed.checkDate);
+        if (typeof parsed.page === "number" && parsed.page >= 1) setPage(parsed.page);
+        if (typeof parsed.pageSize === "number" && [25, 50, 100].includes(parsed.pageSize)) setPageSize(parsed.pageSize);
+      }
+    } catch {
+      // ignore JSON parse or sessionStorage errors
+    } finally {
+      setIsRestored(true);
+    }
+  }, []);
+
+  // Save filters to sessionStorage whenever filters change (only after initial restoration)
+  useEffect(() => {
+    if (!isRestored) return;
+    try {
+      const isDefault =
+        !search &&
+        sourceType === "all" &&
+        dueStatus === "all" &&
+        employeeStatus === "all" &&
+        operatingCityId === "all" &&
+        sponsorId === "all" &&
+        checkDate === getTodayRiyadh() &&
+        page === 1 &&
+        pageSize === 50;
+
+      if (!isDefault) {
+        sessionStorage.setItem(
+          HR_COMPLIANCE_FILTERS_SESSION_KEY,
+          JSON.stringify({
+            search,
+            sourceType,
+            dueStatus,
+            employeeStatus,
+            operatingCityId,
+            sponsorId,
+            checkDate,
+            page,
+            pageSize,
+          })
+        );
+      } else {
+        sessionStorage.removeItem(HR_COMPLIANCE_FILTERS_SESSION_KEY);
+      }
+    } catch {
+      // ignore sessionStorage errors
+    }
+  }, [isRestored, search, sourceType, dueStatus, employeeStatus, operatingCityId, sponsorId, checkDate, page, pageSize]);
 
   useEffect(() => {
     void listSponsors().then(setSponsors).catch(() => { });
@@ -403,8 +467,9 @@ export default function ExpiryCompliancePage() {
   };
 
   useEffect(() => {
+    if (!isRestored) return;
     void loadData();
-  }, [checkDate, sourceType, dueStatus, employeeStatus, operatingCityId, sponsorId, page, pageSize]);
+  }, [isRestored, checkDate, sourceType, dueStatus, employeeStatus, operatingCityId, sponsorId, page, pageSize]);
 
   const items = useMemo(() => {
     if (!data?.items) return [];
@@ -700,6 +765,11 @@ export default function ExpiryCompliancePage() {
     setSponsorId("all");
     setCheckDate(getTodayRiyadh());
     setPage(1);
+    try {
+      sessionStorage.removeItem(HR_COMPLIANCE_FILTERS_SESSION_KEY);
+    } catch {
+      // ignore
+    }
   };
 
   return (
