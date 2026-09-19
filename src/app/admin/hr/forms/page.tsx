@@ -47,6 +47,7 @@ import { AnnualEntitlementsReceiptView } from "@/components/hr/forms/AnnualEntit
 import { SimHandoverReceiptView } from "@/components/hr/forms/SimHandoverReceiptView";
 import { InterviewFormView } from "@/components/hr/forms/InterviewFormView";
 import { OperationsEvaluationView } from "@/components/hr/forms/OperationsEvaluationView";
+import { AbsenceWarningView } from "@/components/hr/forms/AbsenceWarningView";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -141,6 +142,15 @@ export default function HrFormsPage() {
   // Annual Entitlements State
   const [periodFrom, setPeriodFrom] = useState<string>("2025/09/01");
   const [periodTo, setPeriodTo] = useState<string>("2026/09/01");
+
+  // Absence Warning State
+  const [absenceLanguage, setAbsenceLanguage] = useState<"ar" | "en" | "both">("both");
+  const [warningNumber, setWarningNumber] = useState<string>("1");
+  const [warningDegree, setWarningDegree] = useState<"first" | "second" | "final">("first");
+  const [absenceStartDay, setAbsenceStartDay] = useState<string>("السبت");
+  const [absenceStartDate, setAbsenceStartDate] = useState<string>("2026/09/01");
+  const [absenceEndDate, setAbsenceEndDate] = useState<string>("2026/09/05");
+  const [executiveDirector, setExecutiveDirector] = useState<string>("المدير التنفيذي");
 
   // Interview Form Specific States
   const [relativePhoneInside, setRelativePhoneInside] = useState<string>("");
@@ -1642,8 +1652,117 @@ export default function HrFormsPage() {
                 </div>
               )}
 
+              {/* Absence Warning specific fields */}
+              {selectedTemplateId === "absence_warning" && (
+                <div className="space-y-4 pt-2 border-t border-[var(--border)]">
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted)] mb-2">
+                      لغة النموذج (Template Language)
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAbsenceLanguage("ar")}
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
+                          absenceLanguage === "ar"
+                            ? "bg-[#1167c9] text-white border-[#1167c9] shadow-sm"
+                            : "border-[var(--border)] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        🇸🇦 بالعربية فقط
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAbsenceLanguage("en")}
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
+                          absenceLanguage === "en"
+                            ? "bg-[#1167c9] text-white border-[#1167c9] shadow-sm"
+                            : "border-[var(--border)] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        🇬🇧 English Only
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAbsenceLanguage("both")}
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
+                          absenceLanguage === "both"
+                            ? "bg-[#1167c9] text-white border-[#1167c9] shadow-sm"
+                            : "border-[var(--border)] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        🌐 اللغتان معاً
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="الإنذار رقم (Notice No.)"
+                      value={warningNumber}
+                      onChange={(e) => setWarningNumber(e.target.value)}
+                      placeholder="1"
+                    />
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        درجة الإنذار
+                      </label>
+                      <select
+                        value={warningDegree}
+                        onChange={(e) => setWarningDegree(e.target.value as "first" | "second" | "final")}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="first">الإنذار الأول (First Warning)</option>
+                        <option value="second">الإنذار الثاني (Second Warning)</option>
+                        <option value="final">الإنذار النهائي (Final Warning)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted)] mb-1">
+                        يوم بدء الانقطاع
+                      </label>
+                      <select
+                        value={absenceStartDay}
+                        onChange={(e) => setAbsenceStartDay(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--foreground)] outline-none focus:border-[#1167c9]"
+                      >
+                        <option value="السبت">السبت (Saturday)</option>
+                        <option value="الأحد">الأحد (Sunday)</option>
+                        <option value="الاثنين">الاثنين (Monday)</option>
+                        <option value="الثلاثاء">الثلاثاء (Tuesday)</option>
+                        <option value="الأربعاء">الأربعاء (Wednesday)</option>
+                        <option value="الخميس">الخميس (Thursday)</option>
+                        <option value="الجمعة">الجمعة (Friday)</option>
+                      </select>
+                    </div>
+                    <Input
+                      label="من تاريخ (Start Date)"
+                      value={absenceStartDate}
+                      onChange={(e) => setAbsenceStartDate(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                    <Input
+                      label="وحتى تاريخ (End Date)"
+                      value={absenceEndDate}
+                      onChange={(e) => setAbsenceEndDate(e.target.value)}
+                      placeholder="YYYY/MM/DD"
+                    />
+                  </div>
+
+                  <Input
+                    label="المدير التنفيذي (Executive Director)"
+                    value={executiveDirector}
+                    onChange={(e) => setExecutiveDirector(e.target.value)}
+                    placeholder="المدير التنفيذي"
+                  />
+                </div>
+              )}
+
               {/* City for templates requiring city */}
-              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
+              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && (
                 <Input
                   label="المدينة / الفرع"
                   value={issueCity}
@@ -1667,7 +1786,7 @@ export default function HrFormsPage() {
               )}
 
               {/* Generic Document notes */}
-              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && (
+              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && (
                 <div className="pt-2 border-t border-[var(--border)]">
                   <label className="block text-xs font-bold text-[var(--muted)] mb-1">
                     ملاحظات إضافية (اختياري)
@@ -1999,7 +2118,28 @@ export default function HrFormsPage() {
               />
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && (
+            {selectedTemplateId === "absence_warning" && (
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <AbsenceWarningView
+                  data={{
+                    language: absenceLanguage,
+                    companyName,
+                    date,
+                    warningNumber,
+                    warningDegree,
+                    employeeName: riderName,
+                    iqamaNo,
+                    startDate: absenceStartDate,
+                    startDay: absenceStartDay,
+                    endDate: absenceEndDate,
+                    executiveDirector,
+                    notes,
+                  }}
+                />
+              </LetterheadFrame>
+            )}
+
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "absence_warning" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{

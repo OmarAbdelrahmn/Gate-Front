@@ -229,6 +229,18 @@ export const FORM_TEMPLATES: FormTemplate[] = [
     requiresRider: true,
   },
   {
+    id: "absence_warning",
+    titleAr: "إنذار بالانقطاع عن العمل",
+    titleEn: "Notice of Absence from Work",
+    category: "administrative",
+    categoryNameAr: "النماذج الإدارية",
+    descriptionAr: "إنذار رسمي بالانقطاع والتغيب عن العمل بموجب المادة (80) من نظام العمل السعودي، متاح بالعربية والإنجليزية وثنائي اللغة.",
+    icon: ShieldAlert,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "عربي / إنجليزي / ثنائي",
+  },
+  {
     id: "violation_warning",
     titleAr: "إنذار وتنبيه موظف / مندوب",
     titleEn: "Employee Violation Warning",

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { Badge } from "@/components/ui/Badge";
@@ -26,7 +26,13 @@ import {
   CheckCircle2,
   UserCheck,
   Building,
+  X,
+  Filter as FilterIcon,
 } from "lucide-react";
+import {
+  TableHeaderColumnFilter,
+  type FilterOption,
+} from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
 
 interface FuelCardsListViewProps {
   searchQuery: string;
@@ -51,6 +57,73 @@ export function FuelCardsListView({
   const [riderFilterId, setRiderFilterId] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+
+  // Table Header Column Filters
+  const [headerCardNumberFilter, setHeaderCardNumberFilter] = useState<string>("");
+  const [headerPlateFilter, setHeaderPlateFilter] = useState<string>("");
+  const [headerAssignmentFilter, setHeaderAssignmentFilter] = useState<string>("");
+
+  const FUEL_CARDS_FILTERS_SESSION_KEY = "admin_fleet_fuel_cards_filters_session";
+  const [isRestored, setIsRestored] = useState(false);
+
+  // Restore filters on mount for the current session
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(FUEL_CARDS_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.providerFilter === "string") setProviderFilter(parsed.providerFilter as FuelProvider | "");
+        if (typeof parsed.riderFilterId === "string") setRiderFilterId(parsed.riderFilterId);
+        if (typeof parsed.headerCardNumberFilter === "string") setHeaderCardNumberFilter(parsed.headerCardNumberFilter);
+        if (typeof parsed.headerPlateFilter === "string") setHeaderPlateFilter(parsed.headerPlateFilter);
+        if (typeof parsed.headerAssignmentFilter === "string") setHeaderAssignmentFilter(parsed.headerAssignmentFilter);
+        if (typeof parsed.searchQuery === "string" && parsed.searchQuery) onSearchChange(parsed.searchQuery);
+      }
+    } catch {
+      // ignore JSON parse or sessionStorage errors
+    } finally {
+      setIsRestored(true);
+    }
+  }, []);
+
+  // Save filters to sessionStorage whenever filters change (only after initial restoration)
+  useEffect(() => {
+    if (!isRestored) return;
+    try {
+      if (
+        providerFilter ||
+        riderFilterId ||
+        headerCardNumberFilter ||
+        headerPlateFilter ||
+        headerAssignmentFilter ||
+        searchQuery
+      ) {
+        sessionStorage.setItem(
+          FUEL_CARDS_FILTERS_SESSION_KEY,
+          JSON.stringify({
+            providerFilter,
+            riderFilterId,
+            headerCardNumberFilter,
+            headerPlateFilter,
+            headerAssignmentFilter,
+            searchQuery,
+          })
+        );
+      } else {
+        sessionStorage.removeItem(FUEL_CARDS_FILTERS_SESSION_KEY);
+      }
+    } catch {
+      // ignore sessionStorage errors
+    }
+  }, [
+    isRestored,
+    providerFilter,
+    riderFilterId,
+    headerCardNumberFilter,
+    headerPlateFilter,
+    headerAssignmentFilter,
+    searchQuery,
+  ]);
 
   const [cardsPageData, setCardsPageData] = useState<FuelCardPage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,7 +156,7 @@ export function FuelCardsListView({
       setCardsPageData(data);
     } catch (err) {
       console.error("Failed to fetch fuel cards:", err);
-    } fontally: {
+    } finally {
       setLoading(false);
     }
   }, [searchQuery, providerFilter, riderFilterId, page, pageSize]);
@@ -101,6 +174,126 @@ export function FuelCardsListView({
   const unassignedCount = items.filter((c) => c.currentRider === null).length;
   const petroCount = items.filter((c) => c.provider === "PetroApp").length;
   const sayaraCount = items.filter((c) => c.provider === "SayaraApp").length;
+
+  // Options for Table Header Filters
+  const providerOptions = useMemo<FilterOption[]>(() => {
+    return [
+      { value: "PetroApp", label: fuelProviderLabels.PetroApp, count: petroCount },
+      { value: "SayaraApp", label: fuelProviderLabels.SayaraApp, count: sayaraCount },
+    ];
+  }, [petroCount, sayaraCount]);
+
+  const cardNumberOptions = useMemo<FilterOption[]>(() => {
+    const map = new Map<string, number>();
+    items.forEach((c) => {
+      if (c.cardNumber) {
+        map.set(c.cardNumber, (map.get(c.cardNumber) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([num, count]) => ({
+        value: num,
+        label: num,
+        count,
+      }));
+  }, [items]);
+
+  const plateOptions = useMemo<FilterOption[]>(() => {
+    const map = new Map<string, number>();
+    let unassignedPlates = 0;
+    items.forEach((c) => {
+      if (c.plateNumberText) {
+        map.set(c.plateNumberText, (map.get(c.plateNumberText) || 0) + 1);
+      } else {
+        unassignedPlates++;
+      }
+    });
+    const opts: FilterOption[] = Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([plate, count]) => ({
+        value: plate,
+        label: plate,
+        count,
+      }));
+    if (unassignedPlates > 0) {
+      opts.unshift({
+        value: "__none__",
+        label: "بدون لوحة مسجلة",
+        count: unassignedPlates,
+      });
+    }
+    return opts;
+  }, [items]);
+
+  const assignmentOptions = useMemo<FilterOption[]>(() => {
+    const opts: FilterOption[] = [
+      { value: "assigned", label: "معينة لمندوب (نشطة)", count: assignedCount },
+      { value: "unassigned", label: "شاغرة (غير مسندة)", count: unassignedCount },
+    ];
+    const riderMap = new Map<string, { label: string; count: number }>();
+    items.forEach((c) => {
+      if (c.currentRider) {
+        const id = c.currentRider.riderProfileId;
+        const name = c.currentRider.riderNameAr || c.currentRider.riderNameEn || "مندوب";
+        const curr = riderMap.get(id) || { label: name, count: 0 };
+        curr.count++;
+        riderMap.set(id, curr);
+      }
+    });
+    riderMap.forEach((info, id) => {
+      opts.push({
+        value: id,
+        label: info.label,
+        count: info.count,
+      });
+    });
+    return opts;
+  }, [items, assignedCount, unassignedCount]);
+
+  const isHeaderFiltered = Boolean(
+    providerFilter || headerCardNumberFilter || headerPlateFilter || headerAssignmentFilter
+  );
+
+  const clearHeaderFilters = () => {
+    setProviderFilter("");
+    setHeaderCardNumberFilter("");
+    setHeaderPlateFilter("");
+    setHeaderAssignmentFilter("");
+    try {
+      sessionStorage.removeItem(FUEL_CARDS_FILTERS_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Client-filtered cards based on table header filters
+  const filteredCards = useMemo(() => {
+    return items.filter((card) => {
+      if (headerCardNumberFilter && card.cardNumber !== headerCardNumberFilter) {
+        return false;
+      }
+      if (headerPlateFilter) {
+        if (headerPlateFilter === "__none__") {
+          if (card.plateNumberText) return false;
+        } else if (card.plateNumberText !== headerPlateFilter) {
+          return false;
+        }
+      }
+      if (headerAssignmentFilter) {
+        if (headerAssignmentFilter === "assigned" && !card.currentRider) return false;
+        if (headerAssignmentFilter === "unassigned" && card.currentRider) return false;
+        if (
+          headerAssignmentFilter !== "assigned" &&
+          headerAssignmentFilter !== "unassigned" &&
+          card.currentRider?.riderProfileId !== headerAssignmentFilter
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [items, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter]);
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -200,18 +393,103 @@ export function FuelCardsListView({
         </div>
       </div>
 
+      {/* Active Table Header Filters */}
+      {isHeaderFiltered && (
+        <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs">
+          <span className="text-[var(--muted)] font-bold">فلاتر أعمدة الجدول النشطة:</span>
+          {providerFilter && (
+            <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 gap-1 pl-1.5 font-medium">
+              المزود: {fuelProviderLabels[providerFilter]}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setProviderFilter("")} />
+            </Badge>
+          )}
+          {headerCardNumberFilter && (
+            <Badge className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 gap-1 pl-1.5 font-medium">
+              رقم البطاقة: {headerCardNumberFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderCardNumberFilter("")} />
+            </Badge>
+          )}
+          {headerPlateFilter && (
+            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 gap-1 pl-1.5 font-medium">
+              اللوحة: {headerPlateFilter === "__none__" ? "بدون لوحة" : headerPlateFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderPlateFilter("")} />
+            </Badge>
+          )}
+          {headerAssignmentFilter && (
+            <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 gap-1 pl-1.5 font-medium">
+              التعيين: {assignmentOptions.find((o: FilterOption) => o.value === headerAssignmentFilter)?.label || headerAssignmentFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderAssignmentFilter("")} />
+            </Badge>
+          )}
+          <button
+            type="button"
+            onClick={clearHeaderFilters}
+            className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-bold mr-auto cursor-pointer"
+          >
+            مسح جميع فلاتر الأعمدة
+          </button>
+        </div>
+      )}
+
       {/* Cards Table */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-start">
             <thead className="border-b border-[var(--border)] bg-slate-50/80 dark:bg-slate-800/60 font-bold text-[var(--muted)] uppercase">
               <tr>
-                <th className="px-4 py-3.5 text-start">شركة المزود</th>
-                <th className="px-4 py-3.5 text-start">رقم البطاقة / المعرف</th>
-                <th className="px-4 py-3.5 text-start">رقم اللوحة</th>
-                <th className="px-4 py-3.5 text-start">المندوب المعين حالياً</th>
-                <th className="px-4 py-3.5 text-start">تاريخ بدء التعيين</th>
-                <th className="px-4 py-3.5 text-center">الإجراءات</th>
+                <th className="px-4 py-3.5 text-start whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1.5">
+                    <span>شركة المزود</span>
+                    <TableHeaderColumnFilter
+                      label="المزود"
+                      value={providerFilter}
+                      onChange={(val) => {
+                        setProviderFilter(val as FuelProvider | "");
+                        setPage(1);
+                      }}
+                      options={providerOptions}
+                      placeholder="تصفية بالمزود..."
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-start whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1.5">
+                    <span>رقم البطاقة / المعرف</span>
+                    <TableHeaderColumnFilter
+                      label="رقم البطاقة"
+                      value={headerCardNumberFilter}
+                      onChange={setHeaderCardNumberFilter}
+                      options={cardNumberOptions}
+                      placeholder="تصفية برقم البطاقة..."
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-start whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1.5">
+                    <span>رقم اللوحة</span>
+                    <TableHeaderColumnFilter
+                      label="اللوحة"
+                      value={headerPlateFilter}
+                      onChange={setHeaderPlateFilter}
+                      options={plateOptions}
+                      placeholder="تصفية باللوحة..."
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-start whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1.5">
+                    <span>المندوب المعين حالياً</span>
+                    <TableHeaderColumnFilter
+                      label="المندوب"
+                      value={headerAssignmentFilter}
+                      onChange={setHeaderAssignmentFilter}
+                      options={assignmentOptions}
+                      placeholder="تصفية بالمندوب والحالة..."
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-start whitespace-nowrap">تاريخ بدء التعيين</th>
+                <th className="px-4 py-3.5 text-center whitespace-nowrap">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)] font-medium">
@@ -228,8 +506,22 @@ export function FuelCardsListView({
                     لا توجد بطاقات وقود تطابق معايير البحث.
                   </td>
                 </tr>
+              ) : filteredCards.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-[var(--muted)]">
+                    <FilterIcon size={24} className="mx-auto opacity-40 mb-2" />
+                    <p className="font-bold text-sm text-[var(--foreground)]">لا توجد بطاقات وقود تطابق فلاتر الأعمدة المحددة.</p>
+                    <button
+                      type="button"
+                      onClick={clearHeaderFilters}
+                      className="mt-2 text-xs font-bold text-[#1167c9] hover:underline"
+                    >
+                      مسح فلاتر الأعمدة
+                    </button>
+                  </td>
+                </tr>
               ) : (
-                items.map((card) => {
+                filteredCards.map((card: FuelCard) => {
                   const hasRider = card.currentRider !== null;
 
                   return (

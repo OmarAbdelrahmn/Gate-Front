@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, useMemo } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   Edit3,
+  FileDown,
   FileSpreadsheet,
   FileText,
   Filter,
@@ -44,6 +45,10 @@ import {
   type GpsImportResponse,
   type GpsImportLogItem,
 } from "@/lib/fleet/daily-distances-api";
+import {
+  TableHeaderColumnFilter,
+  type FilterOption,
+} from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
 
 function getRiyadhDateStr(daysOffset = 0): string {
   const now = new Date();
@@ -61,6 +66,74 @@ export default function VehicleDailyDistancesPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<"gps" | "manual" | "missing" | "">("");
+
+  // Table Header Column Filters
+  const [headerPlateFilter, setHeaderPlateFilter] = useState<string>("");
+  const [headerSourceFilter, setHeaderSourceFilter] = useState<string>("");
+  const [headerGpsStatusFilter, setHeaderGpsStatusFilter] = useState<string>("");
+  const [headerManualStatusFilter, setHeaderManualStatusFilter] = useState<string>("");
+
+  const GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY = "admin_fleet_daily_distances_filters_session";
+  const [isRestored, setIsRestored] = useState(false);
+
+  // Restore filters on mount for the current session
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.headerPlateFilter === "string") setHeaderPlateFilter(parsed.headerPlateFilter);
+        if (typeof parsed.headerSourceFilter === "string") setHeaderSourceFilter(parsed.headerSourceFilter);
+        if (typeof parsed.headerGpsStatusFilter === "string") setHeaderGpsStatusFilter(parsed.headerGpsStatusFilter);
+        if (typeof parsed.headerManualStatusFilter === "string") setHeaderManualStatusFilter(parsed.headerManualStatusFilter);
+        if (typeof parsed.sourceFilter === "string") setSourceFilter(parsed.sourceFilter as any);
+        if (typeof parsed.searchQuery === "string") setSearchQuery(parsed.searchQuery);
+      }
+    } catch {
+      // ignore JSON parse or sessionStorage errors
+    } finally {
+      setIsRestored(true);
+    }
+  }, []);
+
+  // Save filters to sessionStorage whenever filters change (only after initial restoration)
+  useEffect(() => {
+    if (!isRestored) return;
+    try {
+      if (
+        headerPlateFilter ||
+        headerSourceFilter ||
+        headerGpsStatusFilter ||
+        headerManualStatusFilter ||
+        sourceFilter ||
+        searchQuery
+      ) {
+        sessionStorage.setItem(
+          GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY,
+          JSON.stringify({
+            headerPlateFilter,
+            headerSourceFilter,
+            headerGpsStatusFilter,
+            headerManualStatusFilter,
+            sourceFilter,
+            searchQuery,
+          })
+        );
+      } else {
+        sessionStorage.removeItem(GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY);
+      }
+    } catch {
+      // ignore sessionStorage errors
+    }
+  }, [
+    isRestored,
+    headerPlateFilter,
+    headerSourceFilter,
+    headerGpsStatusFilter,
+    headerManualStatusFilter,
+    sourceFilter,
+    searchQuery,
+  ]);
 
   // Debounce search query
   useEffect(() => {
@@ -246,6 +319,170 @@ export default function VehicleDailyDistancesPage() {
     }
   };
 
+  // Download GPS import problems / unaccepted rows as Excel (.xlsx)
+  const handleDownloadErrorsExcel = async () => {
+    if (!importResult) return;
+
+    try {
+      const XLSX = await import("xlsx");
+
+      const errorRows =
+        importResult.errors && importResult.errors.length > 0
+          ? importResult.errors.map((err, idx) => {
+              if (locale === "en") {
+                return {
+                  "#": idx + 1,
+                  "Row Number": err.rowNumber != null ? err.rowNumber : "—",
+                  "Plate Number": err.plateNumber || "—",
+                  "Error Code": err.errorCode || "UNACCEPTED",
+                  "Rejection Reason / Description": err.message || err.errorCode,
+                  "Work Date": expectedDate || workDate,
+                  "Imported File": gpsFile?.name || "GPS Report",
+                };
+              }
+
+              return {
+                "م": idx + 1,
+                "رقم الصف في الملف": err.rowNumber != null ? err.rowNumber : "—",
+                "رقم اللوحة": err.plateNumber || "—",
+                "رمز المشكلة": err.errorCode || "غير مقبول",
+                "سبب عدم القبول / وصف المشكلة": err.message || err.errorCode,
+                "تاريخ العمل": expectedDate || workDate,
+                "اسم الملف المستورد": gpsFile?.name || "تقرير GPS",
+              };
+            })
+          : [
+              {
+                "م": 1,
+                "رقم الصف في الملف": "—",
+                "رقم اللوحة": "—",
+                "رمز المشكلة": "UNMATCHED_RECORDS",
+                "سبب عدم القبول / وصف المشكلة": `يوجد ${importResult.unmatchedRows} صف غير مطابق و ${importResult.invalidRows} صف غير صالح في الملف.`,
+                "تاريخ العمل": expectedDate || workDate,
+                "اسم الملف المستورد": gpsFile?.name || "تقرير GPS",
+              },
+            ];
+
+      const worksheet = XLSX.utils.json_to_sheet(errorRows);
+
+      // Set column widths
+      worksheet["!cols"] = [
+        { wch: 6 },  // #
+        { wch: 18 }, // Row number
+        { wch: 20 }, // Plate
+        { wch: 25 }, // Error Code
+        { wch: 45 }, // Reason
+        { wch: 16 }, // Work Date
+        { wch: 28 }, // File name
+      ];
+
+      // Format Plate Number column as text
+      const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:G1");
+      const plateColIndex = 2; // Column C
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: plateColIndex });
+        const cell = worksheet[cellAddress];
+        if (cell) {
+          cell.t = "s";
+          cell.z = "@";
+        }
+      }
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        locale === "en" ? "GPS Import Problems" : "مشاكل استيراد GPS"
+      );
+
+      const fileName = `gps-import-problems-${expectedDate || workDate}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      toast.success(
+        "تم تصدير ملف المشاكل",
+        "تم تنزيل تقرير المشاكل والصفوف غير المقبولة بنجاح بصيغة Excel"
+      );
+    } catch (exportErr) {
+      console.error("Error exporting GPS problems Excel:", exportErr);
+      toast.error("فشل التصدير", "حدث خطأ أثناء إنشاء ملف Excel");
+    }
+  };
+
+  // Export current table records as Excel
+  const handleExportTableExcel = async () => {
+    if (!data || !data.items.length) {
+      toast.error("لا توجد بيانات", "لا توجد سجلات مسافات لتصديرها لهذا اليوم.");
+      return;
+    }
+
+    try {
+      const XLSX = await import("xlsx");
+
+      const rows = data.items.map((item, idx) => {
+        const sourceInfo = getAppliedSourceInfo(item.appliedSource);
+        if (locale === "en") {
+          return {
+            "#": idx + 1,
+            "Plate (Ar)": item.plateNumberAr || "—",
+            "Plate (En)": item.plateNumberEn || "—",
+            "Asset Number": item.assetNumber || "—",
+            "GPS Distance (KM)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
+            "Manual Odometer": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
+            "Manual Baseline": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
+            "Manual Distance (KM)": item.manualDistanceKm != null ? item.manualDistanceKm : "—",
+            "Applied Distance (KM)": item.appliedDistanceKm != null ? item.appliedDistanceKm : "—",
+            "Applied Source": sourceInfo.labelEn,
+            "Work Date": item.workDate,
+          };
+        }
+
+        return {
+          "م": idx + 1,
+          "اللوحة (عربي)": item.plateNumberAr || "—",
+          "اللوحة (إنجليزي)": item.plateNumberEn || "—",
+          "الرقم التسلسلي": item.assetNumber || "—",
+          "مسافة GPS (كم)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
+          "قراءة العداد اليدوية": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
+          "قراءة الأساس اليدوية": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
+          "المسافة اليدوية (كم)": item.manualDistanceKm != null ? item.manualDistanceKm : "—",
+          "المسافة المعتمدة (كم)": item.appliedDistanceKm != null ? item.appliedDistanceKm : "—",
+          "المصدر المعتمد": sourceInfo.labelAr,
+          "تاريخ العمل": item.workDate,
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      worksheet["!cols"] = [
+        { wch: 6 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 22 },
+        { wch: 18 },
+        { wch: 16 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        locale === "en" ? "Daily Distances" : "المسافات اليومية"
+      );
+
+      const fileName = `daily-distances-${workDate}${sourceFilter ? `-${sourceFilter}` : ""}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      toast.success("تم التصدير", "تم تنزيل سجلات المسافات اليومية بنجاح بصيغة Excel");
+    } catch (err) {
+      console.error("Error exporting daily distances:", err);
+      toast.error("فشل التصدير", "حدث خطأ أثناء إنشاء ملف Excel");
+    }
+  };
+
   // Open Logs Modal
   const handleOpenLogs = async () => {
     setIsLogsModalOpen(true);
@@ -260,6 +497,117 @@ export default function VehicleDailyDistancesPage() {
       setLogsLoading(false);
     }
   };
+  // Options for Table Header Filters
+  const plateOptions = useMemo<FilterOption[]>(() => {
+    if (!data?.items) return [];
+    const map = new Map<string, number>();
+    data.items.forEach((item) => {
+      const plate = item.plateNumberAr || item.plateNumberEn || item.assetNumber;
+      if (plate) {
+        map.set(plate, (map.get(plate) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([plate, count]) => ({
+        value: plate,
+        label: plate,
+        count,
+      }));
+  }, [data?.items]);
+
+  const sourceOptions = useMemo<FilterOption[]>(() => {
+    if (!data?.items) return [];
+    let gpsCount = 0;
+    let manualCount = 0;
+    let noneCount = 0;
+    data.items.forEach((item) => {
+      const s = getAppliedSourceInfo(item.appliedSource);
+      if (s.code === "Gps") gpsCount++;
+      else if (s.code === "Manual") manualCount++;
+      else noneCount++;
+    });
+    return [
+      { value: "Gps", label: "GPS (معتمد)", count: gpsCount },
+      { value: "Manual", label: "يدوي (بديل)", count: manualCount },
+      { value: "None", label: "بدون مسافة", count: noneCount },
+    ];
+  }, [data?.items]);
+
+  const gpsStatusOptions = useMemo<FilterOption[]>(() => {
+    if (!data?.items) return [];
+    let hasCount = 0;
+    let zeroCount = 0;
+    let noCount = 0;
+    data.items.forEach((item) => {
+      if (item.gpsDistanceKm == null) noCount++;
+      else if (item.gpsDistanceKm === 0) zeroCount++;
+      else hasCount++;
+    });
+    return [
+      { value: "has_gps", label: "مسافة مسجلة (> 0 كم)", count: hasCount },
+      { value: "zero_gps", label: "مسافة صفرية (0 كم)", count: zeroCount },
+      { value: "no_gps", label: "غير متوفرة (—)", count: noCount },
+    ];
+  }, [data?.items]);
+
+  const manualStatusOptions = useMemo<FilterOption[]>(() => {
+    if (!data?.items) return [];
+    let hasManual = 0;
+    let noManual = 0;
+    data.items.forEach((item) => {
+      if (item.manualOdometerReading != null) hasManual++;
+      else noManual++;
+    });
+    return [
+      { value: "has_manual", label: "قراءة مسجلة", count: hasManual },
+      { value: "no_manual", label: "بدون قراءة يدوية", count: noManual },
+    ];
+  }, [data?.items]);
+
+  const clearHeaderFilters = () => {
+    setHeaderPlateFilter("");
+    setHeaderSourceFilter("");
+    setHeaderGpsStatusFilter("");
+    setHeaderManualStatusFilter("");
+    try {
+      sessionStorage.removeItem(GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
+  const isHeaderFiltered = Boolean(
+    headerPlateFilter || headerSourceFilter || headerGpsStatusFilter || headerManualStatusFilter
+  );
+
+  // Client-filtered items based on table header filters
+  const filteredItems = useMemo(() => {
+    if (!data?.items) return [];
+    return data.items.filter((item) => {
+      if (headerPlateFilter) {
+        const p = headerPlateFilter.toLowerCase();
+        const matchAr = item.plateNumberAr?.toLowerCase().includes(p);
+        const matchEn = item.plateNumberEn?.toLowerCase().includes(p);
+        const matchAsset = item.assetNumber?.toLowerCase().includes(p);
+        if (!matchAr && !matchEn && !matchAsset) return false;
+      }
+      if (headerSourceFilter) {
+        const s = getAppliedSourceInfo(item.appliedSource);
+        if (headerSourceFilter !== s.code) return false;
+      }
+      if (headerGpsStatusFilter) {
+        if (headerGpsStatusFilter === "has_gps" && (item.gpsDistanceKm == null || item.gpsDistanceKm <= 0)) return false;
+        if (headerGpsStatusFilter === "zero_gps" && item.gpsDistanceKm !== 0) return false;
+        if (headerGpsStatusFilter === "no_gps" && item.gpsDistanceKm != null) return false;
+      }
+      if (headerManualStatusFilter) {
+        if (headerManualStatusFilter === "has_manual" && item.manualOdometerReading == null) return false;
+        if (headerManualStatusFilter === "no_manual" && item.manualOdometerReading != null) return false;
+      }
+      return true;
+    });
+  }, [data?.items, headerPlateFilter, headerSourceFilter, headerGpsStatusFilter, headerManualStatusFilter]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -281,6 +629,17 @@ export default function VehicleDailyDistancesPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {data && data.items.length > 0 && (
+            <Button
+              variant="secondary"
+              onClick={handleExportTableExcel}
+              className="gap-2 text-xs font-bold"
+            >
+              <FileDown className="h-4 w-4 text-[#1167c9]" />
+              تصدير السجلات (Excel)
+            </Button>
+          )}
+
           {(can("fleet.daily_distances.read") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
             <Button variant="secondary" onClick={handleOpenLogs} className="gap-2 text-xs font-bold">
               <History className="h-4 w-4 text-slate-600 dark:text-slate-300" />
@@ -459,6 +818,44 @@ export default function VehicleDailyDistancesPage() {
         </div>
       )}
 
+      {/* Active Table Header Filters */}
+      {isHeaderFiltered && (
+        <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs">
+          <span className="text-[var(--muted)] font-bold">فلاتر أعمدة الجدول النشطة:</span>
+          {headerPlateFilter && (
+            <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 gap-1 pl-1.5 font-medium">
+              اللوحة: {headerPlateFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderPlateFilter("")} />
+            </Badge>
+          )}
+          {headerSourceFilter && (
+            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 gap-1 pl-1.5 font-medium">
+              المصدر: {sourceOptions.find((s: FilterOption) => s.value === headerSourceFilter)?.label || headerSourceFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderSourceFilter("")} />
+            </Badge>
+          )}
+          {headerGpsStatusFilter && (
+            <Badge className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 gap-1 pl-1.5 font-medium">
+              مسافة GPS: {gpsStatusOptions.find((s: FilterOption) => s.value === headerGpsStatusFilter)?.label || headerGpsStatusFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderGpsStatusFilter("")} />
+            </Badge>
+          )}
+          {headerManualStatusFilter && (
+            <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 gap-1 pl-1.5 font-medium">
+              العداد اليدوي: {manualStatusOptions.find((s: FilterOption) => s.value === headerManualStatusFilter)?.label || headerManualStatusFilter}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderManualStatusFilter("")} />
+            </Badge>
+          )}
+          <button
+            type="button"
+            onClick={clearHeaderFilters}
+            className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-bold mr-auto cursor-pointer"
+          >
+            مسح جميع فلاتر الأعمدة
+          </button>
+        </div>
+      )}
+
       {/* Main Table */}
       <Card className="p-0 overflow-hidden border-[var(--border)] shadow-sm">
         {loading ? (
@@ -483,24 +880,76 @@ export default function VehicleDailyDistancesPage() {
               تأكد من اختيار تاريخ عمل صحيح أو قم برفع تقرير GPS الخاص بهذا اليوم.
             </p>
           </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <Filter className="h-10 w-10 text-[var(--muted)] mx-auto opacity-50" />
+            <h3 className="font-bold text-sm text-[var(--foreground)]">لا توجد سجلات تطابق فلاتر الأعمدة المحددة.</h3>
+            <Button variant="secondary" onClick={clearHeaderFilters} className="text-xs">
+              مسح فلاتر الأعمدة
+            </Button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs dir-rtl">
               <thead className="bg-[#1167c9]/10 text-xs font-extrabold text-[var(--muted)] border-b border-[var(--border)]">
                 <tr>
-                  <th className="px-4 py-3.5">اللوحة (عربي/إنجليزي)</th>
-                  <th className="px-4 py-3.5 text-center">مسافة GPS</th>
-                  <th className="px-4 py-3.5 text-center">قراءة العداد اليدوية</th>
-                  <th className="px-4 py-3.5 text-center">قراءة الأساس</th>
-                  <th className="px-4 py-3.5 text-center">المسافة اليدوية</th>
-                  <th className="px-4 py-3.5 text-center bg-blue-500/10 text-[#1167c9]">المسافة المعتمدة</th>
-                  <th className="px-4 py-3.5 text-center">المصدر المعتمد</th>
-                  <th className="px-4 py-3.5 text-center">إجمالي المركبة التشغيلي</th>
-                  <th className="px-4 py-3.5 text-center">الإجراءات</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>اللوحة (عربي/إنجليزي)</span>
+                      <TableHeaderColumnFilter
+                        label="اللوحة"
+                        value={headerPlateFilter}
+                        onChange={setHeaderPlateFilter}
+                        options={plateOptions}
+                        placeholder="بحث في اللوحات..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap">
+                    <div className="inline-flex items-center justify-center gap-1.5">
+                      <span>مسافة GPS</span>
+                      <TableHeaderColumnFilter
+                        label="مسافة GPS"
+                        value={headerGpsStatusFilter}
+                        onChange={setHeaderGpsStatusFilter}
+                        options={gpsStatusOptions}
+                        placeholder="تصفية مسافة GPS..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap">
+                    <div className="inline-flex items-center justify-center gap-1.5">
+                      <span>قراءة العداد اليدوية</span>
+                      <TableHeaderColumnFilter
+                        label="العداد اليدوي"
+                        value={headerManualStatusFilter}
+                        onChange={setHeaderManualStatusFilter}
+                        options={manualStatusOptions}
+                        placeholder="تصفية القراءة اليدوية..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap">قراءة الأساس</th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap">المسافة اليدوية</th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap bg-blue-500/10 text-[#1167c9]">المسافة المعتمدة</th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap">
+                    <div className="inline-flex items-center justify-center gap-1.5">
+                      <span>المصدر المعتمد</span>
+                      <TableHeaderColumnFilter
+                        label="المصدر المعتمد"
+                        value={headerSourceFilter}
+                        onChange={setHeaderSourceFilter}
+                        options={sourceOptions}
+                        placeholder="تصفية المصدر..."
+                      />
+                    </div>
+                  </th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap">إجمالي المركبة التشغيلي</th>
+                  <th className="px-4 py-3.5 text-center whitespace-nowrap">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)] font-medium">
-                {data.items.map((item) => {
+                {filteredItems.map((item: VehicleDailyDistanceItem) => {
                   const sourceInfo = getAppliedSourceInfo(item.appliedSource);
 
                   return (
@@ -829,11 +1278,45 @@ export default function VehicleDailyDistancesPage() {
                 </div>
               </div>
 
+              {/* Download Problems Alert & Button */}
+              {(importResult.errors?.length > 0 || importResult.unmatchedRows > 0 || importResult.invalidRows > 0) && (
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-900">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-red-900 dark:text-red-200">
+                      <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+                      <span>يوجد صفوف أو لوحات غير مقبولة في الملف</span>
+                    </div>
+                    <p className="text-[11px] text-red-700 dark:text-red-300">
+                      يمكنك تحميل ملف Excel يحتوي على قائمة المشاكل واللوحات المرفوضة مع أرقام الصفوف وأسباب الرفض.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleDownloadErrorsExcel}
+                    className="gap-2 text-xs font-bold bg-white dark:bg-slate-900 border-red-300 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950 shadow-xs shrink-0"
+                  >
+                    <FileDown className="h-4 w-4 text-red-600" />
+                    <span>تحميل المشاكل (Excel)</span>
+                  </Button>
+                </div>
+              )}
+
               {importResult.errors && importResult.errors.length > 0 && (
                 <div className="border rounded-xl p-3 bg-red-50/60 dark:bg-red-950/30 max-h-40 overflow-y-auto space-y-1.5 text-[11px]">
-                  <p className="font-bold text-red-900 dark:text-red-300">ملاحظات وشرائح الأخطاء أثناء الرفع:</p>
+                  <div className="flex items-center justify-between font-bold text-red-900 dark:text-red-300 pb-1 border-b border-red-200/60">
+                    <span>ملاحظات وشرائح الأخطاء أثناء الرفع ({importResult.errors.length}):</span>
+                    <button
+                      type="button"
+                      onClick={handleDownloadErrorsExcel}
+                      className="text-xs font-bold text-[#1167c9] dark:text-blue-400 hover:underline flex items-center gap-1"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      <span>تنزيل كملف Excel</span>
+                    </button>
+                  </div>
                   {importResult.errors.map((err, i) => (
-                    <div key={i} className="text-red-800 dark:text-red-200 border-b border-red-200/50 pb-1">
+                    <div key={i} className="text-red-800 dark:text-red-200 border-b border-red-200/50 pb-1 last:border-none">
                       {err.rowNumber && <span className="font-mono font-bold">[صف {err.rowNumber}] </span>}
                       {err.plateNumber && <span className="font-bold">لوحة: {err.plateNumber} — </span>}
                       <span>{err.message || err.errorCode}</span>
