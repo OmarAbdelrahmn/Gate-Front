@@ -384,10 +384,18 @@ export default function VehicleDetailPage() {
               </span>
             </Card>
             <Card className="p-4 flex flex-col gap-1">
-              <span className="text-xs font-bold text-slate-500 uppercase">العداد</span>
+              <span className="text-xs font-bold text-slate-500 uppercase">الكيلومترات والعداد</span>
               <span className="text-lg font-bold text-slate-800 dark:text-slate-200 font-mono text-[#1167c9]">
-                {summary.currentOdometer.toLocaleString()} <span className="text-sm">كم</span>
+                {(summary.trackedDistanceKm ?? summary.vehicleTrackedDistanceKm ?? summary.currentOdometer).toLocaleString(undefined, {
+                  minimumFractionDigits: (summary.trackedDistanceKm != null || summary.vehicleTrackedDistanceKm != null) ? 2 : 0,
+                  maximumFractionDigits: 2,
+                })} <span className="text-sm">كم</span>
               </span>
+              {(summary.trackedDistanceKm != null || summary.vehicleTrackedDistanceKm != null) && (
+                <span className="text-[10px] text-[var(--muted)] font-mono">
+                  العداد الأساسي: {summary.currentOdometer.toLocaleString()} كم
+                </span>
+              )}
             </Card>
             <Card className="p-4 flex flex-col justify-between gap-1">
               <span className="text-xs font-bold text-slate-500 uppercase">المالك المسجل</span>

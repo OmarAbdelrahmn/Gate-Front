@@ -382,6 +382,8 @@ export interface VehicleSummaryResponse {
   operatingCityId?: string | null;
   operatingCity?: string | null;
   currentOdometer: number;
+  trackedDistanceKm?: number | null;
+  vehicleTrackedDistanceKm?: number | null;
   currentAssignmentId?: string | null;
   currentRiderProfileId?: string | null;
   currentRiderName?: string | null;
@@ -483,6 +485,8 @@ export interface VehicleUpsertRequest {
   acquisitionDate?: string | null;
   leaseReference?: string | null;
   currentOdometer: number;
+  trackedDistanceKm?: number | null;
+  vehicleTrackedDistanceKm?: number | null;
   notes?: string | null;
   rowVersion?: string | null;
 }

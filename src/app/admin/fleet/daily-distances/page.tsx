@@ -39,6 +39,8 @@ import {
   importGpsFile,
   getGpsImportLogs,
   getAppliedSourceInfo,
+  getDailyDistanceErrorMessage,
+  getGpsRowErrorMessage,
   type VehicleDailyDistanceItem,
   type VehicleDailyDistancesResponse,
   type SaveManualOdometerRequest,
@@ -255,22 +257,38 @@ export default function VehicleDailyDistancesPage() {
           rowVersion: selectedItemForManual.rowVersion,
         };
 
-        await saveManualOdometer(selectedItemForManual.vehicleId, selectedItemForManual.workDate, payload);
+        const updatedItem = await saveManualOdometer(selectedItemForManual.vehicleId, selectedItemForManual.workDate, payload);
         toast.success("تم التحديث بنجاح", "تم تسجيل قراءة العداد اليدوية واحتساب المسافة المعتمدة.");
+        
+        // Immediately replace the row with PUT response
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            items: prev.items.map((it) => (it.vehicleId === updatedItem.vehicleId ? updatedItem : it)),
+          };
+        });
+
         setSelectedItemForManual(null);
+        // Refresh summary KPIs and subsequent days
         fetchDailyDistances();
       } catch (err: any) {
         console.error("Save manual odometer error:", err);
-        if (err?.errorCode === "fleet.daily_distance.manual_baseline_required" || err?.status === 400 && err?.message?.includes("baseline")) {
+        const errInfo = getDailyDistanceErrorMessage(err?.errorCode, err?.message);
+        if (err?.errorCode === "fleet.daily_distance.manual_baseline_required" || (err?.status === 400 && err?.message?.includes("baseline"))) {
           setRequireBaselineInput(true);
           toast.error("مطلوب قراءة الأساس", "يرجى تحديد قراءة العداد السابقة (الأساس) لهذه المركبة.");
         } else if (err?.errorCode === "fleet.daily_distance.invalid_manual_odometer") {
-          toast.error("قراءة غير صالحة", "قراءة العداد الإجمالية أقل من قراءة الأساس أو تكسر تسلسل القراءات.");
-        } else if (err?.status === 409) {
+          const baselineVal = selectedItemForManual.manualBaselineOdometerReading ?? selectedItemForManual.currentOdometer;
+          toast.error(
+            "قراءة غير صالحة",
+            `قراءة العداد الإجمالية أقل من العداد الفعلي السابق للمركبة (قراءة الأساس: ${baselineVal.toLocaleString()} كم) أو تكسر تسلسل القراءات. يرجى إدخال قراءة صحيحة أو إجراء تصحيح إداري.`
+          );
+        } else if (err?.status === 409 || err?.errorCode === "fleet.concurrency_conflict") {
           toast.error("تعارض في التحديث", "تم تعديل السجل بواسطة مستخدم آخر. تم إعادة تحميل البيانات.");
           fetchDailyDistances();
         } else {
-          toast.error("فشل الحفظ", err?.message || "تعذر حفظ قراءة العداد اليدوية.");
+          toast.error(errInfo.title, errInfo.description);
         }
       }
     });
@@ -288,7 +306,7 @@ export default function VehicleDailyDistancesPage() {
   const handleGpsImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!gpsFile) {
-      toast.error("ملف مفقود", "يرجى اختيار ملف تقرير GPS بصيغة .xls أو .xlsx");
+      toast.error("ملف مفقود", "يرجى اختيار ملف تقرير GPS بصيغة .xls أو .xlsx أو .htm أو .zip");
       return;
     }
 
@@ -302,18 +320,14 @@ export default function VehicleDailyDistancesPage() {
         "تم معالجة التقرير",
         `تم مطابقة ${res.matchedRows} مركبة بنجاح (${res.unmatchedRows} غير مطابقة، ${res.invalidRows} غير صالحة).`
       );
+      if (expectedDate && expectedDate !== workDate) {
+        setWorkDate(expectedDate);
+      }
       fetchDailyDistances();
     } catch (err: any) {
       console.error("GPS import error:", err);
-      if (err?.errorCode === "fleet.daily_distance.gps_date_mismatch") {
-        toast.error("اختلاف في تاريخ التقرير", "تاريخ التقرير المرفوع لا يطابق تاريخ العمل المحدد.");
-      } else if (err?.errorCode === "fleet.daily_distance.duplicate_gps_import") {
-        toast.error("ملف مكرر", "تم رفع هذا التقرير مسبقاً لهذا اليوم.");
-      } else if (err?.errorCode === "fleet.daily_distance.invalid_gps_file") {
-        toast.error("ملف غير صالح", "بنية التقرير المرفوع غير صالحة أو تعذر قراءتها.");
-      } else {
-        toast.error("فشل استيراد تقرير GPS", err?.message || "حدث خطأ أثناء معالجة التقرير.");
-      }
+      const errInfo = getDailyDistanceErrorMessage(err?.errorCode, err?.message);
+      toast.error(errInfo.title, errInfo.description);
     } finally {
       setIsUploading(false);
     }
@@ -335,7 +349,7 @@ export default function VehicleDailyDistancesPage() {
                   "Row Number": err.rowNumber != null ? err.rowNumber : "—",
                   "Plate Number": err.plateNumber || "—",
                   "Error Code": err.errorCode || "UNACCEPTED",
-                  "Rejection Reason / Description": err.message || err.errorCode,
+                  "Rejection Reason / Description": getGpsRowErrorMessage(err.errorCode) || err.message || err.errorCode,
                   "Work Date": expectedDate || workDate,
                   "Imported File": gpsFile?.name || "GPS Report",
                 };
@@ -346,7 +360,7 @@ export default function VehicleDailyDistancesPage() {
                 "رقم الصف في الملف": err.rowNumber != null ? err.rowNumber : "—",
                 "رقم اللوحة": err.plateNumber || "—",
                 "رمز المشكلة": err.errorCode || "غير مقبول",
-                "سبب عدم القبول / وصف المشكلة": err.message || err.errorCode,
+                "سبب عدم القبول / وصف المشكلة": getGpsRowErrorMessage(err.errorCode) || err.message || err.errorCode,
                 "تاريخ العمل": expectedDate || workDate,
                 "اسم الملف المستورد": gpsFile?.name || "تقرير GPS",
               };
@@ -423,30 +437,42 @@ export default function VehicleDailyDistancesPage() {
         if (locale === "en") {
           return {
             "#": idx + 1,
+            "Asset Number": item.assetNumber || "—",
             "Plate (Ar)": item.plateNumberAr || "—",
             "Plate (En)": item.plateNumberEn || "—",
-            "Asset Number": item.assetNumber || "—",
             "GPS Distance (KM)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
             "Manual Odometer": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
             "Manual Baseline": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
             "Manual Distance (KM)": item.manualDistanceKm != null ? item.manualDistanceKm : "—",
             "Applied Distance (KM)": item.appliedDistanceKm != null ? item.appliedDistanceKm : "—",
             "Applied Source": sourceInfo.labelEn,
+            "Vehicle Tracked Distance (KM)": item.vehicleTrackedDistanceKm != null ? item.vehicleTrackedDistanceKm : "—",
+            "Effective Odometer After (KM)": item.effectiveOdometerAfterKm != null ? item.effectiveOdometerAfterKm : "—",
+            "GPS Import ID": item.lastGpsImportId || "—",
+            "GPS Imported At": item.gpsImportedAtUtc || "—",
+            "Manual Entered At": item.manualEnteredAtUtc || "—",
+            "Manual Notes": item.manualNotes || "—",
             "Work Date": item.workDate,
           };
         }
 
         return {
           "م": idx + 1,
+          "رقم الأصل": item.assetNumber || "—",
           "اللوحة (عربي)": item.plateNumberAr || "—",
           "اللوحة (إنجليزي)": item.plateNumberEn || "—",
-          "الرقم التسلسلي": item.assetNumber || "—",
           "مسافة GPS (كم)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
           "قراءة العداد اليدوية": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
           "قراءة الأساس اليدوية": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
           "المسافة اليدوية (كم)": item.manualDistanceKm != null ? item.manualDistanceKm : "—",
           "المسافة المعتمدة (كم)": item.appliedDistanceKm != null ? item.appliedDistanceKm : "—",
           "المصدر المعتمد": sourceInfo.labelAr,
+          "إجمالي المركبة التشغيلي (كم)": item.vehicleTrackedDistanceKm != null ? item.vehicleTrackedDistanceKm : "—",
+          "العداد بعد هذا اليوم (كم)": item.effectiveOdometerAfterKm != null ? item.effectiveOdometerAfterKm : "—",
+          "رقم عملية استيراد GPS": item.lastGpsImportId || "—",
+          "تاريخ استيراد GPS": item.gpsImportedAtUtc ? new Date(item.gpsImportedAtUtc).toLocaleString("ar-SA") : "—",
+          "تاريخ الإدخال اليدوي": item.manualEnteredAtUtc ? new Date(item.manualEnteredAtUtc).toLocaleString("ar-SA") : "—",
+          "ملاحظات الإدخال اليدوي": item.manualNotes || "—",
           "تاريخ العمل": item.workDate,
         };
       });
@@ -454,7 +480,7 @@ export default function VehicleDailyDistancesPage() {
       const worksheet = XLSX.utils.json_to_sheet(rows);
       worksheet["!cols"] = [
         { wch: 6 },
-        { wch: 16 },
+        { wch: 14 },
         { wch: 16 },
         { wch: 16 },
         { wch: 18 },
@@ -463,6 +489,12 @@ export default function VehicleDailyDistancesPage() {
         { wch: 20 },
         { wch: 22 },
         { wch: 18 },
+        { wch: 24 },
+        { wch: 24 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 25 },
         { wch: 16 },
       ];
 
@@ -685,7 +717,7 @@ export default function VehicleDailyDistancesPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="البحث باللوحة..."
+                placeholder="البحث برقم الأصل أو اللوحة..."
                 className="pr-9 pl-8 text-xs"
               />
               {searchQuery && (
@@ -893,7 +925,8 @@ export default function VehicleDailyDistancesPage() {
             <table className="w-full text-right text-xs dir-rtl">
               <thead className="bg-[#1167c9]/10 text-xs font-extrabold text-[var(--muted)] border-b border-[var(--border)]">
                 <tr>
-                  <th className="px-4 py-3.5 whitespace-nowrap">
+                  <th className="px-3.5 py-3.5 whitespace-nowrap">رقم الأصل</th>
+                  <th className="px-3.5 py-3.5 whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">
                       <span>اللوحة (عربي/إنجليزي)</span>
                       <TableHeaderColumnFilter
@@ -905,7 +938,7 @@ export default function VehicleDailyDistancesPage() {
                       />
                     </div>
                   </th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap">
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap">
                     <div className="inline-flex items-center justify-center gap-1.5">
                       <span>مسافة GPS</span>
                       <TableHeaderColumnFilter
@@ -917,7 +950,7 @@ export default function VehicleDailyDistancesPage() {
                       />
                     </div>
                   </th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap">
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap">
                     <div className="inline-flex items-center justify-center gap-1.5">
                       <span>قراءة العداد اليدوية</span>
                       <TableHeaderColumnFilter
@@ -929,10 +962,10 @@ export default function VehicleDailyDistancesPage() {
                       />
                     </div>
                   </th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap">قراءة الأساس</th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap">المسافة اليدوية</th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap bg-blue-500/10 text-[#1167c9]">المسافة المعتمدة</th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap">
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap">قراءة الأساس</th>
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap">المسافة اليدوية</th>
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap bg-blue-500/10 text-[#1167c9]">المسافة المعتمدة</th>
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap">
                     <div className="inline-flex items-center justify-center gap-1.5">
                       <span>المصدر المعتمد</span>
                       <TableHeaderColumnFilter
@@ -944,8 +977,10 @@ export default function VehicleDailyDistancesPage() {
                       />
                     </div>
                   </th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap">إجمالي المركبة التشغيلي</th>
-                  <th className="px-4 py-3.5 text-center whitespace-nowrap">الإجراءات</th>
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap">إجمالي المركبة التشغيلي</th>
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap bg-slate-100/60 dark:bg-slate-800/40">العداد بعد اليوم</th>
+                  <th className="px-3 py-3.5 whitespace-nowrap text-center">بيانات الإدخال / الاستيراد</th>
+                  <th className="px-3 py-3.5 text-center whitespace-nowrap">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)] font-medium">
@@ -954,19 +989,24 @@ export default function VehicleDailyDistancesPage() {
 
                   return (
                     <tr key={item.vehicleId} className="hover:bg-[var(--subtle-bg)] transition-colors">
-                      {/* Plate Number */}
-                      <td className="px-4 py-3">
+                      {/* Asset Number */}
+                      <td className="px-3.5 py-3 font-mono font-bold whitespace-nowrap">
                         <Link
                           href={`/admin/fleet/vehicles/${item.vehicleId}`}
-                          className="group hover:underline inline-block"
+                          className="text-[#1167c9] dark:text-blue-400 hover:underline inline-flex items-center gap-1"
                         >
-                          <div className="font-bold text-[var(--foreground)] group-hover:text-[#1167c9] transition-colors">{item.plateNumberAr || "—"}</div>
-                          <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
+                          <span>{item.assetNumber || "—"}</span>
                         </Link>
                       </td>
 
+                      {/* Plate Number */}
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        <div className="font-bold text-[var(--foreground)]">{item.plateNumberAr || "—"}</div>
+                        <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
+                      </td>
+
                       {/* GPS Distance */}
-                      <td className="px-4 py-3 text-center font-mono">
+                      <td className="px-3 py-3 text-center font-mono whitespace-nowrap">
                         {item.gpsDistanceKm != null ? (
                           <span className="font-bold text-emerald-700 dark:text-emerald-400">
                             {item.gpsDistanceKm.toFixed(2)} كم
@@ -977,7 +1017,7 @@ export default function VehicleDailyDistancesPage() {
                       </td>
 
                       {/* Manual Odometer Reading */}
-                      <td className="px-4 py-3 text-center font-mono">
+                      <td className="px-3 py-3 text-center font-mono whitespace-nowrap">
                         {item.manualOdometerReading != null ? (
                           <span className="font-bold text-slate-800 dark:text-slate-200">
                             {item.manualOdometerReading.toLocaleString()}
@@ -988,7 +1028,7 @@ export default function VehicleDailyDistancesPage() {
                       </td>
 
                       {/* Baseline Odometer */}
-                      <td className="px-4 py-3 text-center font-mono">
+                      <td className="px-3 py-3 text-center font-mono whitespace-nowrap">
                         {item.manualBaselineOdometerReading != null ? (
                           <span className="text-slate-600 dark:text-slate-400">
                             {item.manualBaselineOdometerReading.toLocaleString()}
@@ -999,7 +1039,7 @@ export default function VehicleDailyDistancesPage() {
                       </td>
 
                       {/* Manual Calculated Distance */}
-                      <td className="px-4 py-3 text-center font-mono">
+                      <td className="px-3 py-3 text-center font-mono whitespace-nowrap">
                         {item.manualDistanceKm != null ? (
                           <span className="font-bold text-amber-700 dark:text-amber-400">
                             {item.manualDistanceKm.toFixed(2)} كم
@@ -1010,7 +1050,7 @@ export default function VehicleDailyDistancesPage() {
                       </td>
 
                       {/* Applied Distance Km (Main Highlighted Column) */}
-                      <td className="px-4 py-3 text-center font-mono bg-blue-50/50 dark:bg-blue-950/20">
+                      <td className="px-3 py-3 text-center font-mono bg-blue-50/50 dark:bg-blue-950/20 whitespace-nowrap">
                         {item.appliedDistanceKm != null ? (
                           <span className="text-sm font-black text-[#1167c9] dark:text-blue-400">
                             {item.appliedDistanceKm.toFixed(2)} كم
@@ -1021,19 +1061,26 @@ export default function VehicleDailyDistancesPage() {
                       </td>
 
                       {/* Applied Source Badge */}
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${sourceInfo.colorClass}`}
-                        >
-                          {sourceInfo.code === "Gps" && <CheckCircle2 className="h-3 w-3" />}
-                          {sourceInfo.code === "Manual" && <Edit3 className="h-3 w-3" />}
-                          {sourceInfo.code === "None" && <AlertCircle className="h-3 w-3" />}
-                          <span>{sourceInfo.labelAr}</span>
-                        </span>
+                      <td className="px-3 py-3 text-center whitespace-nowrap">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${sourceInfo.colorClass}`}
+                          >
+                            {sourceInfo.code === "Gps" && <CheckCircle2 className="h-3 w-3" />}
+                            {sourceInfo.code === "Manual" && <Edit3 className="h-3 w-3" />}
+                            {sourceInfo.code === "None" && <AlertCircle className="h-3 w-3" />}
+                            <span>{sourceInfo.labelAr}</span>
+                          </span>
+                          {sourceInfo.code === "Gps" && item.manualOdometerReading != null && (
+                            <span className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">
+                              (تم حفظ اليدوي للمراجعة)
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Vehicle Tracked Total Distance */}
-                      <td className="px-4 py-3 text-center font-mono">
+                      <td className="px-3 py-3 text-center font-mono whitespace-nowrap">
                         <span className="font-bold text-slate-900 dark:text-white">
                           {item.vehicleTrackedDistanceKm != null
                             ? `${item.vehicleTrackedDistanceKm.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} كم`
@@ -1041,8 +1088,47 @@ export default function VehicleDailyDistancesPage() {
                         </span>
                       </td>
 
+                      {/* Effective Odometer After This Day */}
+                      <td className="px-3 py-3 text-center font-mono bg-slate-50/60 dark:bg-slate-900/40 whitespace-nowrap">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {item.effectiveOdometerAfterKm != null
+                            ? `${item.effectiveOdometerAfterKm.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} كم`
+                            : "—"}
+                        </span>
+                      </td>
+
+                      {/* Entry and Import Details */}
+                      <td className="px-3 py-3 text-[10px] text-slate-600 dark:text-slate-400 whitespace-nowrap leading-tight">
+                        {item.lastGpsImportId && (
+                          <div className="font-mono text-[9px] text-[#1167c9] dark:text-blue-400 flex items-center gap-1">
+                            <span className="font-bold">استيراد:</span>
+                            <span title={item.lastGpsImportId}>{item.lastGpsImportId.slice(0, 8)}...</span>
+                          </div>
+                        )}
+                        {item.gpsImportedAtUtc && (
+                          <div>
+                            <span className="text-slate-500 font-medium">GPS:</span>{" "}
+                            {new Date(item.gpsImportedAtUtc).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        )}
+                        {item.manualEnteredAtUtc && (
+                          <div className="text-amber-700 dark:text-amber-400">
+                            <span className="font-medium">يدوي:</span>{" "}
+                            {new Date(item.manualEnteredAtUtc).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                            {item.manualNotes && (
+                              <span title={`ملاحظة: ${item.manualNotes}`} className="cursor-help mr-1">
+                                📝
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {!item.gpsImportedAtUtc && !item.manualEnteredAtUtc && !item.lastGpsImportId && (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+
                       {/* Actions */}
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center whitespace-nowrap">
                         {(can("fleet.daily_distances.manage") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
                           <Button
                             variant="secondary"
@@ -1201,21 +1287,24 @@ export default function VehicleDailyDistancesPage() {
         )}
       </Modal>
 
-      {/* Modal: Upload GPS Report (.xls / .xlsx) */}
+      {/* Modal: Upload GPS Report (.xls / .xlsx / .htm / .html / .zip) */}
       <Modal
         isOpen={isGpsImportOpen}
         onClose={() => setIsGpsImportOpen(false)}
         title="رفع تقرير المسافات من نظام GPS"
       >
         <form onSubmit={handleGpsImportSubmit} className="space-y-4 pt-2 text-xs">
-          <Card className="p-3 bg-blue-50 dark:bg-blue-950/40 border-blue-200 text-xs text-slate-800 dark:text-slate-200 space-y-1">
+          <Card className="p-3 bg-blue-50 dark:bg-blue-950/40 border-blue-200 text-xs text-slate-800 dark:text-slate-200 space-y-1.5">
             <p className="font-bold flex items-center gap-1.5 text-[#1167c9]">
               <Info className="h-4 w-4" />
-              تعليمات رفع ملف GPS:
+              تعليمات وصيغ ملف GPS المدعومة:
             </p>
-            <p className="text-[11px] leading-relaxed">
-              يدعم المستورد ملفات Excel بصيغة <strong>.xls</strong> و <strong>.xlsx</strong> وتقارير HTML المنزلة بنفس الامتداد. يتعرف المستورد تلقائياً على اللوحات والأرقام العربية والإنجليزية.
-            </p>
+            <ul className="text-[11px] leading-relaxed list-disc list-inside space-y-0.5 text-slate-700 dark:text-slate-300">
+              <li>ملفات Excel الحقيقية بصيغتي <strong>.xls</strong> و <strong>.xlsx</strong>.</li>
+              <li>تقارير HTML المنزلة من نظام GPS بامتداد <strong>.xls</strong> أو <strong>.htm / .html</strong>.</li>
+              <li>ملف <strong>ZIP</strong> مضغوط يحتوي على ملف التقرير ومجلد <strong>.files</strong> المرافق له في حال كانت البيانات مفصولة.</li>
+              <li>التعرف التلقائي على الأرقام واللوحات العربية والإنجليزية والفارسية بمختلف التنسيقات.</li>
+            </ul>
           </Card>
 
           <div>
@@ -1233,13 +1322,13 @@ export default function VehicleDailyDistancesPage() {
 
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-300">
-              اختر ملف التقرير (.xls / .xlsx - أقصى 10MB) <span className="text-red-500">*</span>
+              اختر ملف التقرير (.xls / .xlsx / .htm / .html / .zip - أقصى 10MB) <span className="text-red-500">*</span>
             </label>
             <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-4 text-center bg-slate-50 dark:bg-slate-900/50 hover:border-[#1167c9] transition-colors">
               <FileSpreadsheet className="h-8 w-8 text-[#1167c9] mx-auto mb-2" />
               <input
                 type="file"
-                accept=".xls,.xlsx"
+                accept=".xls,.xlsx,.htm,.html,.zip"
                 onChange={(e) => setGpsFile(e.target.files?.[0] || null)}
                 className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#1167c9] file:text-white hover:file:bg-blue-700 cursor-pointer"
                 required
@@ -1319,7 +1408,7 @@ export default function VehicleDailyDistancesPage() {
                     <div key={i} className="text-red-800 dark:text-red-200 border-b border-red-200/50 pb-1 last:border-none">
                       {err.rowNumber && <span className="font-mono font-bold">[صف {err.rowNumber}] </span>}
                       {err.plateNumber && <span className="font-bold">لوحة: {err.plateNumber} — </span>}
-                      <span>{err.message || err.errorCode}</span>
+                      <span>{getGpsRowErrorMessage(err.errorCode) || err.message || err.errorCode}</span>
                     </div>
                   ))}
                 </div>

@@ -756,7 +756,17 @@ export default function VehiclesPage() {
                       <div className="text-xs text-[var(--muted)]">{item.sponsorName || "—"}</div>
                     </td>
                     <td className="px-6 py-4 font-mono">
-                      {item.currentOdometer.toLocaleString()} كم
+                      <div>
+                        {(item.trackedDistanceKm ?? item.vehicleTrackedDistanceKm ?? item.currentOdometer).toLocaleString(undefined, {
+                          minimumFractionDigits: (item.trackedDistanceKm != null || item.vehicleTrackedDistanceKm != null) ? 2 : 0,
+                          maximumFractionDigits: 2,
+                        })} كم
+                      </div>
+                      {(item.trackedDistanceKm != null || item.vehicleTrackedDistanceKm != null) && (
+                        <div className="text-[10px] text-[var(--muted)] font-mono">
+                          العداد: {item.currentOdometer.toLocaleString()} كم
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-2 items-start">

@@ -15,8 +15,12 @@ export type VehicleDailyDistanceItem = {
   manualDistanceKm: number | null;
   appliedDistanceKm: number | null;
   appliedSource: "None" | "Manual" | "Gps" | 0 | 1 | 2 | string;
+  effectiveOdometerAfterKm?: number | null;
   gpsImportedAtUtc: string | null;
+  lastGpsImportId?: string | null;
+  gpsImportedByUserId?: string | null;
   manualEnteredAtUtc: string | null;
+  manualEnteredByUserId?: string | null;
   manualNotes: string | null;
   rowVersion: string | null;
 };
@@ -103,7 +107,7 @@ export async function saveManualOdometer(
 }
 
 /**
- * Upload GPS Excel report (.xls / .xlsx) for daily distances
+ * Upload GPS Excel report (.xls / .xlsx / .htm / .html / .zip) for daily distances
  */
 export async function importGpsFile(
   file: File,
@@ -139,7 +143,7 @@ export function getAppliedSourceInfo(source: string | number | null | undefined)
   colorClass: string;
   badgeTone: "emerald" | "amber" | "slate";
 } {
-  if (source === 2 || source === "Gps" || source === "GPS" || source === "gps") {
+  if (source === 2 || source === "2" || source === "Gps" || source === "GPS" || source === "gps") {
     return {
       code: "Gps",
       labelAr: "GPS (معتمد)",
@@ -148,7 +152,7 @@ export function getAppliedSourceInfo(source: string | number | null | undefined)
       badgeTone: "emerald",
     };
   }
-  if (source === 1 || source === "Manual" || source === "manual") {
+  if (source === 1 || source === "1" || source === "Manual" || source === "manual") {
     return {
       code: "Manual",
       labelAr: "يدوي (بديل)",
@@ -164,4 +168,75 @@ export function getAppliedSourceInfo(source: string | number | null | undefined)
     colorClass: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300",
     badgeTone: "slate",
   };
+}
+
+/**
+ * Translate and describe API error codes for daily distances operations
+ */
+export function getDailyDistanceErrorMessage(errorCode?: string, defaultMessage?: string): {
+  title: string;
+  description: string;
+} {
+  switch (errorCode) {
+    case "fleet.daily_distance.invalid_gps_file":
+      return {
+        title: "بنية الملف غير صالحة",
+        description: "تعذر قراءة ملف تقرير GPS. تأكد من أن الملف هو تقرير سليم بصيغة Excel أو HTML.",
+      };
+    case "fleet.daily_distance.gps_frameset_missing_sheet":
+      return {
+        title: "صفحة أوراق العمل مفقودة",
+        description:
+          "ملف XLS المرفوع هو صفحة إطارات (Frameset) وتوجد البيانات في مجلد المرافق (.files). يُرجى رفع ملف sheet001.htm مباشرة، أو ضغط ملف XLS مع مجلده في ملف ZIP ورفعه، أو إعادة حفظ التقرير بصيغة XLSX.",
+      };
+    case "fleet.daily_distance.gps_date_mismatch":
+      return {
+        title: "عدم تطابق تاريخ التقرير",
+        description: "تاريخ العمل داخل تقرير GPS المرفوع لا يطابق تاريخ العمل المستهدف المحدد في الشاشة.",
+      };
+    case "fleet.daily_distance.duplicate_gps_import":
+      return {
+        title: "تقرير مكرر",
+        description: "تم رفع هذا التقرير مسبقاً لنفس تاريخ العمل.",
+      };
+    case "fleet.daily_distance.invalid_manual_odometer":
+      return {
+        title: "قراءة عداد غير صالحة",
+        description:
+          "القراءة اليدوية المدخلة أقل من العداد الفعلي التشغيلي الناتج عن الأيام السابقة أو تكسر تسلسل القراءات. يرجى إدخال قراءة صحيحة أو إجراء تصحيح إداري.",
+      };
+    case "fleet.daily_distance.manual_baseline_required":
+      return {
+        title: "قراءة الأساس مطلوبة",
+        description: "لا توجد قراءة سابقة مسجلة تلقائياً لهذه المركبة؛ يجب إدخال قراءة العداد السابقة (الأساس) لبدء الاحتساب.",
+      };
+    case "fleet.concurrency_conflict":
+      return {
+        title: "تعارض في التحديث",
+        description: "تم تعديل السجل بواسطة مستخدم آخر أثناء التعديل؛ تم تحديث البيانات تلقائياً، يرجى المحاولة مجدداً.",
+      };
+    default:
+      return {
+        title: "حدث خطأ",
+        description: defaultMessage || "حدث خطأ غير متوقع أثناء تنفيذ العملية.",
+      };
+  }
+}
+
+/**
+ * Translate GPS row-level error codes
+ */
+export function getGpsRowErrorMessage(errorCode: string): string {
+  switch (errorCode) {
+    case "vehicle_not_found":
+      return "لا توجد مركبة مطابقة لرقم اللوحة في النظام.";
+    case "ambiguous_plate":
+      return "رقم اللوحة يطابق أكثر من مركبة في النظام.";
+    case "duplicate_plate":
+      return "رقم اللوحة مكرر داخل نفس التقرير المرفوع.";
+    case "invalid_distance":
+      return "قيمة المسافة غير قابلة للقراءة أو بصيغة رقمية غير صالحة.";
+    default:
+      return errorCode;
+  }
 }
