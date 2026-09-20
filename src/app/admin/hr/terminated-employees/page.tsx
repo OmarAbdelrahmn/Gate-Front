@@ -268,7 +268,7 @@ export default function TerminatedEmployeesPage() {
             <table className={`min-w-[900px] w-full ${isEn ? "text-left" : "text-right"}`}>
               <thead className="bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                 <tr>
-                  <th className="px-5 py-4">{isEn ? "Name / Type" : "الاسم / نوع التعاقد"}</th>
+                  <th className="px-5 py-4">{isEn ? "Name" : "الاسم"}</th>
                   <th className="px-5 py-4">{isEn ? "Iqama / Phone" : "رقم الإقامة / الجوال"}</th>
                   <th className="px-5 py-4">{isEn ? "City & Role" : "المدينة والدور"}</th>
                   <th className="px-5 py-4">{t("common.status")}</th>
@@ -285,23 +285,14 @@ export default function TerminatedEmployeesPage() {
                       >
                         {person.fullName}
                       </Link>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
-                        <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                            person.sourceType === "ExternalRider"
-                              ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
-                              : "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
-                          }`}
-                        >
-                          {isEn ? person.engagementLabel.en : person.engagementLabel.ar}
-                        </span>
-                        {person.nationality && person.nationality !== "—" && (
+                      {person.nationality && person.nationality !== "—" && (
+                        <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold">
                           <span className="inline-flex items-center gap-1 rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-700 dark:text-slate-300">
                             <Globe size={11} />
                             {person.nationality}
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </td>
 
                     <td className="px-5 py-4">
