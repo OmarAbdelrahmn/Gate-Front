@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   createVehicle,
   updateVehicle,
@@ -15,12 +16,14 @@ import {
   VehicleTransmissionType,
   VehicleOwnershipType,
   VehicleCatalogStatus,
+  VehicleOperationalStatus,
   type VehicleUpsertRequest,
   type VehicleDetailResponse,
   type VehicleManufacturerResponse,
   type VehicleModelResponse,
   type VehicleSupplierResponse,
 } from "@/lib/fleet/types";
+import { formatVehicleOperationalStatus } from "@/lib/fleet/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -28,7 +31,7 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { listSponsors, type Sponsor } from "@/lib/workforce/api";
 import { getOperatingCities, type OperatingCityCatalogItem } from "@/lib/workforce/external-riders-api";
-import { Sparkles, Landmark, ShieldCheck, Building2, Info, AlertCircle } from "lucide-react";
+import { Sparkles, Landmark, ShieldCheck, Building2, Info, AlertCircle, Activity } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -56,7 +59,10 @@ const COMMON_VEHICLE_COLORS = [
 ];
 
 export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle }: Props) {
+  const { can } = useAuth();
+  const canDecommission = can("fleet.vehicles.decommission");
   const [isPending, startTransition] = useTransition();
+  const [currentOperationalStatus, setCurrentOperationalStatus] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<VehicleUpsertRequest>({
     assetNumber: "",
@@ -193,6 +199,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           notes: editingVehicle.notes || "",
           rowVersion: editingVehicle.summary.rowVersion,
         });
+        setCurrentOperationalStatus(null);
       } else {
         setOwnerMode("implicit");
         setFormData({
@@ -227,11 +234,29 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           notes: "",
           rowVersion: null,
         });
+        setCurrentOperationalStatus(null);
       }
     }
   }, [isOpen, editingVehicle]);
 
   const availableModels = allModels.filter((m) => m.vehicleManufacturerId === formData.vehicleManufacturerId);
+
+  const statusOptions = [
+    {
+      value: "",
+      label: editingVehicle
+        ? `الاحتفاظ بالحالة الحالية (${formatVehicleOperationalStatus(editingVehicle.summary.status)})`
+        : "الاحتفاظ بالحالة الحالية (بدون تغيير)",
+    },
+    { value: String(VehicleOperationalStatus.Available), label: "متاح (Available)" },
+    { value: String(VehicleOperationalStatus.ProblemHold), label: "إيقاف - مشكلة (ProblemHold)" },
+    { value: String(VehicleOperationalStatus.AccidentHold), label: "إيقاف - حادث (AccidentHold)" },
+    { value: String(VehicleOperationalStatus.Stolen), label: "مسروق (Stolen)" },
+    { value: String(VehicleOperationalStatus.OutOfService), label: "خارج الخدمة (OutOfService)" },
+    ...(canDecommission || editingVehicle?.summary.status === VehicleOperationalStatus.Decommissioned
+      ? [{ value: String(VehicleOperationalStatus.Decommissioned), label: "تالف / مستبعد (Decommissioned)" }]
+      : []),
+  ];
 
   // Computed options that preserve existing selections even if archived or 403 Forbidden
   const operatingSponsorOptions = sponsors.map((s) => ({
@@ -396,6 +421,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           acquisitionDate: formData.acquisitionDate?.trim() || null,
           leaseReference: formData.leaseReference?.trim() || null,
           notes: formData.notes?.trim() || null,
+          currentOperationalStatus: editingVehicle ? currentOperationalStatus : null,
           rowVersion: editingVehicle ? editingVehicle.summary.rowVersion : null,
         };
 
@@ -695,6 +721,73 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
             </div>
           </div>
         </div>
+
+        {/* Operational Status (Update Mode) */}
+        {editingVehicle && (
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3 border-b border-slate-200 dark:border-slate-700 pb-2">
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <Activity className="h-5 w-5 text-[#1167c9]" />
+                <span>الحالة التشغيلية للمركبة (Operational Status)</span>
+              </h3>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-500 font-medium">الحالة المسجلة حالياً:</span>
+                <span className="font-bold px-2.5 py-1 rounded-lg border bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 shadow-xs">
+                  {formatVehicleOperationalStatus(editingVehicle.summary.status)}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  تعديل الحالة التشغيلية للمركبة
+                </label>
+                <SearchableSelect
+                  options={statusOptions}
+                  value={currentOperationalStatus !== null ? String(currentOperationalStatus) : ""}
+                  placeholder="الاحتفاظ بالحالة الحالية..."
+                  onChange={(v) => setCurrentOperationalStatus(v ? Number(v) : null)}
+                />
+              </div>
+
+              {/* Warning when transitioning away from Assigned */}
+              {editingVehicle.summary.status === VehicleOperationalStatus.Assigned &&
+                currentOperationalStatus !== null &&
+                currentOperationalStatus !== VehicleOperationalStatus.Assigned && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                    <div>
+                      <strong>تنبيه إنهاء التعيين:</strong> تغيير الحالة بعيداً عن (معيّن) سيقوم تلقائياً بإنهاء تعيين المندوب النشط المسلم له هذه المركبة في النظام.
+                    </div>
+                  </div>
+                )}
+
+              {/* Notice when transitioning away from Decommissioned */}
+              {editingVehicle.summary.status === VehicleOperationalStatus.Decommissioned &&
+                currentOperationalStatus !== null &&
+                currentOperationalStatus !== VehicleOperationalStatus.Decommissioned && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
+                    <div>
+                      <strong>إعادة التفعيل:</strong> تغيير الحالة بعيداً عن (تالف / مستبعد) سيقوم بمسح تاريخ وسبب الاستبعاد المسجل للمركبة تلقائياً.
+                    </div>
+                  </div>
+                )}
+
+              {/* Warning when choosing Decommissioned */}
+              {currentOperationalStatus === VehicleOperationalStatus.Decommissioned &&
+                editingVehicle.summary.status !== VehicleOperationalStatus.Decommissioned && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+                    <div>
+                      <strong>تنبيه الاستبعاد (تالف):</strong> سيتم إيقاف تشغيل المركبة بالكامل واستبعادها كمركبة تالفة. يتطلب هذا الإجراء صلاحية الاستبعاد (<code className="font-mono bg-rose-100 dark:bg-rose-900 px-1 py-0.5 rounded">fleet.vehicles.decommission</code>).
+                    </div>
+                  </div>
+                )}
+            </div>
+          </div>
+        )}
 
         {/* Ownership & Operation */}
         <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">

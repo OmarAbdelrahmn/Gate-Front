@@ -488,6 +488,7 @@ export interface VehicleUpsertRequest {
   trackedDistanceKm?: number | null;
   vehicleTrackedDistanceKm?: number | null;
   notes?: string | null;
+  currentOperationalStatus?: VehicleOperationalStatus | number | null;
   rowVersion?: string | null;
 }
 
