@@ -402,8 +402,8 @@ export const archiveInsurancePolicy = (id: string, reason: string, rowVersion: s
     body: JSON.stringify({ reason, rowVersion }),
   });
 
-export type SourceTypeEnum = 0 | 1 | 2 | 3 | 4 | number;
-export type DueStatusEnum = 0 | 1 | 2 | 3 | 4;
+export type SourceTypeEnum = 0 | 1 | 2 | 3 | 4 | "EmployeeDocument" | "DriverLicense" | "RiderCard" | "HealthCard" | "MedicalInsurance" | string | number;
+export type DueStatusEnum = 0 | 1 | 2 | 3 | 4 | "Valid" | "Upcoming" | "DueToday" | "Expired" | "Missing" | string | number;
 
 export type ExpiryComplianceItem = {
   employeeId: string;
@@ -426,6 +426,16 @@ export type ExpiryComplianceItem = {
   employeeIqamaNo?: string | null;
   nationalId?: string | null;
 };
+
+export function isDocumentNotUploaded(item: {
+  sourceStatus?: string | null;
+  employeeDocumentId?: string | null;
+}): boolean {
+  return (
+    String(item?.sourceStatus ?? "").trim().toLowerCase() === "missing" &&
+    (item?.employeeDocumentId === null || item?.employeeDocumentId === undefined)
+  );
+}
 
 export type ExpiryComplianceSummary = {
   valid: number;

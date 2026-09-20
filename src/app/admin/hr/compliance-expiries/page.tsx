@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   getComplianceExpiries,
+  isDocumentNotUploaded,
   type ExpiryComplianceItem,
   type ExpiryComplianceResponse,
   type ExpiryComplianceSummary,
@@ -65,7 +66,25 @@ function isGeneralDocument(item: { categoryNameAr?: string; categoryNameEn?: str
   );
 }
 
-function formatCategoryName(nameAr: string, nameEn: string, locale: string, documentTypes?: DocumentType[]) {
+function formatCategoryName(
+  nameAr: string,
+  nameEn: string,
+  locale: string,
+  documentTypes?: DocumentType[],
+  documentTypeId?: string
+) {
+  // When sourceStatus === "Missing" and employeeDocumentId === null, sourceId is the document-type ID
+  if (documentTypeId && documentTypes) {
+    const match = documentTypes.find(
+      (d) => d.id?.toLowerCase() === documentTypeId.toLowerCase()
+    );
+    if (match) {
+      if (locale === "en" && match.nameEn) return match.nameEn;
+      if (locale === "ar" && match.nameAr) return match.nameAr;
+      if (match.nameAr || match.nameEn) return (locale === "en" ? match.nameEn || match.nameAr : match.nameAr || match.nameEn) as string;
+    }
+  }
+
   const ar = (nameAr || "").trim();
   const en = (nameEn || "").trim();
   const lowerAr = ar.toLowerCase();
@@ -112,7 +131,17 @@ function getSourceTypeMeta(sourceType: unknown) {
   return { ar: "وثيقة", en: "Document", badge: "bg-slate-100 text-slate-700 border-slate-200" };
 }
 
-function getDueStatusMeta(dueStatus: unknown, daysRemaining: number | null) {
+function getDueStatusMeta(dueStatus: unknown, daysRemaining: number | null, isDocNotUploaded: boolean = false) {
+  if (isDocNotUploaded) {
+    return {
+      rawStatus: "Missing" as const,
+      ar: "الوثيقة غير مرفوعة",
+      en: "Document not uploaded",
+      color: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
+      icon: FileQuestion,
+    };
+  }
+
   let code: 0 | 1 | 2 | 3 | 4;
 
   if (daysRemaining === null) {
@@ -137,15 +166,15 @@ function getDueStatusMeta(dueStatus: unknown, daysRemaining: number | null) {
 
   switch (code) {
     case 0:
-      return { ar: "ساري", en: "Valid", color: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: CheckCircle2 };
+      return { rawStatus: "Valid" as const, ar: "ساري", en: "Valid", color: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: CheckCircle2 };
     case 1:
-      return { ar: "قريب الانتهاء", en: "Upcoming", color: "bg-amber-100 text-amber-800 border-amber-300", icon: Clock };
+      return { rawStatus: "Upcoming" as const, ar: "قريب الانتهاء", en: "Upcoming", color: "bg-amber-100 text-amber-800 border-amber-300", icon: Clock };
     case 2:
-      return { ar: "ينتهي اليوم", en: "Due Today", color: "bg-orange-100 text-orange-800 border-orange-300", icon: AlertTriangle };
+      return { rawStatus: "DueToday" as const, ar: "ينتهي اليوم", en: "Due Today", color: "bg-orange-100 text-orange-800 border-orange-300", icon: AlertTriangle };
     case 3:
-      return { ar: "منتهي", en: "Expired", color: "bg-red-100 text-red-800 border-red-300", icon: AlertCircle };
+      return { rawStatus: "Expired" as const, ar: "منتهي", en: "Expired", color: "bg-red-100 text-red-800 border-red-300", icon: AlertCircle };
     case 4:
-      return { ar: "غير مضاف", en: "Missing", color: "bg-slate-100 text-slate-700 border-slate-300", icon: FileQuestion };
+      return { rawStatus: "Missing" as const, ar: "غير مضاف", en: "Missing", color: "bg-slate-100 text-slate-700 border-slate-300", icon: FileQuestion };
   }
 }
 
@@ -491,9 +520,17 @@ export default function ExpiryCompliancePage() {
         const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
         const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
         const itemSourceTypeStr = String(x.sourceType ?? "").trim().toLowerCase();
+        const isDocNotUploaded = isDocumentNotUploaded(x);
 
         if (itemCode === target || itemNameAr === target || itemNameEn === target) return true;
         if (itemSourceTypeStr === target) return true;
+
+        // When sourceStatus === "Missing" and employeeDocumentId === null, sourceId is the document-type ID
+        if (isDocNotUploaded && x.sourceId) {
+          const sid = x.sourceId.toLowerCase();
+          if (sid === target) return true;
+          if (matchedDocType && matchedDocType.id.toLowerCase() === sid) return true;
+        }
 
         if (matchedDocType) {
           if (matchedDocType.code && itemCode === matchedDocType.code.toLowerCase()) return true;
@@ -508,9 +545,20 @@ export default function ExpiryCompliancePage() {
     if (!search.trim()) return filtered;
     const q = search.toLowerCase().trim();
     return filtered.filter((x) => {
+      const isDocNotUploaded = isDocumentNotUploaded(x);
       const empStatus = getEmployeeStatusMeta(x.employeeStatus);
-      const catFormatted = formatCategoryName(x.categoryNameAr, x.categoryNameEn, locale, documentTypes).toLowerCase();
+      const catFormatted = formatCategoryName(
+        x.categoryNameAr,
+        x.categoryNameEn,
+        locale,
+        documentTypes,
+        isDocNotUploaded ? x.sourceId : undefined
+      ).toLowerCase();
       const iqama = getIqamaNumber(x).toLowerCase();
+      const notUploadedText = isDocNotUploaded
+        ? (locale === "en" ? "document not uploaded" : "الوثيقة غير مرفوعة لم يتم الرفع")
+        : "";
+
       return (
         x.employeeNameAr.toLowerCase().includes(q) ||
         iqama.includes(q) ||
@@ -520,7 +568,8 @@ export default function ExpiryCompliancePage() {
         (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
         (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
         empStatus.ar.toLowerCase().includes(q) ||
-        empStatus.en.toLowerCase().includes(q)
+        empStatus.en.toLowerCase().includes(q) ||
+        (isDocNotUploaded && notUploadedText.includes(q))
       );
     });
   }, [data, search, sourceType, documentTypes, locale, employeeMap, riderMap]);
@@ -561,9 +610,17 @@ export default function ExpiryCompliancePage() {
           const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
           const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
           const itemSourceTypeStr = String(x.sourceType ?? "").trim().toLowerCase();
+          const isDocNotUploaded = isDocumentNotUploaded(x);
 
           if (itemCode === target || itemNameAr === target || itemNameEn === target) return true;
           if (itemSourceTypeStr === target) return true;
+
+          // When sourceStatus === "Missing" and employeeDocumentId === null, sourceId is the document-type ID
+          if (isDocNotUploaded && x.sourceId) {
+            const sid = x.sourceId.toLowerCase();
+            if (sid === target) return true;
+            if (matchedDocType && matchedDocType.id.toLowerCase() === sid) return true;
+          }
 
           if (matchedDocType) {
             if (matchedDocType.code && itemCode === matchedDocType.code.toLowerCase()) return true;
@@ -579,9 +636,20 @@ export default function ExpiryCompliancePage() {
       if (search.trim()) {
         const q = search.toLowerCase().trim();
         exportItems = exportItems.filter((x) => {
+          const isDocNotUploaded = isDocumentNotUploaded(x);
           const empStatus = getEmployeeStatusMeta(x.employeeStatus);
-          const catFormatted = formatCategoryName(x.categoryNameAr, x.categoryNameEn, locale, documentTypes).toLowerCase();
+          const catFormatted = formatCategoryName(
+            x.categoryNameAr,
+            x.categoryNameEn,
+            locale,
+            documentTypes,
+            isDocNotUploaded ? x.sourceId : undefined
+          ).toLowerCase();
           const iqama = getIqamaNumber(x).toLowerCase();
+          const notUploadedText = isDocNotUploaded
+            ? (locale === "en" ? "document not uploaded" : "الوثيقة غير مرفوعة لم يتم الرفع")
+            : "";
+
           return (
             x.employeeNameAr.toLowerCase().includes(q) ||
             iqama.includes(q) ||
@@ -591,7 +659,8 @@ export default function ExpiryCompliancePage() {
             (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
             (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
             empStatus.ar.toLowerCase().includes(q) ||
-            empStatus.en.toLowerCase().includes(q)
+            empStatus.en.toLowerCase().includes(q) ||
+            (isDocNotUploaded && notUploadedText.includes(q))
           );
         });
       }
@@ -609,23 +678,31 @@ export default function ExpiryCompliancePage() {
       const XLSX = await import("xlsx");
 
       const rows = exportItems.map((item, idx) => {
-        const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
+        const isDocNotUploaded = isDocumentNotUploaded(item);
+        const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocNotUploaded);
         const empStatusMeta = getEmployeeStatusMeta(item.employeeStatus);
         const docTypeMeta = getSourceTypeMeta(item.sourceType);
         const iqama = getIqamaNumber(item);
+        const docTypeLabel = formatCategoryName(
+          item.categoryNameAr,
+          item.categoryNameEn,
+          locale === "en" ? "en" : "ar",
+          documentTypes,
+          isDocNotUploaded ? item.sourceId : undefined
+        );
 
         if (locale === "en") {
           return {
             "#": idx + 1,
             "Employee / Rider": item.employeeNameAr,
             "Iqama / ID No": iqama || "—",
-            "Document Type": formatCategoryName(item.categoryNameAr, item.categoryNameEn, "en", documentTypes),
+            "Document Type": docTypeLabel,
             "Expiry Date": item.expiryDate || "—",
-            "Days Remaining": item.daysRemaining !== null ? item.daysRemaining : "—",
+            "Days Remaining": item.daysRemaining !== null ? item.daysRemaining : (isDocNotUploaded ? "Not uploaded" : "—"),
             "Due Status": statusMeta.en,
             "Employee Status": empStatusMeta.en,
             "Source Category": docTypeMeta.en,
-            "Reference": item.referenceMasked || "—",
+            "Reference": item.referenceMasked || (isDocNotUploaded ? "Document not uploaded" : "—"),
           };
         }
 
@@ -633,13 +710,13 @@ export default function ExpiryCompliancePage() {
           "م": idx + 1,
           "الموظف / المندوب": item.employeeNameAr,
           "رقم الإقامة / الهوية": iqama || "—",
-          "نوع الوثيقة": formatCategoryName(item.categoryNameAr, item.categoryNameEn, "ar", documentTypes),
+          "نوع الوثيقة": docTypeLabel,
           "تاريخ الانتهاء": item.expiryDate || "—",
-          "الأيام المتبقية": item.daysRemaining !== null ? item.daysRemaining : "—",
+          "الأيام المتبقية": item.daysRemaining !== null ? item.daysRemaining : (isDocNotUploaded ? "لم يتم الرفع" : "—"),
           "حالة الامتثال": statusMeta.ar,
           "حالة الموظف": empStatusMeta.ar,
           "تصنيف المصدر": docTypeMeta.ar,
-          "الرقم المرجعي": item.referenceMasked || "—",
+          "الرقم المرجعي": item.referenceMasked || (isDocNotUploaded ? "الوثيقة غير مرفوعة" : "—"),
         };
       });
 
@@ -653,10 +730,10 @@ export default function ExpiryCompliancePage() {
         { wch: 28 }, // Document Type
         { wch: 16 }, // Expiry Date
         { wch: 16 }, // Days Remaining
-        { wch: 18 }, // Due Status
+        { wch: 22 }, // Due Status
         { wch: 16 }, // Employee Status
         { wch: 20 }, // Source Category
-        { wch: 20 }, // Reference
+        { wch: 22 }, // Reference
       ];
 
       // Ensure Iqama / ID number column is treated strictly as text string
@@ -714,12 +791,12 @@ export default function ExpiryCompliancePage() {
     if (sourceType && sourceType !== "all") {
       const s = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
       for (const item of items) {
-        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
-        if (meta.en === "Valid") s.valid++;
-        else if (meta.en === "Upcoming") s.upcoming++;
-        else if (meta.en === "Due Today") s.dueToday++;
-        else if (meta.en === "Expired") s.expired++;
-        else if (meta.en === "Missing") s.missing++;
+        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocumentNotUploaded(item));
+        if (meta.rawStatus === "Valid") s.valid++;
+        else if (meta.rawStatus === "Upcoming") s.upcoming++;
+        else if (meta.rawStatus === "DueToday") s.dueToday++;
+        else if (meta.rawStatus === "Expired") s.expired++;
+        else if (meta.rawStatus === "Missing") s.missing++;
       }
       return s;
     }
@@ -727,12 +804,12 @@ export default function ExpiryCompliancePage() {
     const ignoredByStatus = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
     for (const item of data.items) {
       if (isGeneralDocument(item)) {
-        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
-        if (meta.en === "Valid") ignoredByStatus.valid++;
-        else if (meta.en === "Upcoming") ignoredByStatus.upcoming++;
-        else if (meta.en === "Due Today") ignoredByStatus.dueToday++;
-        else if (meta.en === "Expired") ignoredByStatus.expired++;
-        else if (meta.en === "Missing") ignoredByStatus.missing++;
+        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocumentNotUploaded(item));
+        if (meta.rawStatus === "Valid") ignoredByStatus.valid++;
+        else if (meta.rawStatus === "Upcoming") ignoredByStatus.upcoming++;
+        else if (meta.rawStatus === "DueToday") ignoredByStatus.dueToday++;
+        else if (meta.rawStatus === "Expired") ignoredByStatus.expired++;
+        else if (meta.rawStatus === "Missing") ignoredByStatus.missing++;
       }
     }
 
@@ -1130,13 +1207,24 @@ export default function ExpiryCompliancePage() {
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {items.map((item) => {
-                  const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining);
+                  const isDocNotUploaded = isDocumentNotUploaded(item);
+                  const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocNotUploaded);
                   const StatusIcon = statusMeta.icon;
                   const empStatusMeta = getEmployeeStatusMeta(item.employeeStatus);
                   const iqamaNo = getIqamaNumber(item);
+                  const docTypeName = formatCategoryName(
+                    item.categoryNameAr,
+                    item.categoryNameEn,
+                    locale,
+                    documentTypes,
+                    isDocNotUploaded ? item.sourceId : undefined
+                  );
 
                   return (
-                    <tr key={`${item.sourceId}-${item.categoryCode}`} className="hover:bg-slate-50/60">
+                    <tr
+                      key={`${item.employeeId}-${item.sourceId}-${item.categoryCode}`}
+                      className={`hover:bg-slate-50/60 ${isDocNotUploaded ? "bg-rose-50/20" : ""}`}
+                    >
                       {/* Employee Name */}
                       <td className="px-4 py-3.5">
                         <Link
@@ -1170,7 +1258,15 @@ export default function ExpiryCompliancePage() {
 
                       {/* Document Type / Category */}
                       <td className="px-4 py-3.5 font-bold text-[var(--foreground)]">
-                        {formatCategoryName(item.categoryNameAr, item.categoryNameEn, locale, documentTypes)}
+                        <div className="flex flex-col">
+                          <span>{docTypeName}</span>
+                          {isDocNotUploaded && (
+                            <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+                              <FileQuestion size={12} />
+                              {locale === "en" ? "Document not uploaded" : "الوثيقة غير مرفوعة"}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Expiry Date */}
@@ -1200,8 +1296,10 @@ export default function ExpiryCompliancePage() {
                                 : `${item.daysRemaining} ${locale === "en" ? "days (Expired)" : "يوم (منتهي)"}`}
                           </span>
                         ) : (
-                          <span className="text-xs text-[var(--muted)]">
-                            {locale === "en" ? "Missing date" : "غير محدد"}
+                          <span className={`text-xs ${isDocNotUploaded ? "font-semibold text-rose-600 dark:text-rose-400" : "text-[var(--muted)]"}`}>
+                            {isDocNotUploaded
+                              ? (locale === "en" ? "Not uploaded" : "لم يتم الرفع")
+                              : (locale === "en" ? "Missing date" : "غير محدد")}
                           </span>
                         )}
                       </td>
