@@ -43,6 +43,9 @@ export default function AssignmentsPage() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"assigned" | "available">("assigned");
   const [riderToEmpMap, setRiderToEmpMap] = useState<Map<string, string>>(new Map());
+  const [riderDetailsMap, setRiderDetailsMap] = useState<
+    Map<string, { nameAr: string; nameEn?: string; iqama?: string; phone?: string }>
+  >(new Map());
 
   const [cityFilter, setCityFilter] = useState("");
   const [manufacturerFilter, setManufacturerFilter] = useState("");
@@ -60,7 +63,6 @@ export default function AssignmentsPage() {
 
       const [firstRes, ridersRes, empRes] = await Promise.all([
         getVehicles({
-          search,
           status,
           page: 1,
           pageSize: 2000,
@@ -82,7 +84,6 @@ export default function AssignmentsPage() {
         for (let p = 2; p <= totalPages; p++) {
           pagePromises.push(
             getVehicles({
-              search,
               status,
               page: p,
               pageSize,
@@ -101,15 +102,47 @@ export default function AssignmentsPage() {
       }
 
       const map = new Map<string, string>();
+      const detailsMap = new Map<string, { nameAr: string; nameEn?: string; iqama?: string; phone?: string }>();
+
       ridersRes.forEach((r) => {
         if (r.id && r.employeeId) map.set(r.id, r.employeeId);
+        const info = {
+          nameAr: r.fullNameAr || "",
+          nameEn: r.fullNameEn || "",
+          iqama: r.iqamaNo || "",
+          phone: "",
+        };
+        if (r.id) detailsMap.set(r.id, info);
+        if (r.employeeId) detailsMap.set(r.employeeId, info);
       });
+
       empRes.forEach((e) => {
         if (e.riderProfileId && e.id) map.set(e.riderProfileId, e.id);
         if (e.rider?.id && e.id) map.set(e.rider.id, e.id);
         if (e.id) map.set(e.id, e.id);
+
+        const info = {
+          nameAr: e.fullNameAr || "",
+          nameEn: e.fullNameEn || "",
+          iqama: e.iqamaNo || "",
+          phone: e.primaryPhone || (e as any).phone || "",
+        };
+        if (e.id) {
+          const existing = detailsMap.get(e.id);
+          detailsMap.set(e.id, { ...existing, ...info });
+        }
+        if (e.riderProfileId) {
+          const existing = detailsMap.get(e.riderProfileId);
+          detailsMap.set(e.riderProfileId, { ...existing, ...info });
+        }
+        if (e.rider?.id) {
+          const existing = detailsMap.get(e.rider.id);
+          detailsMap.set(e.rider.id, { ...existing, ...info });
+        }
       });
+
       setRiderToEmpMap(map);
+      setRiderDetailsMap(detailsMap);
 
       // Filter out available vehicles that are not ready
       if (filterType === "available") {
@@ -125,15 +158,11 @@ export default function AssignmentsPage() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search, filterType]);
+    loadData();
+  }, [filterType]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    loadData();
   };
 
   const openModal = (type: ActiveModal, vehicle: VehicleSummaryResponse | null = null) => {
@@ -251,15 +280,70 @@ export default function AssignmentsPage() {
 
   // Apply client-side filters
   const filteredData = useMemo(() => {
+    const queryTokens = search.trim() ? normalizeText(search).split(/\s+/).filter(Boolean) : [];
+
     return data.filter((item) => {
-      // 1. Operating City Filter
+      // 1. Search Query across vehicle and rider fields
+      if (queryTokens.length > 0) {
+        const empId =
+          (item as any).employeeId ||
+          (item as any).currentEmployeeId ||
+          (item.currentRiderProfileId ? riderToEmpMap.get(item.currentRiderProfileId) || item.currentRiderProfileId : null);
+
+        const riderInfo =
+          (item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null) ||
+          (empId ? riderDetailsMap.get(empId) : null);
+
+        const realRiderObj = item.realRider || (item.actualRider && item.actualRider.isSelectedRiderTheActualRider === false ? {
+          id: item.actualRider.selectedRiderEmployeeId || item.actualRider.selectedRiderProfileId,
+          name: item.actualRider.actualRiderName,
+          iqamaNo: item.actualRider.actualRiderIqamaNo,
+          relationshipToAssignedRider: item.actualRider.relationshipToSelectedRider,
+        } : null);
+
+        const realRiderInfo = realRiderObj?.id ? riderDetailsMap.get(realRiderObj.id) : null;
+
+        const parts = [
+          item.serialNumber,
+          item.assetNumber,
+          item.chassisNumber,
+          item.plateNumberAr,
+          item.plateNumberEn,
+          item.plateLettersAr,
+          item.plateLettersEn,
+          item.plateDigits,
+          item.manufacturer,
+          item.model,
+          item.operatingCity,
+          item.currentRiderName,
+          riderInfo?.nameAr,
+          riderInfo?.nameEn,
+          riderInfo?.iqama,
+          riderInfo?.phone,
+          realRiderObj?.name,
+          realRiderObj?.iqamaNo,
+          realRiderInfo?.nameAr,
+          realRiderInfo?.nameEn,
+          realRiderInfo?.iqama,
+        ];
+
+        const searchableText = parts
+          .filter(Boolean)
+          .map((p) => normalizeText(String(p)))
+          .join(" ");
+
+        const matchesSearch = queryTokens.every((token) => searchableText.includes(token));
+        if (!matchesSearch) return false;
+      }
+
+      // 2. Operating City Filter
       if (cityFilter) {
         if (!item.operatingCity || normalizeText(item.operatingCity) !== normalizeText(cityFilter)) {
           return false;
         }
       }
 
-      // 2. Vehicle Manufacturer / Model Filter
+      // 3. Vehicle Manufacturer / Model Filter
       if (manufacturerFilter) {
         const normFilter = normalizeText(manufacturerFilter.replace(/^—\s*/, ""));
         const itemMfg = normalizeText(item.manufacturer);
@@ -277,9 +361,10 @@ export default function AssignmentsPage() {
 
       return true;
     });
-  }, [data, cityFilter, manufacturerFilter]);
+  }, [data, search, cityFilter, manufacturerFilter, riderToEmpMap, riderDetailsMap]);
 
   const hasActiveFilters = Boolean(cityFilter || manufacturerFilter);
+  const isFiltered = Boolean(search.trim() || hasActiveFilters);
 
   return (
     <div className="space-y-6">
@@ -290,7 +375,7 @@ export default function AssignmentsPage() {
             مركز تعيينات المركبات
             {data.length > 0 && (
               <span className="text-sm font-normal text-slate-500 mr-2">
-                ({hasActiveFilters ? `${filteredData.length} من ${data.length}` : `${data.length}`} مركبة)
+                ({isFiltered ? `${filteredData.length} من ${data.length}` : `${data.length}`} مركبة)
               </span>
             )}
           </h1>
@@ -330,20 +415,27 @@ export default function AssignmentsPage() {
             </Button>
           </div>
 
-          <form onSubmit={handleSearch} className="flex min-w-[280px] gap-2">
+          <form onSubmit={handleSearch} className="flex min-w-[280px] sm:min-w-[340px] flex-1 max-w-md gap-2">
             <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="بحث بالرقم أو اللوحة..."
-                className="pr-10"
+                placeholder="بحث باسم المندوب، اللوحة، أو الرقم..."
+                className="pr-10 pl-8"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  title="مسح البحث"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            <Button type="submit" variant="secondary">
-              <Search className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="secondary" onClick={loadData} disabled={loading} className="px-3">
+            <Button type="button" variant="secondary" onClick={loadData} disabled={loading} className="px-3" title="تحديث البيانات">
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
           </form>
@@ -578,6 +670,21 @@ export default function AssignmentsPage() {
                     </tr>
                   );
                 })}
+
+                {filteredData.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={filterType === "assigned" ? (can("fleet.assignments.manage") ? 8 : 7) : (can("fleet.assignments.manage") ? 6 : 5)}
+                      className="px-6 py-12 text-center text-slate-500 font-medium"
+                    >
+                      {search.trim() || hasActiveFilters
+                        ? "لا توجد نتائج مطابقة للبحث أو التصفية الحالية"
+                        : filterType === "assigned"
+                          ? "لا توجد مركبات مسلّمة حالياً"
+                          : "لا توجد مركبات متاحة جاهزة للتسليم"}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
