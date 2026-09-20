@@ -295,14 +295,6 @@ export const navigation: NavItem[] = [
         permissionsAny: ["fleet.daily_distances.read", "fleet.vehicles.read", "fleet.assignments.read"],
       },
       {
-        label: "الأعطال والمشاكل",
-        labelKey: "nav.vehicleIssues",
-        href: "/admin/fleet/issues",
-        icon: Wrench,
-        roles: ["admin", "manager", "member", "accountant"],
-        permission: "fleet.issues.read",
-      },
-      {
         label: "متابعة تجديد التراخيص",
         labelKey: "nav.vehicleCompliance",
         href: "/admin/fleet/compliance",
