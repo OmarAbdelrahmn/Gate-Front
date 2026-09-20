@@ -124,10 +124,10 @@ export function StockBalancesView({ locations, items }: StockBalancesViewProps) 
               className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-bold focus:outline-hidden cursor-pointer"
             >
               <option value="">جميع أنواع الأصناف (الكل)</option>
-              <option value={String(ItemType.SparePart)}>قطع غيار (1)</option>
-              <option value={String(ItemType.RiderAccessory)}>مستلزمات المناديب (2)</option>
-              <option value={String(ItemType.Oil)}>زيوت ومواد تشحيم (3)</option>
-              <option value={String(ItemType.Consumable)}>مستهلكات وورشة (4)</option>
+              <option value={String(ItemType.SparePart)}>قطع غيار</option>
+              <option value={String(ItemType.RiderAccessory)}>مستلزمات المناديب</option>
+              <option value={String(ItemType.Oil)}>زيوت ومواد تشحيم</option>
+              <option value={String(ItemType.Consumable)}>مستهلكات وورشة</option>
             </select>
           </div>
           <div className="w-52">

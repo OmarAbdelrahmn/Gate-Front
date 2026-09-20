@@ -895,9 +895,9 @@ export function WorkOrderDetailModal({
                 <div className="flex items-center gap-1">
                   {[
                     { id: "ALL" as const, label: "الكل" },
-                    { id: ItemType.SparePart, label: "قطع غيار (1)" },
-                    { id: ItemType.Oil, label: "زيوت (3)" },
-                    { id: ItemType.Consumable, label: "مستهلكات (4)" },
+                    { id: ItemType.SparePart, label: "قطع غيار" },
+                    { id: ItemType.Oil, label: "زيوت" },
+                    { id: ItemType.Consumable, label: "مستهلكات" },
                   ].map((chip) => (
                     <button
                       key={String(chip.id)}

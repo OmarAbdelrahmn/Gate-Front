@@ -57,10 +57,10 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
 
   const filterTabs = [
     { id: "ALL" as const, label: "كافة الأصناف", count: counts.all },
-    { id: ItemType.SparePart, label: "قطع غيار (1)", count: counts.spareParts, badgeClass: "text-blue-700 dark:text-blue-400" },
-    { id: ItemType.RiderAccessory, label: "مستلزمات المناديب (2)", count: counts.riderAccessories, badgeClass: "text-purple-700 dark:text-purple-400" },
-    { id: ItemType.Oil, label: "زيوت ومواد تشحيم (3)", count: counts.oils, badgeClass: "text-amber-700 dark:text-amber-400" },
-    { id: ItemType.Consumable, label: "مستهلكات وورشة (4)", count: counts.consumables, badgeClass: "text-emerald-700 dark:text-emerald-400" },
+    { id: ItemType.SparePart, label: "قطع غيار", count: counts.spareParts, badgeClass: "text-blue-700 dark:text-blue-400" },
+    { id: ItemType.RiderAccessory, label: "مستلزمات المناديب", count: counts.riderAccessories, badgeClass: "text-purple-700 dark:text-purple-400" },
+    { id: ItemType.Oil, label: "زيوت ومواد تشحيم", count: counts.oils, badgeClass: "text-amber-700 dark:text-amber-400" },
+    { id: ItemType.Consumable, label: "مستهلكات وورشة", count: counts.consumables, badgeClass: "text-emerald-700 dark:text-emerald-400" },
   ];
 
   return (
