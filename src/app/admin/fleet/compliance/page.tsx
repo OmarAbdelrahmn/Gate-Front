@@ -198,8 +198,8 @@ export default function CompliancePage() {
     setError(null);
     try {
       const [dueData, firstVehiclesRes] = await Promise.all([
-        getVehicleComplianceDue(checkDate || undefined),
-        getVehicles({ pageSize: 200 }).catch((err) => {
+        getVehicleComplianceDue(checkDate || undefined, { page: 1, pageSize: 2000 }),
+        getVehicles({ page: 1, pageSize: 2000 }).catch((err) => {
           console.warn("Failed to load vehicles list:", err);
           return null;
         }),
@@ -237,7 +237,37 @@ export default function CompliancePage() {
       }
 
       console.log("Compliance Due API Response:", dueData);
-      setData(dueData || []);
+
+      let allDueItems: VehicleComplianceDueResponse[] = [];
+      if (Array.isArray(dueData)) {
+        allDueItems = dueData;
+      } else if (dueData && Array.isArray((dueData as any).items)) {
+        allDueItems = [...(dueData as any).items];
+        const totalCount = (dueData as any).totalCount ?? allDueItems.length;
+        const pageSize = (dueData as any).pageSize || 200;
+
+        if (totalCount > allDueItems.length) {
+          const totalPages = Math.ceil(totalCount / pageSize);
+          const pagePromises: Promise<any>[] = [];
+          for (let p = 2; p <= totalPages; p++) {
+            pagePromises.push(
+              getVehicleComplianceDue(checkDate || undefined, { page: p, pageSize }).catch((err) => {
+                console.warn(`Failed to load compliance due page ${p}:`, err);
+                return null;
+              })
+            );
+          }
+          const remaining = await Promise.all(pagePromises);
+          for (const r of remaining) {
+            const items = Array.isArray(r) ? r : (r as any)?.items;
+            if (items) {
+              allDueItems = allDueItems.concat(items);
+            }
+          }
+        }
+      }
+
+      setData(allDueItems);
     } catch (e: any) {
       console.error("Failed to load compliance data:", e);
       setError(e?.message || "تعذر جلب بيانات متابعة تجديد التراخيص.");

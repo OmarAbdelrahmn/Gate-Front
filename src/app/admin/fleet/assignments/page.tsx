@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehicles } from "@/lib/fleet/api";
@@ -8,12 +8,31 @@ import { listRiders, listEmployees } from "@/lib/workforce/api";
 import { VehicleOperationalStatus, type VehicleSummaryResponse } from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Key, Search, RefreshCw, Car, ArrowLeftRight, CalendarClock, ShieldCheck } from "lucide-react";
+import {
+  TableHeaderColumnFilter,
+  type FilterOption,
+} from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
+import { Key, Search, RefreshCw, Car, ArrowLeftRight, CalendarClock, ShieldCheck, X } from "lucide-react";
 import { TakeVehicleModal } from "./components/TakeVehicleModal";
 import { ReturnVehicleModal } from "./components/ReturnVehicleModal";
 import { SwitchVehicleModal } from "./components/SwitchVehicleModal";
 import { RenewPermissionModal } from "./components/RenewPermissionModal";
+
+function normalizeText(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel/diacritics
+    .replace(/\u0640/g, "") // remove tatweel
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+}
 
 type ActiveModal = "take" | "return" | "switch" | "renew" | null;
 
@@ -25,23 +44,61 @@ export default function AssignmentsPage() {
   const [filterType, setFilterType] = useState<"assigned" | "available">("assigned");
   const [riderToEmpMap, setRiderToEmpMap] = useState<Map<string, string>>(new Map());
 
+  const [cityFilter, setCityFilter] = useState("");
+  const [manufacturerFilter, setManufacturerFilter] = useState("");
+
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleSummaryResponse | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [res, ridersRes, empRes] = await Promise.all([
+      const status =
+        filterType === "assigned"
+          ? VehicleOperationalStatus.Assigned.toString()
+          : VehicleOperationalStatus.Available.toString();
+
+      const [firstRes, ridersRes, empRes] = await Promise.all([
         getVehicles({
           search,
-          status: filterType === "assigned" ? VehicleOperationalStatus.Assigned.toString() : VehicleOperationalStatus.Available.toString(),
-          pageSize: 50,
+          status,
+          page: 1,
+          pageSize: 2000,
         }),
         listRiders().catch(() => []),
         listEmployees().catch(() => []),
       ]);
 
-      console.log("[Fleet Assignments API Response]:", res);
+      console.log("[Fleet Assignments API Response]:", firstRes);
+
+      let allVehicles = firstRes?.items || [];
+      const totalCount = firstRes?.totalCount ?? allVehicles.length;
+
+      // Backend clamps pageSize to 200. If totalCount exceeds 200, fetch remaining pages concurrently
+      if (totalCount > allVehicles.length) {
+        const pageSize = firstRes?.pageSize || 200;
+        const totalPages = Math.ceil(totalCount / pageSize);
+        const pagePromises = [];
+        for (let p = 2; p <= totalPages; p++) {
+          pagePromises.push(
+            getVehicles({
+              search,
+              status,
+              page: p,
+              pageSize,
+            }).catch((err) => {
+              console.warn(`Failed to load vehicles page ${p}:`, err);
+              return null;
+            })
+          );
+        }
+        const remainingResults = await Promise.all(pagePromises);
+        for (const r of remainingResults) {
+          if (r?.items) {
+            allVehicles = allVehicles.concat(r.items);
+          }
+        }
+      }
 
       const map = new Map<string, string>();
       ridersRes.forEach((r) => {
@@ -56,9 +113,9 @@ export default function AssignmentsPage() {
 
       // Filter out available vehicles that are not ready
       if (filterType === "available") {
-        setData(res.items.filter(v => v.isReadyForAssignment));
+        setData(allVehicles.filter((v) => v.isReadyForAssignment));
       } else {
-        setData(res.items);
+        setData(allVehicles);
       }
     } catch (e) {
       console.error(e);
@@ -90,6 +147,140 @@ export default function AssignmentsPage() {
     loadData();
   };
 
+  // Operating City Options for Table Header Filter
+  const cityOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const v of data) {
+      const city = (v.operatingCity || "").trim();
+      if (city) {
+        counts.set(city, (counts.get(city) || 0) + 1);
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+    const sortedCities = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+
+    for (const [city, count] of sortedCities) {
+      opts.push({
+        value: city,
+        label: city,
+        sublabel: `${count} مركبة`,
+        count,
+      });
+    }
+
+    if (cityFilter && !opts.some((o) => o.value === cityFilter)) {
+      opts.push({
+        value: cityFilter,
+        label: cityFilter,
+      });
+    }
+
+    return opts;
+  }, [data, cityFilter]);
+
+  // Vehicle Manufacturer / Model Options for Table Header Filter
+  const manufacturerOptions = useMemo(() => {
+    const mfgMap = new Map<string, { count: number; models: Map<string, number> }>();
+
+    for (const v of data) {
+      const mfg = (v.manufacturer || "").trim();
+      const mdl = (v.model || "").trim();
+      if (!mfg && !mdl) continue;
+
+      const mainKey = mfg || mdl;
+      const existing = mfgMap.get(mainKey);
+      if (existing) {
+        existing.count += 1;
+        if (mdl && mdl !== mainKey) {
+          existing.models.set(mdl, (existing.models.get(mdl) || 0) + 1);
+        }
+      } else {
+        const models = new Map<string, number>();
+        if (mdl && mdl !== mainKey) {
+          models.set(mdl, 1);
+        }
+        mfgMap.set(mainKey, { count: 1, models });
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+    const sortedMfgs = Array.from(mfgMap.entries()).sort((a, b) => b[1].count - a[1].count);
+
+    for (const [mfg, info] of sortedMfgs) {
+      if (info.models.size > 1) {
+        opts.push({
+          value: mfg,
+          label: `${mfg} (الكل)`,
+          sublabel: `${info.count} مركبة`,
+          count: info.count,
+        });
+
+        const sortedModels = Array.from(info.models.entries()).sort((a, b) => b[1] - a[1]);
+        for (const [mdl, mdlCount] of sortedModels) {
+          const combined = `${mfg} ${mdl}`;
+          opts.push({
+            value: combined,
+            label: `— ${combined}`,
+            sublabel: `${mdlCount} مركبة`,
+            count: mdlCount,
+          });
+        }
+      } else {
+        const mdl = Array.from(info.models.keys())[0];
+        const label = mdl ? `${mfg} ${mdl}` : mfg;
+        opts.push({
+          value: label,
+          label: label,
+          sublabel: `${info.count} مركبة`,
+          count: info.count,
+        });
+      }
+    }
+
+    if (manufacturerFilter && !opts.some((o) => o.value === manufacturerFilter)) {
+      opts.push({
+        value: manufacturerFilter,
+        label: manufacturerFilter,
+      });
+    }
+
+    return opts;
+  }, [data, manufacturerFilter]);
+
+  // Apply client-side filters
+  const filteredData = useMemo(() => {
+    return data.filter((item) => {
+      // 1. Operating City Filter
+      if (cityFilter) {
+        if (!item.operatingCity || normalizeText(item.operatingCity) !== normalizeText(cityFilter)) {
+          return false;
+        }
+      }
+
+      // 2. Vehicle Manufacturer / Model Filter
+      if (manufacturerFilter) {
+        const normFilter = normalizeText(manufacturerFilter.replace(/^—\s*/, ""));
+        const itemMfg = normalizeText(item.manufacturer);
+        const itemMdl = normalizeText(item.model);
+        const itemCombined = normalizeText([item.manufacturer, item.model].filter(Boolean).join(" "));
+
+        const matchesCombined = itemCombined.includes(normFilter);
+        const matchesMfg = itemMfg ? itemMfg.includes(normFilter) || normFilter.includes(itemMfg) : false;
+        const matchesMdl = itemMdl ? itemMdl.includes(normFilter) || normFilter.includes(itemMdl) : false;
+
+        if (!matchesCombined && !matchesMfg && !matchesMdl) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [data, cityFilter, manufacturerFilter]);
+
+  const hasActiveFilters = Boolean(cityFilter || manufacturerFilter);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -97,6 +288,11 @@ export default function AssignmentsPage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
             <Key className="h-7 w-7 text-[#1167c9]" />
             مركز تعيينات المركبات
+            {data.length > 0 && (
+              <span className="text-sm font-normal text-slate-500 mr-2">
+                ({hasActiveFilters ? `${filteredData.length} من ${data.length}` : `${data.length}`} مركبة)
+              </span>
+            )}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             إدارة تسليم واستلام وتبديل المركبات للمناديب
@@ -115,59 +311,123 @@ export default function AssignmentsPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <Button
-            variant={filterType === "assigned" ? "primary" : "secondary"}
-            className={filterType === "assigned" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
-            onClick={() => setFilterType("assigned")}
-          >
-            المركبات المسلمة
-          </Button>
-          <Button
-            variant={filterType === "available" ? "primary" : "secondary"}
-            className={filterType === "available" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
-            onClick={() => setFilterType("available")}
-          >
-            المركبات المتاحة
-          </Button>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={filterType === "assigned" ? "primary" : "secondary"}
+              className={filterType === "assigned" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
+              onClick={() => setFilterType("assigned")}
+            >
+              المركبات المسلمة
+            </Button>
+            <Button
+              variant={filterType === "available" ? "primary" : "secondary"}
+              className={filterType === "available" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
+              onClick={() => setFilterType("available")}
+            >
+              المركبات المتاحة
+            </Button>
+          </div>
+
+          <form onSubmit={handleSearch} className="flex min-w-[280px] gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="بحث بالرقم أو اللوحة..."
+                className="pr-10"
+              />
+            </div>
+            <Button type="submit" variant="secondary">
+              <Search className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="secondary" onClick={loadData} disabled={loading} className="px-3">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
+          </form>
         </div>
 
-        <form onSubmit={handleSearch} className="flex min-w-[280px] gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث بالرقم أو اللوحة..."
-              className="pr-10"
-            />
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <span className="text-xs text-[var(--muted)]">التصفيات النشطة:</span>
+            {manufacturerFilter && (
+              <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
+                الصانع / الموديل: {manufacturerFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setManufacturerFilter("")} />
+              </Badge>
+            )}
+            {cityFilter && (
+              <Badge className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
+                المدينة: {cityFilter}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCityFilter("")} />
+              </Badge>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setCityFilter("");
+                setManufacturerFilter("");
+              }}
+              className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 font-semibold underline cursor-pointer mr-1"
+            >
+              مسح التصفيات
+            </button>
           </div>
-          <Button type="submit" variant="secondary">
-            <Search className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="secondary" onClick={loadData} disabled={loading} className="px-3">
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-        </form>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
         {loading ? (
           <div className="p-8 text-center text-[var(--muted)]">جارٍ التحميل...</div>
-        ) : data.length === 0 ? (
+        ) : filteredData.length === 0 ? (
           <div className="p-12 text-center text-[var(--muted)]">
             <Key className="mx-auto mb-3 h-12 w-12 opacity-30" />
             <p className="text-lg font-bold">لا توجد بيانات مطابقة</p>
+            {hasActiveFilters && (
+              <Button
+                variant="secondary"
+                className="mt-4 gap-1 text-xs px-3 py-1.5"
+                onClick={() => {
+                  setCityFilter("");
+                  setManufacturerFilter("");
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
               <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
                 <tr>
-                  <th className="px-6 py-4">المركبة (الرقم التسلسلي)</th>
+                  <th className="px-6 py-4 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>المركبة (الرقم التسلسلي)</span>
+                      <TableHeaderColumnFilter
+                        label="الصانع / الموديل"
+                        value={manufacturerFilter}
+                        onChange={setManufacturerFilter}
+                        options={manufacturerOptions}
+                        placeholder="تصفية بالصانع أو الموديل..."
+                      />
+                    </div>
+                  </th>
                   <th className="px-6 py-4">اللوحة</th>
-                  <th className="px-6 py-4">مدينة التشغيل</th>
+                  <th className="px-6 py-4 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>مدينة التشغيل</span>
+                      <TableHeaderColumnFilter
+                        label="مدينة التشغيل"
+                        value={cityFilter}
+                        onChange={setCityFilter}
+                        options={cityOptions}
+                        placeholder="تصفية بالمدينة..."
+                      />
+                    </div>
+                  </th>
                   {filterType === "assigned" && (
                     <>
                       <th className="px-6 py-4">المندوب المنسوب</th>
@@ -180,7 +440,7 @@ export default function AssignmentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {data.map((item) => {
+                {filteredData.map((item) => {
                   const empId =
                     (item as any).employeeId ||
                     (item as any).currentEmployeeId ||

@@ -404,9 +404,18 @@ export const renewVehicleOperationCard = (vehicleId: string, payload: T.VehicleO
     notifySuccess: "تم تحديث كرت التشغيل بنجاح",
   });
 
-export const getVehicleComplianceDue = (checkDate?: string) => {
-  const query = checkDate ? `?checkDate=${checkDate}` : "";
-  return authFetch<T.VehicleComplianceDueResponse[]>(`/api/vehicle-compliance/due${query}`);
+export const getVehicleComplianceDue = (
+  checkDate?: string,
+  params?: { page?: number; pageSize?: number }
+) => {
+  const query = new URLSearchParams();
+  if (checkDate) query.set("checkDate", checkDate);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  const qs = query.toString();
+  return authFetch<T.VehicleComplianceDueResponse[] | T.PagedResponse<T.VehicleComplianceDueResponse>>(
+    `/api/vehicle-compliance/due${qs ? `?${qs}` : ""}`
+  );
 };
 
 // ---------------------------
