@@ -602,8 +602,8 @@ export const navigation: NavItem[] = [
     ],
   },
   {
-    label: "إدارة المستخدمين",
-    labelKey: "nav.userManagement",
+    label: "إدارة النظام",
+    labelKey: "nav.systemManagement",
     icon: ShieldCheck,
     roles: ["admin", "manager", "member", "accountant"],
     children: [
@@ -622,6 +622,14 @@ export const navigation: NavItem[] = [
         icon: ShieldCheck,
         roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["roles.read", "permissions.read"],
+      },
+      {
+        label: "سجل العمليات والتدقيق",
+        labelKey: "nav.auditLogs",
+        href: "/admin/audit",
+        icon: History,
+        roles: ["admin", "manager", "member", "accountant"],
+        permission: "audit.read",
       },
     ],
   },

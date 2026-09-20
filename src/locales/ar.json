@@ -119,10 +119,12 @@
     "maintenanceLocations": "مواقع وورش الصيانة والمستودعات",
     "maintenanceSuppliers": "موردو قطع الغيار والخدمات",
     "maintenancePlans": "خطط وبرامج الصيانة الدورية",
+    "systemManagement": "إدارة النظام",
     "userManagement": "إدارة المستخدمين",
     "users": "المستخدمون",
     "roles": "الأدوار",
     "rolesAndPermissions": "الأدوار والصلاحيات",
+    "auditLogs": "سجل العمليات والتدقيق",
     "profile": "ملفي الشخصي",
     "collapseMenu": "تصغير القائمة",
     "expandMenu": "توسيع القائمة"

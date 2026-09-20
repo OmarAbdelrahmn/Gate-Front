@@ -214,7 +214,7 @@ export default function RolesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-bold text-[#1167c9]">{t("nav.userManagement")}</p>
+          <p className="text-sm font-bold text-[#1167c9]">{t("nav.systemManagement")}</p>
           <h1 className="mt-1 text-3xl font-black">{t("nav.rolesAndPermissions")}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
             {locale === "en" ? "Create custom roles and assign associated permissions." : "أنشئ الأدوار المخصصة وحدد الصلاحيات التي تمنحها."}

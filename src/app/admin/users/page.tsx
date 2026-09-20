@@ -666,7 +666,7 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-bold text-[#1167c9]">{t("nav.userManagement")}</p>
+          <p className="text-sm font-bold text-[#1167c9]">{t("nav.systemManagement")}</p>
           <h1 className="mt-1 text-3xl font-black">{t("users.title")}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
             {locale === "en"

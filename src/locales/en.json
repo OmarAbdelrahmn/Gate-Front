@@ -119,10 +119,12 @@
     "maintenanceLocations": "Locations, Workshops & Warehouses",
     "maintenanceSuppliers": "Suppliers & Service Providers",
     "maintenancePlans": "Maintenance Plans & Schedules",
+    "systemManagement": "System Management",
     "userManagement": "User Management",
     "users": "Users",
     "roles": "Roles",
     "rolesAndPermissions": "Roles & Permissions",
+    "auditLogs": "Audit Logs",
     "profile": "My Profile",
     "collapseMenu": "Collapse Menu",
     "expandMenu": "Expand Menu"
