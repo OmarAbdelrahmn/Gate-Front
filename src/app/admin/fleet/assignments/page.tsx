@@ -14,7 +14,8 @@ import {
   TableHeaderColumnFilter,
   type FilterOption,
 } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
-import { Key, Search, RefreshCw, Car, ArrowLeftRight, CalendarClock, ShieldCheck, X } from "lucide-react";
+import { Key, Search, RefreshCw, Car, ArrowLeftRight, CalendarClock, ShieldCheck, X, FileSpreadsheet } from "lucide-react";
+import { exportToExcel } from "@/lib/export-excel";
 import { TakeVehicleModal } from "./components/TakeVehicleModal";
 import { ReturnVehicleModal } from "./components/ReturnVehicleModal";
 import { SwitchVehicleModal } from "./components/SwitchVehicleModal";
@@ -366,6 +367,74 @@ export default function AssignmentsPage() {
   const hasActiveFilters = Boolean(cityFilter || manufacturerFilter);
   const isFiltered = Boolean(search.trim() || hasActiveFilters);
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredData.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `vehicle-assignments-${filterType}-${new Date().toISOString().split("T")[0]}`,
+        sheetName: filterType === "assigned" ? "المركبات المسلمة" : "المركبات المتاحة",
+        data: filteredData,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "اللوحة (عربي)", accessor: (item) => item.plateNumberAr || "—", width: 16, isText: true },
+          { header: "اللوحة (إنجليزي)", accessor: (item) => item.plateNumberEn || "—", width: 16, isText: true },
+          { header: "المركبة والموديل", accessor: (item) => [item.manufacturer, item.model].filter(Boolean).join(" ") || "—", width: 22 },
+          { header: "الرقم التسلسلي", accessor: (item) => item.serialNumber || "—", width: 18, isText: true },
+          { header: "المدينة التشغيلية", accessor: (item) => item.operatingCity || "—", width: 16 },
+          {
+            header: "المندوب المسجل",
+            accessor: (item) => {
+              const rInfo = item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null;
+              return rInfo?.nameAr || item.currentRiderName || "—";
+            },
+            width: 24,
+          },
+          {
+            header: "هوية المندوب",
+            accessor: (item) => {
+              const rInfo = item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null;
+              return rInfo?.iqama || "—";
+            },
+            width: 18,
+            isText: true,
+          },
+          {
+            header: "جوال المندوب",
+            accessor: (item) => {
+              const rInfo = item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null;
+              return rInfo?.phone || "—";
+            },
+            width: 18,
+            isText: true,
+          },
+          {
+            header: "المندوب الفعلي (إن وجد)",
+            accessor: (item) => item.actualRider ? (item.actualRider.actualRiderName || (item.actualRider as any).name || "—") : "—",
+            width: 22,
+          },
+          {
+            header: "هوية المندوب الفعلي",
+            accessor: (item) => item.actualRider ? (item.actualRider.actualRiderIqamaNo || "—") : "—",
+            width: 20,
+            isText: true,
+          },
+          {
+            header: "حالة المركبة",
+            accessor: (item) => item.status === VehicleOperationalStatus.Assigned ? "معين" : "متاح",
+            width: 14,
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("Export assignments error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -384,16 +453,28 @@ export default function AssignmentsPage() {
           </p>
         </div>
 
-        {can("fleet.assignments.manage") && (
-          <div className="flex gap-2">
-            <Button onClick={() => openModal("take")} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
-              <Key className="h-4 w-4" /> تسليم مركبة
-            </Button>
-            <Button onClick={() => openModal("return")} variant="secondary" className="gap-2">
-              <ArrowLeftRight className="h-4 w-4" /> استلام مركبة
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting || loading || filteredData.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير إكسل
+          </Button>
+          {can("fleet.assignments.manage") && (
+            <div className="flex gap-2">
+              <Button onClick={() => openModal("take")} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
+                <Key className="h-4 w-4" /> تسليم مركبة
+              </Button>
+              <Button onClick={() => openModal("return")} variant="secondary" className="gap-2">
+                <ArrowLeftRight className="h-4 w-4" /> استلام مركبة
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">

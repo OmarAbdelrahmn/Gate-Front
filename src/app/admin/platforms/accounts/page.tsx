@@ -45,7 +45,9 @@ import {
   ExternalLink,
   Lock,
   UserCheck,
+  FileSpreadsheet,
 } from "lucide-react";
+import { exportToExcel } from "@/lib/export-excel";
 
 export default function PlatformAccountsPage() {
   const { can, locale, refreshSession } = useAuth();
@@ -621,6 +623,43 @@ export default function PlatformAccountsPage() {
     }
   };
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredAccounts.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `platform-accounts-${new Date().toISOString().split("T")[0]}`,
+        sheetName: isEn ? "Platform Accounts" : "حسابات المنصات",
+        data: filteredAccounts,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: isEn ? "Account Code" : "رمز الحساب", accessor: (acc) => acc.code, width: 18, isText: true },
+          { header: isEn ? "Platform" : "المنصة", accessor: (acc) => (isEn ? acc.platformNameEn : acc.platformNameAr) || acc.platformNameAr || acc.platformNameEn || acc.platformCode || acc.platformId, width: 18 },
+          { header: isEn ? "Operating City" : "المدينة", accessor: (acc) => (isEn ? acc.operatingCityNameEn : acc.operatingCityNameAr) || acc.operatingCityNameAr || acc.operatingCityNameEn || acc.operatingCityId, width: 16 },
+          { header: isEn ? "Sponsor" : "الكفيل", accessor: (acc) => (isEn ? acc.sponsorNameEn : acc.sponsorNameAr) || acc.sponsorNameAr || acc.sponsorNameEn || acc.sponsorId, width: 22 },
+          { header: isEn ? "Payment Model" : "نموذج الدفع", accessor: (acc) => acc.paymentModel, width: 16 },
+          { header: isEn ? "Owner Rider" : "صاحب الحساب الأساسي", accessor: (acc) => (isEn ? acc.ownerRiderNameEn : acc.ownerRiderNameAr) || acc.ownerRiderNameAr || acc.ownerRiderNameEn || "—", width: 24 },
+          { header: isEn ? "Current Assignee" : "المندوب الفعلي (الحالي)", accessor: (acc) => (isEn ? acc.currentAssignment?.actualRiderNameEn : acc.currentAssignment?.actualRiderNameAr) || acc.currentAssignment?.actualRiderNameAr || acc.currentAssignment?.actualRiderNameEn || "—", width: 24 },
+          { header: isEn ? "Status" : "الحالة", accessor: (acc) => acc.status, width: 14 },
+        ],
+      });
+      toast.success(
+        isEn ? "Exported" : "تم التصدير",
+        isEn ? "Platform accounts exported to Excel successfully." : "تم تنزيل حسابات المنصات بصيغة إكسل بنجاح."
+      );
+    } catch (err) {
+      console.error("Export error:", err);
+      toast.error(
+        isEn ? "Export Failed" : "فشل التصدير",
+        isEn ? "Failed to export data to Excel." : "حدث خطأ أثناء تصدير ملف الإكسل."
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -635,15 +674,27 @@ export default function PlatformAccountsPage() {
           </p>
         </div>
 
-        {can("platform_accounts.manage") && (
+        <div className="flex items-center gap-2">
           <Button
-            onClick={handleOpenAdd}
-            className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]"
+            variant="secondary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting || loading || filteredAccounts.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
           >
-            <Plus className="h-4 w-4" />
-            {t("platforms.newAccount")}
+            <FileSpreadsheet size={16} />
+            {isEn ? "Export Excel" : "تصدير إكسل"}
           </Button>
-        )}
+          {can("platform_accounts.manage") && (
+            <Button
+              onClick={handleOpenAdd}
+              className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]"
+            >
+              <Plus className="h-4 w-4" />
+              {t("platforms.newAccount")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* 403 / Error Diagnostic Banner */}

@@ -12,8 +12,10 @@ import {
   FileCheck,
   AlertCircle,
   ShieldAlert,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
+import { exportToExcel } from "../../../../lib/export-excel";
 import {
   createPayrollEmployee,
   deletePayrollEmployee,
@@ -412,6 +414,43 @@ export default function PayrollEmployeesPage() {
     );
   }
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (employees.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `payroll-employees-${new Date().toISOString().split("T")[0]}`,
+        sheetName: isEn ? "Payroll Employees" : "موظفو الرواتب",
+        data: employees,
+        columns: [
+          { header: "م", accessor: (item) => item.number, width: 8 },
+          { header: isEn ? "Name" : "الاسم", accessor: (item) => item.name, width: 28 },
+          { header: isEn ? "National ID" : "رقم الهوية", accessor: (item) => item.nationalId, width: 20, isText: true },
+          { header: isEn ? "Country" : "البلد", accessor: (item) => item.country, width: 16 },
+          { header: isEn ? "Joining Date" : "تاريخ الانضمام", accessor: (item) => item.joiningDate ? item.joiningDate.split("T")[0] : "—", width: 16 },
+          { header: isEn ? "Personal IBAN" : "الايبان الشخصي", accessor: (item) => item.personalIban, width: 26, isText: true },
+          { header: isEn ? "Salary" : "الراتب", accessor: (item) => item.salary, width: 14 },
+          { header: isEn ? "Sponsor" : "الكفيل", accessor: (item) => item.sponsor?.registryNameAr || item.sponsor?.registryNameEn || "—", width: 24 },
+          { header: isEn ? "Status" : "الحالة", accessor: (item) => item.status || "—", width: 16 },
+        ],
+      });
+      toast.success(
+        isEn ? "Exported" : "تم التصدير",
+        isEn ? "Payroll employees exported to Excel successfully." : "تم تنزيل سجلات موظفي الرواتب بصيغة إكسل بنجاح."
+      );
+    } catch (err) {
+      console.error("Export payroll error:", err);
+      toast.error(
+        isEn ? "Export Failed" : "فشل التصدير",
+        isEn ? "Failed to export data to Excel." : "حدث خطأ أثناء تصدير ملف الإكسل."
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Bar */}
@@ -429,12 +468,24 @@ export default function PayrollEmployeesPage() {
               : "إدارة ومتابعة سجلات موظفي الرواتب المسجلين بالتأمينات الاجتماعية، الكفلاء، والايبانات."}
           </p>
         </div>
-        {canCreate && (
-          <Button onClick={openCreateModal}>
-            <Plus size={17} />
-            {isEn ? "Add Payroll Employee" : "إضافة موظف رواتب جديد"}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting || loading || employees.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={16} />
+            {isEn ? "Export Excel" : "تصدير إكسل"}
           </Button>
-        )}
+          {canCreate && (
+            <Button onClick={openCreateModal}>
+              <Plus size={17} />
+              {isEn ? "Add Payroll Employee" : "إضافة موظف رواتب جديد"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Main Table Card */}

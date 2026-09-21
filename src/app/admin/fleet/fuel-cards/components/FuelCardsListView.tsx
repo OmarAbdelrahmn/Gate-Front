@@ -28,7 +28,9 @@ import {
   Building,
   X,
   Filter as FilterIcon,
+  FileSpreadsheet,
 } from "lucide-react";
+import { exportToExcel } from "@/lib/export-excel";
 import {
   TableHeaderColumnFilter,
   type FilterOption,
@@ -295,6 +297,46 @@ export function FuelCardsListView({
     });
   }, [items, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter]);
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const data = await getFuelCards({
+        search: searchQuery.trim() || undefined,
+        provider: providerFilter || undefined,
+        riderProfileId: riderFilterId || undefined,
+        page: 1,
+        pageSize: 10000,
+      });
+
+      const exportItems = data?.items || [];
+      if (exportItems.length === 0) {
+        return;
+      }
+
+      await exportToExcel({
+        filename: `fuel-cards-${new Date().toISOString().split("T")[0]}`,
+        sheetName: "بطاقات الوقود",
+        data: exportItems,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "رقم البطاقة", accessor: (c) => c.cardNumber, width: 22, isText: true },
+          { header: "المزود", accessor: (c) => c.providerNameAr || fuelProviderLabels[c.provider] || String(c.provider), width: 16 },
+          { header: "اللوحة المرتبطة", accessor: (c) => c.plateNumberText || "—", width: 16, isText: true },
+          { header: "المندوب المعين", accessor: (c) => c.currentRider?.riderNameAr || c.currentRider?.riderNameEn || "غير معين", width: 24 },
+          { header: "تاريخ بداية التعيين", accessor: (c) => c.currentRider?.effectiveFrom ? c.currentRider.effectiveFrom.split("T")[0] : "—", width: 18 },
+          { header: "حالة التعيين", accessor: (c) => c.currentRider ? "معين" : "شاغر (متاح)", width: 16 },
+          { header: "ملاحظات", accessor: (c) => c.notes || "—", width: 24 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export fuel cards error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4" dir="rtl">
       {/* KPI Summary Cards */}
@@ -341,55 +383,67 @@ export function FuelCardsListView({
       </div>
 
       {/* Filters Toolbar */}
-      <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Search */}
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute start-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                onSearchChange(e.target.value);
-                setPage(1);
-              }}
-              placeholder="بحث برقم البطاقة، اللوحة، أو اسم المندوب..."
-              className="w-full h-10 ps-9 pe-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
-            />
+      <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+            {/* Search */}
+            <div className="relative">
+              <Search
+                size={16}
+                className="absolute start-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  onSearchChange(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="بحث برقم البطاقة، اللوحة، أو اسم المندوب..."
+                className="w-full h-10 ps-9 pe-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
+              />
+            </div>
+
+            {/* Provider Filter */}
+            <div>
+              <select
+                value={providerFilter}
+                onChange={(e) => {
+                  setProviderFilter(e.target.value as FuelProvider | "");
+                  setPage(1);
+                }}
+                className="w-full h-10 px-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none cursor-pointer"
+              >
+                <option value="">جميع الشركات المزودة...</option>
+                <option value="PetroApp">{fuelProviderLabels.PetroApp}</option>
+                <option value="SayaraApp">{fuelProviderLabels.SayaraApp}</option>
+              </select>
+            </div>
+
+            {/* Rider Filter */}
+            <div>
+              <SearchableSelect
+                value={riderFilterId}
+                onChange={(val) => {
+                  setRiderFilterId(val);
+                  setPage(1);
+                }}
+                options={ridersOptions}
+                placeholder="المندوب المعين..."
+                searchPlaceholder="بحث في المناديب..."
+              />
+            </div>
           </div>
 
-          {/* Provider Filter */}
-          <div>
-            <select
-              value={providerFilter}
-              onChange={(e) => {
-                setProviderFilter(e.target.value as FuelProvider | "");
-                setPage(1);
-              }}
-              className="w-full h-10 px-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none cursor-pointer"
-            >
-              <option value="">جميع الشركات المزودة...</option>
-              <option value="PetroApp">{fuelProviderLabels.PetroApp}</option>
-              <option value="SayaraApp">{fuelProviderLabels.SayaraApp}</option>
-            </select>
-          </div>
-
-          {/* Rider Filter */}
-          <div>
-            <SearchableSelect
-              value={riderFilterId}
-              onChange={(val) => {
-                setRiderFilterId(val);
-                setPage(1);
-              }}
-              options={ridersOptions}
-              placeholder="المندوب المعين..."
-              searchPlaceholder="بحث في المناديب..."
-            />
-          </div>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exporting || loading || totalCount === 0}
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs hover:bg-emerald-100 transition-colors shrink-0 disabled:opacity-50"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير إكسل
+          </button>
         </div>
       </div>
 

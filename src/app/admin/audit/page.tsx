@@ -43,6 +43,7 @@ import { listEmployees } from "@/lib/workforce/api";
 import { getVehicles, getVehicleStatusHistory } from "@/lib/fleet/api";
 import type { SelectOption } from "@/components/ui/SearchableSelect";
 import { TableHeaderColumnFilter, type FilterOption } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
+import { exportToExcel } from "@/lib/export-excel";
 
 const COMMON_ENTITY_TYPES = [
   { value: "ALL", label: "كافة الكيانات", labelEn: "All Entity Types" },
@@ -649,6 +650,124 @@ export default function AuditLogsPage() {
     }
   };
 
+  const processedEntries = useMemo(() => {
+    return items.filter((entry) => {
+      if (shouldIgnoreAuditEntry(entry)) return false;
+      const resolved = resolveAuditRecordInfo(
+        entry,
+        isEn,
+        docTypesMap,
+        documentsMap,
+        employeesList,
+        vehiclePeriodsMap
+      );
+      if (shouldIgnoreAuditEntry(entry, resolved?.primaryTitle)) return false;
+      return true;
+    });
+  }, [items, isEn, docTypesMap, documentsMap, employeesList, vehiclePeriodsMap]);
+
+  const handleExportExcel = async () => {
+    if (processedEntries.length === 0) {
+      alert(isEn ? "No audit records to export." : "لا توجد سجلات تدقيق للتصدير.");
+      return;
+    }
+
+    await exportToExcel({
+      filename: `audit-logs-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: isEn ? "Audit Logs" : "سجل العمليات",
+      columns: [
+        {
+          header: isEn ? "Timestamp (UTC)" : "التاريخ والوقت",
+          accessor: (entry) => formatDateTime(entry.occurredAtUtc),
+          width: 22,
+        },
+        {
+          header: isEn ? "Action" : "الإجراء",
+          accessor: (entry) => {
+            const meta = getActionBadge(entry.action);
+            return meta.label;
+          },
+          width: 15,
+        },
+        {
+          header: isEn ? "Entity Type" : "نوع الكيان",
+          accessor: (entry) => {
+            const resolved = resolveAuditRecordInfo(
+              entry,
+              isEn,
+              docTypesMap,
+              documentsMap,
+              employeesList,
+              vehiclePeriodsMap
+            );
+            return resolved.entityLabel;
+          },
+          width: 22,
+        },
+        {
+          header: isEn ? "Target Record" : "السجل المستهدف",
+          accessor: (entry) => {
+            const resolved = resolveAuditRecordInfo(
+              entry,
+              isEn,
+              docTypesMap,
+              documentsMap,
+              employeesList,
+              vehiclePeriodsMap
+            );
+            const extra = resolved.secondaryTitle ? ` - ${resolved.secondaryTitle}` : "";
+            return `${resolved.primaryTitle}${extra}`;
+          },
+          isText: true,
+          width: 32,
+        },
+        {
+          header: isEn ? "Record Code / ID" : "معرف / رمز السجل",
+          accessor: (entry) => {
+            const resolved = resolveAuditRecordInfo(
+              entry,
+              isEn,
+              docTypesMap,
+              documentsMap,
+              employeesList,
+              vehiclePeriodsMap
+            );
+            return resolved.code || entry.entityId;
+          },
+          isText: true,
+          width: 20,
+        },
+        {
+          header: isEn ? "Actor / User" : "القائم بالعملية",
+          accessor: (entry) =>
+            entry.actor?.displayNameAr ||
+            entry.actor?.displayNameEn ||
+            entry.actor?.userName ||
+            entry.actorType ||
+            (isEn ? "System" : "النظام"),
+          width: 22,
+        },
+        {
+          header: isEn ? "Actor Username" : "اسم المستخدم",
+          accessor: (entry) => entry.actor?.userName || "-",
+          isText: true,
+          width: 18,
+        },
+        {
+          header: isEn ? "Changes Count" : "عدد التعديلات",
+          accessor: (entry) => entry.changes?.length ?? 0,
+          width: 14,
+        },
+        {
+          header: isEn ? "Changed Fields" : "الحقول المعدلة",
+          accessor: (entry) => entry.changes?.map((c) => c.field).join(", ") || "-",
+          width: 35,
+        },
+      ],
+      data: processedEntries,
+    });
+  };
+
   const openDetail = (entry: AuditEntry) => {
     setSelectedEventId(entry.eventId);
     setSelectedEntry(entry);
@@ -704,6 +823,14 @@ export default function AuditLogsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-2 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={14} />
+            <span>{isEn ? "Export Excel" : "تصدير إكسل"}</span>
+          </Button>
           <Button
             variant="secondary"
             onClick={() => loadData(currentCursor)}
@@ -892,7 +1019,7 @@ export default function AuditLogsPage() {
                     </td>
                   </tr>
                 ))
-              ) : items.length === 0 ? (
+              ) : processedEntries.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
@@ -909,14 +1036,7 @@ export default function AuditLogsPage() {
                   </td>
                 </tr>
               ) : (
-                items
-                  .filter((entry) => {
-                    if (shouldIgnoreAuditEntry(entry)) return false;
-                    const resolved = resolveAuditRecordInfo(entry, isEn, docTypesMap, documentsMap, employeesList, vehiclePeriodsMap);
-                    if (shouldIgnoreAuditEntry(entry, resolved?.primaryTitle)) return false;
-                    return true;
-                  })
-                  .map((entry) => {
+                processedEntries.map((entry) => {
                   const actionMeta = getActionBadge(entry.action);
                   const ActionIcon = actionMeta.icon;
                   const actorName =

@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { PlusCircle, Eye, Wrench, RefreshCw, Car, User, Search } from "lucide-react";
+import { PlusCircle, Eye, Wrench, RefreshCw, Car, User, Search, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { exportToExcel } from "@/lib/export-excel";
 import { WorkOrderDetailModal } from "./WorkOrderDetailModal";
 import { CreateCompanyWorkOrderModal } from "./CreateCompanyWorkOrderModal";
 import { getWorkOrders, getSupplyRequests } from "@/lib/maintenance/api";
@@ -193,6 +194,84 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
     );
   });
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (displayedOrders.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `work-orders-${new Date().toISOString().split("T")[0]}.xlsx`,
+        sheetName: "أوامر الصيانة",
+        data: displayedOrders,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          {
+            header: "الرقم التسلسلي / المستفيد",
+            accessor: (o) => {
+              const { serialDisplay } = getOrderVehicleInfo(o);
+              if (o.serviceSubjectType === 1) {
+                return serialDisplay;
+              }
+              return `عميل: ${o.externalVehicle?.customerName || "عميل خارجي"}`;
+            },
+            isText: true,
+            width: 22,
+          },
+          {
+            header: "رقم اللوحة",
+            accessor: (o) => {
+              const { plateDisplay } = getOrderVehicleInfo(o);
+              if (o.serviceSubjectType === 1) {
+                return plateDisplay || "بدون لوحة";
+              }
+              return o.externalVehicle?.plateOrReference || "—";
+            },
+            isText: true,
+            width: 18,
+          },
+          {
+            header: "الموقع / الورشة",
+            accessor: (o) => o.maintenanceLocationNameAr || "—",
+            width: 22,
+          },
+          {
+            header: "نوع الصيانة",
+            accessor: (o) => maintenanceTypeLabels[o.maintenanceType] || String(o.maintenanceType),
+            width: 18,
+          },
+          {
+            header: "العداد عند الفتح",
+            accessor: (o) => o.odometerAtOpen ?? "—",
+            width: 16,
+          },
+          {
+            header: "حالة الأمر",
+            accessor: (o) => {
+              const st = getWorkOrderEffectiveStatus(o.status, o.supplyRequest);
+              return st?.label || String(o.status);
+            },
+            width: 20,
+          },
+          {
+            header: "إجمالي التكلفة (ر.س)",
+            accessor: (o) => (o.actualTotalCost != null ? Number(o.actualTotalCost.toFixed(2)) : 0),
+            width: 18,
+          },
+          {
+            header: "تاريخ الفتح",
+            accessor: (o) => (o.openedAtUtc ? formatDateTime(o.openedAtUtc) : "—"),
+            width: 20,
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("Export work orders error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Page Header */}
@@ -207,16 +286,28 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
           </p>
         </div>
 
-        {canManage && (
+        <div className="flex items-center gap-2">
           <Button
-            variant="primary"
-            onClick={() => setCreateModalOpen(true)}
-            className="text-xs shrink-0 h-9"
+            variant="secondary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting || loading || displayedOrders.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold text-xs shrink-0 h-9"
           >
-            <PlusCircle size={15} />
-            أمر صيانة شركة جديد
+            <FileSpreadsheet size={15} />
+            تصدير إكسل
           </Button>
-        )}
+          {canManage && (
+            <Button
+              variant="primary"
+              onClick={() => setCreateModalOpen(true)}
+              className="text-xs shrink-0 h-9"
+            >
+              <PlusCircle size={15} />
+              أمر صيانة شركة جديد
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Prominent Search at the Head of the Page */}

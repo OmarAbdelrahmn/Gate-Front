@@ -19,8 +19,10 @@ import {
   TrendingUp,
   Boxes,
   DollarSign,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { exportToExcel } from "@/lib/export-excel";
 import { CreateReceiptModal } from "./CreateReceiptModal";
 import { BillViewerModal } from "./BillViewerModal";
 import { ReceiptDetailsModal } from "./ReceiptDetailsModal";
@@ -308,6 +310,34 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
     setSelectedSupplierId("");
   };
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredReceipts.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `purchase-receipts-${new Date().toISOString().split("T")[0]}`,
+        sheetName: "فواتير واستلام المشتريات",
+        data: filteredReceipts,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "رقم الإيصال", accessor: (r) => r.receiptNumber || r.id?.slice(0, 8) || "—", width: 16, isText: true },
+          { header: "رقم فاتورة المورد", accessor: (r) => r.supplierInvoiceNumber || "—", width: 18, isText: true },
+          { header: "المورد", accessor: (r) => r.supplierNameAr || "—", width: 24 },
+          { header: "المستودع / الموقع", accessor: (r) => r.inventoryLocationNameAr || "—", width: 22 },
+          { header: "تاريخ الفاتورة", accessor: (r) => r.invoiceDate ? r.invoiceDate.split("T")[0] : "—", width: 16 },
+          { header: "إجمالي الفاتورة (ر.س)", accessor: (r) => r.totalAmount ?? 0, width: 18 },
+          { header: "قيمة المخزون المقيم (ر.س)", accessor: (r) => r.inventoryValuationAmount ?? 0, width: 20 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export receipts error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Page Header */}
@@ -322,6 +352,17 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting || loading || filteredReceipts.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold text-xs"
+          >
+            <FileSpreadsheet size={14} />
+            تصدير إكسل
+          </Button>
+
           <Button
             variant="ghost"
             onClick={loadReceipts}

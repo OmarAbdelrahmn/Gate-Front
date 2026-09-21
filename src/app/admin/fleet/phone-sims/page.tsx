@@ -13,6 +13,7 @@ import {
   PhoneSimPage,
   PhoneSimStatus,
 } from "@/lib/fleet/phone-sims-api";
+import { exportToExcel } from "@/lib/export-excel";
 import { PhoneSimsNav } from "./components/PhoneSimsNav";
 import { CreateSimModal } from "./components/CreateSimModal";
 import { EditSimModal } from "./components/EditSimModal";
@@ -205,6 +206,59 @@ export default function PhoneSimsPage() {
     (s) => s.status === "Suspended" || s.status === "Lost" || s.status === "Deactivated"
   ).length;
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const data = await getPhoneSims({
+        search: search.trim() || undefined,
+        status: selectedStatus || undefined,
+        responsibleEmployeeId: selectedResponsibleId || undefined,
+        riderProfileId: selectedRiderId || undefined,
+        page: 1,
+        pageSize: 10000,
+      });
+
+      const exportItems = data?.items || [];
+      if (exportItems.length === 0) return;
+
+      await exportToExcel({
+        filename: `phone-sims-${new Date().toISOString().split("T")[0]}`,
+        sheetName: "شرائح الاتصال",
+        data: exportItems,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "رقم الهاتف", accessor: (s) => s.phoneNumber, width: 18, isText: true },
+          { header: "الرقم التسلسلي (ICCID)", accessor: (s) => s.iccid || "—", width: 24, isText: true },
+          { header: "شركة الاتصالات (المشغل)", accessor: (s) => s.carrierName || "—", width: 18 },
+          {
+            header: "الحالة",
+            accessor: (s) => {
+              switch (s.status) {
+                case "Available": return "متاحة";
+                case "Assigned": return "معينة";
+                case "Suspended": return "معلقة";
+                case "Lost": return "مفقودة";
+                case "Deactivated": return "ملغاة";
+                default: return s.status;
+              }
+            },
+            width: 14,
+          },
+          { header: "الموظف المسؤول (العهدة)", accessor: (s) => s.responsibleEmployeeNameAr || s.responsibleEmployeeNameEn || "—", width: 22 },
+          { header: "المندوب المستلم", accessor: (s) => s.currentRider?.fullNameAr || s.currentRider?.fullNameEn || "—", width: 22 },
+          { header: "تاريخ بداية التعيين", accessor: (s) => s.currentRider?.effectiveFrom ? s.currentRider.effectiveFrom.split("T")[0] : "—", width: 18 },
+          { header: "ملاحظات", accessor: (s) => s.notes || "—", width: 24 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export phone sims error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-4 sm:p-6" dir="rtl">
       {/* Top Header Navigation */}
@@ -215,6 +269,8 @@ export default function PhoneSimsPage() {
           setActiveSimForPrint(null);
           setIsPrintModalOpen(true);
         }}
+        onExportExcel={handleExportExcel}
+        exporting={exporting}
         loading={loading}
         canManage={canManage}
       />

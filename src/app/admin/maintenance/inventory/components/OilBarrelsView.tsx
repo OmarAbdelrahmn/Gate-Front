@@ -11,11 +11,13 @@ import {
   Unlock,
   TrendingDown,
   Info,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { exportToExcel } from "@/lib/export-excel";
 import {
   getOilBarrels,
   openOilBarrel,
@@ -143,6 +145,60 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (barrels.length === 0) {
+      alert("لا توجد بيانات براميل زيت للتصدير.");
+      return;
+    }
+    await exportToExcel({
+      filename: `oil-barrels-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: "براميل الزيوت",
+      columns: [
+        { header: "رقم البرميل", accessor: "barrelNumber", isText: true, width: 22 },
+        {
+          header: "المستودع / الموقع",
+          accessor: (b) => {
+            const loc = locations.find((l) => l.id === b.inventoryLocationId);
+            return loc ? `${loc.nameAr} (${loc.code})` : b.inventoryLocationId;
+          },
+          width: 25,
+        },
+        {
+          header: "صنف الزيت",
+          accessor: (b) => {
+            const itm = items.find((i) => i.id === b.inventoryItemId);
+            return itm ? `${itm.nameAr} (${itm.sku})` : b.inventoryItemId;
+          },
+          width: 28,
+        },
+        {
+          header: "الحالة",
+          accessor: (b) => oilBarrelStatusConfig[b.status]?.label || String(b.status),
+          width: 15,
+        },
+        { header: "سلسلة الطرد", accessor: "packageSequence", width: 14 },
+        { header: "السعة الاسمية (لتر)", accessor: "nominalCapacityLiters", width: 18 },
+        { header: "المتبقي (لتر)", accessor: (b) => Number(b.remainingLiters.toFixed(2)), width: 15 },
+        { header: "المستهلك (لتر)", accessor: (b) => Number(b.consumedLiters.toFixed(2)), width: 15 },
+        { header: "الفاقد المسجل (لتر)", accessor: (b) => Number(b.recordedLossLiters.toFixed(2)), width: 18 },
+        { header: "الحد الأقصى للفاقد (لتر)", accessor: (b) => Number(b.maximumAllowedLossLiters.toFixed(2)), width: 22 },
+        { header: "تكلفة اللتر (ر.س)", accessor: (b) => Number(b.unitCostPerLiter.toFixed(2)), width: 18 },
+        { header: "قيمة المخزون المتبقي (ر.س)", accessor: (b) => Number(b.remainingInventoryValue.toFixed(2)), width: 22 },
+        {
+          header: "تاريخ الفتح",
+          accessor: (b) => (b.openedAtUtc ? formatDateTime(b.openedAtUtc) : "-"),
+          width: 20,
+        },
+        {
+          header: "تاريخ الاستهلاك",
+          accessor: (b) => (b.depletedAtUtc ? formatDateTime(b.depletedAtUtc) : "-"),
+          width: 20,
+        },
+      ],
+      data: barrels,
+    });
+  };
+
   const oilItems = items.filter((i) => i.itemType === ItemType.Oil);
 
   return (
@@ -191,10 +247,20 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
           </select>
         </div>
 
-        <Button variant="secondary" onClick={loadBarrels} loading={loading} className="h-10 text-xs">
-          <RefreshCw size={14} />
-          تحديث البراميل
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            className="h-10 text-xs inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={14} />
+            تصدير إكسل
+          </Button>
+          <Button variant="secondary" onClick={loadBarrels} loading={loading} className="h-10 text-xs">
+            <RefreshCw size={14} />
+            تحديث البراميل
+          </Button>
+        </div>
       </div>
 
       {/* Barrels Grid */}

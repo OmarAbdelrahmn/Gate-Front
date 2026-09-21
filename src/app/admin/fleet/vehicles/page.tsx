@@ -9,8 +9,9 @@ import { formatVehicleType, formatVehicleRegistrationType } from "@/lib/fleet/fo
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { Car, Search, Plus, RefreshCw, AlertTriangle, ChevronRight, Filter, X } from "lucide-react";
+import { Car, Search, Plus, RefreshCw, AlertTriangle, ChevronRight, Filter, X, FileSpreadsheet } from "lucide-react";
 import { VehicleUpsertModal } from "./components/VehicleUpsertModal";
+import { exportToExcel } from "@/lib/export-excel";
 import { listSponsors, type Sponsor } from "@/lib/workforce/api";
 import {
   TableHeaderColumnFilter,
@@ -527,6 +528,52 @@ export default function VehiclesPage() {
     }
   };
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredData.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `vehicles-fleet-${new Date().toISOString().split("T")[0]}`,
+        sheetName: "أسطول المركبات",
+        data: filteredData,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "اللوحة (عربي)", accessor: (v) => v.plateNumberAr || "—", width: 16, isText: true },
+          { header: "اللوحة (إنجليزي)", accessor: (v) => v.plateNumberEn || "—", width: 16, isText: true },
+          { header: "الشركة والموديل", accessor: (v) => [v.manufacturer, v.model].filter(Boolean).join(" ") || "—", width: 22 },
+          { header: "رقم الهيكل", accessor: (v) => v.chassisNumber || "—", width: 22, isText: true },
+          { header: "الرقم التسلسلي", accessor: (v) => v.serialNumber || "—", width: 18, isText: true },
+          { header: "نوع التسجيل", accessor: (v) => formatVehicleRegistrationType(v.registrationType), width: 18 },
+          { header: "المدينة التشغيلية", accessor: (v) => v.operatingCity || "—", width: 16 },
+          { header: "الكفيل / السجل", accessor: (v) => v.sponsorName || "—", width: 22 },
+          {
+            header: "الحالة التشغيلية",
+            accessor: (v) => {
+              switch (v.status) {
+                case VehicleOperationalStatus.Available: return "متاح";
+                case VehicleOperationalStatus.Assigned: return "معيّن";
+                case VehicleOperationalStatus.ProblemHold: return "إيقاف (مشكلة)";
+                case VehicleOperationalStatus.AccidentHold: return "إيقاف (حادث)";
+                case VehicleOperationalStatus.OutOfService: return "خارج الخدمة";
+                case VehicleOperationalStatus.Stolen: return "مسروق";
+                case VehicleOperationalStatus.Decommissioned: return "مستبعد";
+                default: return String(v.status);
+              }
+            },
+            width: 16,
+          },
+          { header: "المندوب المستلم حالياً", accessor: (v) => v.currentRiderName || "—", width: 22 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export vehicles error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -544,11 +591,23 @@ export default function VehiclesPage() {
             إدارة المركبات، الاستمارات، وتتبع العهدة
           </p>
         </div>
-        {can("fleet.vehicles.manage") && (
-          <Button onClick={() => setIsUpsertOpen(true)} className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]">
-            <Plus className="h-4 w-4" /> إضافة مركبة جديدة
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting || loading || filteredData.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير إكسل
           </Button>
-        )}
+          {can("fleet.vehicles.manage") && (
+            <Button onClick={() => setIsUpsertOpen(true)} className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]">
+              <Plus className="h-4 w-4" /> إضافة مركبة جديدة
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">

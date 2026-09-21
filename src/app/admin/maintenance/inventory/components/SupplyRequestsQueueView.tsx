@@ -10,9 +10,11 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { exportToExcel } from "@/lib/export-excel";
 import { getSupplyRequests, getStockBalances } from "@/lib/maintenance/api";
 import { getAllVehicles } from "@/lib/fleet/api";
 import { listRiders } from "@/lib/workforce/api";
@@ -259,6 +261,72 @@ export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewPr
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
+  const handleExportExcel = async () => {
+    if (requests.length === 0) {
+      alert("لا توجد طلبات صرف للتصدير.");
+      return;
+    }
+    await exportToExcel({
+      filename: `warehouse-supply-requests-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: "طلبات صرف المستودع",
+      columns: [
+        { header: "رقم الطلب", accessor: "requestNumber", isText: true, width: 20 },
+        {
+          header: "تاريخ الطلب",
+          accessor: (r) => (r.requestedAtUtc ? formatDateTime(r.requestedAtUtc) : "-"),
+          width: 20,
+        },
+        {
+          header: "نوع الطلب",
+          accessor: (r) => supplyRequestSubjectLabels[r.subjectType] || "طلب صرف",
+          width: 20,
+        },
+        {
+          header: "الجهة / المستلم",
+          accessor: (r) => {
+            if (r.subjectType === SupplyRequestSubjectType.VehicleMaintenance) {
+              const plate = r.vehiclePlateNumber ? ` (${r.vehiclePlateNumber})` : "";
+              const wo = r.workOrderNumber ? ` - أمر ${r.workOrderNumber}` : "";
+              return `${r.vehicleAssetNumber || "مركبة"}${plate}${wo}`;
+            }
+            return r.riderNameAr || "مندوب";
+          },
+          isText: true,
+          width: 30,
+        },
+        {
+          header: "مستودع الصرف",
+          accessor: (r) =>
+            r.inventoryLocationNameAr ||
+            locations.find((l) => l.id === r.inventoryLocationId)?.nameAr ||
+            "-",
+          width: 25,
+        },
+        {
+          header: "مقدم الطلب",
+          accessor: (r) => r.requestedByUserName || "-",
+          width: 20,
+        },
+        {
+          header: "عدد الأصناف",
+          accessor: (r) => r.lines?.length || 0,
+          width: 15,
+        },
+        {
+          header: "الحالة",
+          accessor: (r) => supplyRequestStatusConfig[r.status]?.label || String(r.status),
+          width: 22,
+        },
+        {
+          header: "التكلفة الإجمالية (ر.س)",
+          accessor: (r) => Number(getRequestTotalCost(r).toFixed(2)),
+          width: 20,
+        },
+      ],
+      data: requests,
+    });
+  };
+
   if (!canReadQueue) {
     return (
       <div className="p-8 rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-center space-y-3" dir="rtl">
@@ -288,6 +356,14 @@ export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewPr
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            className="h-8 text-xs px-3 inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={13} />
+            تصدير إكسل
+          </Button>
           <Button
             variant="secondary"
             onClick={loadRequests}

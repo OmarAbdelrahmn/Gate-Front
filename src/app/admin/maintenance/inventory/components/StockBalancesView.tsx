@@ -10,8 +10,10 @@ import {
   Calendar,
   AlertCircle,
   TrendingDown,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { exportToExcel } from "@/lib/export-excel";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { getStockBalances, getCostLayers } from "@/lib/maintenance/api";
 import type {
@@ -103,6 +105,64 @@ export function StockBalancesView({ locations, items }: StockBalancesViewProps) 
     0,
   );
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredBalances.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `stock-balances-${new Date().toISOString().split("T")[0]}`,
+        sheetName: "أرصدة المخزون",
+        data: filteredBalances,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          {
+            header: "رمز الصنف (SKU)",
+            accessor: (b) => {
+              const itm = items.find((i) => i.id === b.inventoryItemId);
+              return itm?.sku || "—";
+            },
+            width: 16,
+            isText: true,
+          },
+          {
+            header: "اسم الصنف",
+            accessor: (b) => {
+              const itm = items.find((i) => i.id === b.inventoryItemId);
+              return itm?.nameAr || "—";
+            },
+            width: 24,
+          },
+          {
+            header: "المستودع / الموقع",
+            accessor: (b) => {
+              const loc = locations.find((l) => l.id === b.inventoryLocationId);
+              return loc ? `${loc.nameAr} (${loc.code})` : "—";
+            },
+            width: 20,
+          },
+          { header: "الرصيد في اليد", accessor: (b) => b.quantityOnHand ?? 0, width: 14 },
+          { header: "الرصيد المحجوز", accessor: (b) => b.quantityReserved ?? 0, width: 14 },
+          {
+            header: "وحدة القياس",
+            accessor: (b) => {
+              const itm = items.find((i) => i.id === b.inventoryItemId);
+              return itm ? (unitOfMeasureLabels[itm.baseUnitOfMeasure] || String(itm.baseUnitOfMeasure)) : "—";
+            },
+            width: 14,
+          },
+          { header: "متوسط التكلفة (ر.س)", accessor: (b) => b.reportingAverageUnitCost ?? 0, width: 18 },
+          { header: "إجمالي القيمة (ر.س)", accessor: (b) => b.inventoryValue ?? 0, width: 18 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export stock balances error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Filters & Total Metric */}
@@ -121,9 +181,9 @@ export function StockBalancesView({ locations, items }: StockBalancesViewProps) 
                   }
                 }
               }}
-              className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-bold focus:outline-hidden cursor-pointer"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
             >
-              <option value="">جميع أنواع الأصناف (الكل)</option>
+              <option value="">كافة أصناف المخزون</option>
               <option value={String(ItemType.SparePart)}>قطع غيار</option>
               <option value={String(ItemType.RiderAccessory)}>مستلزمات المناديب</option>
               <option value={String(ItemType.Oil)}>زيوت ومواد تشحيم</option>
@@ -160,6 +220,15 @@ export function StockBalancesView({ locations, items }: StockBalancesViewProps) 
               placeholder="فلترة بالصنف..."
             />
           </div>
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            disabled={loading || exporting || filteredBalances.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold h-10 text-xs shrink-0"
+          >
+            <FileSpreadsheet size={14} />
+            تصدير إكسل
+          </Button>
           <Button
             variant="secondary"
             onClick={loadBalances}

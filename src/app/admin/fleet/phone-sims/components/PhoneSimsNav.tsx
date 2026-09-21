@@ -7,6 +7,7 @@ import {
   Plus,
   RefreshCw,
   Printer,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
@@ -14,6 +15,8 @@ interface PhoneSimsNavProps {
   onRefresh?: () => void;
   onOpenCreate?: () => void;
   onOpenFormTemplate?: () => void;
+  onExportExcel?: () => void;
+  exporting?: boolean;
   loading?: boolean;
   canManage?: boolean;
 }
@@ -22,6 +25,8 @@ export function PhoneSimsNav({
   onRefresh,
   onOpenCreate,
   onOpenFormTemplate,
+  onExportExcel,
+  exporting = false,
   loading = false,
   canManage = false,
 }: PhoneSimsNavProps) {
@@ -62,6 +67,18 @@ export function PhoneSimsNav({
             >
               <RefreshCw size={16} className={loading ? "animate-spin text-[#1167c9]" : ""} />
               تحديث البيانات
+            </Button>
+          )}
+
+          {onExportExcel && (
+            <Button
+              variant="secondary"
+              onClick={onExportExcel}
+              disabled={loading || exporting}
+              className="flex items-center gap-2 h-10 px-4 rounded-xl shadow-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+            >
+              <FileSpreadsheet size={16} />
+              تصدير إكسل
             </Button>
           )}
 

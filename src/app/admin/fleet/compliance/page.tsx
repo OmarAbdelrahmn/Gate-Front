@@ -49,7 +49,9 @@ import {
   Loader2,
   AlertCircle,
   ExternalLink,
+  FileSpreadsheet,
 } from "lucide-react";
+import { exportToExcel } from "@/lib/export-excel";
 import Link from "next/link";
 
 
@@ -1006,6 +1008,54 @@ export default function CompliancePage() {
     search || modelFilter || registrationFilter || docTypeFilter || dateStatusFilter || combinedStatusFilter
   );
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filtered.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `vehicle-compliance-${checkDate}`,
+        sheetName: "ملاحظات التراخيص",
+        data: filtered,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "اللوحة (عربي)", accessor: (c) => c.plateNumberAr || "—", width: 16, isText: true },
+          { header: "اللوحة (إنجليزي)", accessor: (c) => c.plateNumberEn || "—", width: 16, isText: true },
+          { header: "رقم الأصل", accessor: (c) => c.assetNumber || "—", width: 16, isText: true },
+          { header: "الرقم التسلسلي", accessor: (c) => c.serialNumber || "—", width: 16, isText: true },
+          { header: "نوع الترخيص / الوثيقة", accessor: (c) => getDocTypeInfo(c.type).label, width: 20 },
+          { header: "حالة الملف", accessor: (c) => c.hasUploadedFile ? "مرفوع" : "غير مرفوع", width: 14 },
+          { header: "تاريخ البداية", accessor: (c) => c.effectiveFrom || "—", width: 16 },
+          { header: "تاريخ الانتهاء", accessor: (c) => c.expiryDate || c.permitEndDate || "—", width: 16 },
+          { header: "الأيام المتبقية", accessor: (c) => c.daysRemaining != null ? c.daysRemaining : "—", width: 14 },
+          {
+            header: "حالة الترخيص",
+            accessor: (c) => {
+              const st = Number(c.status ?? c.permitStatus);
+              switch (st) {
+                case VehicleComplianceDueStatus.Valid: return "ساري";
+                case VehicleComplianceDueStatus.Upcoming: return "قريب الانتهاء";
+                case VehicleComplianceDueStatus.DueToday: return "ينتهي اليوم";
+                case VehicleComplianceDueStatus.Expired: return "منتهي";
+                case VehicleComplianceDueStatus.UploadedWithoutDates: return "مرفوع — التواريخ غير مسجلة";
+                case VehicleComplianceDueStatus.Missing: return "مفقود (غير مسجل)";
+                default: return String(c.status ?? c.permitStatus ?? "—");
+              }
+            },
+            width: 22,
+          },
+        ],
+      });
+      toast.success("تم التصدير", "تم تصدير ملاحظات تراخيص المركبات بنجاح بصيغة إكسل.");
+    } catch (err) {
+      console.error("Export compliance error:", err);
+      toast.error("فشل التصدير", "حدث خطأ أثناء تصدير ملف الإكسل.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -1018,6 +1068,17 @@ export default function CompliancePage() {
             متابعة حالة المستندات المرفوعة وتواريخ تجديد التراخيص للمركبات بشكل منفصل
           </p>
         </div>
+
+        <Button
+          variant="secondary"
+          onClick={handleExportExcel}
+          loading={exporting}
+          disabled={exporting || loading || filtered.length === 0}
+          className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold self-start sm:self-auto"
+        >
+          <FileSpreadsheet size={16} />
+          تصدير إكسل
+        </Button>
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">

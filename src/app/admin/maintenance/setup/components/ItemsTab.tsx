@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { PlusCircle, Edit2, Search, Package, AlertCircle } from "lucide-react";
+import { PlusCircle, Edit2, Search, Package, AlertCircle, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { exportToExcel } from "@/lib/export-excel";
 import { ItemModal } from "./ItemModal";
 import type { InventoryItem } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
@@ -55,6 +56,44 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
     onSearch(val);
   };
 
+  const handleExportExcel = async () => {
+    if (displayedItems.length === 0) {
+      alert("لا توجد أصناف للتصدير.");
+      return;
+    }
+    await exportToExcel({
+      filename: `maintenance-items-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: "دليل الأصناف",
+      columns: [
+        { header: "رمز الصنف (SKU)", accessor: "sku", isText: true, width: 18 },
+        { header: "الباركود", accessor: (i) => i.barcode || "-", isText: true, width: 20 },
+        { header: "اسم الصنف (عربي)", accessor: "nameAr", width: 28 },
+        { header: "اسم الصنف (إنجليزي)", accessor: (i) => i.nameEn || "-", width: 28 },
+        {
+          header: "نوع الصنف",
+          accessor: (i) => itemTypeLabels[i.itemType] || String(i.itemType),
+          width: 20,
+        },
+        {
+          header: "وحدة الصرف",
+          accessor: (i) => unitOfMeasureLabels[i.baseUnitOfMeasure] || String(i.baseUnitOfMeasure),
+          width: 16,
+        },
+        {
+          header: "وحدة الشراء",
+          accessor: (i) => unitOfMeasureLabels[i.purchaseUnitOfMeasure] || String(i.purchaseUnitOfMeasure),
+          width: 16,
+        },
+        { header: "سعة العبوة", accessor: "defaultPackageQuantity", width: 14 },
+        { header: "الحد الأدنى", accessor: "minimumStockLevel", width: 14 },
+        { header: "كمية إعادة الطلب", accessor: "reorderQuantity", width: 16 },
+        { header: "تتبع بالرقم التسلسلي", accessor: (i) => i.isSerialized ? "نعم" : "لا", width: 18 },
+        { header: "تتبع برقم التشغيلة", accessor: (i) => i.isLotTracked ? "نعم" : "لا", width: 18 },
+      ],
+      data: displayedItems,
+    });
+  };
+
   const filterTabs = [
     { id: "ALL" as const, label: "كافة الأصناف", count: counts.all },
     { id: ItemType.SparePart, label: "قطع غيار", count: counts.spareParts, badgeClass: "text-blue-700 dark:text-blue-400" },
@@ -87,6 +126,14 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
               className="pr-9 text-xs"
             />
           </div>
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            className="text-xs shrink-0 inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={15} />
+            تصدير إكسل
+          </Button>
           {canManage && (
             <Button variant="primary" onClick={handleCreate} className="text-xs shrink-0">
               <PlusCircle size={15} />

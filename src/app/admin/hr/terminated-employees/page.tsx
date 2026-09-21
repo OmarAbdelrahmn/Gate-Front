@@ -12,9 +12,11 @@ import {
   MapPin,
   ShieldAlert,
   FileCheck,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
+import { exportToExcel } from "@/lib/export-excel";
 import { listEmployees } from "@/lib/workforce/api";
 import {
   listExternalRiders,
@@ -206,6 +208,38 @@ export default function TerminatedEmployeesPage() {
     });
   }, [terminatedList, search]);
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredList.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `terminated-personnel-${new Date().toISOString().split("T")[0]}`,
+        sheetName: isEn ? "Terminated Personnel" : "منتهيي الخدمة",
+        data: filteredList,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: isEn ? "Full Name" : "الاسم الكامل", accessor: (item) => item.fullName, width: 28 },
+          { header: isEn ? "Iqama / ID No" : "رقم الإقامة / الهوية", accessor: (item) => item.iqamaNo, width: 20, isText: true },
+          { header: isEn ? "Phone" : "رقم الجوال", accessor: (item) => item.phone, width: 18, isText: true },
+          {
+            header: isEn ? "Category" : "التصنيف",
+            accessor: (item) => item.engagementLabel ? (isEn ? item.engagementLabel.en : item.engagementLabel.ar) : item.sourceType,
+            width: 18,
+          },
+          { header: isEn ? "Nationality" : "الجنسية", accessor: (item) => item.nationality, width: 16 },
+          { header: isEn ? "Operating City" : "المدينة التشغيلية", accessor: (item) => item.cityName, width: 20 },
+          { header: isEn ? "Role" : "الدور", accessor: (item) => item.roleName, width: 22 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export terminated error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -222,6 +256,16 @@ export default function TerminatedEmployeesPage() {
               : "السجل الشامل للموظفين والمناديب المكفولين والمناديب الخارجيين منتهيي الخدمة."}
           </p>
         </div>
+        <Button
+          variant="secondary"
+          onClick={handleExportExcel}
+          loading={exporting}
+          disabled={exporting || loading || filteredList.length === 0}
+          className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+        >
+          <FileSpreadsheet size={16} />
+          {isEn ? "Export Excel" : "تصدير إكسل"}
+        </Button>
       </div>
 
       {/* Main Table Card */}

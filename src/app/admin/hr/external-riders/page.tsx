@@ -16,9 +16,11 @@ import {
   Globe,
   CreditCard,
   FileText,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
+import { exportToExcel } from "../../../../lib/export-excel";
 import { getNationalityOptions } from "../../../../lib/constants/nationalities";
 import {
   listExternalRiders,
@@ -471,6 +473,67 @@ export default function ExternalRidersPage() {
     }
   };
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredRiders.length === 0) {
+      toast.error(
+        locale === "en" ? "No Data" : "لا توجد بيانات",
+        locale === "en" ? "No external riders match the current search." : "لا يوجد مناديب خارجيين يطابقون خيارات البحث."
+      );
+      return;
+    }
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `external-riders-${new Date().toISOString().split("T")[0]}`,
+        sheetName: locale === "en" ? "External Riders" : "المناديب الخارجيين",
+        data: filteredRiders,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: locale === "en" ? "Full Name" : "الاسم الكامل", accessor: (r) => r.fullNameAr, width: 28 },
+          { header: locale === "en" ? "Iqama / ID No" : "رقم الإقامة", accessor: (r) => r.iqamaNo, width: 18, isText: true },
+          { header: locale === "en" ? "Primary Phone" : "رقم الجوال", accessor: (r) => r.primaryPhone, width: 18, isText: true },
+          { header: locale === "en" ? "Nationality" : "الجنسية", accessor: (r) => r.nationality || "—", width: 16 },
+          {
+            header: locale === "en" ? "Operating City" : "المدينة التشغيلية",
+            accessor: (r) => {
+              const cityObj = r.operatingCityId ? cityMap.get(r.operatingCityId) : undefined;
+              return cityObj ? (locale === "en" ? (cityObj.nameEn || cityObj.nameAr) : (cityObj.nameAr || cityObj.nameEn)) : (r.operatingCityId || "—");
+            },
+            width: 20,
+          },
+          {
+            header: locale === "en" ? "Operational Role" : "الدور التشغيلي",
+            accessor: (r) => {
+              const wt = r.operationalWorkTypeId ? workTypeMap.get(r.operationalWorkTypeId) : undefined;
+              return wt ? (locale === "en" ? (wt.nameEn || wt.nameAr) : (wt.nameAr || wt.nameEn)) : (r.operationalWorkTypeId || "—");
+            },
+            width: 22,
+          },
+          { header: locale === "en" ? "IBAN" : "الآيبان البنكي", accessor: (r) => r.iban || "—", width: 26, isText: true },
+          {
+            header: locale === "en" ? "Status" : "الحالة",
+            accessor: (r) => r.status === "Terminated" ? (locale === "en" ? "Terminated" : "منتهي الخدمة") : (locale === "en" ? "Active" : "نشط"),
+            width: 16,
+          },
+        ],
+      });
+      toast.success(
+        locale === "en" ? "Exported" : "تم التصدير",
+        locale === "en" ? "External riders list exported to Excel successfully." : "تم تنزيل قائمة المناديب الخارجيين بصيغة إكسل بنجاح."
+      );
+    } catch (err) {
+      console.error("Export error:", err);
+      toast.error(
+        locale === "en" ? "Export Failed" : "فشل التصدير",
+        locale === "en" ? "Failed to export data to Excel." : "حدث خطأ أثناء تصدير ملف الإكسل."
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -486,12 +549,24 @@ export default function ExternalRidersPage() {
               : "إدارة وتسجيل بيانات المناديب الخارجيين والأدوار التشغيلية والمدن."}
           </p>
         </div>
-        {canCreate && (
-          <Button onClick={handleOpenCreate}>
-            <Plus size={17} />
-            {locale === "en" ? "Add External Rider" : "إضافة مندوب خارجي"}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            loading={exporting}
+            disabled={exporting || loading || filteredRiders.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+          >
+            <FileSpreadsheet size={16} />
+            {locale === "en" ? "Export Excel" : "تصدير إكسل"}
           </Button>
-        )}
+          {canCreate && (
+            <Button onClick={handleOpenCreate}>
+              <Plus size={17} />
+              {locale === "en" ? "Add External Rider" : "إضافة مندوب خارجي"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Summary Cards */}

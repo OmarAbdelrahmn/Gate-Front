@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Filter, Plus, Search, UsersRound, FileText } from "lucide-react";
+import { Check, Filter, Plus, Search, UsersRound, FileText, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { translate } from "../../../lib/i18n";
+import { exportToExcel } from "../../../lib/export-excel";
 import { hrCatalogApi, type HrRow } from "../../../lib/hr/api";
 import { listEmployees } from "../../../lib/workforce/api";
 import type { Employee } from "../../../lib/workforce/types";
@@ -414,6 +415,86 @@ export default function EmployeesPage() {
         [employees, search, cities, workTypes, locale, statusFilter, engagementFilter, roleFilter],
     );
 
+    const [exporting, setExporting] = useState(false);
+
+    const handleExportExcel = async () => {
+        if (results.length === 0) {
+            return;
+        }
+        setExporting(true);
+        try {
+            await exportToExcel({
+                filename: `employees-${new Date().toISOString().split("T")[0]}`,
+                sheetName: locale === "en" ? "Employees" : "الموظفين",
+                data: results,
+                columns: [
+                    { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+                    {
+                        header: locale === "en" ? "Employee Name" : "اسم الموظف",
+                        accessor: (emp) => locale === "en" ? (emp.fullNameEn || emp.fullNameAr) : (emp.fullNameAr || emp.fullNameEn),
+                        width: 28,
+                    },
+                    {
+                        header: locale === "en" ? "Type" : "نوع الكادر",
+                        accessor: (emp) => emp.isEmployee ? (locale === "en" ? "Staff" : "إداري") : (locale === "en" ? "Delegate" : "مندوب"),
+                        width: 14,
+                    },
+                    {
+                        header: locale === "en" ? "Iqama / National ID" : "رقم الهوية / الإقامة",
+                        accessor: (emp) => emp.iqamaNo || (emp as any).nationalId || "—",
+                        width: 20,
+                        isText: true,
+                    },
+                    {
+                        header: locale === "en" ? "Primary Phone" : "رقم الجوال",
+                        accessor: (emp) => emp.primaryPhone || "—",
+                        width: 18,
+                        isText: true,
+                    },
+                    {
+                        header: locale === "en" ? "Nationality" : "الجنسية",
+                        accessor: (emp) => emp.nationality || (emp as any).nationalityAr || "—",
+                        width: 16,
+                    },
+                    {
+                        header: locale === "en" ? "Sponsor / Registry" : "الكفيل / السجل",
+                        accessor: (emp) => {
+                            const empRec = emp as Record<string, unknown>;
+                            return (locale === "en"
+                                ? emp.sponsor?.nameEn || emp.sponsor?.nameAr
+                                : emp.sponsor?.nameAr || emp.sponsor?.nameEn) ||
+                                (empRec.sponsorNameAr as string) ||
+                                "—";
+                        },
+                        width: 24,
+                    },
+                    {
+                        header: locale === "en" ? "Operational Role" : "الدور التشغيلي",
+                        accessor: (emp) => getWorkTypeDisplay(emp, workTypes, locale),
+                        width: 22,
+                    },
+                    {
+                        header: locale === "en" ? "Operating City" : "المدينة التشغيلية",
+                        accessor: (emp) => getCityDisplay(emp, cities, locale),
+                        width: 18,
+                    },
+                    {
+                        header: locale === "en" ? "Status" : "الحالة",
+                        accessor: (emp) => {
+                            const st = statusLabel[emp.status];
+                            return st ? (locale === "en" ? st.en : st.ar) : emp.status;
+                        },
+                        width: 16,
+                    },
+                ],
+            });
+        } catch (err) {
+            console.error("Failed to export employees:", err);
+        } finally {
+            setExporting(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
@@ -429,6 +510,16 @@ export default function EmployeesPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Button
+                        variant="secondary"
+                        onClick={handleExportExcel}
+                        loading={exporting}
+                        disabled={exporting || loading || results.length === 0}
+                        className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+                    >
+                        <FileSpreadsheet size={16} />
+                        {locale === "en" ? "Export Excel" : "تصدير إكسل"}
+                    </Button>
                     <Link href="/admin/hr/forms">
                         <Button variant="secondary">
                             <FileText size={17} />

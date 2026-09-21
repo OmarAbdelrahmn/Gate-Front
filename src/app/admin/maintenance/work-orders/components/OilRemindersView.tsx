@@ -12,8 +12,10 @@ import {
   Car,
   Bike,
   Search,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { exportToExcel } from "@/lib/export-excel";
 import { Input } from "@/components/ui/Input";
 import { getOilReminders } from "@/lib/maintenance/api";
 import type { OilReminder } from "@/lib/maintenance/types";
@@ -84,6 +86,36 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
 
   const dueCount = safeReminders.filter((r) => r && r.status === 2).length;
   const overdueCount = safeReminders.filter((r) => r && r.status === 3).length;
+
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (filteredReminders.length === 0) return;
+    setExporting(true);
+    try {
+      await exportToExcel({
+        filename: `oil-reminders-${new Date().toISOString().split("T")[0]}.xlsx`,
+        sheetName: "تذكيرات وتغيير الزيوت",
+        data: filteredReminders,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "رقم الأصل", accessor: (r) => r.assetNumber || "—", width: 18, isText: true },
+          { header: "نوع المركبة", accessor: (r) => r.vehicleType === 2 ? "سيارة" : r.vehicleType === 1 ? "دراجة نارية" : String(r.vehicleType), width: 16 },
+          { header: "العداد الحالي (كم)", accessor: (r) => r.currentOdometer, width: 16 },
+          { header: "عداد آخر تغيير (كم)", accessor: (r) => r.lastOilChangeOdometer ?? "—", width: 18 },
+          { header: "المقطوع منذ التغيير (كم)", accessor: (r) => r.distanceSinceLastChange, width: 20 },
+          { header: "الحد الأقصى للاستحقاق (كم)", accessor: (r) => r.maximumDueOdometer, width: 20 },
+          { header: "المسافة المتبقية (كم)", accessor: (r) => r.maximumDueOdometer - r.currentOdometer, width: 18 },
+          { header: "تاريخ آخر تغيير", accessor: (r) => r.lastCompletedAtUtc ? r.lastCompletedAtUtc.split("T")[0] : "لم يتم مسبقاً", width: 18 },
+          { header: "الحالة", accessor: (r) => oilReminderStatusConfig[r.status]?.label || String(r.status), width: 16 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export oil reminders error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -184,6 +216,15 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
               )}
             </div>
           )}
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            disabled={loading || exporting || filteredReminders.length === 0}
+            className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold h-9 text-xs"
+          >
+            <FileSpreadsheet size={14} />
+            تصدير إكسل
+          </Button>
           <Button variant="secondary" onClick={loadReminders} loading={loading} className="h-9 text-xs">
             <RefreshCw size={14} />
             تحديث
