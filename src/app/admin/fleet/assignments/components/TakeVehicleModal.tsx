@@ -461,10 +461,6 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       toast.error("خطأ في البيانات", "يرجى إدخال رقم التفويض.");
       return;
     }
-    if (!formData.reason.trim()) {
-      toast.error("خطأ في البيانات", "يرجى إدخال سبب تسليم المركبة.");
-      return;
-    }
     if (formData.startOdometer < minOdometer) {
       toast.error(
         "خطأ في العداد",
@@ -521,7 +517,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           startCondition: Number(formData.startCondition) as VehicleCondition,
           startFuelLevelPercentage: fuelVal,
           permissionReference: formData.permissionReference.trim(),
-          reason: formData.reason.trim(),
+          reason: formData.reason.trim() || null,
           notes: formData.notes.trim() || undefined,
         };
 
@@ -809,13 +805,12 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-              السبب <span className="text-red-500">*</span>
+              السبب <span className="text-xs text-slate-400 font-normal">(اختياري)</span>
             </label>
             <Input
               value={formData.reason}
               onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
               placeholder="مثال: تسليم عهدة يومية، تبديل وردية..."
-              required
             />
           </div>
 

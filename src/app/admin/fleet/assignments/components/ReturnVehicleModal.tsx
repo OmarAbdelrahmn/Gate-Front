@@ -168,11 +168,6 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
       return null;
     }
 
-    if (!formData.reason || formData.reason.trim() === "") {
-      toast.error("حقل مطلوب", "سبب إرجاع المركبة إجباري.");
-      return null;
-    }
-
     if (formData.endOdometer < minOdometer) {
       toast.error(
         "قراءة عداد غير صحيحة",
@@ -201,7 +196,7 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
       endOdometer: formData.endOdometer,
       endCondition: formData.endCondition,
       endFuelLevelPercentage: safeFuel,
-      reason: formData.reason.trim(),
+      reason: formData.reason.trim() || null,
       rowVersion,
     };
   };
@@ -411,13 +406,12 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
             </div>
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                السبب <span className="text-red-500">*</span>
+                السبب <span className="text-xs text-slate-400 font-normal">(اختياري)</span>
               </label>
               <Input
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                 placeholder="سبب إنهاء العهدة (مثل: نهاية الدوام، استقالة...)"
-                required
               />
             </div>
           </div>

@@ -678,7 +678,7 @@ export interface TakeVehicleRequest {
   startCondition: VehicleCondition;
   startFuelLevelPercentage?: number | null;
   permissionReference: string;
-  reason: string;
+  reason?: string | null;
   notes?: string | null;
 }
 
@@ -688,7 +688,7 @@ export interface ReturnVehicleRequest {
   endOdometer: number;
   endCondition: VehicleCondition;
   endFuelLevelPercentage: number;
-  reason: string;
+  reason?: string | null;
   rowVersion: string;
 }
 
