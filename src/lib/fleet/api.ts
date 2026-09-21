@@ -152,6 +152,39 @@ export const getVehicles = (params: {
   return authFetch<T.PagedResponse<T.VehicleSummaryResponse>>(`/api/vehicles${qs ? `?${qs}` : ""}`);
 };
 
+export const getAllVehicles = async (params: {
+  search?: string;
+  status?: string;
+  operatingCityId?: string;
+} = {}): Promise<T.VehicleSummaryResponse[]> => {
+  const pageSize = 2000;
+  const firstRes = await getVehicles({ ...params, page: 1, pageSize });
+  let allItems = firstRes?.items || [];
+  const totalCount = firstRes?.totalCount ?? allItems.length;
+
+  if (totalCount > allItems.length) {
+    const actualPageSize = firstRes?.pageSize || pageSize;
+    const totalPages = Math.ceil(totalCount / actualPageSize);
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getVehicles({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
+          console.warn(`Failed to fetch vehicles page ${p}:`, err);
+          return null;
+        })
+      );
+    }
+    const remainingResults = await Promise.all(pagePromises);
+    for (const res of remainingResults) {
+      if (res?.items) {
+        allItems = allItems.concat(res.items);
+      }
+    }
+  }
+
+  return allItems;
+};
+
 export const getVehiclesLookup = (search: string) =>
   authFetch<T.VehicleLookupResponse[]>(`/api/vehicles/lookup?search=${encodeURIComponent(search)}`);
 

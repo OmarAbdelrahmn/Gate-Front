@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { getSupplyRequests, getStockBalances } from "@/lib/maintenance/api";
-import { getVehicles } from "@/lib/fleet/api";
+import { getAllVehicles } from "@/lib/fleet/api";
 import { listRiders } from "@/lib/workforce/api";
 import type {
   SupplyRequest,
@@ -69,11 +69,11 @@ export function SupplyRequestsQueueView({ locations }: SupplyRequestsQueueViewPr
 
   // Load select options
   useEffect(() => {
-    getVehicles({ pageSize: 150 })
-      .then((res) => {
-        if (res?.items) {
+    getAllVehicles()
+      .then((items) => {
+        if (Array.isArray(items)) {
           setVehicles(
-            res.items.map((v) => ({
+            items.map((v) => ({
               id: v.id,
               label: `${v.assetNumber || "مركبة"} - ${v.plateNumberAr || v.plateNumberEn || ""}`,
             })),

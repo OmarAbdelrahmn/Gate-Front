@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicleAccidents, getVehicles } from "@/lib/fleet/api";
+import { getVehicleAccidents, getAllVehicles } from "@/lib/fleet/api";
 import { listRiders, listEmployees } from "@/lib/workforce/api";
 import {
   VehicleAccidentStatus,
@@ -55,7 +55,7 @@ export default function AccidentsPage() {
     try {
       const [accidentsRes, vehiclesRes, ridersRes, employeesRes] = await Promise.allSettled([
         getVehicleAccidents({ page, pageSize: 50 }),
-        getVehicles({ pageSize: 500 }),
+        getAllVehicles(),
         listRiders().catch(() => []),
         listEmployees().catch(() => []),
       ]);
@@ -63,9 +63,9 @@ export default function AccidentsPage() {
       if (accidentsRes.status === "fulfilled") {
         setData(accidentsRes.value.items || []);
       }
-      if (vehiclesRes.status === "fulfilled" && vehiclesRes.value?.items) {
+      if (vehiclesRes.status === "fulfilled" && Array.isArray(vehiclesRes.value)) {
         const vMap = new Map<string, VehicleSummaryResponse>();
-        vehiclesRes.value.items.forEach((v) => {
+        vehiclesRes.value.forEach((v) => {
           if (v.id) vMap.set(v.id, v);
         });
         setVehiclesMap(vMap);

@@ -5,7 +5,7 @@ import {
   createVehicleAccident,
   getVehiclesLookup,
   getVehicleDetail,
-  getVehicles,
+  getAllVehicles,
   getVehicleAssignment,
   getVehicleRiderTimeline,
 } from "@/lib/fleet/api";
@@ -125,11 +125,11 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
       // 1. Fetch vehicles lookup and detailed summaries
       Promise.all([
         getVehiclesLookup("").catch(() => []),
-        getVehicles({ pageSize: 500 }).catch(() => ({ items: [] })),
-      ]).then(([lookupRes, fullVehiclesRes]) => {
+        getAllVehicles().catch(() => []),
+      ]).then(([lookupRes, fullVehicles]) => {
         const vMap = new Map<string, VehicleSummaryResponse>();
-        if (fullVehiclesRes?.items) {
-          fullVehiclesRes.items.forEach((item) => {
+        if (Array.isArray(fullVehicles)) {
+          fullVehicles.forEach((item) => {
             vMap.set(item.id, item);
           });
         }
@@ -146,8 +146,8 @@ export function CreateAccidentModal({ isOpen, onClose, onSuccess }: Props) {
         });
 
         // From full list
-        if (fullVehiclesRes?.items) {
-          fullVehiclesRes.items.forEach((v) => {
+        if (Array.isArray(fullVehicles)) {
+          fullVehicles.forEach((v) => {
             if (!optionsMap.has(v.id)) {
               optionsMap.set(v.id, {
                 value: v.id,

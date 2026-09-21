@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicleIssues, getVehicles, getVehicleAssignment } from "@/lib/fleet/api";
+import { getVehicleIssues, getAllVehicles, getVehicleAssignment } from "@/lib/fleet/api";
 import { listRiders } from "@/lib/workforce/api";
 import { formatVehicleIssueCategory } from "@/lib/fleet/formatters";
 import {
@@ -68,7 +68,7 @@ function IssuesPageContent() {
           page,
           pageSize: 50,
         }),
-        getVehicles({ pageSize: 200 }),
+        getAllVehicles(),
         listRiders().catch(() => []),
       ]);
 
@@ -78,9 +78,9 @@ function IssuesPageContent() {
         console.log("Loaded Issues:", loadedIssues);
         setData(loadedIssues);
       }
-      if (vehiclesRes.status === "fulfilled") {
+      if (vehiclesRes.status === "fulfilled" && Array.isArray(vehiclesRes.value)) {
         const vMap: Record<string, VehicleSummaryResponse> = {};
-        (vehiclesRes.value.items || []).forEach((v) => {
+        vehiclesRes.value.forEach((v) => {
           vMap[v.id] = v;
         });
         setVehiclesMap(vMap);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition, useMemo, useRef } from "react";
-import { takeVehicle, getVehiclesLookup, getVehicleDetail, getVehicles, getRiderPromissoryFiles } from "@/lib/fleet/api";
+import { takeVehicle, getVehiclesLookup, getVehicleDetail, getVehicles, getAllVehicles, getRiderPromissoryFiles } from "@/lib/fleet/api";
 import { listExternalRiders } from "@/lib/workforce/external-riders-api";
 import { listRiders, listEmployees } from "@/lib/workforce/api";
 import { getPlatformAccounts } from "@/lib/platforms/api";
@@ -105,11 +105,11 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         listRiders().catch(() => []),
         listExternalRiders().catch(() => []),
         listEmployees().catch(() => []),
-        getVehicles({ status: VehicleOperationalStatus.Assigned.toString(), pageSize: 500 }).catch(() => null),
-      ]).then(([ridersRes, externalRes, employeesRes, assignedVehiclesRes]) => {
+        getAllVehicles({ status: VehicleOperationalStatus.Assigned.toString() }).catch(() => []),
+      ]).then(([ridersRes, externalRes, employeesRes, assignedVehicles]) => {
         const assignedRiderIds = new Set<string>();
-        if (assignedVehiclesRes && assignedVehiclesRes.items) {
-          assignedVehiclesRes.items.forEach((v) => {
+        if (Array.isArray(assignedVehicles)) {
+          assignedVehicles.forEach((v) => {
             if (v.currentRiderProfileId) {
               assignedRiderIds.add(v.currentRiderProfileId);
             }
@@ -212,10 +212,30 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           notes: "",
         });
         setMinOdometer(0);
-        getVehiclesLookup("").then((res) => {
-          setAvailableLookupVehicles(
-            res.filter((v) => v.status === VehicleOperationalStatus.Available)
-          );
+        Promise.all([
+          getVehiclesLookup("").catch(() => []),
+          getAllVehicles({ status: VehicleOperationalStatus.Available.toString() }).catch(() => []),
+        ]).then(([lookupRes, allAvailable]) => {
+          const vMap = new Map<string, VehicleLookupResponse>();
+          (lookupRes || [])
+            .filter((v) => v.status === VehicleOperationalStatus.Available)
+            .forEach((v) => {
+              vMap.set(v.id, v);
+            });
+          (allAvailable || []).forEach((v) => {
+            if (!vMap.has(v.id)) {
+              vMap.set(v.id, {
+                id: v.id,
+                assetNumber: v.assetNumber || "",
+                plateNumberAr: v.plateNumberAr,
+                plateNumberEn: v.plateNumberEn,
+                manufacturer: v.manufacturer,
+                model: v.model,
+                status: VehicleOperationalStatus.Available,
+              });
+            }
+          });
+          setAvailableLookupVehicles(Array.from(vMap.values()));
         });
       }
       setFiles([]);

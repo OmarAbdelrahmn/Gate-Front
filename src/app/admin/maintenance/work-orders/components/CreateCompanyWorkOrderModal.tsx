@@ -4,9 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { createCompanyWorkOrder, getInventoryItems, getStockBalances } from "@/lib/maintenance/api";
-import { getVehicles, getVehicleDetail } from "@/lib/fleet/api";
+import { getAllVehicles, getVehicleDetail } from "@/lib/fleet/api";
 import type { MaintenanceLocation, InventoryItem } from "@/lib/maintenance/types";
 import { MaintenanceType, ItemType, MaterialUsageType, LocationType } from "@/lib/maintenance/types";
 import {
@@ -15,6 +14,7 @@ import {
   formatCurrency,
 } from "@/lib/maintenance/constants";
 import { PackagePlus, Trash2, Plus, Droplets, AlertCircle } from "lucide-react";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 interface RequestedPartLine {
   tempId: string;
@@ -198,10 +198,10 @@ export function CreateCompanyWorkOrderModal({
 
   useEffect(() => {
     let active = true;
-    getVehicles({ pageSize: 150 })
-      .then((res) => {
-        if (active && res?.items) {
-          const mappedVehicles: VehicleOption[] = res.items.map((v) => ({
+    getAllVehicles()
+      .then((items) => {
+        if (active && Array.isArray(items)) {
+          const mappedVehicles: VehicleOption[] = items.map((v) => ({
             id: v.id,
             serialNumber: v.serialNumber,
             plateNumber: v.plateNumberAr || (v.plateLettersAr && v.plateDigits ? `${v.plateLettersAr} ${v.plateDigits}` : "") || v.plateNumberEn || "",

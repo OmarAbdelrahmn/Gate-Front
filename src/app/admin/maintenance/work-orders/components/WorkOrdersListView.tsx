@@ -8,7 +8,7 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { WorkOrderDetailModal } from "./WorkOrderDetailModal";
 import { CreateCompanyWorkOrderModal } from "./CreateCompanyWorkOrderModal";
 import { getWorkOrders, getSupplyRequests } from "@/lib/maintenance/api";
-import { getVehicles } from "@/lib/fleet/api";
+import { getAllVehicles } from "@/lib/fleet/api";
 import type { VehicleSummaryResponse } from "@/lib/fleet/types";
 import type {
   WorkOrder,
@@ -68,7 +68,7 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
       const isCustomStatus =
         statusFilter === "rejected" || statusFilter === "pending_supply";
       const canReadSupply = can("inventory.supply_requests.read");
-      const [data, supplyRequests, vehiclesRes] = await Promise.all([
+      const [data, supplyRequests, vehiclesList] = await Promise.all([
         getWorkOrders({
           maintenanceLocationId: locationFilter || undefined,
           status:
@@ -77,13 +77,13 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
             subjectFilter === "all" ? undefined : Number(subjectFilter),
         }),
         canReadSupply ? getSupplyRequests().catch(() => []) : Promise.resolve([]),
-        getVehicles({ pageSize: 500 }).catch(() => null),
+        getAllVehicles().catch(() => []),
       ]);
 
-      if (vehiclesRes?.items) {
+      if (Array.isArray(vehiclesList)) {
         const vMap = new Map<string, VehicleSummaryResponse>();
         const vAssetMap = new Map<string, VehicleSummaryResponse>();
-        for (const v of vehiclesRes.items) {
+        for (const v of vehiclesList) {
           if (v.id) vMap.set(v.id, v);
           if (v.assetNumber) vAssetMap.set(v.assetNumber, v);
         }

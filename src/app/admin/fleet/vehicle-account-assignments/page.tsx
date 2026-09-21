@@ -33,7 +33,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
-import { getVehicles } from "@/lib/fleet/api";
+import { getAllVehicles } from "@/lib/fleet/api";
 import { getPlatformAccounts, getPlatforms } from "@/lib/platforms/api";
 import { listOperatingCities, listSponsors } from "@/lib/workforce/api";
 import {
@@ -199,7 +199,7 @@ export default function VehicleAccountAssignmentsPage() {
           activeOnly,
         }),
         getVehicleAccountAssignmentProblems(),
-        getVehicles({ pageSize: 1000 }),
+        getAllVehicles(),
         getPlatformAccounts({ currentOnly: false }),
         getPlatforms(true),
         listOperatingCities(),
@@ -209,7 +209,7 @@ export default function VehicleAccountAssignmentsPage() {
 
       if (assignRes.status === "fulfilled") setAssignments(assignRes.value);
       if (probRes.status === "fulfilled") setProblems(probRes.value);
-      if (vehRes.status === "fulfilled") setVehicles(vehRes.value?.items || []);
+      if (vehRes.status === "fulfilled") setVehicles(Array.isArray(vehRes.value) ? vehRes.value : (vehRes.value as any)?.items || []);
       if (accRes.status === "fulfilled") {
         setPlatformAccounts(Array.isArray(accRes.value) ? accRes.value : (accRes.value as any)?.items || []);
       }
