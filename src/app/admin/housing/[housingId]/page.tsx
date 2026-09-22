@@ -24,6 +24,7 @@ import {
   Search,
   Bike,
   Briefcase,
+  Package,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { authFetch } from "../../../../lib/auth/api";
@@ -56,10 +57,11 @@ import {
   MoveOccupantModal,
   RemoveOccupantModal,
 } from "../../../../components/housing/RoomModals";
+import { WarehouseTab } from "../../../../components/housing/WarehouseTab";
 
 type Employee = { id: string; fullNameAr: string; fullNameEn?: string; iqamaNo?: string };
 
-type TabType = "rooms" | "history" | "supervisors";
+type TabType = "rooms" | "history" | "supervisors" | "warehouse";
 
 export default function HousingDetails({
   params,
@@ -548,6 +550,18 @@ export default function HousingDetails({
             {supervisors.length}
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveTab("warehouse")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition-all ${
+            activeTab === "warehouse"
+              ? "border-amber-600 text-amber-600"
+              : "border-transparent text-[var(--muted)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          <Package size={17} />
+          <span>{isEn ? "Warehouse" : "المستودع"}</span>
+        </button>
       </div>
 
       {/* TAB 1: ROOMS & OCCUPANCY */}
@@ -894,6 +908,11 @@ export default function HousingDetails({
             )}
           </div>
         </Card>
+      )}
+
+      {/* TAB 4: WAREHOUSE */}
+      {activeTab === "warehouse" && (
+        <WarehouseTab housingId={housingId} isArchived={Boolean(isArchived)} />
       )}
 
       {/* ==================== MODALS ==================== */}

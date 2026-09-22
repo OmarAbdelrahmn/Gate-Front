@@ -162,6 +162,20 @@ export function getFriendlyErrorMessage(
         return "هذا الشخص مسكن بالفعل في غرفة نشطة أخرى. يمكنك استخدام ميزة نقل الساكن.";
       case "housing.not_active":
         return "وحدة السكن غير نشطة حالياً، ولا يمكن تسكين أشخاص بها.";
+      case "housing.warehouse_not_found":
+        return "مستودع السكن غير موجود أو لم يتم إنشاؤه بعد.";
+      case "housing.warehouse_item_not_found":
+        return "صنف المستودع المطلوب غير موجود أو تم حذفه.";
+      case "housing.warehouse_item_name_duplicate":
+        return "اسم الصنف مستخدم بالفعل في مستودع هذا السكن.";
+      case "housing.warehouse_item_insufficient_quantity":
+        return "الكمية المطلوبة تتجاوز الرصيد المتاح في الحالة المصدر.";
+      case "housing.invalid_status":
+        return "حالة الصنف المحددة غير صالحة. القيم المقبولة: غير مستخدم، مستخدم، تالف.";
+      case "housing.invalid_quantity":
+        return "الكمية المدخلة غير صالحة. يجب أن تكون صفر أو أكثر بحد أقصى 3 أرقام عشرية.";
+      case "housing.nameAr_required":
+        return "الاسم بالعربية مطلوب.";
       case "phone_sim.invalid_phone_number":
         return "رقم الهاتف غير صحيح. يرجى إدخال رقم هاتف صالح بالصيغة المحلية أو الدولية.";
       case "phone_sim.invalid_iccid":

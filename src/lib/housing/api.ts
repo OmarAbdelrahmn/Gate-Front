@@ -338,3 +338,154 @@ export const removeOccupant = (
       body: JSON.stringify(payload),
     },
   );
+
+// ==================== HOUSING WAREHOUSE API ====================
+
+export type WarehouseItemStatus = "Unused" | "Used" | "Damaged";
+
+export interface HousingWarehouse {
+  id: string;
+  housingId: string;
+  housingCode: string;
+  housingNameAr: string;
+  housingNameEn: string;
+  nameAr: string;
+  nameEn: string;
+  isDefault: boolean;
+  itemCount: number;
+  totalQuantity: number;
+  rowVersion: string;
+}
+
+export interface WarehouseItem {
+  id: string;
+  warehouseId: string;
+  housingId: string;
+  nameAr: string;
+  totalQuantity: number;
+  unusedQuantity: number;
+  usedQuantity: number;
+  damagedQuantity: number;
+  notes: string | null;
+  rowVersion: string;
+}
+
+export interface CreateWarehouseItemPayload {
+  nameAr: string;
+  quantity: number;
+  status: WarehouseItemStatus;
+  notes?: string | null;
+}
+
+export interface UpdateWarehouseItemPayload {
+  nameAr: string;
+  notes?: string | null;
+  rowVersion: string;
+}
+
+export interface StatusTransferPayload {
+  fromStatus: WarehouseItemStatus;
+  toStatus: WarehouseItemStatus;
+  quantity: number;
+  rowVersion: string;
+}
+
+export interface CorrectQuantityPayload {
+  quantity: number;
+  rowVersion: string;
+}
+
+export interface DeleteWarehouseItemPayload {
+  reason: string;
+  rowVersion: string;
+}
+
+export const getHousingWarehouse = (housingId: string) =>
+  authFetch<HousingWarehouse>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse`,
+  );
+
+export const listWarehouseItems = (
+  housingId: string,
+  search?: string,
+  status?: WarehouseItemStatus,
+) => {
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set("search", search.trim());
+  if (status) params.set("status", status);
+  const qs = params.toString();
+  return authFetch<WarehouseItem[]>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items${qs ? `?${qs}` : ""}`,
+  );
+};
+
+export const getWarehouseItem = (housingId: string, itemId: string) =>
+  authFetch<WarehouseItem>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items/${encodeURIComponent(itemId)}`,
+  );
+
+export const createWarehouseItem = (
+  housingId: string,
+  payload: CreateWarehouseItemPayload,
+) =>
+  authFetch<WarehouseItem>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const updateWarehouseItem = (
+  housingId: string,
+  itemId: string,
+  payload: UpdateWarehouseItemPayload,
+) =>
+  authFetch<WarehouseItem>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items/${encodeURIComponent(itemId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const transferWarehouseItemStatus = (
+  housingId: string,
+  itemId: string,
+  payload: StatusTransferPayload,
+) =>
+  authFetch<WarehouseItem>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items/${encodeURIComponent(itemId)}/status-transfers`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const correctWarehouseItemQuantity = (
+  housingId: string,
+  itemId: string,
+  status: WarehouseItemStatus,
+  payload: CorrectQuantityPayload,
+) =>
+  authFetch<WarehouseItem>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items/${encodeURIComponent(itemId)}/statuses/${encodeURIComponent(status)}/quantity`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const deleteWarehouseItem = (
+  housingId: string,
+  itemId: string,
+  payload: DeleteWarehouseItemPayload,
+) =>
+  authFetch<void>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items/${encodeURIComponent(itemId)}`,
+    {
+      method: "DELETE",
+      body: JSON.stringify(payload),
+    },
+  );
+
