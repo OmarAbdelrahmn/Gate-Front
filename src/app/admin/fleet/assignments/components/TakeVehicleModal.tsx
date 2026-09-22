@@ -76,10 +76,25 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       return;
     }
 
+    const meta = riderMetaMapRef.current.get(formData.riderProfileId);
+    const targetRiderId = meta?.riderProfileId || formData.riderProfileId;
+    const targetEmpId = meta?.employeeId;
+
     setLoadingPromissory(true);
-    getRiderPromissoryFiles(formData.riderProfileId)
-      .then((res) => {
-        setExistingPromissoryCount(res?.length || 0);
+    const queries = [getRiderPromissoryFiles(targetRiderId).catch(() => [])];
+    if (targetEmpId && targetEmpId !== targetRiderId) {
+      queries.push(getRiderPromissoryFiles(targetEmpId).catch(() => []));
+    }
+
+    Promise.all(queries)
+      .then((results) => {
+        const allFiles = results.flat();
+        const seen = new Set<string>();
+        allFiles.forEach((f: any) => {
+          const key = f?.id || f?.fileId || (f?.fileName ? `${f.fileName}-${f.uploadedAtUtc}` : null);
+          if (key) seen.add(key);
+        });
+        setExistingPromissoryCount(seen.size > 0 ? seen.size : allFiles.length);
       })
       .catch((err) => {
         console.error("Failed to load rider promissory files:", err);
@@ -499,10 +514,29 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       return;
     }
 
+    if (loadingPromissory) {
+      toast.error("يرجى الانتظار", "جارٍ التحقق من سجل سندات الأمر الخاصة بالمندوب...");
+      return;
+    }
+
+    // At least one promissory file is strictly required for this rider:
+    // Either already on record from a previous assignment (existingPromissoryCount > 0)
+    // or uploaded with this submission (files.length > 0)
+    if (existingPromissoryCount === 0 && files.length === 0) {
+      toast.error(
+        "سند الأمر مطلوب",
+        "يجب إرفاق سند أمر واحد على الأقل لهذا المندوب لإتمام تسليم المركبة، حيث لا توجد له أي سندات أمر سابقة مسجلة على النظام."
+      );
+      return;
+    }
+
     startTransition(async () => {
       try {
+        const meta = riderMetaMapRef.current.get(formData.riderProfileId);
+        const resolvedRiderId = meta?.riderProfileId || formData.riderProfileId;
+
         const metadataJSON: TakeVehicleRequest = {
-          riderProfileId: formData.riderProfileId,
+          riderProfileId: resolvedRiderId,
           isRealRider: isRealRider,
           realRider: isRealRider
             ? null
@@ -827,42 +861,91 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         </div>
 
         {/* Promissory Files Section */}
-        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50 space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <div
+          className={`rounded-xl border p-4 space-y-3 transition-colors ${
+            formData.riderProfileId && existingPromissoryCount === 0 && files.length === 0
+              ? "border-amber-300 bg-amber-50/50 dark:border-amber-800/70 dark:bg-amber-950/20"
+              : "border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50"
+          }`}
+        >
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <label className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <FileText className="h-4 w-4 text-[#1167c9]" />
-              سندات الأمر / Promissory Notes
+              <span>سندات الأمر / Promissory Notes</span>
+              {formData.riderProfileId && existingPromissoryCount === 0 && (
+                <span className="text-[11px] font-bold text-red-600 bg-red-100 dark:bg-red-950/70 dark:text-red-300 px-2 py-0.5 rounded-full">
+                  * مطلوب إرفاق سند
+                </span>
+              )}
             </label>
             <div className="flex items-center gap-2">
               {loadingPromissory ? (
-                <span className="text-xs text-slate-400">جارٍ فحص السندات...</span>
-              ) : (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded border ${existingPromissoryCount >= 3
-                    ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300"
-                    : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
-                  }`}>
-                  سندات المندوب الحالية: {existingPromissoryCount} / 3
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3 animate-spin" /> جارٍ فحص السندات...
                 </span>
-              )}
+              ) : formData.riderProfileId ? (
+                <span
+                  className={`text-xs font-bold px-2 py-0.5 rounded border ${
+                    existingPromissoryCount >= 3
+                      ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300"
+                      : existingPromissoryCount > 0
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                  }`}
+                >
+                  سندات المندوب السابقة: {existingPromissoryCount} / 3
+                </span>
+              ) : null}
             </div>
           </div>
 
-          {existingPromissoryCount >= 3 ? (
-            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-              <span>المندوب يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى). لا يمكنك إضافة المزيد من السندات.</span>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              المندوب يمتلك {existingPromissoryCount} {existingPromissoryCount === 1 ? "سند" : "سندات"} حالياً. يمكنك رفع حتى {Math.max(0, 3 - existingPromissoryCount)} {3 - existingPromissoryCount === 1 ? "سند جديد" : "سندات جديدة"} (الحد الأقصى الإجمالي: 3).
-            </p>
+          {formData.riderProfileId && !loadingPromissory && (
+            <>
+              {existingPromissoryCount === 0 ? (
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-100/70 border border-amber-300 text-amber-950 text-xs dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                  <div>
+                    <p className="font-bold">يلزم إرفاق سند أمر واحد على الأقل للمندوب</p>
+                    <p className="mt-0.5 font-normal text-amber-900/90 dark:text-amber-300/90 leading-relaxed">
+                      هذا المندوب ليس لديه أي سندات أمر سابقة مسجلة على النظام. لإتمام تسليم المركبة، يجب إرفاق سند أمر واحد على الأقل (يمكنك رفع حتى 3 سندات).
+                    </p>
+                  </div>
+                </div>
+              ) : existingPromissoryCount >= 3 ? (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                  <span>المندوب يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى). السندات السابقة كافية لإتمام التسليم.</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs font-medium dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span>
+                    المندوب يمتلك {existingPromissoryCount} {existingPromissoryCount === 1 ? "سند أمر مسجل مسبقاً" : "سندات أمر مسجلة مسبقاً"} (مكتمل الشروط). إرفاق سند جديد اختياري (متبقي {3 - existingPromissoryCount} كحد أقصى).
+                  </span>
+                </div>
+              )}
+            </>
           )}
 
           {existingPromissoryCount < 3 && files.length < (3 - existingPromissoryCount) && (
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition-colors hover:border-[#1167c9] dark:border-slate-700 dark:bg-slate-800">
-              <Upload className="h-6 w-6 text-slate-400 mb-1" />
+            <label
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
+                formData.riderProfileId && existingPromissoryCount === 0 && files.length === 0
+                  ? "border-amber-400 bg-white hover:border-[#1167c9] dark:border-amber-700 dark:bg-slate-800"
+                  : "border-slate-300 bg-white hover:border-[#1167c9] dark:border-slate-700 dark:bg-slate-800"
+              }`}
+            >
+              <Upload
+                className={`h-6 w-6 mb-1 ${
+                  formData.riderProfileId && existingPromissoryCount === 0 && files.length === 0
+                    ? "text-amber-500"
+                    : "text-slate-400"
+                }`}
+              />
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                اضغط هنا لرفع سندات الأمر (PDF أو صور)
+                {existingPromissoryCount === 0
+                  ? "اضغط هنا لرفع سند الأمر المطلوب (PDF أو صور) *"
+                  : "اضغط هنا لرفع سندات الأمر (PDF أو صور)"}
               </span>
               <span className="text-[11px] text-slate-400 mt-0.5">PDF, PNG, JPG (حتى 10MB)</span>
               <input
