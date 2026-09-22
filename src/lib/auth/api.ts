@@ -170,6 +170,15 @@ export function getFriendlyErrorMessage(
         return "اسم الصنف مستخدم بالفعل في مستودع هذا السكن.";
       case "housing.warehouse_item_insufficient_quantity":
         return "الكمية المطلوبة تتجاوز الرصيد المتاح في الحالة المصدر.";
+      case "housing.same_destination":
+      case "housing.destination_housing_same":
+        return "لا يمكن النقل لنفس السكن. يرجى اختيار سكن آخر مختلف.";
+      case "housing.destination_housing_not_found":
+        return "السكن الوجهة غير موجود أو غير متاح.";
+      case "housing.destination_warehouse_not_found":
+        return "مستودع السكن الوجهة غير موجود.";
+      case "housing.transfer_unused_only":
+        return "يمكن نقل الرصيد غير المستخدم فقط بين مستودعات السكن.";
       case "housing.invalid_status":
         return "حالة الصنف المحددة غير صالحة. القيم المقبولة: غير مستخدم، مستخدم، تالف.";
       case "housing.invalid_quantity":

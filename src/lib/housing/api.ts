@@ -489,3 +489,31 @@ export const deleteWarehouseItem = (
     },
   );
 
+export interface HousingTransferPayload {
+  destinationHousingId: string;
+  quantity: number;
+  rowVersion: string;
+}
+
+export interface HousingTransferResponse {
+  sourceHousingId: string;
+  destinationHousingId: string;
+  quantity: number;
+  sourceItem: WarehouseItem;
+  destinationItem: WarehouseItem;
+}
+
+export const transferWarehouseItemHousing = (
+  housingId: string,
+  itemId: string,
+  payload: HousingTransferPayload,
+) =>
+  authFetch<HousingTransferResponse>(
+    `/api/housing/${encodeURIComponent(housingId)}/warehouse/items/${encodeURIComponent(itemId)}/housing-transfers`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+

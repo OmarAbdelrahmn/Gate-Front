@@ -1,19 +1,23 @@
 "use client";
 
 import { useState, useEffect, type FormEvent } from "react";
-import { X, AlertTriangle, ArrowRightLeft } from "lucide-react";
+import { X, AlertTriangle, ArrowRightLeft, Building2, Truck, Info } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { toast } from "../ui/Toast";
+import { SearchableSelect, type SelectOption } from "../ui/SearchableSelect";
 import {
   createWarehouseItem,
   updateWarehouseItem,
   transferWarehouseItemStatus,
   correctWarehouseItemQuantity,
   deleteWarehouseItem,
+  transferWarehouseItemHousing,
   getWarehouseItem,
+  listHousing,
   type WarehouseItem,
   type WarehouseItemStatus,
+  type Housing,
 } from "../../lib/housing/api";
 
 const inputCls =
@@ -769,3 +773,294 @@ export function DeleteWarehouseItemModal({
     </div>
   );
 }
+
+// ============================
+// 5. Transfer to Another Housing Warehouse Modal
+// ============================
+export function TransferHousingModal({
+  isOpen,
+  onClose,
+  housingId,
+  item,
+  onSuccess,
+  isEn,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  housingId: string;
+  item: WarehouseItem | null;
+  onSuccess: () => void;
+  isEn: boolean;
+}) {
+  const [destinationHousingId, setDestinationHousingId] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [rowVersion, setRowVersion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loadingHousings, setLoadingHousings] = useState(false);
+  const [housings, setHousings] = useState<Housing[]>([]);
+  const [error, setError] = useState("");
+  const [concurrencyWarning, setConcurrencyWarning] = useState(false);
+  const [liveItem, setLiveItem] = useState<WarehouseItem | null>(null);
+
+  useEffect(() => {
+    if (isOpen && item) {
+      setDestinationHousingId("");
+      setQuantity("");
+      setRowVersion(item.rowVersion);
+      setError("");
+      setConcurrencyWarning(false);
+      setLiveItem(item);
+
+      setLoadingHousings(true);
+      listHousing()
+        .then((list) => {
+          const available = (list || []).filter(
+            (h) => h.id !== housingId && h.status !== "Archived" && !h.isDeleted,
+          );
+          setHousings(available);
+        })
+        .catch((err) => {
+          console.error("Failed to load destination housings:", err);
+        })
+        .finally(() => {
+          setLoadingHousings(false);
+        });
+    }
+  }, [isOpen, item, housingId]);
+
+  const currentItem = liveItem || item;
+  const availableUnused = currentItem ? currentItem.unusedQuantity : 0;
+
+  const housingOptions: SelectOption[] = housings.map((h) => ({
+    value: h.id,
+    label: isEn
+      ? `${h.nameEn || h.nameAr} (${h.code})`
+      : `${h.nameAr || h.nameEn} (${h.code})`,
+    sublabel: isEn
+      ? (h.cityAr ? `City: ${h.cityAr}` : undefined)
+      : (h.cityAr ? `المدينة: ${h.cityAr}` : undefined),
+    keywords: `${h.code} ${h.nameAr} ${h.nameEn}`,
+  }));
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!currentItem) return;
+    setError("");
+
+    if (!destinationHousingId) {
+      setError(
+        isEn
+          ? "Please select a destination housing"
+          : "يرجى اختيار السكن الوجهة",
+      );
+      return;
+    }
+
+    if (destinationHousingId === housingId) {
+      setError(
+        isEn
+          ? "Destination must be a different housing"
+          : "يجب اختيار سكن وجهة مختلف عن السكن الحالي",
+      );
+      return;
+    }
+
+    const qty = parseFloat(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      setError(
+        isEn
+          ? "Quantity must be greater than zero"
+          : "الكمية يجب أن تكون أكبر من صفر",
+      );
+      return;
+    }
+
+    const decimalParts = quantity.split(".");
+    if (decimalParts.length > 1 && decimalParts[1].length > 3) {
+      setError(
+        isEn
+          ? "Quantity can have at most 3 decimal places"
+          : "الكمية يمكن أن تحتوي على 3 أرقام عشرية كحد أقصى",
+      );
+      return;
+    }
+
+    if (qty > availableUnused) {
+      setError(
+        isEn
+          ? `Quantity exceeds available unused balance (${availableUnused})`
+          : `الكمية تتجاوز الرصيد غير المستخدم المتاح (${availableUnused})`,
+      );
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await transferWarehouseItemHousing(housingId, currentItem.id, {
+        destinationHousingId,
+        quantity: qty,
+        rowVersion,
+      });
+
+      const dest = housings.find((h) => h.id === destinationHousingId);
+      const destName = isEn
+        ? dest?.nameEn || dest?.nameAr || "destination housing"
+        : dest?.nameAr || "السكن الوجهة";
+
+      toast.success(
+        isEn ? "Transfer Successful" : "تم نقل الكمية بنجاح",
+        isEn
+          ? `Transferred ${qty} to ${destName} warehouse.`
+          : `تم نقل ${qty} إلى مستودع ${destName}.`,
+      );
+      onClose();
+      onSuccess();
+    } catch (err: any) {
+      const errorCode = err?.details?.errorCode;
+      if (errorCode === "hr.concurrency_conflict") {
+        setConcurrencyWarning(true);
+        try {
+          const fresh = await getWarehouseItem(housingId, currentItem.id);
+          setRowVersion(fresh.rowVersion);
+          setLiveItem(fresh);
+        } catch {
+          /* keep current */
+        }
+        setError(
+          isEn
+            ? "Item modified by another user. Balances refreshed — review and resubmit."
+            : "تم تعديل الصنف بواسطة مستخدم آخر. تم تحديث الرصيد — راجع وأعد الإرسال.",
+        );
+      } else {
+        setError(
+          err?.message ||
+            (isEn ? "Transfer failed" : "تعذر نقل الصنف إلى سكن آخر"),
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!isOpen || !currentItem) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <Card className="w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2">
+            <Truck size={18} className="text-purple-600" />
+            <h2 className="text-lg font-black">
+              {isEn ? "Transfer to Housing Warehouse" : "نقل إلى مستودع سكن آخر"}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Source item balance card */}
+        <div className="mt-3 rounded-xl bg-[var(--subtle-bg)] p-3 border border-[var(--border)] space-y-1.5">
+          <p className="text-sm font-bold text-[var(--foreground)]" dir="rtl">
+            {currentItem.nameAr}
+          </p>
+          <div className="flex items-center justify-between text-xs font-bold text-[var(--muted)]">
+            <span>{isEn ? "Unused balance (transferable)" : "الرصيد غير المستخدم (المتاح للنقل)"}:</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-extrabold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {availableUnused}
+            </span>
+          </div>
+        </div>
+
+        {/* Info banner */}
+        <div className="mt-2.5 flex items-start gap-2 rounded-xl bg-purple-50/70 p-2.5 text-[11px] font-medium text-purple-900 border border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-900">
+          <Info size={15} className="shrink-0 mt-0.5 text-purple-600 dark:text-purple-400" />
+          <span>
+            {isEn
+              ? "Only unused quantity is transferred to the destination housing warehouse. If the item exists there, its unused balance will increase; otherwise it will be created automatically."
+              : "يتم نقل الرصيد غير المستخدم فقط. سيعثر النظام على مستودع السكن الوجهة تلقائياً ويضيف الرصيد إليه أو ينشئ الصنف إذا لم يكن موجوداً."}
+          </span>
+        </div>
+
+        {concurrencyWarning && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {error && !concurrencyWarning && (
+          <div className="mt-3 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div className="grid gap-1.5 text-xs font-bold">
+            <span>
+              {isEn ? "Destination Housing" : "السكن الوجهة"} <span className="text-rose-500">*</span>
+            </span>
+            <SearchableSelect
+              value={destinationHousingId}
+              onChange={setDestinationHousingId}
+              options={housingOptions}
+              placeholder={
+                loadingHousings
+                  ? (isEn ? "Loading housings..." : "جاري تحميل المساكن...")
+                  : (isEn ? "Select destination housing..." : "اختر السكن الوجهة...")
+              }
+              searchPlaceholder={isEn ? "Search housing..." : "بحث عن سكن..."}
+              noOptionsText={isEn ? "No available housings" : "لا توجد مساكن متاحة"}
+              disabled={loadingHousings || busy}
+              required
+            />
+          </div>
+
+          <label className="grid gap-1.5 text-xs font-bold">
+            <span className="flex items-center justify-between">
+              <span>
+                {isEn ? "Quantity to transfer" : "الكمية المراد نقلها"} <span className="text-rose-500">*</span>
+              </span>
+              <span className="text-[11px] font-medium text-[var(--muted)]">
+                {isEn ? "Max" : "الحد الأقصى"}: <strong className="text-emerald-600">{availableUnused}</strong>
+              </span>
+            </span>
+            <input
+              type="number"
+              min="0.001"
+              max={availableUnused}
+              step="0.001"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="0"
+              className={inputCls}
+              dir="ltr"
+              disabled={busy || availableUnused <= 0}
+              autoFocus
+            />
+          </label>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
+              {isEn ? "Cancel" : "إلغاء"}
+            </Button>
+            <Button
+              type="submit"
+              loading={busy}
+              disabled={availableUnused <= 0 || loadingHousings}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              {isEn ? "Transfer" : "تأكيد النقل"}
+            </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+

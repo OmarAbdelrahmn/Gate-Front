@@ -12,6 +12,7 @@ import {
   Building,
   ArrowRightLeft,
   SlidersHorizontal,
+  Truck,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { Button } from "../ui/Button";
@@ -28,6 +29,7 @@ import {
   TransferStatusModal,
   CorrectQuantityModal,
   DeleteWarehouseItemModal,
+  TransferHousingModal,
 } from "./WarehouseModals";
 
 const STATUS_FILTERS: { id: WarehouseItemStatus | "ALL"; labelEn: string; labelAr: string }[] = [
@@ -66,6 +68,7 @@ export function WarehouseTab({
   const [upsertOpen, setUpsertOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<WarehouseItem | null>(null);
   const [transferItem, setTransferItem] = useState<WarehouseItem | null>(null);
+  const [transferHousingItem, setTransferHousingItem] = useState<WarehouseItem | null>(null);
   const [correctItem, setCorrectItem] = useState<WarehouseItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<WarehouseItem | null>(null);
 
@@ -347,6 +350,22 @@ export function WarehouseTab({
                             <ArrowRightLeft size={14} />
                           </button>
                           <button
+                            onClick={() => setTransferHousingItem(item)}
+                            title={
+                              item.unusedQuantity > 0
+                                ? (isEn ? "Transfer to another housing" : "نقل إلى سكن آخر")
+                                : (isEn ? "No unused quantity to transfer" : "لا توجد كمية غير مستخدمة للنقل")
+                            }
+                            disabled={item.unusedQuantity <= 0}
+                            className={`grid h-8 w-8 place-items-center rounded-lg transition-all ${
+                              item.unusedQuantity > 0
+                                ? "text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                                : "text-[var(--muted)] opacity-35 cursor-not-allowed"
+                            }`}
+                          >
+                            <Truck size={14} />
+                          </button>
+                          <button
                             onClick={() => setCorrectItem(item)}
                             title={isEn ? "Correct quantity" : "تصحيح كمية"}
                             className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/40 transition-all"
@@ -418,6 +437,22 @@ export function WarehouseTab({
                         <ArrowRightLeft size={13} />
                       </button>
                       <button
+                        onClick={() => setTransferHousingItem(item)}
+                        className={`grid h-8 w-8 place-items-center rounded-lg transition-all border border-[var(--border)] ${
+                          item.unusedQuantity > 0
+                            ? "text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                            : "text-[var(--muted)] opacity-35 cursor-not-allowed"
+                        }`}
+                        title={
+                          item.unusedQuantity > 0
+                            ? (isEn ? "Transfer to housing" : "نقل لسكن آخر")
+                            : (isEn ? "No unused quantity" : "لا توجد كمية غير مستخدمة")
+                        }
+                        disabled={item.unusedQuantity <= 0}
+                      >
+                        <Truck size={13} />
+                      </button>
+                      <button
                         onClick={() => setCorrectItem(item)}
                         className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/40 transition-all border border-[var(--border)]"
                         title={isEn ? "Correct" : "تصحيح كمية"}
@@ -462,6 +497,15 @@ export function WarehouseTab({
         onClose={() => setTransferItem(null)}
         housingId={housingId}
         item={transferItem}
+        onSuccess={handleMutationSuccess}
+        isEn={isEn}
+      />
+
+      <TransferHousingModal
+        isOpen={Boolean(transferHousingItem)}
+        onClose={() => setTransferHousingItem(null)}
+        housingId={housingId}
+        item={transferHousingItem}
         onSuccess={handleMutationSuccess}
         isEn={isEn}
       />
