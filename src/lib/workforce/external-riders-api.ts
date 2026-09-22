@@ -28,14 +28,13 @@ export type CreateExternalRiderRequest = {
 };
 
 export type UpdateExternalRiderRequest = {
-  iqamaNo?: string;
-  fullNameAr?: string;
+  iqamaNo: string;
+  fullNameAr: string;
   nationality?: string | null;
   iban?: string | null;
   address?: AddressDto | null;
-  primaryPhone?: string;
-  operatingCityId?: string;
-  operationalWorkTypeId?: string;
+  primaryPhone: string;
+  operationalWorkTypeId: string;
   rowVersion: string;
 };
 

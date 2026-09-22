@@ -109,6 +109,8 @@ export default function ExternalRiderProfilePage({
   const [formErrors, setFormErrors] = useState<{
     iqamaNo?: string;
     fullNameAr?: string;
+    primaryPhone?: string;
+    operationalWorkTypeId?: string;
   }>({});
 
   const canUpdate = can("employees.update");
@@ -188,6 +190,16 @@ export default function ExternalRiderProfilePage({
     return map;
   }, [workTypes]);
 
+  const workTypeOptions = useMemo<SelectOption[]>(() => {
+    return workTypes
+      .filter((w) => w.status === "Active" || w.id === formData.operationalWorkTypeId)
+      .map((w) => ({
+        value: w.id,
+        label: isEn ? (w.nameEn || w.nameAr || w.code) : (w.nameAr || w.nameEn || w.code),
+        sublabel: w.code,
+      }));
+  }, [workTypes, isEn, formData.operationalWorkTypeId]);
+
   const cityName = useMemo(() => {
     if (!rider?.operatingCityId) return isEn ? "Not specified" : "غير محددة";
     const c = cityMap.get(rider.operatingCityId);
@@ -258,7 +270,12 @@ export default function ExternalRiderProfilePage({
     e.preventDefault();
     if (!rider) return;
 
-    const errors: { iqamaNo?: string; fullNameAr?: string } = {};
+    const errors: {
+      iqamaNo?: string;
+      fullNameAr?: string;
+      primaryPhone?: string;
+      operationalWorkTypeId?: string;
+    } = {};
     const cleanIqama = formData.iqamaNo.trim();
     if (!cleanIqama) {
       errors.iqamaNo = isEn ? "Iqama / National ID is required." : "رقم الإقامة مطلوب.";
@@ -271,6 +288,22 @@ export default function ExternalRiderProfilePage({
     const cleanName = formData.fullNameAr.trim();
     if (!cleanName) {
       errors.fullNameAr = isEn ? "Arabic name is required." : "الاسم بالعربية مطلوب.";
+    } else if (cleanName.length > 200) {
+      errors.fullNameAr = isEn ? "Arabic name cannot exceed 200 characters." : "الاسم بالعربية لا يمكن أن يتجاوز 200 حرف.";
+    }
+
+    const cleanPhone = formData.primaryPhone.trim();
+    if (!cleanPhone) {
+      errors.primaryPhone = isEn ? "Primary phone is required." : "رقم الجوال الرئيسي مطلوب.";
+    } else if (cleanPhone.length > 32) {
+      errors.primaryPhone = isEn ? "Primary phone cannot exceed 32 characters." : "رقم الجوال لا يمكن أن يتجاوز 32 حرفاً.";
+    }
+
+    const cleanWorkTypeId = formData.operationalWorkTypeId.trim();
+    if (!cleanWorkTypeId) {
+      errors.operationalWorkTypeId = isEn ? "Operational work type is required." : "الدور التشغيلي (نوع العمل) مطلوب.";
+    } else if (workTypes.length > 0 && !workTypes.some((w) => w.id === cleanWorkTypeId)) {
+      errors.operationalWorkTypeId = isEn ? "Selected work type does not exist in catalog." : "الدور التشغيلي المحدد غير موجود في السجل.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -285,25 +318,28 @@ export default function ExternalRiderProfilePage({
         fullNameAr: cleanName,
         nationality: formData.nationality.trim() || null,
         iban: formData.iban.trim() || null,
-        primaryPhone: formData.primaryPhone.trim(),
-        operatingCityId: formData.operatingCityId || undefined,
-        operationalWorkTypeId: formData.operationalWorkTypeId || undefined,
+        primaryPhone: cleanPhone,
+        operationalWorkTypeId: cleanWorkTypeId,
         address: getAddressPayload(),
         rowVersion: rider.rowVersion,
       });
 
+      // Refresh the rider after a successful update because the response contains a new rowVersion
       setRider((prev) => (prev ? { ...prev, ...updated } : updated));
       setIsEditing(false);
       toast.success(
         isEn ? "Profile Updated" : "تم التحديث",
         isEn ? "External rider details saved successfully." : "تم حفظ بيانات المندوب الخارجي بنجاح."
       );
+      loadRiderData();
     } catch (err: any) {
       let message = isEn ? "Failed to save changes." : "تعذر حفظ التعديلات.";
       if (err?.status === 409) {
         message = isEn
-          ? "Duplicate Iqama number or outdated record version."
-          : "رقم الإقامة مستخدم بالفعل أو أن نسخة السجل قديمة.";
+          ? "Conflict detected (the record was modified elsewhere or outdated). Latest data reloaded, please retry."
+          : "حدث تعارض في البيانات (تم تعديل السجل في مكان آخر). تم إعادة تحميل أحدث البيانات، يرجى المحاولة مجدداً.";
+        // Handle 409 Conflict by reloading the rider and asking the user to retry
+        loadRiderData();
       } else if (err?.message) {
         message = err.message;
       }
@@ -858,11 +894,33 @@ export default function ExternalRiderProfilePage({
 
                 <div>
                   <Input
-                    label={isEn ? "Primary Phone" : "رقم الجوال الرئيسي"}
+                    label={isEn ? "Primary Phone *" : "رقم الجوال الرئيسي *"}
                     value={formData.primaryPhone}
                     onChange={(e) => setFormData({ ...formData, primaryPhone: e.target.value })}
                     placeholder="0500000000"
+                    maxLength={32}
+                    required
                   />
+                  {formErrors.primaryPhone && (
+                    <p className="mt-1 text-xs text-red-600 font-bold">{formErrors.primaryPhone}</p>
+                  )}
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {isEn ? "Operational Role (Work Type) *" : "الدور التشغيلي (نوع العمل) *"}
+                  </label>
+                  <SearchableSelect
+                    value={formData.operationalWorkTypeId}
+                    onChange={(val) => setFormData({ ...formData, operationalWorkTypeId: val })}
+                    options={workTypeOptions}
+                    placeholder={isEn ? "Select operational role..." : "اختر الدور التشغيلي..."}
+                    searchPlaceholder={isEn ? "Search roles..." : "ابحث عن دور تشغيلي..."}
+                    required
+                  />
+                  {formErrors.operationalWorkTypeId && (
+                    <p className="mt-1 text-xs text-red-600 font-bold">{formErrors.operationalWorkTypeId}</p>
+                  )}
                 </div>
 
                 <div className="sm:col-span-2">

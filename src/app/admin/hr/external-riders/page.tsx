@@ -24,6 +24,7 @@ import { exportToExcel } from "../../../../lib/export-excel";
 import { getNationalityOptions } from "../../../../lib/constants/nationalities";
 import {
   listExternalRiders,
+  getExternalRider,
   createExternalRider,
   updateExternalRider,
   getOperatingCities,
@@ -252,7 +253,12 @@ export default function ExternalRidersPage() {
   };
 
   const validateUpdateForm = (): boolean => {
-    const errors: { iqamaNo?: string; fullNameAr?: string } = {};
+    const errors: {
+      iqamaNo?: string;
+      fullNameAr?: string;
+      primaryPhone?: string;
+      operationalWorkTypeId?: string;
+    } = {};
 
     const cleanIqama = formData.iqamaNo.trim();
     if (!cleanIqama) {
@@ -278,6 +284,32 @@ export default function ExternalRidersPage() {
         locale === "en"
           ? "Arabic full name cannot exceed 200 characters."
           : "الاسم بالعربية لا يمكن أن يتجاوز 200 حرف.";
+    }
+
+    const cleanPhone = formData.primaryPhone.trim();
+    if (!cleanPhone) {
+      errors.primaryPhone =
+        locale === "en"
+          ? "Primary phone number is required."
+          : "رقم الهاتف الرئيسي مطلوب.";
+    } else if (cleanPhone.length > 32) {
+      errors.primaryPhone =
+        locale === "en"
+          ? "Primary phone number cannot exceed 32 characters."
+          : "رقم الهاتف الرئيسي لا يمكن أن يتجاوز 32 حرفاً.";
+    }
+
+    const cleanWorkType = formData.operationalWorkTypeId.trim();
+    if (!cleanWorkType) {
+      errors.operationalWorkTypeId =
+        locale === "en"
+          ? "Operational role (work type) is required."
+          : "اختيار الدور التشغيلي (نوع العمل) مطلوب.";
+    } else if (workTypes.length > 0 && !workTypes.some((w) => w.id === cleanWorkType)) {
+      errors.operationalWorkTypeId =
+        locale === "en"
+          ? "Selected operational work type is invalid."
+          : "الدور التشغيلي المحدد غير صالح.";
     }
 
     setFormErrors(errors);
@@ -426,8 +458,10 @@ export default function ExternalRidersPage() {
       const updated = await updateExternalRider(editingRider.employeeId, {
         iqamaNo: formData.iqamaNo.trim(),
         fullNameAr: formData.fullNameAr.trim(),
-        nationality: formData.nationality.trim(),
-        iban: formData.iban.trim(),
+        nationality: formData.nationality.trim() || null,
+        iban: formData.iban.trim() || null,
+        primaryPhone: formData.primaryPhone.trim(),
+        operationalWorkTypeId: formData.operationalWorkTypeId.trim(),
         address: getAddressPayload(),
         rowVersion: editingRider.rowVersion,
       });
@@ -437,10 +471,12 @@ export default function ExternalRidersPage() {
           ? "External rider details updated successfully."
           : "تم تحديث بيانات المندوب الخارجي بنجاح."
       );
+      // Refresh the rider after a successful update because the response contains a new rowVersion
       setRiders((prev) =>
         prev.map((r) => (r.employeeId === updated.employeeId ? { ...r, ...updated } : r))
       );
       handleCloseModals();
+      loadData();
     } catch (err: any) {
       let message =
         locale === "en"
@@ -449,8 +485,34 @@ export default function ExternalRidersPage() {
       if (err?.status === 409) {
         message =
           locale === "en"
-            ? "Duplicate Iqama number or outdated record version. Please refresh and try again."
-            : "رقم الإقامة مستخدم أو أن نسق البيانات قديم. يرجى التحديث والمحاولة مجدداً.";
+            ? "Conflict detected (outdated version or duplicate data). Latest rider data was reloaded. Please review and retry."
+            : "حدث تعارض في البيانات (نسخة قديمة أو تكرار). تمت إعادة تحميل أحدث بيانات للمندوب. يرجى المراجعة والمحاولة مجدداً.";
+        // Handle 409 Conflict by reloading the rider and asking the user to retry
+        try {
+          const latestRider = await getExternalRider(editingRider.employeeId);
+          setEditingRider(latestRider);
+          setFormData((prev) => ({
+            ...prev,
+            iqamaNo: latestRider.iqamaNo || "",
+            fullNameAr: latestRider.fullNameAr || "",
+            nationality: latestRider.nationality || "",
+            iban: latestRider.iban || "",
+            primaryPhone: latestRider.primaryPhone || "",
+            operatingCityId: latestRider.operatingCityId || "",
+            operationalWorkTypeId: latestRider.operationalWorkTypeId || "",
+            buildingNumber: latestRider.address?.buildingNumber || "",
+            street: latestRider.address?.street || "",
+            district: latestRider.address?.district || "",
+            city: latestRider.address?.city || "",
+            postalCode: latestRider.address?.postalCode || "",
+            additionalNumber: latestRider.address?.additionalNumber || "",
+          }));
+          setRiders((prev) =>
+            prev.map((r) => (r.employeeId === latestRider.employeeId ? { ...r, ...latestRider } : r))
+          );
+        } catch {
+          loadData();
+        }
       } else if (err?.status === 404) {
         message =
           locale === "en"
@@ -1089,6 +1151,51 @@ export default function ExternalRidersPage() {
                       placeholder={locale === "en" ? "Select nationality..." : "اختر الجنسية..."}
                       searchPlaceholder={locale === "en" ? "Search nationalities..." : "ابحث عن جنسية..."}
                     />
+                  </div>
+
+                  {/* Primary Phone */}
+                  <div>
+                    <Input
+                      label={locale === "en" ? "Primary Phone *" : "رقم الهاتف الرئيسي *"}
+                      value={formData.primaryPhone}
+                      onChange={(e) =>
+                        setFormData({ ...formData, primaryPhone: e.target.value })
+                      }
+                      placeholder="0500000000"
+                      maxLength={32}
+                      required
+                    />
+                    {formErrors.primaryPhone ? (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.primaryPhone}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-[var(--muted)]">
+                        {locale === "en"
+                          ? "Required. Maximum 32 characters."
+                          : "مطلوب ولا يتجاوز 32 حرفاً."}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Operational Role (Work Type) */}
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      {locale === "en" ? "Operational Role *" : "الدور التشغيلي (نوع العمل) *"}
+                    </label>
+                    <SearchableSelect
+                      value={formData.operationalWorkTypeId}
+                      onChange={(val) => setFormData({ ...formData, operationalWorkTypeId: val })}
+                      options={workTypeOptions}
+                      placeholder={locale === "en" ? "Select operational role..." : "اختر الدور التشغيلي..."}
+                      searchPlaceholder={locale === "en" ? "Search roles..." : "ابحث عن دور تشغيلي..."}
+                      required
+                    />
+                    {formErrors.operationalWorkTypeId && (
+                      <p className="mt-1 text-xs font-bold text-red-600">
+                        {formErrors.operationalWorkTypeId}
+                      </p>
+                    )}
                   </div>
 
                   {/* IBAN */}
