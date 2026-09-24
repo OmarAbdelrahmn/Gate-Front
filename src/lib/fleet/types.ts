@@ -545,6 +545,7 @@ export interface VehicleReadinessResponse {
 
 export interface VehicleIdentityCorrectionRequest {
   assetNumber: string;
+  purchasedFromSupplierId?: string | null;
   serialNumber?: string | null;
   plateNumberAr?: string | null;
   plateNumberEn?: string | null;
@@ -1263,3 +1264,37 @@ export interface VehicleReadinessResponse {
   blockingReasons?: string[] | null;
   notes?: string | null;
 }
+
+// ==========================================
+// Complete History (Timeline) Types
+// ==========================================
+
+export type CompleteHistoryEventFile = {
+  id: string;
+  fileName: string;
+  contentType: string;
+  fileSizeBytes: number;
+  downloadPath: string;
+};
+
+export type CompleteHistoryEvent = {
+  occurredAtUtc: string;
+  category: string;
+  action: string;
+  entityId: string;
+  vehicleId: string | null;
+  riderProfileId: string | null;
+  assignmentId: string | null;
+  summary: string;
+  details: Record<string, unknown>;
+  files: CompleteHistoryEventFile[];
+};
+
+export type CompleteHistoryResponse = {
+  subjectId: string;
+  subjectType: "vehicle" | "rider";
+  subjectName: string | null;
+  generatedAtUtc: string;
+  totalEvents: number;
+  events: CompleteHistoryEvent[];
+};

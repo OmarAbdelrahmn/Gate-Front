@@ -14,12 +14,13 @@ import {
   TableHeaderColumnFilter,
   type FilterOption,
 } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
-import { Key, Search, RefreshCw, Car, ArrowLeftRight, CalendarClock, ShieldCheck, X, FileSpreadsheet } from "lucide-react";
+import { Key, Search, RefreshCw, Car, ArrowLeftRight, CalendarClock, ShieldCheck, X, FileSpreadsheet, FileUp } from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
 import { TakeVehicleModal } from "./components/TakeVehicleModal";
 import { ReturnVehicleModal } from "./components/ReturnVehicleModal";
 import { SwitchVehicleModal } from "./components/SwitchVehicleModal";
 import { RenewPermissionModal } from "./components/RenewPermissionModal";
+import { AttachPromissoryFilesModal } from "./components/AttachPromissoryFilesModal";
 
 function normalizeText(text: string | null | undefined): string {
   if (!text) return "";
@@ -35,7 +36,7 @@ function normalizeText(text: string | null | undefined): string {
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
 }
 
-type ActiveModal = "take" | "return" | "switch" | "renew" | null;
+type ActiveModal = "take" | "return" | "switch" | "renew" | "promissory" | null;
 
 export default function AssignmentsPage() {
   const { can } = useAuth();
@@ -743,6 +744,14 @@ export default function AssignmentsPage() {
                                 >
                                   <CalendarClock className="h-4 w-4" />
                                 </button>
+                                <button
+                                  onClick={() => openModal("promissory", item)}
+                                  className="rounded-lg p-2 text-violet-600 hover:bg-violet-50 bg-violet-50/50 dark:bg-violet-950/30 dark:hover:bg-violet-900/50 transition-colors"
+                                  title="إرفاق سندات الأمر بالعهدة الحالية"
+                                  aria-label="إرفاق سندات الأمر بالعهدة الحالية"
+                                >
+                                  <FileUp className="h-4 w-4" />
+                                </button>
                               </>
                             )}
                           </div>
@@ -776,6 +785,9 @@ export default function AssignmentsPage() {
       <ReturnVehicleModal isOpen={activeModal === "return"} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} preselectedVehicle={selectedVehicle} />
       <SwitchVehicleModal isOpen={activeModal === "switch"} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} preselectedVehicle={selectedVehicle} />
       <RenewPermissionModal isOpen={activeModal === "renew"} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} preselectedVehicle={selectedVehicle} />
+      {activeModal === "promissory" && (
+        <AttachPromissoryFilesModal key={selectedVehicle?.currentAssignmentId} isOpen onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} vehicle={selectedVehicle} />
+      )}
     </div>
   );
 }

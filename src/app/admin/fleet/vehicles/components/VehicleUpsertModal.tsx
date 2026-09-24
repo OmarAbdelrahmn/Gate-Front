@@ -283,6 +283,16 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
     sublabel: s.nameEn || s.code || undefined,
     keywords: `${s.nameEn || ""} ${s.code || ""} ${s.commercialRegistrationNumber || ""}`,
   }));
+  const purchaseSupplierOptions = suppliers.map((s) => ({ value: s.id, label: s.nameAr }));
+  if (
+    editingVehicle?.purchasedFromSupplierId &&
+    !purchaseSupplierOptions.some((option) => option.value === editingVehicle.purchasedFromSupplierId)
+  ) {
+    purchaseSupplierOptions.unshift({
+      value: editingVehicle.purchasedFromSupplierId,
+      label: editingVehicle.supplierName || editingVehicle.purchasedFromSupplierId,
+    });
+  }
   if (
     editingVehicle?.registeredOwnerSupplierId &&
     ownerMode === "supplier" &&
@@ -365,12 +375,6 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
       return;
     }
 
-    // Conditional requirement: Supplier is required when ownershipType is Owned (1)
-    if (formData.ownershipType === VehicleOwnershipType.Owned && !formData.purchasedFromSupplierId) {
-      toast.error("خطأ في البيانات", "مورد الشراء مطلوب عند اختيار نوع الملكية 'مملوكة للشركة'");
-      return;
-    }
-
     // Required selection when explicit supplier or sponsor owner is enabled
     if (ownerMode === "supplier" && !formData.registeredOwnerSupplierId) {
       toast.error("خطأ في البيانات", "يرجى اختيار جهة التمويل / المورد المالك المسجل");
@@ -427,13 +431,13 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
 
         if (editingVehicle) {
           // Strictly preserve protected vehicle identity fields on PUT request
-          payload.serialNumber = editingVehicle.serialNumber?.trim() || null;
-          payload.chassisNumber = editingVehicle.chassisNumber?.trim() || null;
-          payload.plateNumberAr = editingVehicle.summary.plateNumberAr?.trim() || null;
-          payload.plateNumberEn = editingVehicle.summary.plateNumberEn?.trim() || null;
-          payload.plateLettersAr = editingVehicle.plateLettersAr?.trim() || null;
-          payload.plateLettersEn = editingVehicle.plateLettersEn?.trim() || null;
-          payload.plateDigits = editingVehicle.plateDigits?.trim() || null;
+          payload.serialNumber = editingVehicle.serialNumber ?? null;
+          payload.chassisNumber = editingVehicle.chassisNumber ?? null;
+          payload.plateNumberAr = editingVehicle.summary.plateNumberAr ?? null;
+          payload.plateNumberEn = editingVehicle.summary.plateNumberEn ?? null;
+          payload.plateLettersAr = editingVehicle.plateLettersAr ?? null;
+          payload.plateLettersEn = editingVehicle.plateLettersEn ?? null;
+          payload.plateDigits = editingVehicle.plateDigits ?? null;
           payload.registrationType = editingVehicle.registrationType ?? editingVehicle.summary.registrationType;
 
           await updateVehicle(editingVehicle.summary.id, payload);
@@ -837,16 +841,12 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                 مورد الشراء الأصلي{" "}
-                {formData.ownershipType === VehicleOwnershipType.Owned ? (
-                  <span className="text-red-500">*</span>
-                ) : (
-                  <span className="text-slate-400 text-xs font-normal">(اختياري)</span>
-                )}
+                <span className="text-slate-400 text-xs font-normal">(اختياري)</span>
               </label>
               <SearchableSelect
                 options={[
-                  ...(formData.ownershipType !== VehicleOwnershipType.Owned ? [{ value: "", label: "لا يوجد" }] : []),
-                  ...suppliers.map((s) => ({ value: s.id, label: s.nameAr })),
+                  { value: "", label: "لا يوجد" },
+                  ...purchaseSupplierOptions,
                 ]}
                 value={formData.purchasedFromSupplierId || ""}
                 placeholder="اختر مورد الشراء..."

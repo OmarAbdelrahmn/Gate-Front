@@ -983,6 +983,15 @@ export default function EmployeeDetailsPage({
               {locale === "en" ? "Rider Platform History" : "سجل تشغيل المنصات"}
             </Button>
           )}
+          <Link href={`/admin/employees/${employee.id}/events`}>
+            <Button
+              variant="secondary"
+              className="gap-2 border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+            >
+              <History size={17} className="text-blue-600 dark:text-blue-400" />
+              {locale === "en" ? "Complete History" : "سجل الأحداث الشامل"}
+            </Button>
+          </Link>
           <Link href={`/admin/employees/${employee.id}/actions`}>
             <Button>{locale === "en" ? "Employee Actions" : "إجراءات الموظف"}</Button>
           </Link>

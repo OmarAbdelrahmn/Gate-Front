@@ -32,7 +32,7 @@ interface OilRemindersViewProps {
 
 export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
   const { can } = useAuth();
-  const canManage = can("maintenance.oil.complete");
+  const canManage = can("maintenance.oil.complete") && can("inventory.stock.move");
 
   const [reminders, setReminders] = useState<OilReminder[]>([]);
   const [loading, setLoading] = useState(true);

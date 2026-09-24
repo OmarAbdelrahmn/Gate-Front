@@ -373,6 +373,16 @@ export const switchVehicle = (formData: FormData, idempotencyKey?: string) => {
 export const getVehicleAssignment = (assignmentId: string) =>
   authFetch<T.RiderVehicleAssignmentResponse>(`/api/vehicle-assignments/${assignmentId}`);
 
+export const attachAssignmentPromissoryFiles = (assignmentId: string, formData: FormData, idempotencyKey: string) =>
+  authFetch<T.RiderVehicleAssignmentResponse>(
+    `/api/vehicle-assignments/${assignmentId}/promissory-files`,
+    withIdempotency({
+      method: "POST",
+      body: formData,
+      notifySuccess: "تم إرفاق سندات الأمر بالعهدة بنجاح",
+    }, idempotencyKey)
+  );
+
 export const renewVehiclePermission = (assignmentId: string, payload: T.RenewPermissionRequest) =>
   authFetch<T.RiderVehicleAssignmentResponse>(
     `/api/vehicle-assignments/${assignmentId}/renew-permission`,
@@ -619,3 +629,15 @@ export const createWorkflowInstallment = (id: string, payload: T.CreateWorkflowI
     notifySuccess: "تم تسجيل القسط بنجاح",
   });
 
+// ---------------------------
+// Complete History (Vehicle & Rider)
+// ---------------------------
+export const getVehicleCompleteHistory = (vehicleId: string) =>
+  authFetch<T.CompleteHistoryResponse>(
+    `/api/vehicles/${encodeURIComponent(vehicleId)}/complete-history`
+  );
+
+export const getRiderCompleteHistory = (riderProfileId: string) =>
+  authFetch<T.CompleteHistoryResponse>(
+    `/api/riders/${encodeURIComponent(riderProfileId)}/complete-history`
+  );

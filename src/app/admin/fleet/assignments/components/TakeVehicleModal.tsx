@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition, useMemo, useRef } from "react";
-import { takeVehicle, getVehiclesLookup, getVehicleDetail, getVehicles, getAllVehicles, getRiderPromissoryFiles } from "@/lib/fleet/api";
+import { useCallback, useEffect, useState, useTransition, useMemo, useRef } from "react";
+import { takeVehicle, getVehiclesLookup, getVehicleDetail, getAllVehicles, getRiderPromissoryFiles } from "@/lib/fleet/api";
 import { listExternalRiders } from "@/lib/workforce/external-riders-api";
 import { listRiders, listEmployees } from "@/lib/workforce/api";
-import { getPlatformAccounts } from "@/lib/platforms/api";
+import { getPlatformAccounts, type AccountResponse } from "@/lib/platforms/api";
 import { getVehicleAccountAssignments } from "@/lib/fleet/vehicle-account-assignments-api";
 import { VehicleCondition, VehicleOperationalStatus, type VehicleSummaryResponse, type TakeVehicleRequest, type VehicleLookupResponse } from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
@@ -72,41 +72,35 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
   useEffect(() => {
     if (!formData.riderProfileId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExistingPromissoryCount(0);
+      setLoadingPromissory(false);
       return;
     }
 
     const meta = riderMetaMapRef.current.get(formData.riderProfileId);
     const targetRiderId = meta?.riderProfileId || formData.riderProfileId;
-    const targetEmpId = meta?.employeeId;
-
+    let cancelled = false;
     setLoadingPromissory(true);
-    const queries = [getRiderPromissoryFiles(targetRiderId).catch(() => [])];
-    if (targetEmpId && targetEmpId !== targetRiderId) {
-      queries.push(getRiderPromissoryFiles(targetEmpId).catch(() => []));
-    }
-
-    Promise.all(queries)
-      .then((results) => {
-        const allFiles = results.flat();
-        const seen = new Set<string>();
-        allFiles.forEach((f: any) => {
-          const key = f?.id || f?.fileId || (f?.fileName ? `${f.fileName}-${f.uploadedAtUtc}` : null);
-          if (key) seen.add(key);
-        });
-        setExistingPromissoryCount(seen.size > 0 ? seen.size : allFiles.length);
+    getRiderPromissoryFiles(targetRiderId)
+      .then((promissoryFiles) => {
+        if (!cancelled) setExistingPromissoryCount(promissoryFiles.length);
       })
       .catch((err) => {
-        console.error("Failed to load rider promissory files:", err);
-        setExistingPromissoryCount(0);
+        if (!cancelled) {
+          console.error("Failed to load rider promissory files:", err);
+          setExistingPromissoryCount(0);
+        }
       })
       .finally(() => {
-        setLoadingPromissory(false);
+        if (!cancelled) setLoadingPromissory(false);
       });
+    return () => { cancelled = true; };
   }, [formData.riderProfileId]);
 
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsRealRider(true);
       setRealRider({
         name: "",
@@ -135,7 +129,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         const metaMap = new Map<string, { riderProfileId: string; employeeId?: string; name: string }>();
 
         ridersRes.forEach((r) => {
-          const id = r.id || r.employeeId;
+          const id = r.id;
           const riderId = r.id;
           const empId = r.employeeId;
           if (id && !map.has(id)) {
@@ -147,13 +141,13 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
             }
             const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
             map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
-            metaMap.set(id, { riderProfileId: r.id || id, employeeId: r.employeeId, name: r.fullNameAr });
+            metaMap.set(id, { riderProfileId: r.id, employeeId: r.employeeId, name: r.fullNameAr });
           }
         });
 
-        externalRes.forEach((r: any) => {
-          const id = r.riderProfileId || r.employeeId || r.id;
-          const riderId = r.riderProfileId || r.id;
+        externalRes.forEach((r) => {
+          const id = r.riderProfileId;
+          const riderId = r.riderProfileId;
           const empId = r.employeeId;
           if (id && !map.has(id)) {
             if (
@@ -164,13 +158,13 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
             }
             const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
             map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
-            metaMap.set(id, { riderProfileId: r.riderProfileId || r.id || id, employeeId: r.employeeId, name: r.fullNameAr });
+            metaMap.set(id, { riderProfileId: r.riderProfileId, employeeId: r.employeeId, name: r.fullNameAr });
           }
         });
 
         employeesRes.forEach((e) => {
-          const id = e.riderProfileId || e.id;
           const riderId = e.riderProfileId || e.rider?.id;
+          const id = riderId;
           const empId = e.id;
           if (id && !map.has(id)) {
             if (
@@ -182,7 +176,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
             }
             const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
             map.set(id, { value: id, label: `${e.fullNameAr}${iqamaStr}` });
-            metaMap.set(id, { riderProfileId: e.riderProfileId || e.rider?.id || e.id, employeeId: e.id, name: e.fullNameAr });
+            metaMap.set(id, { riderProfileId: riderId, employeeId: e.id, name: e.fullNameAr });
           }
         });
 
@@ -257,10 +251,31 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
     }
   }, [isOpen, preselectedVehicle]);
 
+  const handleVehicleChange = useCallback(async (vehicleId: string) => {
+    setFormData((prev) => ({ ...prev, vehicleId }));
+    if (!vehicleId) return;
+
+    try {
+      const detail = await getVehicleDetail(vehicleId);
+      if (detail && detail.summary) {
+        const odo = detail.summary.currentOdometer || 0;
+        setMinOdometer(odo);
+        setFormData((prev) => ({
+          ...prev,
+          vehicleId,
+          startOdometer: Math.max(prev.startOdometer, odo),
+        }));
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
   // Dynamic Suggestion: When rider is chosen, inspect platform accounts & linked active vehicles
   useEffect(() => {
     const riderIdKey = formData.riderProfileId;
     if (!riderIdKey) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSuggestedVehicles([]);
       setLoadingSuggestions(false);
       return;
@@ -273,19 +288,11 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       try {
         const meta = riderMetaMapRef.current.get(riderIdKey);
         const targetRiderId = meta?.riderProfileId || riderIdKey;
-        const targetEmpId = meta?.employeeId;
 
-        const accountQueries: Promise<any>[] = [
+        const accountQueries: Promise<AccountResponse[]>[] = [
           getPlatformAccounts({ actualRiderProfileId: targetRiderId, currentOnly: false }).catch(() => []),
           getPlatformAccounts({ ownerRiderProfileId: targetRiderId, currentOnly: false }).catch(() => []),
         ];
-
-        if (targetEmpId && targetEmpId !== targetRiderId) {
-          accountQueries.push(
-            getPlatformAccounts({ actualRiderProfileId: targetEmpId, currentOnly: false }).catch(() => []),
-            getPlatformAccounts({ ownerRiderProfileId: targetEmpId, currentOnly: false }).catch(() => [])
-          );
-        }
 
         const [accountResults, activeAssignments] = await Promise.all([
           Promise.all(accountQueries),
@@ -295,8 +302,8 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         if (isCancelled) return;
 
         // Collect all unique accounts belonging to this rider
-        const accountMap = new Map<string, any>();
-        accountResults.flat().forEach((acc: any) => {
+        const accountMap = new Map<string, AccountResponse>();
+        accountResults.flat().forEach((acc) => {
           if (acc && acc.id) {
             accountMap.set(acc.id, acc);
           }
@@ -356,27 +363,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
     return () => {
       isCancelled = true;
     };
-  }, [formData.riderProfileId, availableLookupVehicles, preselectedVehicle]);
-
-  const handleVehicleChange = async (vehicleId: string) => {
-    setFormData((prev) => ({ ...prev, vehicleId }));
-    if (!vehicleId) return;
-
-    try {
-      const detail = await getVehicleDetail(vehicleId);
-      if (detail && detail.summary) {
-        const odo = detail.summary.currentOdometer || 0;
-        setMinOdometer(odo);
-        setFormData((prev) => ({
-          ...prev,
-          vehicleId,
-          startOdometer: Math.max(prev.startOdometer, odo),
-        }));
-      }
-    } catch {
-      // Fallback
-    }
-  };
+  }, [formData.riderProfileId, formData.vehicleId, availableLookupVehicles, preselectedVehicle, handleVehicleChange]);
 
   const vehicleOptions = useMemo(() => {
     if (preselectedVehicle) {
@@ -444,8 +431,8 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         toast.error("تنبيه", `حجم الملف ${file.name} يتجاوز 10 ميجابايت.`);
         continue;
       }
-      const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/jpg", "image/webp"];
-      if (!validTypes.some((type) => file.type.startsWith("image/") || file.type === "application/pdf")) {
+      const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"];
+      if (!validTypes.includes(file.type)) {
         toast.error("تنبيه", `الملف ${file.name} غير مدعوم. المسموح: PDF والصور فقط.`);
         continue;
       }
@@ -514,19 +501,12 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       return;
     }
 
-    if (loadingPromissory) {
+    if (loadingPromissory && files.length > 0) {
       toast.error("يرجى الانتظار", "جارٍ التحقق من سجل سندات الأمر الخاصة بالمندوب...");
       return;
     }
-
-    // At least one promissory file is strictly required for this rider:
-    // Either already on record from a previous assignment (existingPromissoryCount > 0)
-    // or uploaded with this submission (files.length > 0)
-    if (existingPromissoryCount === 0 && files.length === 0) {
-      toast.error(
-        "سند الأمر مطلوب",
-        "يجب إرفاق سند أمر واحد على الأقل لهذا المندوب لإتمام تسليم المركبة، حيث لا توجد له أي سندات أمر سابقة مسجلة على النظام."
-      );
+    if (existingPromissoryCount + files.length > 3) {
+      toast.error("عدد الملفات كبير", "المجموع الكلي المسموح به هو 3 سندات أمر للمندوب. احذف بعض الملفات الجديدة ثم حاول مرة أخرى.");
       return;
     }
 
@@ -565,7 +545,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         const response = await takeVehicle(payload);
         console.log("Take Vehicle API Response:", response);
         onSuccess();
-      } catch (err) {
+      } catch {
         // Error toast handled by authFetch
       }
     });
@@ -861,22 +841,12 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         </div>
 
         {/* Promissory Files Section */}
-        <div
-          className={`rounded-xl border p-4 space-y-3 transition-colors ${
-            formData.riderProfileId && existingPromissoryCount === 0 && files.length === 0
-              ? "border-amber-300 bg-amber-50/50 dark:border-amber-800/70 dark:bg-amber-950/20"
-              : "border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50"
-          }`}
-        >
+        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3 dark:border-slate-800 dark:bg-slate-900/50">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <label className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <FileText className="h-4 w-4 text-[#1167c9]" />
               <span>سندات الأمر / Promissory Notes</span>
-              {formData.riderProfileId && existingPromissoryCount === 0 && (
-                <span className="text-[11px] font-bold text-red-600 bg-red-100 dark:bg-red-950/70 dark:text-red-300 px-2 py-0.5 rounded-full">
-                  * مطلوب إرفاق سند
-                </span>
-              )}
+              <span className="text-[11px] font-bold text-slate-600 bg-slate-200/70 dark:bg-slate-800 dark:text-slate-300 px-2 py-0.5 rounded-full">اختياري</span>
             </label>
             <div className="flex items-center gap-2">
               {loadingPromissory ? (
@@ -890,7 +860,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
                       ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300"
                       : existingPromissoryCount > 0
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
-                      : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                      : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300"
                   }`}
                 >
                   سندات المندوب السابقة: {existingPromissoryCount} / 3
@@ -902,25 +872,25 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           {formData.riderProfileId && !loadingPromissory && (
             <>
               {existingPromissoryCount === 0 ? (
-                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-100/70 border border-amber-300 text-amber-950 text-xs dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200">
-                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">
+                  <FileText className="h-4 w-4 shrink-0 text-slate-500 mt-0.5" />
                   <div>
-                    <p className="font-bold">يلزم إرفاق سند أمر واحد على الأقل للمندوب</p>
-                    <p className="mt-0.5 font-normal text-amber-900/90 dark:text-amber-300/90 leading-relaxed">
-                      هذا المندوب ليس لديه أي سندات أمر سابقة مسجلة على النظام. لإتمام تسليم المركبة، يجب إرفاق سند أمر واحد على الأقل (يمكنك رفع حتى 3 سندات).
+                    <p className="font-bold">يمكن إتمام التسليم دون إرفاق سند أمر</p>
+                    <p className="mt-0.5 font-normal leading-relaxed">
+                      لا توجد سندات أمر سابقة لهذا المندوب. يمكنك إرفاق حتى 3 سندات الآن أو المتابعة دون ملفات.
                     </p>
                   </div>
                 </div>
               ) : existingPromissoryCount >= 3 ? (
                 <div className="flex items-center gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
                   <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-                  <span>المندوب يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى). السندات السابقة كافية لإتمام التسليم.</span>
+                  <span>المندوب يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى). يمكنك إتمام التسليم دون إضافة ملفات.</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs font-medium dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span>
-                    المندوب يمتلك {existingPromissoryCount} {existingPromissoryCount === 1 ? "سند أمر مسجل مسبقاً" : "سندات أمر مسجلة مسبقاً"} (مكتمل الشروط). إرفاق سند جديد اختياري (متبقي {3 - existingPromissoryCount} كحد أقصى).
+                    المندوب يمتلك {existingPromissoryCount} {existingPromissoryCount === 1 ? "سند أمر مسجل مسبقاً" : "سندات أمر مسجلة مسبقاً"}. إرفاق سند جديد اختياري (متبقي {3 - existingPromissoryCount} كحد أقصى).
                   </span>
                 </div>
               )}
@@ -928,30 +898,16 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           )}
 
           {existingPromissoryCount < 3 && files.length < (3 - existingPromissoryCount) && (
-            <label
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-                formData.riderProfileId && existingPromissoryCount === 0 && files.length === 0
-                  ? "border-amber-400 bg-white hover:border-[#1167c9] dark:border-amber-700 dark:bg-slate-800"
-                  : "border-slate-300 bg-white hover:border-[#1167c9] dark:border-slate-700 dark:bg-slate-800"
-              }`}
-            >
-              <Upload
-                className={`h-6 w-6 mb-1 ${
-                  formData.riderProfileId && existingPromissoryCount === 0 && files.length === 0
-                    ? "text-amber-500"
-                    : "text-slate-400"
-                }`}
-              />
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition-colors hover:border-[#1167c9] dark:border-slate-700 dark:bg-slate-800">
+              <Upload className="h-6 w-6 mb-1 text-slate-400" />
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                {existingPromissoryCount === 0
-                  ? "اضغط هنا لرفع سند الأمر المطلوب (PDF أو صور) *"
-                  : "اضغط هنا لرفع سندات الأمر (PDF أو صور)"}
+                اضغط هنا لرفع سندات الأمر اختيارياً (PDF أو صور)
               </span>
               <span className="text-[11px] text-slate-400 mt-0.5">PDF, PNG, JPG (حتى 10MB)</span>
               <input
                 type="file"
                 multiple
-                accept="application/pdf,image/*"
+                accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,image/bmp"
                 onChange={(e) => handleAddFiles(e.target.files)}
                 className="hidden"
               />

@@ -35,6 +35,9 @@ import type {
   UpdateMaintenancePlanRequest,
   CompleteOilChangeRequest,
   CompleteOilChangeResult,
+  DirectOilChangeRequest,
+  DirectOilInventoryLocation,
+  DirectOilBarrel,
   PartSaleRequest,
   PartSaleResponse,
   CustomerLaborChargeRequest,
@@ -547,6 +550,28 @@ export async function completeOilChange(
     body: JSON.stringify(payload),
     notifySuccess: "تم تسجيل عملية تغيير الزيت وتحديث استهلاك البراميل بنجاح",
   });
+}
+
+export async function completeDirectOilChange(
+  vehicleId: string,
+  payload: DirectOilChangeRequest,
+  idempotencyKey: string,
+): Promise<CompleteOilChangeResult> {
+  return authFetch<CompleteOilChangeResult>(`/api/maintenance/vehicles/${vehicleId}/oil-changes`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تغيير الزيت وصرف المواد وتحديث التذكير بنجاح",
+  });
+}
+
+export async function getDirectOilInventoryLocations(): Promise<DirectOilInventoryLocation[]> {
+  return authFetch<DirectOilInventoryLocation[]>("/api/maintenance/oil-inventory-locations");
+}
+
+export async function getDirectOilBarrels(inventoryLocationId: string, inventoryItemId: string): Promise<DirectOilBarrel[]> {
+  const query = new URLSearchParams({ inventoryLocationId, inventoryItemId });
+  return authFetch<DirectOilBarrel[]>(`/api/maintenance/oil-barrels?${query}`);
 }
 
 // ==========================================

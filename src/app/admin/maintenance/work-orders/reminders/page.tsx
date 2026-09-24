@@ -3,52 +3,31 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { OilRemindersView } from "../components/OilRemindersView";
-import { CreateCompanyWorkOrderModal } from "../components/CreateCompanyWorkOrderModal";
-import { getMaintenanceLocations } from "@/lib/maintenance/api";
-import type { MaintenanceLocation } from "@/lib/maintenance/types";
-import { MaintenanceType } from "@/lib/maintenance/types";
+import { DirectOilChangeModal } from "../components/DirectOilChangeModal";
 
 function OilRemindersContent() {
   const searchParams = useSearchParams();
   const openOilChangeFor = searchParams.get("openOilChangeFor");
 
-  const [locations, setLocations] = useState<MaintenanceLocation[]>([]);
-  const [prefillVehicleId, setPrefillVehicleId] = useState<string | null>(null);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-
-  useEffect(() => {
-    getMaintenanceLocations()
-      .then((data) => setLocations(Array.isArray(data) ? data : []))
-      .catch(() => setLocations([]));
-  }, []);
+  const [vehicleId, setVehicleId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (openOilChangeFor) {
-      setPrefillVehicleId(openOilChangeFor);
-      setCreateModalOpen(true);
+      setVehicleId(openOilChangeFor);
     }
   }, [openOilChangeFor]);
 
   const handleStartOilChange = (vehicleId: string) => {
-    setPrefillVehicleId(vehicleId);
-    setCreateModalOpen(true);
+    setVehicleId(vehicleId);
   };
 
   return (
     <>
-      <OilRemindersView onStartOilChange={handleStartOilChange} />
-
-      <CreateCompanyWorkOrderModal
-        isOpen={createModalOpen}
-        onClose={() => {
-          setCreateModalOpen(false);
-          setPrefillVehicleId(null);
-        }}
-        onSaved={() => {}}
-        locations={locations}
-        initialVehicleId={prefillVehicleId || undefined}
-        initialMaintenanceType={MaintenanceType.OilChange}
-      />
+      <OilRemindersView key={refreshKey} onStartOilChange={handleStartOilChange} />
+      {vehicleId && <DirectOilChangeModal key={vehicleId} vehicleId={vehicleId} reminder={null}
+        onClose={() => setVehicleId(null)}
+        onCompleted={() => { setVehicleId(null); setRefreshKey((value) => value + 1); }} />}
     </>
   );
 }

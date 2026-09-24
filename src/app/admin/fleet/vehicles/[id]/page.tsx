@@ -81,13 +81,13 @@ export default function VehicleDetailPage() {
     try {
       const payload: VehicleUpsertRequest = {
         assetNumber: vehicle.summary.assetNumber,
-        serialNumber: vehicle.serialNumber?.trim() || null,
-        chassisNumber: vehicle.chassisNumber?.trim() || null,
-        plateNumberAr: vehicle.summary.plateNumberAr?.trim() || null,
-        plateNumberEn: vehicle.summary.plateNumberEn?.trim() || null,
-        plateLettersAr: vehicle.plateLettersAr?.trim() || null,
-        plateLettersEn: vehicle.plateLettersEn?.trim() || null,
-        plateDigits: vehicle.plateDigits?.trim() || null,
+        serialNumber: vehicle.serialNumber ?? null,
+        chassisNumber: vehicle.chassisNumber ?? null,
+        plateNumberAr: vehicle.summary.plateNumberAr ?? null,
+        plateNumberEn: vehicle.summary.plateNumberEn ?? null,
+        plateLettersAr: vehicle.plateLettersAr ?? null,
+        plateLettersEn: vehicle.plateLettersEn ?? null,
+        plateDigits: vehicle.plateDigits ?? null,
         vin: vehicle.vin?.trim() || null,
         engineNumber: vehicle.engineNumber?.trim() || null,
         sponsorId: vehicle.summary.sponsorId || null,
@@ -259,8 +259,16 @@ export default function VehicleDetailPage() {
             <ArrowRight className="h-4 w-4" />
           </Link>
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-slate-900 font-mono tracking-wide">{summary.assetNumber}</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+                {summary.plateNumberAr || "مركبة"}
+              </h1>
+              {vehicle.serialNumber && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 font-bold text-xs shadow-2xs font-mono">
+                  <span>الرقم التسلسلي:</span>
+                  <span>{vehicle.serialNumber}</span>
+                </span>
+              )}
               {renderStatus(summary.status)}
               {!summary.isReadyForAssignment && summary.status === VehicleOperationalStatus.Available && (
                 <Badge className="bg-red-50 text-red-700 border-red-200">غير جاهزة للتسليم</Badge>
@@ -289,6 +297,16 @@ export default function VehicleDetailPage() {
                 </span>
               </Button>
             )}
+
+          <Link href={`/admin/fleet/vehicles/${id}/events`}>
+            <Button
+              variant="secondary"
+              className="gap-2 border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+            >
+              <History className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span>سجل الأحداث الشامل</span>
+            </Button>
+          </Link>
 
           {can("fleet.vehicles.manage") && (
             <Button onClick={() => setIsUpsertOpen(true)} variant="secondary" className="gap-2">
@@ -764,4 +782,3 @@ export default function VehicleDetailPage() {
     </div>
   );
 }
-

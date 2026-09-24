@@ -18,41 +18,40 @@ export type CustomRequestInit = RequestInit & {
   suppressErrorToast?: boolean;
 };
 
-export function extractErrorMessageFromBody(body: any): string | null {
+export function extractErrorMessageFromBody(body: unknown): string | null {
   if (!body) return null;
   if (typeof body === "string") return body.trim() || null;
+  if (typeof body !== "object") return null;
+
+  const responseBody = body as Record<string, unknown>;
+  const messageText = (value: unknown): string | null =>
+    typeof value === "string" ? value.trim() || null : null;
+  const nestedMessage = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") return null;
+    const item = value as Record<string, unknown>;
+    return messageText(item.description) || messageText(item.message) ||
+      messageText(item.detail) || messageText(item.code);
+  };
 
   const subErrors: string[] = [];
 
   // 1. Check identityErrors array (e.g. ASP.NET Identity / UserManagement)
-  if (Array.isArray(body.identityErrors) && body.identityErrors.length > 0) {
-    for (const err of body.identityErrors) {
-      if (typeof err === "string" && err.trim()) {
-        subErrors.push(err.trim());
-      } else if (err && typeof err === "object") {
-        const msg = err.description || err.message || err.detail || err.code;
-        if (msg && typeof msg === "string" && msg.trim()) {
-          subErrors.push(msg.trim());
-        }
-      }
+  if (Array.isArray(responseBody.identityErrors)) {
+    for (const err of responseBody.identityErrors) {
+      const message = messageText(err) || nestedMessage(err);
+      if (message) subErrors.push(message);
     }
   }
 
   // 2. Check errors property (dictionary or array)
-  if (body.errors) {
-    if (Array.isArray(body.errors) && body.errors.length > 0) {
-      for (const err of body.errors) {
-        if (typeof err === "string" && err.trim()) {
-          subErrors.push(err.trim());
-        } else if (err && typeof err === "object") {
-          const msg = err.description || err.message || err.detail || err.code;
-          if (msg && typeof msg === "string" && msg.trim()) {
-            subErrors.push(msg.trim());
-          }
-        }
+  if (responseBody.errors) {
+    if (Array.isArray(responseBody.errors)) {
+      for (const err of responseBody.errors) {
+        const message = messageText(err) || nestedMessage(err);
+        if (message) subErrors.push(message);
       }
-    } else if (typeof body.errors === "object") {
-      for (const [field, errs] of Object.entries(body.errors)) {
+    } else if (typeof responseBody.errors === "object") {
+      for (const [field, errs] of Object.entries(responseBody.errors)) {
         if (!errs) continue;
         const fieldStr = Array.isArray(errs)
           ? errs.filter(Boolean).join(", ")
@@ -65,10 +64,9 @@ export function extractErrorMessageFromBody(body: any): string | null {
   }
 
   const mainDetail =
-    (typeof body.detail === "string" && body.detail.trim()) ||
-    (typeof body.message === "string" && body.message.trim()) ||
-    (typeof body.error === "string" && body.error.trim()) ||
-    null;
+    messageText(responseBody.detail) ||
+    messageText(responseBody.message) ||
+    messageText(responseBody.error);
 
   if (subErrors.length > 0) {
     const formattedSub = subErrors.join(" | ");
@@ -80,7 +78,7 @@ export function extractErrorMessageFromBody(body: any): string | null {
 
   return (
     mainDetail ||
-    (typeof body.title === "string" && body.title.trim()) ||
+    messageText(responseBody.title) ||
     null
   );
 }
@@ -212,7 +210,7 @@ export function getFriendlyErrorMessage(
       case "phone_sim.concurrency_conflict":
         return "تم تعديل بيانات الشريحة بواسطة مستخدم آخر. يرجى إعادة تحميل الصفحة والمحاولة مجدداً.";
       case "fleet.invalid_request":
-        return "طلب غير صالح. يرجى التأكد من التواريخ واختيار كفيلين مختلفين ومركبات صالحة.";
+        return rawMessage || "طلب الأسطول غير صالح. يرجى مراجعة الحقول المدخلة.";
       case "fleet.lease_vehicle_sponsor_mismatch":
         return "المركبة المحددة لا تنتمي إلى الكفيل المؤجر الأصلي.";
       case "fleet.lease_period_conflict":
@@ -220,7 +218,7 @@ export function getFriendlyErrorMessage(
       case "fleet.keeta_platform_unavailable":
         return "سجل منصة كيتا غير متاح في الكتالوج حالياً.";
       case "fleet.concurrency_conflict":
-        return "تم تعديل الاتفاقية أو التعيين بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+        return rawMessage || "تم تعديل السجل بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
       case "fleet.return_condition_report_required":
         return "تقرير حالة المركبة مطلوب عندما تكون حالة المركبة غير جيدة.";
       case "fleet.return_condition_report_not_allowed":

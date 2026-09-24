@@ -820,9 +820,39 @@ export interface CompleteOilChangeRequest {
   workOrderRowVersion: string;
 }
 
+export interface DirectOilChangeRequest {
+  performedAtUtc: string;
+  odometerAtChange: number;
+  inventoryLocationId: string;
+  oilInventoryItemId: string;
+  nextOilBarrelId?: string | null;
+  oilFilterChanged: boolean;
+  oilFilterInventoryItemId?: string | null;
+  configuredOilQuantityLiters?: number | null;
+  otherCost: number;
+  notes?: string | null;
+  vehicleRowVersion: string;
+}
+
+export interface DirectOilInventoryLocation {
+  inventoryLocationId: string;
+  maintenanceLocationId: string;
+  inventoryLocationNameAr: string;
+  maintenanceLocationNameAr: string;
+}
+
+export interface DirectOilBarrel {
+  id: string;
+  barrelNumber: string;
+  inventoryLocationId: string;
+  inventoryItemId: string;
+  status: OilBarrelStatus;
+  remainingLiters: number;
+}
+
 export interface CompleteOilChangeResult {
   id: string;
-  maintenanceWorkOrderId: string;
+  maintenanceWorkOrderId: string | null;
   performedAtUtc: string;
   odometerAtChange: number;
   vehicleType: number;

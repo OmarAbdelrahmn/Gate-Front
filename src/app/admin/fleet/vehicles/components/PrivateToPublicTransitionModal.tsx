@@ -26,6 +26,13 @@ interface Props {
   vehicle: VehicleDetailResponse;
 }
 
+function currentLocalDateTime(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+}
+
 export function PrivateToPublicTransitionModal({
   isOpen,
   onClose,
@@ -44,11 +51,7 @@ export function PrivateToPublicTransitionModal({
   const [plateLettersEn, setPlateLettersEn] = useState("");
   const [plateDigits, setPlateDigits] = useState("");
 
-  // Default datetime-local in local timezone (YYYY-MM-DDTHH:mm)
-  const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-  const [effectiveAtLocal, setEffectiveAtLocal] = useState(nowLocal);
+  const [effectiveAtLocal, setEffectiveAtLocal] = useState(currentLocalDateTime);
   const [reason, setReason] = useState("تحويل المركبة إلى النقل العام");
 
   // Files
@@ -67,7 +70,7 @@ export function PrivateToPublicTransitionModal({
     summary.currentAssignmentId || summary.currentRiderProfileId
   );
 
-  const isEligible = !isAlreadyPublicTransport && !hasActiveAssignment;
+  const isEligible = !isAlreadyPublicTransport;
 
   const handleReset = () => {
     setPlateNumberAr(summary.plateNumberAr || "");
@@ -75,7 +78,7 @@ export function PrivateToPublicTransitionModal({
     setPlateLettersAr("");
     setPlateLettersEn("");
     setPlateDigits("");
-    setEffectiveAtLocal(nowLocal);
+    setEffectiveAtLocal(currentLocalDateTime());
     setReason("تحويل المركبة إلى النقل العام");
     setIstimaraFile(null);
     setOperationCardFile(null);
@@ -119,11 +122,14 @@ export function PrivateToPublicTransitionModal({
       return;
     }
 
-    // Size check limit: 22 MB
-    const totalSizeBytes = (istimaraFile.size || 0) + (operationCardFile.size || 0);
-    const maxSizeBytes = 22 * 1024 * 1024;
-    if (totalSizeBytes > maxSizeBytes) {
-      toast.error("حجم الملفات كبير جداً", "إجمالي حجم الملفات يتجاوز الحد الأقصى المسموح به (22 ميجابايت).");
+    // The API accepts up to 10 MiB for each document.
+    const maxFileSizeBytes = 10 * 1024 * 1024;
+    if (istimaraFile.size > maxFileSizeBytes) {
+      toast.error("حجم ملف الاستمارة كبير جداً", "حجم ملف الاستمارة يجب ألا يتجاوز 10 ميجابايت.");
+      return;
+    }
+    if (operationCardFile.size > maxFileSizeBytes) {
+      toast.error("حجم ملف كرت التشغيل كبير جداً", "حجم ملف كرت التشغيل يجب ألا يتجاوز 10 ميجابايت.");
       return;
     }
 
@@ -198,19 +204,11 @@ export function PrivateToPublicTransitionModal({
             </div>
           </div>
 
-          <div className={`p-3 rounded-xl border flex items-center gap-3 ${
-            !hasActiveAssignment
-              ? "border-emerald-200 bg-emerald-50/50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300"
-              : "border-amber-200 bg-amber-50/50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"
-          }`}>
-            {!hasActiveAssignment ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            )}
+          <div className="p-3 rounded-xl border flex items-center gap-3 border-emerald-200 bg-emerald-50/50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div className="text-xs">
               <div className="font-bold">حالة التسليم للمندوب</div>
-              <div>{!hasActiveAssignment ? "لا توجد عهدة نشطة (جاهزة للتحويل)" : `مسلّمة للمندوب (${summary.currentRiderName || "عهدة نشطة"})`}</div>
+              <div>{!hasActiveAssignment ? "لا توجد عهدة نشطة (جاهزة للتحويل)" : `مسلّمة للمندوب (${summary.currentRiderName || "عهدة نشطة"}) وستبقى العهدة كما هي`}</div>
             </div>
           </div>
         </div>
@@ -218,11 +216,7 @@ export function PrivateToPublicTransitionModal({
         {!isEligible && (
           <div className="p-3.5 rounded-xl border border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 text-xs font-semibold flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 shrink-0" />
-            <span>
-              {isAlreadyPublicTransport
-                ? "لا يمكن تحويل المركبة: نوع تسجيل المركبة هو (نقل عام) بالفعل."
-                : "تعذر البدء بتحويل نوع التسجيل: يجب إنهاء عهدة المندوب الحالية للمركبة أولاً."}
-            </span>
+            <span>لا يمكن تحويل المركبة: نوع تسجيل المركبة هو (نقل عام) بالفعل.</span>
           </div>
         )}
 
@@ -305,7 +299,7 @@ export function PrivateToPublicTransitionModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                تاريخ ووقت سريان التحويل (UTC) <span className="text-red-500">*</span>
+                تاريخ ووقت سريان التحويل (التوقيت المحلي) <span className="text-red-500">*</span>
               </label>
               <Input
                 type="datetime-local"
@@ -334,7 +328,7 @@ export function PrivateToPublicTransitionModal({
           <div className="space-y-3 pt-2">
             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
               <FileText className="h-4 w-4 text-emerald-600" />
-              الوثائق المطلوبة للتحويل (PDF أو صور - بحد أقصى 22MB)
+              الوثائق المطلوبة للتحويل (PDF أو صور - 10 ميجابايت لكل ملف)
             </h4>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
