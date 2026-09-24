@@ -772,7 +772,7 @@ export default function AssignmentsPage() {
                         />
                       </div>
                     </th>
-                    <th className="px-6 py-4">اللوحة</th>
+                    <th className="px-6 py-4 whitespace-nowrap">اللوحة</th>
                     <th className="px-6 py-4 whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <span>مدينة التشغيل</span>
@@ -815,15 +815,17 @@ export default function AssignmentsPage() {
                             {[vehicle?.manufacturer, vehicle?.model].filter(Boolean).join(" ") || `أصل: ${item.assetNumber}`}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="font-bold border border-slate-300 rounded px-2 py-0.5 w-fit bg-white dark:bg-slate-900 shadow-sm">
-                            {vehicle?.plateNumberAr || item.assetNumber || "بدون لوحة"}
-                          </div>
-                          {vehicle?.plateNumberEn && (
-                            <div className="text-[11px] text-[var(--muted)] font-mono mt-0.5">
-                              {vehicle.plateNumberEn}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="inline-flex flex-col items-center">
+                            <div className="font-bold border border-slate-300 dark:border-slate-700 rounded px-3 py-1 min-w-[120px] text-center whitespace-nowrap bg-white dark:bg-slate-900 shadow-2xs text-sm">
+                              {vehicle?.plateNumberAr || item.assetNumber || "بدون لوحة"}
                             </div>
-                          )}
+                            {vehicle?.plateNumberEn && (
+                              <div className="text-[11px] text-[var(--muted)] font-mono mt-0.5 text-center w-full">
+                                {vehicle.plateNumberEn}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">
                           {item.vehicleOperatingCityNameAr || vehicle?.operatingCity || "—"}
@@ -998,7 +1000,7 @@ export default function AssignmentsPage() {
                         />
                       </div>
                     </th>
-                    <th className="px-6 py-4">اللوحة</th>
+                    <th className="px-6 py-4 whitespace-nowrap">اللوحة</th>
                     <th className="px-6 py-4 whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <span>مدينة التشغيل</span>
@@ -1028,9 +1030,16 @@ export default function AssignmentsPage() {
                         </Link>
                         <div className="text-xs text-[var(--muted)]">{item.manufacturer} {item.model}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold border border-slate-300 rounded px-2 py-0.5 w-fit bg-white dark:bg-slate-900 shadow-sm">
-                          {item.plateNumberAr || "بدون لوحة"}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="inline-flex flex-col items-center">
+                          <div className="font-bold border border-slate-300 dark:border-slate-700 rounded px-3 py-1 min-w-[120px] text-center whitespace-nowrap bg-white dark:bg-slate-900 shadow-2xs text-sm">
+                            {item.plateNumberAr || "بدون لوحة"}
+                          </div>
+                          {item.plateNumberEn && (
+                            <div className="text-[11px] text-[var(--muted)] font-mono mt-0.5 text-center w-full">
+                              {item.plateNumberEn}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">

@@ -778,11 +778,11 @@ export default function VehiclesPage() {
                       <Link href={`/admin/fleet/vehicles/${item.id}`} className="group block">
                         {item.plateNumberAr ? (
                           <div className="flex flex-col items-start">
-                            <span className="font-bold border border-slate-300 dark:border-slate-700 rounded px-2.5 py-0.5 w-fit text-xs shadow-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 group-hover:border-[#1167c9] group-hover:text-[#1167c9] transition-colors">
+                            <span className="font-bold border border-slate-300 dark:border-slate-700 rounded px-3 py-1 min-w-[110px] text-center whitespace-nowrap inline-block text-xs shadow-2xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 group-hover:border-[#1167c9] group-hover:text-[#1167c9] transition-colors">
                               {item.plateNumberAr}
                             </span>
                             {item.plateNumberEn && (
-                              <span className="text-xs text-[var(--muted)] mt-1">{item.plateNumberEn}</span>
+                              <span className="text-xs text-[var(--muted)] mt-1 font-mono text-center w-full block">{item.plateNumberEn}</span>
                             )}
                           </div>
                         ) : (
