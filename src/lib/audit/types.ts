@@ -55,6 +55,9 @@ export interface AuditEntry {
 
 export interface AuditEntriesParams {
   actorUserId?: string;
+  userId?: string;
+  actorId?: string;
+  userName?: string;
   entityType?: string;
   entityId?: string;
   action?: string;

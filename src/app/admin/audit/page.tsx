@@ -246,7 +246,7 @@ export default function AuditLogsPage() {
   const [entityId, setEntityId] = useState("");
   const [fromUtc, setFromUtc] = useState(getStartOfMonth);
   const [toUtc, setToUtc] = useState(getTodayDate);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(100);
 
   // Pagination cursor stack: tracks beforeSequence for navigation
   const [currentCursor, setCurrentCursor] = useState<string | null>(null);
@@ -377,6 +377,13 @@ export default function AuditLogsPage() {
     ];
   }, [usersList, isEn]);
 
+  const userFilterOptions: FilterOption[] = useMemo(() => {
+    return userOptions.map((u) => ({
+      value: u.value,
+      label: u.label,
+    }));
+  }, [userOptions]);
+
   const actionFilterOptions: FilterOption[] = useMemo(() => {
     return [
       { value: "", label: isEn ? "All Actions" : "كافة العمليات" },
@@ -462,17 +469,18 @@ export default function AuditLogsPage() {
         let hasMore = true;
         let nextCursorToSave: string | null = null;
         let rounds = 0;
-        const MAX_ROUNDS = 8;
+        const MAX_ROUNDS = actorUserId ? 30 : 10;
+        const selectedUser = actorUserId ? usersList.find((u) => u.id === actorUserId) : null;
 
         while (accumulated.length < pageSize && hasMore && rounds < MAX_ROUNDS) {
           rounds++;
-          // Fetch up to 100 or double pageSize to minimize roundtrips while respecting backend limits
           const batchSize = Math.max(pageSize, 100);
           const params: AuditEntriesParams = {
             pageSize: batchSize,
             entityType: entityType !== "ALL" ? entityType.trim() : undefined,
             action: action !== "ALL" ? action.trim() : undefined,
             actorUserId: actorUserId.trim() || undefined,
+            userName: selectedUser?.userName || undefined,
             entityId: entityId.trim() || undefined,
             fromUtc: fromUtc
               ? fromUtc.includes("T")
@@ -495,22 +503,47 @@ export default function AuditLogsPage() {
             const resolved = resolveAuditRecordInfo(item, isEn, docTypesMap, documentsMap, employeesList, vehiclePeriodsMap);
             if (shouldIgnoreAuditEntry(item, resolved.primaryTitle)) continue;
 
+            // When filtering by a user, ensure entry belongs to that user
+            if (actorUserId) {
+              const itemUserId = item.actorUserId || item.actor?.userId;
+              const matchesId = itemUserId === actorUserId;
+              const matchesUsername =
+                Boolean(selectedUser?.userName &&
+                item.actor?.userName &&
+                item.actor.userName.toLowerCase() === selectedUser.userName.toLowerCase());
+
+              if (!matchesId && !matchesUsername) {
+                continue;
+              }
+            }
+
             accumulated.push(item);
             if (accumulated.length === pageSize) {
               break;
             }
           }
 
-          if (res.nextCursor != null && rawItems.length > 0) {
-            cursor = String(res.nextCursor);
-            hasMore = true;
+          // Advance cursor for next round if we still need more entries
+          let nextCursorCandidate: string | null = null;
+          if (res.nextCursor != null && String(res.nextCursor).trim() !== "") {
+            nextCursorCandidate = String(res.nextCursor);
+          } else if (rawItems.length > 0) {
+            const oldestSequence = rawItems[rawItems.length - 1]?.sequence;
+            if (oldestSequence != null) {
+              nextCursorCandidate = String(oldestSequence);
+            }
+          }
+
+          // Ensure cursor advances and avoid infinite loops
+          if (nextCursorCandidate && nextCursorCandidate !== cursor) {
+            cursor = nextCursorCandidate;
+            hasMore = res.nextCursor != null || rawItems.length >= batchSize;
           } else {
             hasMore = false;
           }
 
           if (accumulated.length >= pageSize) {
             const lastItem = accumulated[accumulated.length - 1];
-            // If the server still had more items or there were more rawItems past lastItem
             const hasMoreRaw = rawItems.some((r) => r.sequence < lastItem.sequence);
             nextCursorToSave = (hasMore || hasMoreRaw) ? String(lastItem.sequence) : null;
             break;
@@ -519,6 +552,9 @@ export default function AuditLogsPage() {
 
         if (accumulated.length < pageSize && !hasMore) {
           nextCursorToSave = null;
+        } else if (accumulated.length > 0 && !nextCursorToSave) {
+          const lastItem = accumulated[accumulated.length - 1];
+          nextCursorToSave = hasMore ? String(lastItem.sequence) : null;
         }
 
         setItems(accumulated);
@@ -544,6 +580,11 @@ export default function AuditLogsPage() {
       fromUtc,
       toUtc,
       isEn,
+      usersList,
+      docTypesMap,
+      documentsMap,
+      employeesList,
+      vehiclePeriodsMap,
     ]
   );
 
@@ -588,7 +629,7 @@ export default function AuditLogsPage() {
     setEntityId("");
     setFromUtc(getStartOfMonth());
     setToUtc(getTodayDate());
-    setPageSize(50);
+    setPageSize(100);
     setCurrentCursor(null);
     setCursorHistory([]);
   };
@@ -599,7 +640,8 @@ export default function AuditLogsPage() {
     actorUserId.trim() ||
     entityId.trim() ||
     fromUtc !== getStartOfMonth() ||
-    toUtc !== getTodayDate()
+    toUtc !== getTodayDate() ||
+    pageSize !== 100
   );
 
   const formatDateTime = (dateStr?: string) => {
@@ -651,6 +693,7 @@ export default function AuditLogsPage() {
   };
 
   const processedEntries = useMemo(() => {
+    const selectedUser = actorUserId ? usersList.find((u) => u.id === actorUserId) : null;
     return items.filter((entry) => {
       if (shouldIgnoreAuditEntry(entry)) return false;
       const resolved = resolveAuditRecordInfo(
@@ -662,9 +705,20 @@ export default function AuditLogsPage() {
         vehiclePeriodsMap
       );
       if (shouldIgnoreAuditEntry(entry, resolved?.primaryTitle)) return false;
+
+      if (actorUserId) {
+        const itemUserId = entry.actorUserId || entry.actor?.userId;
+        const matchesId = itemUserId === actorUserId;
+        const matchesUsername =
+          Boolean(selectedUser?.userName &&
+          entry.actor?.userName &&
+          entry.actor.userName.toLowerCase() === selectedUser.userName.toLowerCase());
+        if (!matchesId && !matchesUsername) return false;
+      }
+
       return true;
     });
-  }, [items, isEn, docTypesMap, documentsMap, employeesList, vehiclePeriodsMap]);
+  }, [items, isEn, docTypesMap, documentsMap, employeesList, vehiclePeriodsMap, actorUserId, usersList]);
 
   const handleExportExcel = async () => {
     if (processedEntries.length === 0) {
@@ -1000,7 +1054,16 @@ export default function AuditLogsPage() {
                   </div>
                 </th>
                 <th className="px-4 py-3.5 text-start w-[180px]">
-                  {isEn ? "Actor / User" : "القائم بالعملية"}
+                  <div className="inline-flex items-center gap-1.5">
+                    <span>{isEn ? "Actor / User" : "القائم بالعملية"}</span>
+                    <TableHeaderColumnFilter
+                      label={isEn ? "Actor / User" : "المستخدم"}
+                      value={actorUserId}
+                      onChange={(val) => setActorUserId(val || "")}
+                      options={userFilterOptions}
+                      placeholder={isEn ? "Filter by user..." : "تصفية بالمستخدم..."}
+                    />
+                  </div>
                 </th>
                 <th className="px-4 py-3.5 text-start w-[160px]">
                   {isEn ? "Changes" : "ملخص التغييرات"}
@@ -1200,10 +1263,9 @@ export default function AuditLogsPage() {
               onChange={(e) => setPageSize(Number(e.target.value))}
               className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-bold"
             >
-              <option value={25}>25</option>
-              <option value={50}>50</option>
               <option value={100}>100</option>
               <option value={200}>200</option>
+              <option value={1000}>1000</option>
             </select>
           </div>
 

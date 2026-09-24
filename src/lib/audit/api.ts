@@ -3,7 +3,14 @@ import type { AuditEntriesParams, AuditEntriesResponse, AuditEntry } from "./typ
 
 export async function getAuditEntries(params: AuditEntriesParams = {}): Promise<AuditEntriesResponse> {
   const query = new URLSearchParams();
-  if (params.actorUserId) query.set("actorUserId", params.actorUserId);
+  if (params.actorUserId) {
+    query.set("actorUserId", params.actorUserId);
+    query.set("userId", params.actorUserId);
+    query.set("actorId", params.actorUserId);
+  } else if (params.userId) {
+    query.set("userId", params.userId);
+  }
+  if (params.userName) query.set("userName", params.userName);
   if (params.entityType && params.entityType !== "ALL") query.set("entityType", params.entityType);
   if (params.entityId) query.set("entityId", params.entityId);
   if (params.action && params.action !== "ALL") query.set("action", params.action);
