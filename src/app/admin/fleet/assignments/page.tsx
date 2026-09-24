@@ -3,18 +3,34 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicles } from "@/lib/fleet/api";
-import { listRiders, listEmployees } from "@/lib/workforce/api";
-import { VehicleOperationalStatus, type VehicleSummaryResponse } from "@/lib/fleet/types";
+import { getAllVehicleAssignments, getAllVehicles } from "@/lib/fleet/api";
+import {
+  VehicleOperationalStatus,
+  RiderVehicleAssignmentStatus,
+  type VehicleSummaryResponse,
+  type RiderVehicleAssignmentResponse,
+} from "@/lib/fleet/types";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import {
   TableHeaderColumnFilter,
   type FilterOption,
 } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
-import { Key, Search, RefreshCw, Car, ArrowLeftRight, CalendarClock, ShieldCheck, X, FileSpreadsheet, FileUp } from "lucide-react";
+import {
+  Key,
+  Search,
+  RefreshCw,
+  Car,
+  ArrowLeftRight,
+  CalendarClock,
+  ShieldCheck,
+  X,
+  FileSpreadsheet,
+  FileUp,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
 import { TakeVehicleModal } from "./components/TakeVehicleModal";
 import { ReturnVehicleModal } from "./components/ReturnVehicleModal";
@@ -40,118 +56,44 @@ type ActiveModal = "take" | "return" | "switch" | "renew" | "promissory" | null;
 
 export default function AssignmentsPage() {
   const { can } = useAuth();
-  const [data, setData] = useState<VehicleSummaryResponse[]>([]);
+  const [assignments, setAssignments] = useState<RiderVehicleAssignmentResponse[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleSummaryResponse[]>([]);
+  const [vehiclesMap, setVehiclesMap] = useState<Map<string, VehicleSummaryResponse>>(new Map());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"assigned" | "available">("assigned");
-  const [riderToEmpMap, setRiderToEmpMap] = useState<Map<string, string>>(new Map());
-  const [riderDetailsMap, setRiderDetailsMap] = useState<
-    Map<string, { nameAr: string; nameEn?: string; iqama?: string; phone?: string }>
-  >(new Map());
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<"active" | "all" | "completed">("active");
 
   const [cityFilter, setCityFilter] = useState("");
   const [manufacturerFilter, setManufacturerFilter] = useState("");
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleSummaryResponse | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const status =
-        filterType === "assigned"
-          ? VehicleOperationalStatus.Assigned.toString()
-          : VehicleOperationalStatus.Available.toString();
-
-      const [firstRes, ridersRes, empRes] = await Promise.all([
-        getVehicles({
-          status,
-          page: 1,
-          pageSize: 2000,
+      const [assignmentsRes, vehiclesRes] = await Promise.all([
+        getAllVehicleAssignments().catch((err) => {
+          console.error("Failed to load vehicle assignments:", err);
+          return [] as RiderVehicleAssignmentResponse[];
         }),
-        listRiders().catch(() => []),
-        listEmployees().catch(() => []),
+        getAllVehicles().catch((err) => {
+          console.error("Failed to load vehicles:", err);
+          return [] as VehicleSummaryResponse[];
+        }),
       ]);
 
-      console.log("[Fleet Assignments API Response]:", firstRes);
+      console.log("[Vehicle Assignments API Response]:", assignmentsRes);
+      setAssignments(assignmentsRes || []);
+      setVehicles(vehiclesRes || []);
 
-      let allVehicles = firstRes?.items || [];
-      const totalCount = firstRes?.totalCount ?? allVehicles.length;
-
-      // Backend clamps pageSize to 200. If totalCount exceeds 200, fetch remaining pages concurrently
-      if (totalCount > allVehicles.length) {
-        const pageSize = firstRes?.pageSize || 200;
-        const totalPages = Math.ceil(totalCount / pageSize);
-        const pagePromises = [];
-        for (let p = 2; p <= totalPages; p++) {
-          pagePromises.push(
-            getVehicles({
-              status,
-              page: p,
-              pageSize,
-            }).catch((err) => {
-              console.warn(`Failed to load vehicles page ${p}:`, err);
-              return null;
-            })
-          );
-        }
-        const remainingResults = await Promise.all(pagePromises);
-        for (const r of remainingResults) {
-          if (r?.items) {
-            allVehicles = allVehicles.concat(r.items);
-          }
-        }
+      const vMap = new Map<string, VehicleSummaryResponse>();
+      for (const v of vehiclesRes || []) {
+        if (v.id) vMap.set(v.id, v);
       }
-
-      const map = new Map<string, string>();
-      const detailsMap = new Map<string, { nameAr: string; nameEn?: string; iqama?: string; phone?: string }>();
-
-      ridersRes.forEach((r) => {
-        if (r.id && r.employeeId) map.set(r.id, r.employeeId);
-        const info = {
-          nameAr: r.fullNameAr || "",
-          nameEn: r.fullNameEn || "",
-          iqama: r.iqamaNo || "",
-          phone: "",
-        };
-        if (r.id) detailsMap.set(r.id, info);
-        if (r.employeeId) detailsMap.set(r.employeeId, info);
-      });
-
-      empRes.forEach((e) => {
-        if (e.riderProfileId && e.id) map.set(e.riderProfileId, e.id);
-        if (e.rider?.id && e.id) map.set(e.rider.id, e.id);
-        if (e.id) map.set(e.id, e.id);
-
-        const info = {
-          nameAr: e.fullNameAr || "",
-          nameEn: e.fullNameEn || "",
-          iqama: e.iqamaNo || "",
-          phone: e.primaryPhone || (e as any).phone || "",
-        };
-        if (e.id) {
-          const existing = detailsMap.get(e.id);
-          detailsMap.set(e.id, { ...existing, ...info });
-        }
-        if (e.riderProfileId) {
-          const existing = detailsMap.get(e.riderProfileId);
-          detailsMap.set(e.riderProfileId, { ...existing, ...info });
-        }
-        if (e.rider?.id) {
-          const existing = detailsMap.get(e.rider.id);
-          detailsMap.set(e.rider.id, { ...existing, ...info });
-        }
-      });
-
-      setRiderToEmpMap(map);
-      setRiderDetailsMap(detailsMap);
-
-      // Filter out available vehicles that are not ready
-      if (filterType === "available") {
-        setData(allVehicles.filter((v) => v.isReadyForAssignment));
-      } else {
-        setData(allVehicles);
-      }
+      setVehiclesMap(vMap);
     } catch (e) {
       console.error(e);
     } finally {
@@ -161,13 +103,52 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     loadData();
-  }, [filterType]);
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
   };
 
-  const openModal = (type: ActiveModal, vehicle: VehicleSummaryResponse | null = null) => {
+  // Helper to open modal for an assignment
+  const openModalForAssignment = (type: ActiveModal, assignment: RiderVehicleAssignmentResponse) => {
+    const vehicle = vehiclesMap.get(assignment.vehicleId);
+    const vehicleForModal: VehicleSummaryResponse = vehicle
+      ? {
+          ...vehicle,
+          currentAssignmentId: assignment.id,
+          currentRiderProfileId: assignment.riderProfileId,
+          currentRiderName: assignment.riderName,
+          isRealRider: assignment.isRealRider,
+          realRider: assignment.realRider,
+          permitEndDate: assignment.permissionEndsOn || vehicle.permitEndDate,
+          rowVersion: assignment.rowVersion || vehicle.rowVersion,
+        }
+      : {
+          id: assignment.vehicleId,
+          assetNumber: assignment.assetNumber,
+          serialNumber: assignment.assetNumber,
+          currentAssignmentId: assignment.id,
+          currentRiderProfileId: assignment.riderProfileId,
+          currentRiderName: assignment.riderName,
+          isRealRider: assignment.isRealRider,
+          realRider: assignment.realRider,
+          permitEndDate: assignment.permissionEndsOn,
+          currentOdometer: assignment.startOdometer,
+          operatingCity: assignment.vehicleOperatingCityNameAr,
+          operatingCityId: assignment.vehicleOperatingCityId,
+          status: VehicleOperationalStatus.Assigned,
+          vehicleType: 1 as any,
+          registrationType: 1 as any,
+          isReadyForAssignment: false,
+          rowVersion: assignment.rowVersion,
+        };
+
+    setSelectedVehicle(vehicleForModal);
+    setActiveModal(type);
+  };
+
+  // Helper to open modal for an available vehicle
+  const openModalForVehicle = (type: ActiveModal, vehicle: VehicleSummaryResponse | null = null) => {
     setSelectedVehicle(vehicle);
     setActiveModal(type);
   };
@@ -178,14 +159,51 @@ export default function AssignmentsPage() {
     loadData();
   };
 
+  // Sort assignments newest first
+  const sortedAssignments = useMemo(() => {
+    return [...assignments].sort((a, b) => {
+      const timeA = a.startedAtUtc ? new Date(a.startedAtUtc).getTime() : 0;
+      const timeB = b.startedAtUtc ? new Date(b.startedAtUtc).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [assignments]);
+
+  // Available vehicles list
+  const availableVehicles = useMemo(() => {
+    return vehicles.filter((v) => v.isReadyForAssignment && v.status === VehicleOperationalStatus.Available);
+  }, [vehicles]);
+
+  // Counts
+  const activeAssignmentsCount = useMemo(() => {
+    return assignments.filter(
+      (a) => a.status === RiderVehicleAssignmentStatus.Active || a.status === 1 || (!a.endedAtUtc && a.status !== 2)
+    ).length;
+  }, [assignments]);
+
+  const completedAssignmentsCount = useMemo(() => {
+    return assignments.filter(
+      (a) => a.status === RiderVehicleAssignmentStatus.Completed || a.status === 2 || Boolean(a.endedAtUtc)
+    ).length;
+  }, [assignments]);
+
   // Operating City Options for Table Header Filter
   const cityOptions = useMemo(() => {
     const counts = new Map<string, number>();
 
-    for (const v of data) {
-      const city = (v.operatingCity || "").trim();
-      if (city) {
-        counts.set(city, (counts.get(city) || 0) + 1);
+    if (filterType === "assigned") {
+      for (const a of assignments) {
+        const v = vehiclesMap.get(a.vehicleId);
+        const city = (a.vehicleOperatingCityNameAr || v?.operatingCity || "").trim();
+        if (city) {
+          counts.set(city, (counts.get(city) || 0) + 1);
+        }
+      }
+    } else {
+      for (const v of availableVehicles) {
+        const city = (v.operatingCity || "").trim();
+        if (city) {
+          counts.set(city, (counts.get(city) || 0) + 1);
+        }
       }
     }
 
@@ -209,13 +227,20 @@ export default function AssignmentsPage() {
     }
 
     return opts;
-  }, [data, cityFilter]);
+  }, [filterType, assignments, availableVehicles, vehiclesMap, cityFilter]);
 
   // Vehicle Manufacturer / Model Options for Table Header Filter
   const manufacturerOptions = useMemo(() => {
     const mfgMap = new Map<string, { count: number; models: Map<string, number> }>();
 
-    for (const v of data) {
+    const targetVehicles =
+      filterType === "assigned"
+        ? assignments
+            .map((a) => vehiclesMap.get(a.vehicleId))
+            .filter((v): v is VehicleSummaryResponse => Boolean(v))
+        : availableVehicles;
+
+    for (const v of targetVehicles) {
       const mfg = (v.manufacturer || "").trim();
       const mdl = (v.model || "").trim();
       if (!mfg && !mdl) continue;
@@ -278,55 +303,48 @@ export default function AssignmentsPage() {
     }
 
     return opts;
-  }, [data, manufacturerFilter]);
+  }, [filterType, assignments, availableVehicles, vehiclesMap, manufacturerFilter]);
 
-  // Apply client-side filters
-  const filteredData = useMemo(() => {
+  // Filtered assigned data
+  const filteredAssignedData = useMemo(() => {
     const queryTokens = search.trim() ? normalizeText(search).split(/\s+/).filter(Boolean) : [];
 
-    return data.filter((item) => {
-      // 1. Search Query across vehicle and rider fields
+    return sortedAssignments.filter((item) => {
+      // 0. Status Filter (active vs completed vs all)
+      const isCompleted =
+        item.status === RiderVehicleAssignmentStatus.Completed ||
+        item.status === 2 ||
+        Boolean(item.endedAtUtc);
+      const isActive = !isCompleted;
+
+      if (assignmentStatusFilter === "active" && !isActive) return false;
+      if (assignmentStatusFilter === "completed" && !isCompleted) return false;
+
+      const vehicle = vehiclesMap.get(item.vehicleId);
+
+      // 1. Search Query across assignment and vehicle fields
       if (queryTokens.length > 0) {
-        const empId =
-          (item as any).employeeId ||
-          (item as any).currentEmployeeId ||
-          (item.currentRiderProfileId ? riderToEmpMap.get(item.currentRiderProfileId) || item.currentRiderProfileId : null);
-
-        const riderInfo =
-          (item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null) ||
-          (empId ? riderDetailsMap.get(empId) : null);
-
-        const realRiderObj = item.realRider || (item.actualRider && item.actualRider.isSelectedRiderTheActualRider === false ? {
-          id: item.actualRider.selectedRiderEmployeeId || item.actualRider.selectedRiderProfileId,
-          name: item.actualRider.actualRiderName,
-          iqamaNo: item.actualRider.actualRiderIqamaNo,
-          relationshipToAssignedRider: item.actualRider.relationshipToSelectedRider,
-        } : null);
-
-        const realRiderInfo = realRiderObj?.id ? riderDetailsMap.get(realRiderObj.id) : null;
-
         const parts = [
-          item.serialNumber,
           item.assetNumber,
-          item.chassisNumber,
-          item.plateNumberAr,
-          item.plateNumberEn,
-          item.plateLettersAr,
-          item.plateLettersEn,
-          item.plateDigits,
-          item.manufacturer,
-          item.model,
-          item.operatingCity,
-          item.currentRiderName,
-          riderInfo?.nameAr,
-          riderInfo?.nameEn,
-          riderInfo?.iqama,
-          riderInfo?.phone,
-          realRiderObj?.name,
-          realRiderObj?.iqamaNo,
-          realRiderInfo?.nameAr,
-          realRiderInfo?.nameEn,
-          realRiderInfo?.iqama,
+          item.riderName,
+          item.riderIqamaNo,
+          item.employeeId,
+          item.permissionReference,
+          item.assignmentReason,
+          item.vehicleOperatingCityNameAr,
+          item.realRider?.name,
+          item.realRider?.iqamaNo,
+          vehicle?.serialNumber,
+          vehicle?.assetNumber,
+          vehicle?.chassisNumber,
+          vehicle?.plateNumberAr,
+          vehicle?.plateNumberEn,
+          vehicle?.plateLettersAr,
+          vehicle?.plateLettersEn,
+          vehicle?.plateDigits,
+          vehicle?.manufacturer,
+          vehicle?.model,
+          vehicle?.operatingCity,
         ];
 
         const searchableText = parts
@@ -340,12 +358,67 @@ export default function AssignmentsPage() {
 
       // 2. Operating City Filter
       if (cityFilter) {
+        const city = item.vehicleOperatingCityNameAr || vehicle?.operatingCity || "";
+        if (!city || normalizeText(city) !== normalizeText(cityFilter)) {
+          return false;
+        }
+      }
+
+      // 3. Manufacturer / Model Filter
+      if (manufacturerFilter) {
+        const normFilter = normalizeText(manufacturerFilter.replace(/^—\s*/, ""));
+        const itemMfg = normalizeText(vehicle?.manufacturer);
+        const itemMdl = normalizeText(vehicle?.model);
+        const itemCombined = normalizeText([vehicle?.manufacturer, vehicle?.model].filter(Boolean).join(" "));
+
+        const matchesCombined = itemCombined.includes(normFilter);
+        const matchesMfg = itemMfg ? itemMfg.includes(normFilter) || normFilter.includes(itemMfg) : false;
+        const matchesMdl = itemMdl ? itemMdl.includes(normFilter) || normFilter.includes(itemMdl) : false;
+
+        if (!matchesCombined && !matchesMfg && !matchesMdl) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [sortedAssignments, vehiclesMap, search, assignmentStatusFilter, cityFilter, manufacturerFilter]);
+
+  // Filtered available data
+  const filteredAvailableData = useMemo(() => {
+    const queryTokens = search.trim() ? normalizeText(search).split(/\s+/).filter(Boolean) : [];
+
+    return availableVehicles.filter((item) => {
+      if (queryTokens.length > 0) {
+        const parts = [
+          item.serialNumber,
+          item.assetNumber,
+          item.chassisNumber,
+          item.plateNumberAr,
+          item.plateNumberEn,
+          item.plateLettersAr,
+          item.plateLettersEn,
+          item.plateDigits,
+          item.manufacturer,
+          item.model,
+          item.operatingCity,
+        ];
+
+        const searchableText = parts
+          .filter(Boolean)
+          .map((p) => normalizeText(String(p)))
+          .join(" ");
+
+        const matchesSearch = queryTokens.every((token) => searchableText.includes(token));
+        if (!matchesSearch) return false;
+      }
+
+      if (cityFilter) {
         if (!item.operatingCity || normalizeText(item.operatingCity) !== normalizeText(cityFilter)) {
           return false;
         }
       }
 
-      // 3. Vehicle Manufacturer / Model Filter
       if (manufacturerFilter) {
         const normFilter = normalizeText(manufacturerFilter.replace(/^—\s*/, ""));
         const itemMfg = normalizeText(item.manufacturer);
@@ -363,78 +436,136 @@ export default function AssignmentsPage() {
 
       return true;
     });
-  }, [data, search, cityFilter, manufacturerFilter, riderToEmpMap, riderDetailsMap]);
+  }, [availableVehicles, search, cityFilter, manufacturerFilter]);
 
   const hasActiveFilters = Boolean(cityFilter || manufacturerFilter);
   const isFiltered = Boolean(search.trim() || hasActiveFilters);
 
-  const [exporting, setExporting] = useState(false);
-
   const handleExportExcel = async () => {
-    if (filteredData.length === 0) return;
-    setExporting(true);
-    try {
-      await exportToExcel({
-        filename: `vehicle-assignments-${filterType}-${new Date().toISOString().split("T")[0]}`,
-        sheetName: filterType === "assigned" ? "المركبات المسلمة" : "المركبات المتاحة",
-        data: filteredData,
-        columns: [
-          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
-          { header: "اللوحة (عربي)", accessor: (item) => item.plateNumberAr || "—", width: 16, isText: true },
-          { header: "اللوحة (إنجليزي)", accessor: (item) => item.plateNumberEn || "—", width: 16, isText: true },
-          { header: "المركبة والموديل", accessor: (item) => [item.manufacturer, item.model].filter(Boolean).join(" ") || "—", width: 22 },
-          { header: "الرقم التسلسلي", accessor: (item) => item.serialNumber || "—", width: 18, isText: true },
-          { header: "المدينة التشغيلية", accessor: (item) => item.operatingCity || "—", width: 16 },
-          {
-            header: "المندوب المسجل",
-            accessor: (item) => {
-              const rInfo = item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null;
-              return rInfo?.nameAr || item.currentRiderName || "—";
+    if (filterType === "assigned") {
+      if (filteredAssignedData.length === 0) return;
+      setExporting(true);
+      try {
+        await exportToExcel({
+          filename: `vehicle-assignments-${new Date().toISOString().split("T")[0]}`,
+          sheetName: "تعيينات المركبات",
+          data: filteredAssignedData,
+          columns: [
+            { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+            {
+              header: "اللوحة (عربي)",
+              accessor: (item) => vehiclesMap.get(item.vehicleId)?.plateNumberAr || "—",
+              width: 16,
+              isText: true,
             },
-            width: 24,
-          },
-          {
-            header: "هوية المندوب",
-            accessor: (item) => {
-              const rInfo = item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null;
-              return rInfo?.iqama || "—";
+            {
+              header: "اللوحة (إنجليزي)",
+              accessor: (item) => vehiclesMap.get(item.vehicleId)?.plateNumberEn || "—",
+              width: 16,
+              isText: true,
             },
-            width: 18,
-            isText: true,
-          },
-          {
-            header: "جوال المندوب",
-            accessor: (item) => {
-              const rInfo = item.currentRiderProfileId ? riderDetailsMap.get(item.currentRiderProfileId) : null;
-              return rInfo?.phone || "—";
+            {
+              header: "المركبة والموديل",
+              accessor: (item) => {
+                const v = vehiclesMap.get(item.vehicleId);
+                return [v?.manufacturer, v?.model].filter(Boolean).join(" ") || item.assetNumber || "—";
+              },
+              width: 22,
             },
-            width: 18,
-            isText: true,
-          },
-          {
-            header: "المندوب الفعلي (إن وجد)",
-            accessor: (item) => item.actualRider ? (item.actualRider.actualRiderName || (item.actualRider as any).name || "—") : "—",
-            width: 22,
-          },
-          {
-            header: "هوية المندوب الفعلي",
-            accessor: (item) => item.actualRider ? (item.actualRider.actualRiderIqamaNo || "—") : "—",
-            width: 20,
-            isText: true,
-          },
-          {
-            header: "حالة المركبة",
-            accessor: (item) => item.status === VehicleOperationalStatus.Assigned ? "معين" : "متاح",
-            width: 14,
-          },
-        ],
-      });
-    } catch (err) {
-      console.error("Export assignments error:", err);
-    } finally {
-      setExporting(false);
+            {
+              header: "الرقم التسلسلي / الأصل",
+              accessor: (item) => vehiclesMap.get(item.vehicleId)?.serialNumber || item.assetNumber || "—",
+              width: 18,
+              isText: true,
+            },
+            {
+              header: "المدينة التشغيلية",
+              accessor: (item) => item.vehicleOperatingCityNameAr || vehiclesMap.get(item.vehicleId)?.operatingCity || "—",
+              width: 16,
+            },
+            {
+              header: "المندوب المنسوب",
+              accessor: (item) => item.riderName || "—",
+              width: 24,
+            },
+            {
+              header: "هوية المندوب",
+              accessor: (item) => item.riderIqamaNo || "—",
+              width: 18,
+              isText: true,
+            },
+            {
+              header: "المندوب الفعلي",
+              accessor: (item) => item.realRider?.name || "نفس المندوب",
+              width: 22,
+            },
+            {
+              header: "هوية المندوب الفعلي",
+              accessor: (item) => item.realRider?.iqamaNo || "—",
+              width: 20,
+              isText: true,
+            },
+            {
+              header: "صلة القرابة",
+              accessor: (item) => item.realRider?.relationshipToAssignedRider || "—",
+              width: 16,
+            },
+            {
+              header: "انتهاء التفويض",
+              accessor: (item) => (item.permissionEndsOn ? item.permissionEndsOn.split("T")[0] : "—"),
+              width: 16,
+            },
+            {
+              header: "عداد البداية (كم)",
+              accessor: (item) => item.startOdometer ?? "—",
+              width: 16,
+            },
+            {
+              header: "عداد النهاية (كم)",
+              accessor: (item) => item.endOdometer ?? "—",
+              width: 16,
+            },
+            {
+              header: "حالة التعيين",
+              accessor: (item) => (item.status === 1 || !item.endedAtUtc ? "نشط" : "منتهي"),
+              width: 14,
+            },
+          ],
+        });
+      } catch (err) {
+        console.error("Export assignments error:", err);
+      } finally {
+        setExporting(false);
+      }
+    } else {
+      if (filteredAvailableData.length === 0) return;
+      setExporting(true);
+      try {
+        await exportToExcel({
+          filename: `available-vehicles-${new Date().toISOString().split("T")[0]}`,
+          sheetName: "المركبات المتاحة",
+          data: filteredAvailableData,
+          columns: [
+            { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+            { header: "اللوحة (عربي)", accessor: (item) => item.plateNumberAr || "—", width: 16, isText: true },
+            { header: "اللوحة (إنجليزي)", accessor: (item) => item.plateNumberEn || "—", width: 16, isText: true },
+            { header: "المركبة والموديل", accessor: (item) => [item.manufacturer, item.model].filter(Boolean).join(" ") || "—", width: 22 },
+            { header: "الرقم التسلسلي", accessor: (item) => item.serialNumber || "—", width: 18, isText: true },
+            { header: "المدينة التشغيلية", accessor: (item) => item.operatingCity || "—", width: 16 },
+            { header: "العداد الحالي", accessor: (item) => item.currentOdometer ?? "—", width: 14 },
+            { header: "حالة المركبة", accessor: () => "متاح للتسليم", width: 16 },
+          ],
+        });
+      } catch (err) {
+        console.error("Export available vehicles error:", err);
+      } finally {
+        setExporting(false);
+      }
     }
   };
+
+  const currentCount = filterType === "assigned" ? filteredAssignedData.length : filteredAvailableData.length;
+  const totalCount = filterType === "assigned" ? assignments.length : availableVehicles.length;
 
   return (
     <div className="space-y-6">
@@ -443,14 +574,14 @@ export default function AssignmentsPage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
             <Key className="h-7 w-7 text-[#1167c9]" />
             مركز تعيينات المركبات
-            {data.length > 0 && (
+            {!loading && totalCount > 0 && (
               <span className="text-sm font-normal text-slate-500 mr-2">
-                ({isFiltered ? `${filteredData.length} من ${data.length}` : `${data.length}`} مركبة)
+                ({isFiltered ? `${currentCount} من ${totalCount}` : `${totalCount}`} {filterType === "assigned" ? "تعيين" : "مركبة متاحة"})
               </span>
             )}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            إدارة تسليم واستلام وتبديل المركبات للمناديب
+            إدارة تسليم واستلام وتبديل المركبات للمناديب ومتابعة العهد
           </p>
         </div>
 
@@ -459,7 +590,7 @@ export default function AssignmentsPage() {
             variant="secondary"
             onClick={handleExportExcel}
             loading={exporting}
-            disabled={exporting || loading || filteredData.length === 0}
+            disabled={exporting || loading || currentCount === 0}
             className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
           >
             <FileSpreadsheet size={16} />
@@ -467,10 +598,10 @@ export default function AssignmentsPage() {
           </Button>
           {can("fleet.assignments.manage") && (
             <div className="flex gap-2">
-              <Button onClick={() => openModal("take")} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
+              <Button onClick={() => openModalForVehicle("take")} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
                 <Key className="h-4 w-4" /> تسليم مركبة
               </Button>
-              <Button onClick={() => openModal("return")} variant="secondary" className="gap-2">
+              <Button onClick={() => openModalForVehicle("return")} variant="secondary" className="gap-2">
                 <ArrowLeftRight className="h-4 w-4" /> استلام مركبة
               </Button>
             </div>
@@ -480,13 +611,18 @@ export default function AssignmentsPage() {
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant={filterType === "assigned" ? "primary" : "secondary"}
               className={filterType === "assigned" ? "bg-[#1167c9] hover:bg-[#0e56a8]" : ""}
               onClick={() => setFilterType("assigned")}
             >
               المركبات المسلمة
+              {activeAssignmentsCount > 0 && (
+                <span className="mr-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full bg-white/20 text-white">
+                  {activeAssignmentsCount}
+                </span>
+              )}
             </Button>
             <Button
               variant={filterType === "available" ? "primary" : "secondary"}
@@ -494,6 +630,11 @@ export default function AssignmentsPage() {
               onClick={() => setFilterType("available")}
             >
               المركبات المتاحة
+              {availableVehicles.length > 0 && (
+                <span className="mr-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+                  {availableVehicles.length}
+                </span>
+              )}
             </Button>
           </div>
 
@@ -503,7 +644,7 @@ export default function AssignmentsPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="بحث باسم المندوب، اللوحة، أو الرقم..."
+                placeholder="بحث باسم المندوب، الهوية، اللوحة، أو الأصل..."
                 className="pr-10 pl-8"
               />
               {search && (
@@ -522,6 +663,47 @@ export default function AssignmentsPage() {
             </Button>
           </form>
         </div>
+
+        {filterType === "assigned" && (
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs text-[var(--muted)] font-medium">حالة التعيين:</span>
+            <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 bg-[var(--surface)] text-xs">
+              <button
+                type="button"
+                onClick={() => setAssignmentStatusFilter("active")}
+                className={`px-3 py-1 rounded-md font-medium transition-all ${
+                  assignmentStatusFilter === "active"
+                    ? "bg-[#1167c9] text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                النشطة ({activeAssignmentsCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignmentStatusFilter("completed")}
+                className={`px-3 py-1 rounded-md font-medium transition-all ${
+                  assignmentStatusFilter === "completed"
+                    ? "bg-[#1167c9] text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                المنتهية ({completedAssignmentsCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignmentStatusFilter("all")}
+                className={`px-3 py-1 rounded-md font-medium transition-all ${
+                  assignmentStatusFilter === "all"
+                    ? "bg-[#1167c9] text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                الكل ({assignments.length})
+              </button>
+            </div>
+          </div>
+        )}
 
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 px-1">
@@ -555,79 +737,294 @@ export default function AssignmentsPage() {
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
         {loading ? (
           <div className="p-8 text-center text-[var(--muted)]">جارٍ التحميل...</div>
-        ) : filteredData.length === 0 ? (
-          <div className="p-12 text-center text-[var(--muted)]">
-            <Key className="mx-auto mb-3 h-12 w-12 opacity-30" />
-            <p className="text-lg font-bold">لا توجد بيانات مطابقة</p>
-            {hasActiveFilters && (
-              <Button
-                variant="secondary"
-                className="mt-4 gap-1 text-xs px-3 py-1.5"
-                onClick={() => {
-                  setCityFilter("");
-                  setManufacturerFilter("");
-                }}
-              >
-                <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
-              <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
-                <tr>
-                  <th className="px-6 py-4 whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
-                      <span>المركبة (الرقم التسلسلي)</span>
-                      <TableHeaderColumnFilter
-                        label="الصانع / الموديل"
-                        value={manufacturerFilter}
-                        onChange={setManufacturerFilter}
-                        options={manufacturerOptions}
-                        placeholder="تصفية بالصانع أو الموديل..."
-                      />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4">اللوحة</th>
-                  <th className="px-6 py-4 whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
-                      <span>مدينة التشغيل</span>
-                      <TableHeaderColumnFilter
-                        label="مدينة التشغيل"
-                        value={cityFilter}
-                        onChange={setCityFilter}
-                        options={cityOptions}
-                        placeholder="تصفية بالمدينة..."
-                      />
-                    </div>
-                  </th>
-                  {filterType === "assigned" && (
-                    <>
-                      <th className="px-6 py-4">المندوب المنسوب</th>
-                      <th className="px-6 py-4">المندوب الفعلي</th>
-                    </>
-                  )}
-                  <th className="px-6 py-4">انتهاء التفويض</th>
-                  <th className="px-6 py-4">العداد (كم)</th>
-                  {can("fleet.assignments.manage") && <th className="px-6 py-4 text-center">الإجراءات السريعة</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {filteredData.map((item) => {
-                  const empId =
-                    (item as any).employeeId ||
-                    (item as any).currentEmployeeId ||
-                    (item.currentRiderProfileId ? riderToEmpMap.get(item.currentRiderProfileId) || item.currentRiderProfileId : null);
+        ) : filterType === "assigned" ? (
+          filteredAssignedData.length === 0 ? (
+            <div className="p-12 text-center text-[var(--muted)]">
+              <Key className="mx-auto mb-3 h-12 w-12 opacity-30" />
+              <p className="text-lg font-bold">لا توجد تعيينات مطابقة</p>
+              {hasActiveFilters && (
+                <Button
+                  variant="secondary"
+                  className="mt-4 gap-1 text-xs px-3 py-1.5"
+                  onClick={() => {
+                    setCityFilter("");
+                    setManufacturerFilter("");
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-sm">
+                <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
+                  <tr>
+                    <th className="px-6 py-4 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>المركبة (الرقم التسلسلي)</span>
+                        <TableHeaderColumnFilter
+                          label="الصانع / الموديل"
+                          value={manufacturerFilter}
+                          onChange={setManufacturerFilter}
+                          options={manufacturerOptions}
+                          placeholder="تصفية بالصانع أو الموديل..."
+                        />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4">اللوحة</th>
+                    <th className="px-6 py-4 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>مدينة التشغيل</span>
+                        <TableHeaderColumnFilter
+                          label="مدينة التشغيل"
+                          value={cityFilter}
+                          onChange={setCityFilter}
+                          options={cityOptions}
+                          placeholder="تصفية بالمدينة..."
+                        />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4">المندوب المنسوب</th>
+                    <th className="px-6 py-4">المندوب الفعلي</th>
+                    <th className="px-6 py-4">انتهاء التفويض</th>
+                    <th className="px-6 py-4">العداد (كم)</th>
+                    <th className="px-6 py-4 text-center">حالة التعيين</th>
+                    {can("fleet.assignments.manage") && <th className="px-6 py-4 text-center">الإجراءات السريعة</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {filteredAssignedData.map((item) => {
+                    const vehicle = vehiclesMap.get(item.vehicleId);
+                    const isCompleted =
+                      item.status === RiderVehicleAssignmentStatus.Completed ||
+                      item.status === 2 ||
+                      Boolean(item.endedAtUtc);
+                    const isActive = !isCompleted;
 
-                  return (
+                    return (
+                      <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="px-6 py-4">
+                          <Link
+                            href={`/admin/fleet/vehicles/${item.vehicleId}`}
+                            className="font-bold font-mono text-[#1167c9] hover:underline"
+                          >
+                            {vehicle?.serialNumber || item.assetNumber || "—"}
+                          </Link>
+                          <div className="text-xs text-[var(--muted)]">
+                            {[vehicle?.manufacturer, vehicle?.model].filter(Boolean).join(" ") || `أصل: ${item.assetNumber}`}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold border border-slate-300 rounded px-2 py-0.5 w-fit bg-white dark:bg-slate-900 shadow-sm">
+                            {vehicle?.plateNumberAr || item.assetNumber || "بدون لوحة"}
+                          </div>
+                          {vehicle?.plateNumberEn && (
+                            <div className="text-[11px] text-[var(--muted)] font-mono mt-0.5">
+                              {vehicle.plateNumberEn}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">
+                          {item.vehicleOperatingCityNameAr || vehicle?.operatingCity || "—"}
+                        </td>
+                        <td className="px-6 py-4">
+                          {item.employeeId ? (
+                            <Link
+                              href={`/admin/employees/${item.employeeId}`}
+                              className="font-bold text-[#1167c9] hover:underline block"
+                            >
+                              {item.riderName || "—"}
+                            </Link>
+                          ) : (
+                            <div className="font-bold">{item.riderName || "—"}</div>
+                          )}
+                          {item.riderIqamaNo && (
+                            <div className="text-xs font-mono text-slate-500">
+                              إقامة: {item.riderIqamaNo}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {(() => {
+                            const isNotReal = item.isRealRider === false || String(item.isRealRider) === "false";
+                            const realRiderObj = item.realRider;
+
+                            if ((isNotReal || realRiderObj) && realRiderObj && (realRiderObj.name || realRiderObj.iqamaNo)) {
+                              return (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-purple-700 dark:text-purple-300">
+                                      {realRiderObj.name || "—"}
+                                    </span>
+                                    {realRiderObj.relationshipToAssignedRider && (
+                                      <span className="inline-block rounded-md bg-purple-100 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300">
+                                        {realRiderObj.relationshipToAssignedRider}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {realRiderObj.iqamaNo && (
+                                    <div className="text-xs font-mono text-purple-600/90 dark:text-purple-400 font-medium">
+                                      إقامة: {realRiderObj.iqamaNo}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500/70" />
+                                نفس المندوب المنسوب
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-6 py-4 font-mono">
+                          <div>
+                            {item.permissionEndsOn
+                              ? item.permissionEndsOn.split("T")[0]
+                              : item.permitEndDate
+                              ? item.permitEndDate.split("T")[0]
+                              : "—"}
+                          </div>
+                          {item.permissionReference && (
+                            <div className="text-[11px] text-[var(--muted)] font-mono">
+                              مرجع: {item.permissionReference}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 font-mono">
+                          <div>{(vehicle?.currentOdometer ?? item.startOdometer ?? 0).toLocaleString()}</div>
+                          {item.endOdometer != null && (
+                            <div className="text-[11px] text-[var(--muted)] font-mono">
+                              النهاية: {item.endOdometer.toLocaleString()}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {isActive ? (
+                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-xs">
+                              نشط
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 text-xs">
+                              منتهي
+                            </Badge>
+                          )}
+                        </td>
+
+                        {can("fleet.assignments.manage") && (
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {isActive ? (
+                                <>
+                                  <button
+                                    onClick={() => openModalForAssignment("return", item)}
+                                    className="rounded-lg p-2 text-red-600 hover:bg-red-50 bg-red-50/50 dark:bg-red-950/30 dark:hover:bg-red-900/50 transition-colors"
+                                    title="استلام (إرجاع) المركبة"
+                                  >
+                                    <ArrowLeftRight className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openModalForAssignment("switch", item)}
+                                    className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 bg-blue-50/50 dark:bg-blue-950/30 dark:hover:bg-blue-900/50 transition-colors"
+                                    title="تبديل المركبة"
+                                  >
+                                    <Car className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openModalForAssignment("renew", item)}
+                                    className="rounded-lg p-2 text-orange-600 hover:bg-orange-50 bg-orange-50/50 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 transition-colors"
+                                    title="تجديد التفويض"
+                                  >
+                                    <CalendarClock className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openModalForAssignment("promissory", item)}
+                                    className="rounded-lg p-2 text-violet-600 hover:bg-violet-50 bg-violet-50/50 dark:bg-violet-950/30 dark:hover:bg-violet-900/50 transition-colors"
+                                    title="إرفاق سندات الأمر بالعهدة الحالية"
+                                    aria-label="إرفاق سندات الأمر بالعهدة الحالية"
+                                  >
+                                    <FileUp className="h-4 w-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          /* Available Vehicles Table */
+          filteredAvailableData.length === 0 ? (
+            <div className="p-12 text-center text-[var(--muted)]">
+              <Key className="mx-auto mb-3 h-12 w-12 opacity-30" />
+              <p className="text-lg font-bold">لا توجد مركبات متاحة جاهزة للتسليم</p>
+              {hasActiveFilters && (
+                <Button
+                  variant="secondary"
+                  className="mt-4 gap-1 text-xs px-3 py-1.5"
+                  onClick={() => {
+                    setCityFilter("");
+                    setManufacturerFilter("");
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-sm">
+                <thead className="bg-[var(--subtle-bg)] text-xs font-bold uppercase text-[var(--muted)]">
+                  <tr>
+                    <th className="px-6 py-4 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>المركبة (الرقم التسلسلي)</span>
+                        <TableHeaderColumnFilter
+                          label="الصانع / الموديل"
+                          value={manufacturerFilter}
+                          onChange={setManufacturerFilter}
+                          options={manufacturerOptions}
+                          placeholder="تصفية بالصانع أو الموديل..."
+                        />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4">اللوحة</th>
+                    <th className="px-6 py-4 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>مدينة التشغيل</span>
+                        <TableHeaderColumnFilter
+                          label="مدينة التشغيل"
+                          value={cityFilter}
+                          onChange={setCityFilter}
+                          options={cityOptions}
+                          placeholder="تصفية بالمدينة..."
+                        />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4">العداد الحالي (كم)</th>
+                    <th className="px-6 py-4 text-center">حالة الجاهزية</th>
+                    {can("fleet.assignments.manage") && <th className="px-6 py-4 text-center">الإجراءات</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {filteredAvailableData.map((item) => (
                     <tr key={item.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="px-6 py-4">
                         <Link
                           href={`/admin/fleet/vehicles/${item.id}`}
                           className="font-bold font-mono text-[#1167c9] hover:underline"
                         >
-                          {item.serialNumber || "—"}
+                          {item.serialNumber || item.assetNumber || "—"}
                         </Link>
                         <div className="text-xs text-[var(--muted)]">{item.manufacturer} {item.model}</div>
                       </td>
@@ -639,145 +1036,30 @@ export default function AssignmentsPage() {
                       <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">
                         {item.operatingCity || "—"}
                       </td>
-                      {filterType === "assigned" && (
-                        <>
-                          <td className="px-6 py-4">
-                            {empId ? (
-                              <Link
-                                href={`/admin/employees/${empId}`}
-                                className="font-bold text-[#1167c9] hover:underline block"
-                              >
-                                {item.currentRiderName || "—"}
-                              </Link>
-                            ) : (
-                              <div className="font-bold">{item.currentRiderName || "—"}</div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {(() => {
-                              const isNotReal = item.isRealRider === false || String(item.isRealRider) === "false";
-                              const realRiderObj = item.realRider || (item.actualRider && item.actualRider.isSelectedRiderTheActualRider === false ? {
-                                id: item.actualRider.selectedRiderEmployeeId || item.actualRider.selectedRiderProfileId,
-                                name: item.actualRider.actualRiderName,
-                                iqamaNo: item.actualRider.actualRiderIqamaNo,
-                                relationshipToAssignedRider: item.actualRider.relationshipToSelectedRider,
-                              } : null);
-
-                              if ((isNotReal || realRiderObj) && realRiderObj && (realRiderObj.name || realRiderObj.iqamaNo)) {
-                                const realEmpId = realRiderObj.id ? (riderToEmpMap.get(realRiderObj.id) || realRiderObj.id) : null;
-                                return (
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      {realEmpId && realEmpId !== "guid" && riderToEmpMap.has(realRiderObj.id || "") ? (
-                                        <Link
-                                          href={`/admin/employees/${realEmpId}`}
-                                          className="font-bold text-purple-700 dark:text-purple-300 hover:underline"
-                                        >
-                                          {realRiderObj.name || "—"}
-                                        </Link>
-                                      ) : (
-                                        <span className="font-bold text-purple-700 dark:text-purple-300">
-                                          {realRiderObj.name || "—"}
-                                        </span>
-                                      )}
-                                      {realRiderObj.relationshipToAssignedRider && (
-                                        <span className="inline-block rounded-md bg-purple-100 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300">
-                                          {realRiderObj.relationshipToAssignedRider}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {realRiderObj.iqamaNo && (
-                                      <div className="text-xs font-mono text-purple-600/90 dark:text-purple-400 font-medium">
-                                        إقامة: {realRiderObj.iqamaNo}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 font-medium">
-                                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500/70" />
-                                  نفس المندوب المنسوب
-                                </span>
-                              );
-                            })()}
-                          </td>
-                        </>
-                      )}
-                      <td className="px-6 py-4 font-mono">
-                        {item.permitEndDate ? item.permitEndDate.split("T")[0] : "—"}
-                      </td>
                       <td className="px-6 py-4 font-mono">{item.currentOdometer.toLocaleString()}</td>
-
+                      <td className="px-6 py-4 text-center">
+                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-xs">
+                          جاهزة للتسليم
+                        </Badge>
+                      </td>
                       {can("fleet.assignments.manage") && (
                         <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            {filterType === "available" ? (
-                              <button
-                                onClick={() => openModal("take", item)}
-                                className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 bg-emerald-50/50 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 transition-colors"
-                                title="تسليم هذه المركبة"
-                              >
-                                <Key className="h-4 w-4" />
-                              </button>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => openModal("return", item)}
-                                  className="rounded-lg p-2 text-red-600 hover:bg-red-50 bg-red-50/50 dark:bg-red-950/30 dark:hover:bg-red-900/50 transition-colors"
-                                  title="استلام (إرجاع) المركبة"
-                                >
-                                  <ArrowLeftRight className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => openModal("switch", item)}
-                                  className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 bg-blue-50/50 dark:bg-blue-950/30 dark:hover:bg-blue-900/50 transition-colors"
-                                  title="تبديل المركبة"
-                                >
-                                  <Car className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => openModal("renew", item)}
-                                  className="rounded-lg p-2 text-orange-600 hover:bg-orange-50 bg-orange-50/50 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 transition-colors"
-                                  title="تجديد التفويض"
-                                >
-                                  <CalendarClock className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => openModal("promissory", item)}
-                                  className="rounded-lg p-2 text-violet-600 hover:bg-violet-50 bg-violet-50/50 dark:bg-violet-950/30 dark:hover:bg-violet-900/50 transition-colors"
-                                  title="إرفاق سندات الأمر بالعهدة الحالية"
-                                  aria-label="إرفاق سندات الأمر بالعهدة الحالية"
-                                >
-                                  <FileUp className="h-4 w-4" />
-                                </button>
-                              </>
-                            )}
-                          </div>
+                          <button
+                            onClick={() => openModalForVehicle("take", item)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm"
+                            title="تسليم هذه المركبة لمندوب"
+                          >
+                            <Key className="h-3.5 w-3.5" />
+                            تسليم مركبة
+                          </button>
                         </td>
                       )}
                     </tr>
-                  );
-                })}
-
-                {filteredData.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={filterType === "assigned" ? (can("fleet.assignments.manage") ? 8 : 7) : (can("fleet.assignments.manage") ? 6 : 5)}
-                      className="px-6 py-12 text-center text-slate-500 font-medium"
-                    >
-                      {search.trim() || hasActiveFilters
-                        ? "لا توجد نتائج مطابقة للبحث أو التصفية الحالية"
-                        : filterType === "assigned"
-                          ? "لا توجد مركبات مسلّمة حالياً"
-                          : "لا توجد مركبات متاحة جاهزة للتسليم"}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
 

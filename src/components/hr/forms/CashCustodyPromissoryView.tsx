@@ -22,7 +22,7 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
     : "";
 
   return (
-    <div className="bg-white text-black p-6 md:p-10 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[750px] space-y-6">
+    <div className="bg-white text-black p-4 sm:p-6 print:p-4 rounded-xl border-2 border-black font-sans leading-normal text-right dir-rtl shadow-xs space-y-4 print:space-y-2">
       {/* Title */}
       <div className="text-center my-2">
         <h2 className="text-xl md:text-2xl font-black tracking-wide text-black">

@@ -16,22 +16,22 @@ export function CashAdvanceView({ data }: { data: CashAdvanceData }) {
     : "";
 
   return (
-    <div className="bg-white text-black p-8 md:p-12 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[650px] flex flex-col justify-between">
+    <div className="bg-white text-black p-4 sm:p-5 md:p-6 print:p-4 rounded-xl border-2 border-black font-sans leading-normal text-right dir-rtl shadow-xs flex flex-col justify-between my-1 sm:my-2">
       <div>
         {/* Document Title */}
-        <div className="text-center mt-2 mb-8">
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-wide text-black">
+        <div className="text-center my-1.5 sm:my-2 print:my-1">
+          <h2 className="text-xl sm:text-2xl font-black tracking-wide text-black underline underline-offset-4">
             إقرار سلفة نقدية
           </h2>
         </div>
 
         {/* Date Line Top Right */}
-        <div className="flex justify-start font-bold text-base md:text-lg mb-8">
+        <div className="flex justify-start font-bold text-xs sm:text-sm mb-3 print:mb-2 text-gray-800">
           <span>التاريخ: {data.date || "   /   /      م"}</span>
         </div>
 
         {/* Main Body Text */}
-        <div className="space-y-5 text-base md:text-lg leading-loose font-semibold text-gray-900 px-2">
+        <div className="space-y-2 sm:space-y-2.5 print:space-y-1.5 text-xs sm:text-sm md:text-base leading-relaxed font-semibold text-gray-900 px-1 sm:px-2">
           <div>
             أقر أنا /{" "}
             <span className="font-extrabold underline text-black px-1">
@@ -79,15 +79,15 @@ export function CashAdvanceView({ data }: { data: CashAdvanceData }) {
             وأتعهد بوفاء الدين وليس لي الحق في فتح أي منازعة تنفيذية بشأنه أمام أي جهة حكومية.
           </div>
 
-          <div className="pt-4 font-bold text-lg md:text-xl">
+          <div className="pt-2 print:pt-1 font-bold text-sm sm:text-base md:text-lg text-black">
             وهذا إقرار مني وتعهد ملزم التزاماً قانونياً، والله على ما أقول شهيد.
           </div>
         </div>
 
         {/* Signature & Fingerprint Block */}
-        <div className="mt-12 space-y-4 text-base md:text-lg font-bold pr-2">
+        <div className="mt-4 sm:mt-5 print:mt-3 space-y-2 text-xs sm:text-sm md:text-base font-bold pr-1 sm:pr-2">
           <div className="flex items-center gap-2">
-            <span className="font-black text-xl">•</span>
+            <span className="font-black text-lg">•</span>
             <span>اسم المقر:</span>
             <span className="font-extrabold text-black underline px-2">
               {data.riderName || "........................................................"}
@@ -95,20 +95,20 @@ export function CashAdvanceView({ data }: { data: CashAdvanceData }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="font-black text-xl">•</span>
+            <span className="font-black text-lg">•</span>
             <span>التوقيع: ................................................</span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="font-black text-xl">•</span>
+            <span className="font-black text-lg">•</span>
             <span>البصمة:</span>
-            <span className="inline-block w-24 h-16 border-2 border-dashed border-gray-400 rounded-md mr-4 align-middle"></span>
+            <span className="inline-block w-20 h-12 sm:w-24 sm:h-14 border-2 border-dashed border-gray-400 rounded-md mr-4 align-middle"></span>
           </div>
         </div>
       </div>
 
       {/* Bottom Horizontal Line */}
-      <div className="mt-12 pt-4 border-t-2 border-black"></div>
+      <div className="mt-3 sm:mt-4 print:mt-2 pt-2 border-t border-black/60"></div>
     </div>
   );
 }

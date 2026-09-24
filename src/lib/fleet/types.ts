@@ -639,11 +639,14 @@ export interface RiderVehicleAssignmentResponse {
   riderProfileId: string;
   employeeId?: string | null;
   riderName?: string | null;
+  riderIqamaNo?: string | null;
   isRealRider?: boolean;
   realRider?: RealRiderInfo | null;
   actualRider?: ActualRiderDetail | null;
   vehicleId: string;
   assetNumber: string;
+  vehicleOperatingCityId?: string | null;
+  vehicleOperatingCityNameAr?: string | null;
   startedAtUtc: string;
   endedAtUtc?: string | null;
   startLocationSnapshot?: string | null;

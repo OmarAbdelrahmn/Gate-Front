@@ -370,6 +370,82 @@ export const switchVehicle = (formData: FormData, idempotencyKey?: string) => {
   });
 };
 
+export const getVehicleAssignments = (params: {
+  status?: string | number;
+  vehicleId?: string;
+  riderProfileId?: string;
+  page?: number;
+  pageSize?: number;
+} = {}) => {
+  const query = new URLSearchParams();
+  if (params.status !== undefined && params.status !== "") query.set("status", String(params.status));
+  if (params.vehicleId) query.set("vehicleId", params.vehicleId);
+  if (params.riderProfileId) query.set("riderProfileId", params.riderProfileId);
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+  const qs = query.toString();
+  return authFetch<T.PagedResponse<T.RiderVehicleAssignmentResponse> | T.RiderVehicleAssignmentResponse[]>(
+    `/api/vehicle-assignments${qs ? `?${qs}` : ""}`
+  );
+};
+
+export const getAllVehicleAssignments = async (params: {
+  status?: string | number;
+  vehicleId?: string;
+  riderProfileId?: string;
+} = {}): Promise<T.RiderVehicleAssignmentResponse[]> => {
+  const pageSize = 2000;
+  let firstRes: T.PagedResponse<T.RiderVehicleAssignmentResponse> | T.RiderVehicleAssignmentResponse[] | null = null;
+  try {
+    firstRes = await getVehicleAssignments({ ...params, page: 1, pageSize });
+  } catch (err) {
+    console.warn("Paged fetch for vehicle assignments failed, trying unpaged /api/vehicle-assignments:", err);
+    try {
+      firstRes = await authFetch<T.PagedResponse<T.RiderVehicleAssignmentResponse> | T.RiderVehicleAssignmentResponse[]>(
+        "/api/vehicle-assignments"
+      );
+    } catch (e2) {
+      console.error("Failed to fetch vehicle assignments:", e2);
+      throw e2;
+    }
+  }
+
+  if (Array.isArray(firstRes)) {
+    return firstRes;
+  }
+
+  if (!firstRes) return [];
+
+  let allItems: T.RiderVehicleAssignmentResponse[] =
+    (firstRes as any).items || (firstRes as any).data || [];
+  const totalCount = (firstRes as any).totalCount ?? allItems.length;
+
+  if (totalCount > allItems.length) {
+    const actualPageSize = (firstRes as any).pageSize || pageSize;
+    const totalPages = Math.ceil(totalCount / actualPageSize);
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getVehicleAssignments({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
+          console.warn(`Failed to fetch vehicle assignments page ${p}:`, err);
+          return null;
+        })
+      );
+    }
+    const remainingResults = await Promise.all(pagePromises);
+    for (const res of remainingResults) {
+      if (Array.isArray(res)) {
+        allItems = allItems.concat(res);
+      } else if (res && (res as any).items) {
+        allItems = allItems.concat((res as any).items);
+      }
+    }
+  }
+
+  return allItems;
+};
+
 export const getVehicleAssignment = (assignmentId: string) =>
   authFetch<T.RiderVehicleAssignmentResponse>(`/api/vehicle-assignments/${assignmentId}`);
 
