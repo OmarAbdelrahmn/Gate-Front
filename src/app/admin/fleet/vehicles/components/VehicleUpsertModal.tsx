@@ -290,7 +290,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
   ) {
     purchaseSupplierOptions.unshift({
       value: editingVehicle.purchasedFromSupplierId,
-      label: editingVehicle.supplierName || editingVehicle.purchasedFromSupplierId,
+      label: editingVehicle.purchasedFromSupplier || editingVehicle.supplierName || editingVehicle.purchasedFromSupplierId,
     });
   }
   if (

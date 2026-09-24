@@ -519,7 +519,7 @@ export default function VehicleDetailPage() {
                 <div>
                   <div className="text-sm text-slate-500 mb-1">مورد الشراء الأصلي</div>
                   <div className="font-medium text-slate-900 dark:text-slate-100">
-                    {vehicle.supplierName || "—"}
+                    {vehicle.purchasedFromSupplier || vehicle.supplierName || "—"}
                   </div>
                 </div>
                 <div>
@@ -756,7 +756,7 @@ export default function VehicleDetailPage() {
           </p>
 
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            سيتم تعيين المالك المسجل ليصبح الكفيل المشغّل المباشر، مع الاحتفاظ ببيانات مورد الشراء الأصلي ({vehicle?.supplierName || "المورد"}).
+            سيتم تعيين المالك المسجل ليصبح الكفيل المشغّل المباشر، مع الاحتفاظ ببيانات مورد الشراء الأصلي ({vehicle?.purchasedFromSupplier || vehicle?.supplierName || "المورد"}).
           </p>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">

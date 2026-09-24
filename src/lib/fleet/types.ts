@@ -418,18 +418,19 @@ export interface RegisteredOwnerOption {
 export interface VehicleDetailResponse {
   summary: VehicleSummaryResponse;
   serialNumber?: string | null;
-  plateLettersAr?: string | null;
-  plateLettersEn?: string | null;
-  plateDigits?: string | null;
+  plateLettersAr: string | null;
+  plateLettersEn: string | null;
+  plateDigits: string | null;
   vin?: string | null;
   chassisNumber?: string | null;
   engineNumber?: string | null;
   purchasedFromSupplierId?: string | null;
+  purchasedFromSupplier: string | null; // API field; currently named supplierName here
   supplierName?: string | null;
   registeredOwnerSupplierId?: string | null;
   registeredOwnerSupplier?: string | null;
   registeredOwnerType?: RegisteredOwnerType;
-  registrationType: VehicleRegistrationType;
+  registrationType: VehicleRegistrationType | null;
   vehicleManufacturerId: string;
   vehicleModelId: string;
   modelYear?: number | null;
