@@ -22,20 +22,20 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
     : "";
 
   return (
-    <div className="text-black font-sans leading-relaxed text-right dir-rtl space-y-3">
+    <div className="text-black font-sans leading-loose text-right dir-rtl space-y-6">
       {/* Title */}
       <div className="text-center mb-1">
-        <h2 className="text-xl font-black tracking-wide text-black underline underline-offset-4">
+        <h2 className="text-2xl font-black tracking-wide text-black underline underline-offset-4">
           نموذج استلام عهدة نقدية لسند امر
         </h2>
       </div>
 
       {/* Employee Data Section */}
-      <div className="space-y-1.5 pt-2 border-t border-gray-400">
-        <h3 className="font-extrabold text-sm underline">
+      <div className="space-y-3 pt-3 border-t border-gray-400">
+        <h3 className="font-extrabold text-base underline">
           بيانات الموظف (المستلم):
         </h3>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm font-semibold pr-2">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-base font-semibold pr-2">
           <div>
             الاسم رباعياً:{" "}
             <span className="font-bold border-b border-dotted border-black px-1">
@@ -64,9 +64,9 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
       </div>
 
       {/* Acknowledgment & Undertaking Section */}
-      <div className="space-y-2 pt-2">
-        <h3 className="font-extrabold text-sm underline">الإقرار والتعهد:</h3>
-        <p className="text-sm leading-relaxed font-semibold text-gray-900 pr-2">
+      <div className="space-y-3 pt-3">
+        <h3 className="font-extrabold text-base underline">الإقرار والتعهد:</h3>
+        <p className="text-base leading-loose font-semibold text-gray-900 pr-2">
           أقر أنا الموظف الموضحة بياناتي أعلاه، بأنني استلمت من شركة :{" "}
           <span className="font-bold border-b border-dotted border-black px-1">
             {data.companyName || "شركة اكسبرس جابت"}
@@ -81,7 +81,7 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
           </span>{" "}
           ريال سعودي) {data.amountInWords ? `(${data.amountInWords}) ` : ""}فقط لا غير، وذلك على سبيل العهدة النقدية المؤقتة/المستمرة الخاصة بأعمال الشركة.
         </p>
-        <p className="text-sm leading-relaxed font-semibold text-gray-900 pr-2">
+        <p className="text-base leading-loose font-semibold text-gray-900 pr-2">
           وقد قمت بتحرير وتوقيع سند لأمر لصالح الشركة بتاريخ{" "}
           <span className="font-bold border-b border-dotted border-black px-1">
             {data.promissoryDate || data.date || "____ / ____ / ________م"}
@@ -94,9 +94,9 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
       </div>
 
       {/* Commitments Bullet List */}
-      <div className="space-y-1.5 pt-1">
-        <h3 className="font-extrabold text-sm underline">وأتعهد بالتالي:</h3>
-        <ul className="space-y-1 text-sm font-semibold text-gray-900 pr-4 list-disc list-inside">
+      <div className="space-y-3 pt-2">
+        <h3 className="font-extrabold text-base underline">وأتعهد بالتالي:</h3>
+        <ul className="space-y-3 text-base font-semibold text-gray-900 pr-4 list-disc list-inside">
           <li>
             استخدام العهدة فقط للأغراض المحددة لها والمتعلقة بنشاط الشركة، وفق اللوائح الداخلية.
           </li>
@@ -110,9 +110,9 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
       </div>
 
       {/* Custody and Note Data Section */}
-      <div className="space-y-1.5 pt-2 border-t border-gray-400">
-        <h3 className="font-extrabold text-sm underline">بيانات العهدة والسند:</h3>
-        <div className="space-y-1.5 text-sm font-semibold pr-2">
+      <div className="space-y-2 pt-3 border-t border-gray-400">
+        <h3 className="font-extrabold text-base underline">بيانات العهدة والسند:</h3>
+        <div className="space-y-3 text-base font-semibold pr-2">
           <div>
             • مبلغ العهدة:{" "}
             <span className="font-bold underline dir-ltr inline-block px-1">
@@ -149,10 +149,10 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
         <div className="grid grid-cols-2 gap-6 items-start">
           {/* Employee Signature */}
           <div className="space-y-1.5">
-            <h3 className="font-extrabold text-sm underline">
+            <h3 className="font-extrabold text-base underline">
               توقيع المستلم (الموظف):
             </h3>
-            <div className="space-y-1 text-sm font-semibold pr-1">
+            <div className="space-y-1.5 text-base font-semibold pr-1">
               <div>
                 الاسم :{" "}
                 <span className="font-bold">
@@ -171,10 +171,10 @@ export function CashCustodyPromissoryView({ data }: { data: CashCustodyPromissor
 
           {/* Deliverer Signature */}
           <div className="space-y-1.5 border-r border-gray-300 pr-4">
-            <h3 className="font-extrabold text-sm underline">
+            <h3 className="font-extrabold text-base underline">
               توقيع المسلّم (المسؤول المالي / الموارد البشرية):
             </h3>
-            <div className="space-y-1 text-sm font-semibold pr-1">
+            <div className="space-y-1.5 text-base font-semibold pr-1">
               <div>
                 الاسم : <span className="font-bold">........................................</span>
               </div>
