@@ -5,6 +5,7 @@ import type {
   UpdateMaintenanceLocationRequest,
   InventoryItem,
   ItemType,
+  VehicleType,
   CreateInventoryItemRequest,
   UpdateInventoryItemRequest,
   Supplier,
@@ -87,13 +88,29 @@ export async function updateMaintenanceLocation(
 // Items & Suppliers
 // ==========================================
 
+export interface GetInventoryItemsParams {
+  search?: string;
+  itemType?: ItemType;
+  vehicleType?: VehicleType | number | null;
+}
+
 export async function getInventoryItems(
-  search?: string,
+  searchOrParams?: string | GetInventoryItemsParams,
   itemType?: ItemType,
+  vehicleType?: VehicleType | number | null,
 ): Promise<InventoryItem[]> {
   const query = new URLSearchParams();
-  if (search) query.set("search", search);
-  if (itemType !== undefined) query.set("itemType", String(itemType));
+  if (typeof searchOrParams === "object" && searchOrParams !== null) {
+    if (searchOrParams.search) query.set("search", searchOrParams.search);
+    if (searchOrParams.itemType !== undefined) query.set("itemType", String(searchOrParams.itemType));
+    if (searchOrParams.vehicleType !== undefined && searchOrParams.vehicleType !== null) {
+      query.set("vehicleType", String(searchOrParams.vehicleType));
+    }
+  } else {
+    if (searchOrParams) query.set("search", searchOrParams);
+    if (itemType !== undefined) query.set("itemType", String(itemType));
+    if (vehicleType !== undefined && vehicleType !== null) query.set("vehicleType", String(vehicleType));
+  }
   const queryString = query.toString() ? `?${query.toString()}` : "";
   return authFetch<InventoryItem[]>(`/api/maintenance-inventory/items${queryString}`);
 }

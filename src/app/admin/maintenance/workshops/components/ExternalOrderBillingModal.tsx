@@ -21,6 +21,7 @@ import type {
   MaintenanceLocation,
   FinancialEntryResponse,
   CustomerPaymentResponse,
+  VehicleType,
 } from "@/lib/maintenance/types";
 import { PaymentMethod } from "@/lib/maintenance/types";
 import {
@@ -29,6 +30,8 @@ import {
   paymentMethodLabels,
   itemTypeLabels,
   getLinkedInventoryLocationId,
+  canUseItem,
+  formatCompatibleVehicleTypes,
 } from "@/lib/maintenance/constants";
 import {
   DollarSign,
@@ -40,6 +43,7 @@ import {
   Receipt,
   TrendingUp,
   TrendingDown,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -85,6 +89,7 @@ export function ExternalOrderBillingModal({
   const [partSellingPrice, setPartSellingPrice] = useState<number>(0);
   const [partDiscount, setPartDiscount] = useState<number>(0);
   const [partTax, setPartTax] = useState<number>(0);
+  const [partSaleError, setPartSaleError] = useState<string | null>(null);
 
   // 2. Customer Labor form
   const [laborAmount, setLaborAmount] = useState<number>(0);
@@ -152,10 +157,28 @@ export function ExternalOrderBillingModal({
     }
   }, [isOpen, workOrderId]);
 
+  // External vehicle type resolution
+  const externalVehicleType =
+    order?.externalVehicle?.vehicleType && Number(order.externalVehicle.vehicleType) > 0
+      ? (Number(order.externalVehicle.vehicleType) as VehicleType)
+      : null;
+
+  // Filter items for part sales: if vehicle type is unknown, show only items whose compatibleVehicleTypes contains all 5 values
+  const candidatePartItems = React.useMemo(() => {
+    return items.filter((i) => canUseItem(i.compatibleVehicleTypes, externalVehicleType));
+  }, [items, externalVehicleType]);
+
   // Handle Part Sale submit
   const handlePartSaleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!order || !partItemId) return;
+    setPartSaleError(null);
+
+    const chosenItem = items.find((i) => i.id === partItemId);
+    if (chosenItem && !canUseItem(chosenItem.compatibleVehicleTypes, externalVehicleType)) {
+      setPartSaleError("صنف المخزون المحدد غير متوافق مع نوع هذه المركبة.");
+      return;
+    }
 
     setActionLoading(true);
     try {
@@ -173,10 +196,17 @@ export function ExternalOrderBillingModal({
       setPartSellingPrice(0);
       setPartDiscount(0);
       setPartTax(0);
+      setPartSaleError(null);
       await loadData();
       onUpdated();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const code = err?.details?.errorCode || err?.details?.title || err?.errorCode;
+      if (code === "maintenance.incompatible_vehicle_type") {
+        setPartSaleError("صنف المخزون غير متوافق مع نوع المركبة المحددة.");
+      } else {
+        setPartSaleError(err?.message || "تعذر تسجيل بيع قطعة الغيار.");
+      }
     } finally {
       setActionLoading(false);
     }
@@ -398,6 +428,12 @@ export function ExternalOrderBillingModal({
                 <span className="font-bold text-slate-800 dark:text-slate-200 block">
                   تسجيل بيع قطعة غيار للعميل
                 </span>
+                {partSaleError && (
+                  <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+                    <AlertCircle size={16} className="shrink-0 text-red-600" />
+                    <span className="font-bold">{partSaleError}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div className="lg:col-span-2">
                     <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
@@ -405,11 +441,14 @@ export function ExternalOrderBillingModal({
                     </label>
                     <SearchableSelect
                       value={partItemId}
-                      onChange={(val) => setPartItemId(val)}
-                      options={items.map((i) => ({
+                      onChange={(val) => {
+                        setPartItemId(val);
+                        setPartSaleError(null);
+                      }}
+                      options={candidatePartItems.map((i) => ({
                         value: i.id,
                         label: `${i.nameAr} (${i.sku})`,
-                        sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                        sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • ${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
                         keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                       }))}
                       placeholder="اختر الصنف..."

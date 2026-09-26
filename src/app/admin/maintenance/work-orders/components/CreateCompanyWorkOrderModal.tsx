@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createCompanyWorkOrder, getInventoryItems, getStockBalances } from "@/lib/maintenance/api";
 import { getAllVehicles, getVehicleDetail } from "@/lib/fleet/api";
-import type { MaintenanceLocation, InventoryItem } from "@/lib/maintenance/types";
+import type { MaintenanceLocation, InventoryItem, VehicleType } from "@/lib/maintenance/types";
 import { MaintenanceType, ItemType, MaterialUsageType, LocationType } from "@/lib/maintenance/types";
 import {
   maintenanceTypeLabels,
   getLinkedInventoryLocationId,
   formatCurrency,
+  canUseItem,
+  formatCompatibleVehicleTypes,
 } from "@/lib/maintenance/constants";
 import { PackagePlus, Trash2, Plus, Droplets, AlertCircle } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
@@ -33,6 +35,7 @@ interface VehicleOption {
   operatingCityId?: string | null;
   operatingCity?: string | null;
   currentOdometer?: number;
+  vehicleType?: VehicleType;
 }
 
 interface CreateCompanyWorkOrderModalProps {
@@ -209,6 +212,7 @@ export function CreateCompanyWorkOrderModal({
             operatingCityId: v.operatingCityId,
             operatingCity: v.operatingCity,
             currentOdometer: v.currentOdometer,
+            vehicleType: v.vehicleType,
           }));
           setVehicles(mappedVehicles);
 
@@ -230,20 +234,28 @@ export function CreateCompanyWorkOrderModal({
       })
       .catch(() => {});
 
-    if (!propItems || propItems.length === 0) {
-      getInventoryItems()
-        .then((data) => {
-          if (active && Array.isArray(data)) {
-            setFetchedItems(data);
-          }
-        })
-        .catch(() => {});
-    }
-
     return () => {
       active = false;
     };
-  }, [propItems, initialVehicleId, findMatchingLocation]);
+  }, [initialVehicleId, findMatchingLocation]);
+
+  const selectedVehicle = useMemo(() => vehicles.find((v) => v.id === vehicleId), [vehicles, vehicleId]);
+  const selectedVehicleType = selectedVehicle?.vehicleType ?? null;
+
+  // Once the vehicle is chosen, pass its vehicleType when loading items
+  useEffect(() => {
+    let active = true;
+    getInventoryItems({ vehicleType: selectedVehicleType ?? undefined })
+      .then((data) => {
+        if (active && Array.isArray(data)) {
+          setFetchedItems(data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [selectedVehicleType]);
 
   // Load warehouse stock balances for parts unit cost
   useEffect(() => {
@@ -471,7 +483,12 @@ export function CreateCompanyWorkOrderModal({
         setConflictError("موقع المستودع المحدد غير صالح أو غير مرتبط بموقع الصيانة. يرجى اختيار مستودع صالح.");
       } else if (errCode === "maintenance.invalid_inventory_item") {
         setConflictError("صنف المخزون المحدد لم يعد صالحاً لهذا الطلب. تم تحديث قائمة الأصناف.");
-        getInventoryItems()
+        getInventoryItems({ vehicleType: selectedVehicleType ?? undefined })
+          .then((d) => setFetchedItems(d))
+          .catch(() => {});
+      } else if (errCode === "maintenance.incompatible_vehicle_type") {
+        setConflictError("صنف المخزون المحدد غير متوافق مع نوع المركبة المحددة. تم تحديث قائمة الأصناف المتوافقة.");
+        getInventoryItems({ vehicleType: selectedVehicleType ?? undefined })
           .then((d) => setFetchedItems(d))
           .catch(() => {});
       }
@@ -484,20 +501,30 @@ export function CreateCompanyWorkOrderModal({
   const maintenanceItems = useMemo(
     () =>
       availableItems.filter(
-        (i) => i.itemType === ItemType.SparePart || i.itemType === ItemType.Consumable,
+        (i) =>
+          (i.itemType === ItemType.SparePart || i.itemType === ItemType.Consumable) &&
+          canUseItem(i.compatibleVehicleTypes, selectedVehicleType),
       ),
-    [availableItems],
+    [availableItems, selectedVehicleType],
   );
 
   // Filter oil items for oil change
   const oilItems = useMemo(
-    () => availableItems.filter((i) => i.itemType === ItemType.Oil),
-    [availableItems],
+    () =>
+      availableItems.filter(
+        (i) =>
+          i.itemType === ItemType.Oil &&
+          canUseItem(i.compatibleVehicleTypes, selectedVehicleType),
+      ),
+    [availableItems, selectedVehicleType],
   );
 
   // Filter oil filter items
   const oilFilterItems = useMemo(() => {
-    const filters = availableItems.filter(
+    const candidateFilters = availableItems.filter((i) =>
+      canUseItem(i.compatibleVehicleTypes, selectedVehicleType),
+    );
+    const filters = candidateFilters.filter(
       (i) =>
         i.itemType === ItemType.SparePart &&
         (i.nameAr.includes("فلتر") ||
@@ -507,8 +534,8 @@ export function CreateCompanyWorkOrderModal({
     );
     return filters.length > 0
       ? filters
-      : availableItems.filter((i) => i.itemType === ItemType.SparePart);
-  }, [availableItems]);
+      : candidateFilters.filter((i) => i.itemType === ItemType.SparePart);
+  }, [availableItems, selectedVehicleType]);
 
   return (
     <Modal
@@ -655,7 +682,7 @@ export function CreateCompanyWorkOrderModal({
                 options={oilItems.map((item) => ({
                   value: item.id,
                   label: `${item.nameAr} (${item.sku})`,
-                  sublabel: `SKU: ${item.sku}`,
+                  sublabel: `توافق: ${formatCompatibleVehicleTypes(item.compatibleVehicleTypes)} • SKU: ${item.sku}`,
                 }))}
                 placeholder="اختر صنف الزيت..."
                 required
@@ -689,7 +716,7 @@ export function CreateCompanyWorkOrderModal({
                     options={oilFilterItems.map((item) => ({
                       value: item.id,
                       label: `${item.nameAr} (${item.sku})`,
-                      sublabel: `SKU: ${item.sku}`,
+                      sublabel: `توافق: ${formatCompatibleVehicleTypes(item.compatibleVehicleTypes)} • SKU: ${item.sku}`,
                     }))}
                     placeholder="اختر فلتر الزيت المناسب..."
                     required={oilFilterChanged}
@@ -766,7 +793,7 @@ export function CreateCompanyWorkOrderModal({
                           options={maintenanceItems.map((item) => ({
                             value: item.id,
                             label: `${item.nameAr} (${item.sku})`,
-                            sublabel: `SKU: ${item.sku}`,
+                            sublabel: `توافق: ${formatCompatibleVehicleTypes(item.compatibleVehicleTypes)} • SKU: ${item.sku}`,
                           }))}
                           placeholder="اختر الصنف..."
                           required

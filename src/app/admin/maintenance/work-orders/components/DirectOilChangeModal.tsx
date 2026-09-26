@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/Toast";
 import { getVehicleDetail } from "@/lib/fleet/api";
 import { completeDirectOilChange, getDirectOilBarrels, getDirectOilInventoryLocations, getInventoryItems } from "@/lib/maintenance/api";
 import { ItemType, OilBarrelStatus, UnitOfMeasure, type DirectOilBarrel, type DirectOilInventoryLocation, type InventoryItem, type OilReminder } from "@/lib/maintenance/types";
+import { canUseItem, formatCompatibleVehicleTypes } from "@/lib/maintenance/constants";
 
 interface Props {
   vehicleId: string;
@@ -48,13 +49,20 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getVehicleDetail(vehicleId), getDirectOilInventoryLocations(), getInventoryItems()])
-      .then(([vehicle, siteList, itemList]) => {
+    getVehicleDetail(vehicleId)
+      .then(async (vehicle) => {
         if (cancelled) return;
         setVehicleRowVersion(vehicle.summary.rowVersion);
         setVehicleType(vehicle.summary.vehicleType);
         setCurrentOdometer(vehicle.summary.currentOdometer);
         setOdometer(vehicle.summary.currentOdometer);
+
+        const [siteList, itemList] = await Promise.all([
+          getDirectOilInventoryLocations(),
+          getInventoryItems({ vehicleType: vehicle.summary.vehicleType }),
+        ]);
+
+        if (cancelled) return;
         setLocations(siteList);
         setItems(itemList.filter((item) => item.status === 1));
       })
@@ -72,10 +80,38 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
     return () => { cancelled = true; };
   }, [inventoryLocationId, oilItemId]);
 
-  const oilOptions = useMemo(() => items.filter((item) => item.itemType === ItemType.Oil && item.baseUnitOfMeasure === UnitOfMeasure.Liter)
-    .map((item) => ({ value: item.id, label: `${item.nameAr} (${item.sku})` })), [items]);
-  const filterOptions = useMemo(() => items.filter((item) => item.itemType === ItemType.SparePart && item.baseUnitOfMeasure === UnitOfMeasure.Piece)
-    .map((item) => ({ value: item.id, label: `${item.nameAr} (${item.sku})` })), [items]);
+  const oilOptions = useMemo(
+    () =>
+      items
+        .filter(
+          (item) =>
+            item.itemType === ItemType.Oil &&
+            item.baseUnitOfMeasure === UnitOfMeasure.Liter &&
+            canUseItem(item.compatibleVehicleTypes, vehicleType),
+        )
+        .map((item) => ({
+          value: item.id,
+          label: `${item.nameAr} (${item.sku})`,
+          sublabel: `توافق: ${formatCompatibleVehicleTypes(item.compatibleVehicleTypes)} • SKU: ${item.sku}`,
+        })),
+    [items, vehicleType],
+  );
+  const filterOptions = useMemo(
+    () =>
+      items
+        .filter(
+          (item) =>
+            item.itemType === ItemType.SparePart &&
+            item.baseUnitOfMeasure === UnitOfMeasure.Piece &&
+            canUseItem(item.compatibleVehicleTypes, vehicleType),
+        )
+        .map((item) => ({
+          value: item.id,
+          label: `${item.nameAr} (${item.sku})`,
+          sublabel: `توافق: ${formatCompatibleVehicleTypes(item.compatibleVehicleTypes)} • SKU: ${item.sku}`,
+        })),
+    [items, vehicleType],
+  );
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -113,8 +149,14 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
         vehicleRowVersion,
       }, attemptKey.current);
       onCompleted();
-    } catch {
-      // authFetch displays the API validation message.
+    } catch (err: any) {
+      const code = err?.details?.errorCode || err?.details?.title || err?.errorCode;
+      if (code === "maintenance.incompatible_vehicle_type") {
+        toast.error("غير متوافق مع نوع المركبة", "صنف المخزون غير متوافق مع نوع المركبة المحددة.");
+        getInventoryItems({ vehicleType: vehicleType ?? undefined })
+          .then((itemList) => setItems(itemList.filter((item) => item.status === 1)))
+          .catch(() => {});
+      }
     } finally {
       setSubmitting(false);
     }

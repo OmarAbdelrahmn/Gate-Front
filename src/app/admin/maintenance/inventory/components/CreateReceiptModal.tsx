@@ -6,15 +6,21 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { createPurchaseReceipt } from "@/lib/maintenance/api";
-import type {
-  MaintenanceLocation,
-  InventoryItem,
-  Supplier,
-  ReceiptLinePayload,
-  PurchaseReceipt,
+import {
+  type MaintenanceLocation,
+  type InventoryItem,
+  type Supplier,
+  type ReceiptLinePayload,
+  type PurchaseReceipt,
+  ItemType,
+  UnitOfMeasure,
 } from "@/lib/maintenance/types";
-import { UnitOfMeasure, ItemType } from "@/lib/maintenance/types";
-import { unitOfMeasureLabels, formatCurrency, itemTypeLabels } from "@/lib/maintenance/constants";
+import {
+  unitOfMeasureLabels,
+  formatCurrency,
+  itemTypeLabels,
+  formatCompatibleVehicleTypes,
+} from "@/lib/maintenance/constants";
 import {
   Plus,
   Trash2,
@@ -434,7 +440,7 @@ export function CreateReceiptModal({
                         options={items.map((i) => ({
                           value: i.id,
                           label: `${i.nameAr} (${i.sku})`,
-                          sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                          sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • ${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
                           keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                         }))}
                         placeholder="اختر الصنف..."

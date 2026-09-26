@@ -6,9 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createInventoryItem, updateInventoryItem } from "@/lib/maintenance/api";
 import type { InventoryItem } from "@/lib/maintenance/types";
-import { ItemType, UnitOfMeasure } from "@/lib/maintenance/types";
-import { itemTypeLabels, unitOfMeasureLabels } from "@/lib/maintenance/constants";
-import { Sparkles, Info } from "lucide-react";
+import { ItemType, UnitOfMeasure, VehicleType } from "@/lib/maintenance/types";
+import {
+  itemTypeLabels,
+  unitOfMeasureLabels,
+  vehicleTypeLabels,
+  ALL_VEHICLE_TYPES,
+} from "@/lib/maintenance/constants";
+import { Sparkles, Info, Check, AlertCircle } from "lucide-react";
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -34,6 +39,8 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
   const [reorderQuantity, setReorderQuantity] = useState<number>(10);
   const [isSerialized, setIsSerialized] = useState(false);
   const [isLotTracked, setIsLotTracked] = useState(false);
+  const [compatibleVehicleTypes, setCompatibleVehicleTypes] = useState<VehicleType[]>(ALL_VEHICLE_TYPES);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (item) {
@@ -51,6 +58,12 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
       setReorderQuantity(item.reorderQuantity || 0);
       setIsSerialized(Boolean(item.isSerialized));
       setIsLotTracked(Boolean(item.isLotTracked));
+      setCompatibleVehicleTypes(
+        item.compatibleVehicleTypes && item.compatibleVehicleTypes.length > 0
+          ? item.compatibleVehicleTypes
+          : ALL_VEHICLE_TYPES,
+      );
+      setValidationError(null);
     } else {
       setSku("");
       setBarcode("");
@@ -66,6 +79,8 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
       setReorderQuantity(10);
       setIsSerialized(false);
       setIsLotTracked(false);
+      setCompatibleVehicleTypes(ALL_VEHICLE_TYPES);
+      setValidationError(null);
     }
   }, [item, isOpen]);
 
@@ -96,8 +111,21 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     if (!nameEn) setNameEn("Standard Rider Helmet");
   };
 
+  const toggleVehicleType = (type: VehicleType) => {
+    setCompatibleVehicleTypes((prev) => {
+      const next = prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type];
+      return next.sort((a, b) => a - b);
+    });
+    setValidationError(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (compatibleVehicleTypes.length === 0) {
+      setValidationError("يجب اختيار نوع مركبة واحد على الأقل متوافق مع الصنف.");
+      return;
+    }
+    setValidationError(null);
     setLoading(true);
     try {
       if (item) {
@@ -116,6 +144,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           reorderQuantity: Number(reorderQuantity),
           isSerialized,
           isLotTracked,
+          compatibleVehicleTypes,
           rowVersion: item.rowVersion,
         });
       } else {
@@ -134,6 +163,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           reorderQuantity: Number(reorderQuantity),
           isSerialized,
           isLotTracked,
+          compatibleVehicleTypes,
           rowVersion: null,
         });
       }
@@ -255,6 +285,92 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
               className="text-xs"
             />
           </div>
+        </div>
+
+        {/* Compatible Vehicle Types Multiselect */}
+        <div className="p-3 rounded-xl border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                أنواع المركبات المتوافقة (Compatible vehicle types) <span className="text-red-500">*</span>
+              </label>
+              <span className="text-[11px] text-slate-500">
+                حدد أنواع المركبات التي يتوافق معها هذا الصنف (يمكن اختيار نوع واحد أو عدة أنواع).
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setCompatibleVehicleTypes(ALL_VEHICLE_TYPES);
+                  setValidationError(null);
+                }}
+                className="text-[10px] px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 font-bold transition-colors cursor-pointer"
+              >
+                تحديد الكل (5)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompatibleVehicleTypes([VehicleType.Motorcycle]);
+                  setValidationError(null);
+                }}
+                className="text-[10px] px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 font-bold transition-colors cursor-pointer"
+              >
+                دراجة فقط
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompatibleVehicleTypes([VehicleType.Car]);
+                  setValidationError(null);
+                }}
+                className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 font-bold transition-colors cursor-pointer"
+              >
+                سيارة فقط
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+            {ALL_VEHICLE_TYPES.map((type) => {
+              const isSelected = compatibleVehicleTypes.includes(type);
+              const label = vehicleTypeLabels[type];
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleVehicleType(type)}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-[#1167c9] border-[#1167c9] text-white shadow-xs"
+                      : "bg-[var(--surface)] border-[var(--border)] text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-600"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      className={`size-4 rounded-md flex items-center justify-center border transition-colors ${
+                        isSelected
+                          ? "bg-white text-[#1167c9] border-white"
+                          : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                      }`}
+                    >
+                      {isSelected && <Check size={12} strokeWidth={3} />}
+                    </div>
+                    <span>{label}</span>
+                  </div>
+                  <span className="text-[10px] opacity-75 font-mono">({type})</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {validationError && (
+            <div className="flex items-center gap-1.5 text-xs text-red-600 font-bold pt-1">
+              <AlertCircle size={14} className="shrink-0" />
+              <span>{validationError}</span>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

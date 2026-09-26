@@ -156,10 +156,14 @@ export function CreateExternalOrderModal({
               <select
                 value={vehicleType}
                 onChange={(e) => setVehicleType(Number(e.target.value))}
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 font-bold focus:outline-hidden"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 font-bold focus:outline-hidden text-xs"
               >
                 <option value={2}>سيارة (Car)</option>
                 <option value={1}>دراجة نارية (Motorcycle)</option>
+                <option value={3}>فان (Van)</option>
+                <option value={4}>شاحنة (Truck)</option>
+                <option value={5}>أخرى (Other)</option>
+                <option value={0}>غير محدد (Unknown)</option>
               </select>
             </div>
             <div>

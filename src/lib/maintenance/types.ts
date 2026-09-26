@@ -45,6 +45,14 @@ export enum UnitOfMeasure {
   Set = 5,
 }
 
+export enum VehicleType {
+  Motorcycle = 1,
+  Car = 2,
+  Van = 3,
+  Truck = 4,
+  Other = 5,
+}
+
 export enum MaterialUsageType {
   SparePart = 1,
   Oil = 2,
@@ -182,6 +190,7 @@ export interface InventoryItem {
   isLotTracked: boolean;
   status: number;
   rowVersion: string;
+  compatibleVehicleTypes?: VehicleType[];
 }
 
 export interface CreateInventoryItemRequest {
@@ -199,6 +208,7 @@ export interface CreateInventoryItemRequest {
   reorderQuantity: number;
   isSerialized: boolean;
   isLotTracked: boolean;
+  compatibleVehicleTypes?: VehicleType[] | null;
   rowVersion: null;
 }
 
@@ -217,6 +227,7 @@ export interface UpdateInventoryItemRequest {
   reorderQuantity: number;
   isSerialized: boolean;
   isLotTracked: boolean;
+  compatibleVehicleTypes?: VehicleType[] | null;
   rowVersion: string;
 }
 

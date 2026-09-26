@@ -12,12 +12,14 @@ import {
   reverseMaterialUsage,
   cancelSupplyRequest,
 } from "@/lib/maintenance/api";
+import { getVehicleDetail } from "@/lib/fleet/api";
 import { authFetch } from "@/lib/auth/api";
 import type {
   WorkOrder,
   MaterialUsage,
   InventoryItem,
   MaintenanceLocation,
+  VehicleType,
 } from "@/lib/maintenance/types";
 import {
   WorkOrderStatus,
@@ -36,6 +38,8 @@ import {
   formatDateTime,
   supplyRequestStatusConfig,
   getLinkedInventoryLocationId,
+  canUseItem,
+  formatCompatibleVehicleTypes,
 } from "@/lib/maintenance/constants";
 import { CompleteOilChangeModal } from "./CompleteOilChangeModal";
 import { MaterialHistoryModal } from "./MaterialHistoryModal";
@@ -98,11 +102,14 @@ export function WorkOrderDetailModal({
   const [issueNotes, setIssueNotes] = useState("");
   const [materialLoading, setMaterialLoading] = useState(false);
   const [issueItemTypeFilter, setIssueItemTypeFilter] = useState<ItemType | "ALL">("ALL");
+  const [issueError, setIssueError] = useState<string | null>(null);
+  const [workOrderVehicleType, setWorkOrderVehicleType] = useState<VehicleType | null>(null);
 
-  const filteredIssueItems =
+  const filteredIssueItems = (
     issueItemTypeFilter === "ALL"
       ? items
-      : items.filter((i) => i.itemType === issueItemTypeFilter);
+      : items.filter((i) => i.itemType === issueItemTypeFilter)
+  ).filter((i) => canUseItem(i.compatibleVehicleTypes, workOrderVehicleType));
 
   const handleItemSelectForIssue = (itemId: string) => {
     setSelectedItemId(itemId);
@@ -162,6 +169,20 @@ export function WorkOrderDetailModal({
           setOrder(data);
           setMaterials(Array.isArray(mats) ? mats : []);
           setLoading(false);
+
+          if (data?.externalVehicle?.vehicleType) {
+            setWorkOrderVehicleType(data.externalVehicle.vehicleType as VehicleType);
+          } else if (data?.vehicleId) {
+            getVehicleDetail(data.vehicleId)
+              .then((v) => {
+                if (active && v?.summary?.vehicleType) {
+                  setWorkOrderVehicleType(v.summary.vehicleType as VehicleType);
+                }
+              })
+              .catch(() => {});
+          } else {
+            setWorkOrderVehicleType(null);
+          }
         }
       })
       .catch((err: unknown) => {
@@ -211,6 +232,13 @@ export function WorkOrderDetailModal({
   const handleIssueMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!order || !selectedItemId) return;
+    setIssueError(null);
+
+    const chosen = items.find((i) => i.id === selectedItemId);
+    if (chosen && !canUseItem(chosen.compatibleVehicleTypes, workOrderVehicleType)) {
+      setIssueError("صنف المخزون المحدد غير متوافق مع نوع المركبة في أمر الصيانة هذا.");
+      return;
+    }
 
     setMaterialLoading(true);
     try {
@@ -226,10 +254,17 @@ export function WorkOrderDetailModal({
       setSelectedItemId("");
       setIssueQuantity(1);
       setIssueNotes("");
+      setIssueError(null);
       await loadOrderDetails();
       onUpdated();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const code = err?.details?.errorCode || err?.details?.title || err?.errorCode;
+      if (code === "maintenance.incompatible_vehicle_type") {
+        setIssueError("صنف المخزون المحدد غير متوافق مع نوع المركبة المحددة لأمر العمل.");
+      } else {
+        setIssueError(err?.message || "تعذر صرف المادة.");
+      }
     } finally {
       setMaterialLoading(false);
     }
@@ -882,11 +917,19 @@ export function WorkOrderDetailModal({
         {/* Issue Material Modal */}
         <Modal
           isOpen={issueModalOpen}
-          onClose={() => setIssueModalOpen(false)}
+          onClose={() => {
+            setIssueModalOpen(false);
+            setIssueError(null);
+          }}
           title="صرف قطعة غيار / مادة من المستودع"
           maxWidth="max-w-md"
         >
           <form onSubmit={handleIssueMaterial} className="space-y-4">
+            {issueError && (
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+                <span className="font-bold">{issueError}</span>
+              </div>
+            )}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -920,7 +963,7 @@ export function WorkOrderDetailModal({
                 options={filteredIssueItems.map((i) => ({
                   value: i.id,
                   label: `${i.nameAr} (${i.sku})`,
-                  sublabel: `${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
+                  sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • ${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
                   keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
                 }))}
                 placeholder="اختر الصنف..."
@@ -1007,6 +1050,7 @@ export function WorkOrderDetailModal({
           workOrder={order}
           items={items}
           locations={locations}
+          vehicleType={workOrderVehicleType}
         />
 
         {/* Material History Modal */}

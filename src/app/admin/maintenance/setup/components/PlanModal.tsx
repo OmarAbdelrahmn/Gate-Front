@@ -6,8 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { createMaintenancePlan, updateMaintenancePlan } from "@/lib/maintenance/api";
-import type { MaintenancePlan, InventoryItem } from "@/lib/maintenance/types";
+import type { MaintenancePlan, InventoryItem, VehicleType } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
+import {
+  vehicleTypeLabels,
+  ALL_VEHICLE_TYPES,
+  canUseItem,
+  formatCompatibleVehicleTypes,
+} from "@/lib/maintenance/constants";
 
 interface PlanModalProps {
   isOpen: boolean;
@@ -169,8 +175,11 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
               required
             >
-              <option value={2}>سيارة (Car - 5,000 كم)</option>
-              <option value={1}>دراجة نارية (Motorcycle - 1,000 كم)</option>
+              {ALL_VEHICLE_TYPES.map((vt) => (
+                <option key={vt} value={vt}>
+                  {vehicleTypeLabels[vt]} ({vt})
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -269,10 +278,17 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
             onChange={(val) => setInventoryItemId(val)}
             options={[
               { value: "", label: "بدون تقييد لصنف محدد" },
-              ...oilItems.map((i) => ({
-                value: i.id,
-                label: `${i.nameAr} (${i.sku})`,
-              })),
+              ...items
+                .filter(
+                  (i) =>
+                    i.itemType === ItemType.Oil &&
+                    canUseItem(i.compatibleVehicleTypes, vehicleType),
+                )
+                .map((i) => ({
+                  value: i.id,
+                  label: `${i.nameAr} (${i.sku})`,
+                  sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • SKU: ${i.sku}`,
+                })),
             ]}
             placeholder="اختر صنف الزيت المقترن..."
           />

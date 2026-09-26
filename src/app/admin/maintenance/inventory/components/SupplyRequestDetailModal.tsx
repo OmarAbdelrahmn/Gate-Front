@@ -263,6 +263,10 @@ export function SupplyRequestDetailModal({
         setShowApproveConfirm(false);
         onActionCompleted();
         loadDetails();
+      } else if (code === "maintenance.incompatible_vehicle_type") {
+        setErrorMsg("صنف المخزون غير متوافق مع نوع المركبة المحددة لهذا الطلب.");
+        setShowApproveConfirm(false);
+        loadDetails();
       } else {
         setErrorMsg(err?.message || "تعذر اعتماد وصرف الطلب.");
         loadDetails();

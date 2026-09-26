@@ -289,6 +289,10 @@ export function getFriendlyErrorMessage(
         return "يلزم تعبئة بيانات طلب تغيير الزيت والفلتر ورقم العداد في نموذج أمر العمل وإعادة الإرسال.";
       case "maintenance.labor_cost_external_vehicles_only":
         return "أجور اليد والعمالة مقتصرة فقط على إصلاحات العملاء الخارجيين.";
+      case "maintenance.incompatible_vehicle_type":
+        return "صنف المخزون غير متوافق مع نوع المركبة المحددة.";
+      case "maintenance.invalid_request":
+        return rawMessage || "طلب صيانة غير صالح. يرجى مراجعة الحقول والمدخلات.";
     }
   }
 
@@ -362,7 +366,7 @@ async function parseResponse<T>(
 
   if (!response.ok) {
     const rawMsg = extractErrorMessageFromBody(body);
-    const errorCode = body?.errorCode || body?.code;
+    const errorCode = body?.errorCode || body?.title || body?.code;
     const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg, errorCode);
 
     const error = new Error(friendlyMsg) as AuthApiError;

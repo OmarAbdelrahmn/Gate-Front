@@ -13,6 +13,7 @@ import {
   SupplyRequestStatus,
   SupplyRequestSubjectType,
   MaintenanceLocation,
+  VehicleType,
 } from "./types";
 
 export const locationTypeLabels: Record<LocationType, string> = {
@@ -156,6 +157,89 @@ export const itemTypeBadgeStyles: Record<
 };
 
 export const RIDER_ASSIGNABLE_ITEM_TYPES = [ItemType.RiderAccessory];
+
+export const vehicleTypeLabels: Record<VehicleType, string> = {
+  [VehicleType.Motorcycle]: "دراجة نارية",
+  [VehicleType.Car]: "سيارة",
+  [VehicleType.Van]: "فان",
+  [VehicleType.Truck]: "شاحنة",
+  [VehicleType.Other]: "أخرى",
+};
+
+export const vehicleTypeLabelsEn: Record<VehicleType, string> = {
+  [VehicleType.Motorcycle]: "Motorcycle",
+  [VehicleType.Car]: "Car",
+  [VehicleType.Van]: "Van",
+  [VehicleType.Truck]: "Truck",
+  [VehicleType.Other]: "Other",
+};
+
+export const vehicleTypeBadgeStyles: Record<
+  VehicleType,
+  { label: string; bg: string; text: string; border: string }
+> = {
+  [VehicleType.Motorcycle]: {
+    label: "دراجة نارية",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    text: "text-purple-700 dark:text-purple-300",
+    border: "border-purple-200 dark:border-purple-800",
+  },
+  [VehicleType.Car]: {
+    label: "سيارة",
+    bg: "bg-blue-50 dark:bg-blue-950/40",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  [VehicleType.Van]: {
+    label: "فان",
+    bg: "bg-indigo-50 dark:bg-indigo-950/40",
+    text: "text-indigo-700 dark:text-indigo-300",
+    border: "border-indigo-200 dark:border-indigo-800",
+  },
+  [VehicleType.Truck]: {
+    label: "شاحنة",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+  },
+  [VehicleType.Other]: {
+    label: "أخرى",
+    bg: "bg-slate-100 dark:bg-slate-800/60",
+    text: "text-slate-700 dark:text-slate-300",
+    border: "border-slate-200 dark:border-slate-700",
+  },
+};
+
+export const ALL_VEHICLE_TYPES: VehicleType[] = [
+  VehicleType.Motorcycle,
+  VehicleType.Car,
+  VehicleType.Van,
+  VehicleType.Truck,
+  VehicleType.Other,
+];
+
+export function canUseItem(
+  compatibleVehicleTypes?: VehicleType[] | null,
+  vehicleType?: VehicleType | number | null,
+): boolean {
+  if (!compatibleVehicleTypes || compatibleVehicleTypes.length === 0) {
+    return true;
+  }
+  return vehicleType === null || vehicleType === undefined
+    ? compatibleVehicleTypes.length === 5
+    : compatibleVehicleTypes.includes(vehicleType as VehicleType);
+}
+
+export function formatCompatibleVehicleTypes(
+  types?: VehicleType[] | null,
+  locale: "ar" | "en" = "ar",
+): string {
+  if (!types || types.length === 0 || types.length === 5) {
+    return locale === "ar" ? "كافة أنواع المركبات" : "All vehicle types";
+  }
+  const labels = locale === "ar" ? vehicleTypeLabels : vehicleTypeLabelsEn;
+  return types.map((t) => labels[t] || String(t)).join("، ");
+}
 
 
 export const unitOfMeasureLabels: Record<UnitOfMeasure, string> = {

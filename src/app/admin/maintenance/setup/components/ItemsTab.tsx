@@ -6,9 +6,17 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { exportToExcel } from "@/lib/export-excel";
 import { ItemModal } from "./ItemModal";
-import type { InventoryItem } from "@/lib/maintenance/types";
+import type { InventoryItem, VehicleType } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
-import { itemTypeLabels, unitOfMeasureLabels, itemTypeBadgeStyles } from "@/lib/maintenance/constants";
+import {
+  itemTypeLabels,
+  unitOfMeasureLabels,
+  itemTypeBadgeStyles,
+  vehicleTypeLabels,
+  vehicleTypeBadgeStyles,
+  ALL_VEHICLE_TYPES,
+  formatCompatibleVehicleTypes,
+} from "@/lib/maintenance/constants";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface ItemsTabProps {
@@ -16,9 +24,18 @@ interface ItemsTabProps {
   loading: boolean;
   onRefresh: () => void;
   onSearch: (q: string) => void;
+  vehicleTypeFilter?: VehicleType | null;
+  onVehicleTypeFilterChange?: (vt: VehicleType | null) => void;
 }
 
-export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps) {
+export function ItemsTab({
+  items,
+  loading,
+  onRefresh,
+  onSearch,
+  vehicleTypeFilter,
+  onVehicleTypeFilterChange,
+}: ItemsTabProps) {
   const { can } = useAuth();
   const canManage = can("inventory.items.manage");
 
@@ -75,6 +92,11 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
           width: 20,
         },
         {
+          header: "أنواع المركبات المتوافقة",
+          accessor: (i) => formatCompatibleVehicleTypes(i.compatibleVehicleTypes),
+          width: 24,
+        },
+        {
           header: "وحدة الصرف",
           accessor: (i) => unitOfMeasureLabels[i.baseUnitOfMeasure] || String(i.baseUnitOfMeasure),
           width: 16,
@@ -113,8 +135,8 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
             إدارة قطع الغيار، براميل الزيوت (208 لتر)، مستلزمات المناديب، ومستهلكات الورشة.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-64">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-56">
             <Search
               size={15}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
@@ -126,6 +148,23 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
               className="pr-9 text-xs"
             />
           </div>
+          <select
+            value={vehicleTypeFilter !== undefined && vehicleTypeFilter !== null ? String(vehicleTypeFilter) : ""}
+            onChange={(e) => {
+              const val = e.target.value ? (Number(e.target.value) as VehicleType) : null;
+              if (onVehicleTypeFilterChange) {
+                onVehicleTypeFilterChange(val);
+              }
+            }}
+            className="h-9 px-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer focus:outline-hidden"
+          >
+            <option value="">كافة أنواع المركبات</option>
+            {ALL_VEHICLE_TYPES.map((vt) => (
+              <option key={vt} value={vt}>
+                {vehicleTypeLabels[vt]} ({vt})
+              </option>
+            ))}
+          </select>
           <Button
             variant="secondary"
             onClick={handleExportExcel}
@@ -179,6 +218,7 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
               <th className="p-3">رمز الصنف (SKU)</th>
               <th className="p-3">اسم الصنف</th>
               <th className="p-3">النوع</th>
+              <th className="p-3 text-center">توافق المركبات</th>
               <th className="p-3">وحدة الصرف</th>
               <th className="p-3">وحدة الشراء</th>
               <th className="p-3 text-center">سعة العبوة</th>
@@ -190,13 +230,13 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
           <tbody className="divide-y divide-[var(--border)]">
             {loading ? (
               <tr>
-                <td colSpan={9} className="p-8 text-center text-slate-400">
+                <td colSpan={10} className="p-8 text-center text-slate-400">
                   جارٍ تحميل الأصناف...
                 </td>
               </tr>
             ) : displayedItems.length === 0 ? (
               <tr>
-                <td colSpan={9} className="p-8 text-center text-slate-400">
+                <td colSpan={10} className="p-8 text-center text-slate-400">
                   لا توجد أصناف مطابقة للفلتر المحدد أو البحث.
                 </td>
               </tr>
@@ -230,6 +270,32 @@ export function ItemsTab({ items, loading, onRefresh, onSearch }: ItemsTabProps)
                       >
                         {badge.label}
                       </span>
+                    </td>
+                    <td className="p-3 text-center">
+                      {!item.compatibleVehicleTypes || item.compatibleVehicleTypes.length === 5 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          كافة المركبات (5)
+                        </span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1 justify-center max-w-[150px] mx-auto">
+                          {item.compatibleVehicleTypes.map((vt) => {
+                            const b = vehicleTypeBadgeStyles[vt] || {
+                              label: vehicleTypeLabels[vt] || String(vt),
+                              bg: "bg-slate-100 dark:bg-slate-800",
+                              text: "text-slate-700 dark:text-slate-300",
+                              border: "border-slate-200 dark:border-slate-700",
+                            };
+                            return (
+                              <span
+                                key={vt}
+                                className={`px-1.5 py-0.2 rounded-md text-[9px] font-bold border ${b.bg} ${b.text} ${b.border}`}
+                              >
+                                {b.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </td>
                   <td className="p-3 text-slate-600 dark:text-slate-300">
                     {unitOfMeasureLabels[item.baseUnitOfMeasure] || item.baseUnitOfMeasure}

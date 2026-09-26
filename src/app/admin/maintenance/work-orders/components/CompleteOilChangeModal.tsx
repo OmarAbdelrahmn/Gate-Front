@@ -11,11 +11,14 @@ import type {
   InventoryItem,
   MaintenanceLocation,
   OilBarrel,
+  VehicleType,
 } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
 import {
   getLinkedInventoryLocationId,
   getInventoryLocationsForSite,
+  canUseItem,
+  formatCompatibleVehicleTypes,
 } from "@/lib/maintenance/constants";
 import { Droplets, Filter, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 
@@ -26,6 +29,7 @@ interface CompleteOilChangeModalProps {
   workOrder: WorkOrder | null;
   items: InventoryItem[];
   locations: MaintenanceLocation[];
+  vehicleType?: VehicleType | null;
 }
 
 export function CompleteOilChangeModal({
@@ -35,8 +39,12 @@ export function CompleteOilChangeModal({
   workOrder,
   items,
   locations,
+  vehicleType: propVehicleType,
 }: CompleteOilChangeModalProps) {
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const effectiveVehicleType = propVehicleType ?? (workOrder?.externalVehicle?.vehicleType as VehicleType | null) ?? null;
 
   // Form Fields
   const [performedAtUtc, setPerformedAtUtc] = useState(new Date().toISOString().slice(0, 16));
@@ -69,6 +77,7 @@ export function CompleteOilChangeModal({
       setOtherCost(0);
       setNotes("");
       setNextOilBarrelId("");
+      setErrorMsg(null);
     }
   }, [workOrder, isOpen, locations]);
 
@@ -191,17 +200,26 @@ export function CompleteOilChangeModal({
 
       onCompleted();
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const code = err?.details?.errorCode || err?.details?.title || err?.errorCode;
+      if (code === "maintenance.incompatible_vehicle_type") {
+        setErrorMsg("صنف الزيت أو فلتر الزيت غير متوافق مع نوع المركبة المحددة.");
+      } else {
+        setErrorMsg(err?.message || "تعذر إكمال عملية تغيير الزيت.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const oilItems = items.filter((i) => i.itemType === ItemType.Oil);
+  const oilItems = items.filter(
+    (i) => i.itemType === ItemType.Oil && canUseItem(i.compatibleVehicleTypes, effectiveVehicleType),
+  );
   const filterItems = items.filter(
     (i) =>
       i.itemType === ItemType.SparePart &&
+      canUseItem(i.compatibleVehicleTypes, effectiveVehicleType) &&
       (i.nameAr.includes("فلتر") ||
         i.nameEn.toLowerCase().includes("filter") ||
         i.sku.toLowerCase().includes("flt")),
@@ -215,6 +233,12 @@ export function CompleteOilChangeModal({
       maxWidth="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+            <AlertTriangle size={16} className="shrink-0 text-red-600" />
+            <span className="font-bold">{errorMsg}</span>
+          </div>
+        )}
         {/* Vehicle & Order Context */}
         <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-xs flex items-center justify-between">
           <div>
@@ -282,6 +306,7 @@ export function CompleteOilChangeModal({
               options={oilItems.map((i) => ({
                 value: i.id,
                 label: `${i.nameAr} (${i.sku})`,
+                sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • SKU: ${i.sku}`,
               }))}
               placeholder="اختر صنف الزيت..."
               required
@@ -366,6 +391,7 @@ export function CompleteOilChangeModal({
                 options={(filterItems.length ? filterItems : items).map((i) => ({
                   value: i.id,
                   label: `${i.nameAr} (${i.sku})`,
+                  sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • SKU: ${i.sku}`,
                 }))}
                 placeholder="اختر فلتر الزيت المصروف..."
                 required
