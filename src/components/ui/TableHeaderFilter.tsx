@@ -400,54 +400,57 @@ export function TableHeaderColumnFilter({
   );
 }
 
-export interface TableHeaderCitySponsorFilterProps {
-  cityValue?: string | string[];
-  cityValues?: string[];
-  onCityChange: (val: string[]) => void;
-  cityOptions: FilterOption[];
-  sponsorValue?: string | string[];
-  sponsorValues?: string[];
-  onSponsorChange: (val: string[]) => void;
-  sponsorOptions: FilterOption[];
+export interface DualFilterTabConfig {
+  id: string;
+  label: string;
+  icon?: React.ReactNode;
+  value?: string | string[];
+  values?: string[];
+  onChange: (val: string[]) => void;
+  options: FilterOption[];
+  placeholder?: string;
 }
 
-export function TableHeaderCitySponsorFilter({
-  cityValue,
-  cityValues,
-  onCityChange,
-  cityOptions,
-  sponsorValue,
-  sponsorValues,
-  onSponsorChange,
-  sponsorOptions,
-}: TableHeaderCitySponsorFilterProps) {
+export interface TableHeaderDualFilterProps {
+  label: string;
+  tab1: DualFilterTabConfig;
+  tab2: DualFilterTabConfig;
+  align?: "left" | "right";
+}
+
+export function TableHeaderDualFilter({
+  label,
+  tab1,
+  tab2,
+  align = "right",
+}: TableHeaderDualFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"city" | "sponsor">("city");
+  const [activeTab, setActiveTab] = useState<string>(tab1.id);
   const [query, setQuery] = useState("");
   const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Normalize selected cities
-  const selectedCities: string[] = useMemo(() => {
-    if (Array.isArray(cityValues)) return cityValues.filter(Boolean);
-    if (Array.isArray(cityValue)) return cityValue.filter(Boolean);
-    if (typeof cityValue === "string" && cityValue.trim() && cityValue !== "ALL") {
-      return [cityValue.trim()];
+  // Normalize selected values for tab1
+  const tab1Selected: string[] = useMemo(() => {
+    if (Array.isArray(tab1.values)) return tab1.values.filter(Boolean);
+    if (Array.isArray(tab1.value)) return tab1.value.filter(Boolean);
+    if (typeof tab1.value === "string" && tab1.value.trim() && tab1.value !== "ALL") {
+      return [tab1.value.trim()];
     }
     return [];
-  }, [cityValue, cityValues]);
+  }, [tab1.value, tab1.values]);
 
-  // Normalize selected sponsors
-  const selectedSponsors: string[] = useMemo(() => {
-    if (Array.isArray(sponsorValues)) return sponsorValues.filter(Boolean);
-    if (Array.isArray(sponsorValue)) return sponsorValue.filter(Boolean);
-    if (typeof sponsorValue === "string" && sponsorValue.trim() && sponsorValue !== "ALL") {
-      return [sponsorValue.trim()];
+  // Normalize selected values for tab2
+  const tab2Selected: string[] = useMemo(() => {
+    if (Array.isArray(tab2.values)) return tab2.values.filter(Boolean);
+    if (Array.isArray(tab2.value)) return tab2.value.filter(Boolean);
+    if (typeof tab2.value === "string" && tab2.value.trim() && tab2.value !== "ALL") {
+      return [tab2.value.trim()];
     }
     return [];
-  }, [sponsorValue, sponsorValues]);
+  }, [tab2.value, tab2.values]);
 
   const [coords, setCoords] = useState<{
     top?: number;
@@ -523,24 +526,24 @@ export function TableHeaderCitySponsorFilter({
     }
   }, [isOpen, updateCoords]);
 
-  const totalFilteredCount = selectedCities.length + selectedSponsors.length;
+  const totalFilteredCount = tab1Selected.length + tab2Selected.length;
   const isFiltered = totalFilteredCount > 0;
 
-  const currentOptions = activeTab === "city" ? cityOptions : sponsorOptions;
-  const currentSelected = activeTab === "city" ? selectedCities : selectedSponsors;
-  const handleSelectionChange = activeTab === "city" ? onCityChange : onSponsorChange;
+  const currentTab = activeTab === tab2.id ? tab2 : tab1;
+  const currentSelected = activeTab === tab2.id ? tab2Selected : tab1Selected;
+  const handleSelectionChange = currentTab.onChange;
 
   const validSelectableOptions = useMemo(() => {
-    return currentOptions.filter((opt) => opt.value !== "" && opt.value !== "ALL");
-  }, [currentOptions]);
+    return currentTab.options.filter((opt) => opt.value !== "" && opt.value !== "ALL");
+  }, [currentTab.options]);
 
   const filteredOptions = useMemo(() => {
-    if (!query.trim()) return currentOptions;
-    return currentOptions.filter((opt) => {
+    if (!query.trim()) return currentTab.options;
+    return currentTab.options.filter((opt) => {
       if (opt.value === "" || opt.value === "ALL") return false;
       return matchesArabicSearch(query, opt.label, opt.sublabel, opt.value);
     });
-  }, [currentOptions, query]);
+  }, [currentTab.options, query]);
 
   const toggleOption = (val: string) => {
     if (!val || val === "ALL") {
@@ -563,8 +566,8 @@ export function TableHeaderCitySponsorFilter({
   };
 
   const clearAllBoth = () => {
-    onCityChange([]);
-    onSponsorChange([]);
+    tab1.onChange([]);
+    tab2.onChange([]);
   };
 
   return (
@@ -580,8 +583,8 @@ export function TableHeaderCitySponsorFilter({
         }`}
         title={
           isFiltered
-            ? `تصفية المدينة / الكفيل: (${selectedCities.length} مدينة، ${selectedSponsors.length} كفيل)`
-            : "تصفية المدينة / الكفيل"
+            ? `${label}: (${tab1Selected.length} ${tab1.label}, ${tab2Selected.length} ${tab2.label})`
+            : label
         }
       >
         <Filter
@@ -615,7 +618,7 @@ export function TableHeaderCitySponsorFilter({
             <div className="p-2.5 border-b border-[var(--border)] bg-slate-50/80 dark:bg-slate-800/60 flex flex-col gap-2">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
-                  <span>تصفية المدينة / الكفيل</span>
+                  <span>{label}</span>
                   {totalFilteredCount > 0 && (
                     <span className="text-[11px] font-normal text-blue-600 dark:text-blue-400">
                       ({totalFilteredCount} محدد)
@@ -639,40 +642,40 @@ export function TableHeaderCitySponsorFilter({
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveTab("city");
+                    setActiveTab(tab1.id);
                     setQuery("");
                   }}
                   className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md transition-all cursor-pointer ${
-                    activeTab === "city"
+                    activeTab === tab1.id
                       ? "bg-white dark:bg-slate-800 text-[#1167c9] dark:text-blue-400 shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-800"
                   }`}
                 >
-                  <MapPin className="h-3 w-3" />
-                  <span>المدينة</span>
-                  {selectedCities.length > 0 && (
+                  {tab1.icon}
+                  <span className="truncate">{tab1.label}</span>
+                  {tab1Selected.length > 0 && (
                     <span className="px-1 py-0.2 rounded-full bg-[#1167c9] text-white text-[10px] min-w-[14px]">
-                      {selectedCities.length}
+                      {tab1Selected.length}
                     </span>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveTab("sponsor");
+                    setActiveTab(tab2.id);
                     setQuery("");
                   }}
                   className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md transition-all cursor-pointer ${
-                    activeTab === "sponsor"
+                    activeTab === tab2.id
                       ? "bg-white dark:bg-slate-800 text-[#1167c9] dark:text-blue-400 shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-800"
                   }`}
                 >
-                  <Building2 className="h-3 w-3" />
-                  <span>الكفيل / السجل</span>
-                  {selectedSponsors.length > 0 && (
+                  {tab2.icon}
+                  <span className="truncate">{tab2.label}</span>
+                  {tab2Selected.length > 0 && (
                     <span className="px-1 py-0.2 rounded-full bg-[#1167c9] text-white text-[10px] min-w-[14px]">
-                      {selectedSponsors.length}
+                      {tab2Selected.length}
                     </span>
                   )}
                 </button>
@@ -686,7 +689,7 @@ export function TableHeaderCitySponsorFilter({
                     onClick={selectAllCurrent}
                     className="hover:text-[#1167c9] dark:hover:text-blue-400 font-medium cursor-pointer"
                   >
-                    تحديد كل {activeTab === "city" ? "المدن" : "الكفلاء"} ({validSelectableOptions.length})
+                    تحديد الكل ({validSelectableOptions.length})
                   </button>
                   <span className="text-slate-300 dark:text-slate-700">•</span>
                   <button
@@ -707,11 +710,7 @@ export function TableHeaderCitySponsorFilter({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder={
-                    activeTab === "city"
-                      ? "بحث في المدن..."
-                      : "بحث في الكفلاء والسجلات..."
-                  }
+                  placeholder={currentTab.placeholder || `بحث في ${currentTab.label}...`}
                   className="w-full h-7 pr-7 pl-6 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-[#1167c9]"
                 />
                 {query && (
@@ -798,9 +797,7 @@ export function TableHeaderCitySponsorFilter({
             {/* Footer Summary / Done */}
             <div className="p-2 border-t border-[var(--border)] bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between gap-1 text-[11px]">
               <span className="text-slate-500 dark:text-slate-400 truncate">
-                {activeTab === "city"
-                  ? `${selectedCities.length} مدينة محددة`
-                  : `${selectedSponsors.length} كفيل محدد`}
+                {`${currentSelected.length} محدد في ${currentTab.label}`}
               </span>
               <button
                 type="button"
@@ -814,5 +811,53 @@ export function TableHeaderCitySponsorFilter({
           document.body
         )}
     </div>
+  );
+}
+
+export interface TableHeaderCitySponsorFilterProps {
+  cityValue?: string | string[];
+  cityValues?: string[];
+  onCityChange: (val: string[]) => void;
+  cityOptions: FilterOption[];
+  sponsorValue?: string | string[];
+  sponsorValues?: string[];
+  onSponsorChange: (val: string[]) => void;
+  sponsorOptions: FilterOption[];
+}
+
+export function TableHeaderCitySponsorFilter({
+  cityValue,
+  cityValues,
+  onCityChange,
+  cityOptions,
+  sponsorValue,
+  sponsorValues,
+  onSponsorChange,
+  sponsorOptions,
+}: TableHeaderCitySponsorFilterProps) {
+  return (
+    <TableHeaderDualFilter
+      label="تصفية المدينة / الكفيل"
+      tab1={{
+        id: "city",
+        label: "المدينة",
+        icon: <MapPin className="h-3 w-3" />,
+        value: cityValue,
+        values: cityValues,
+        onChange: onCityChange,
+        options: cityOptions,
+        placeholder: "بحث في المدن...",
+      }}
+      tab2={{
+        id: "sponsor",
+        label: "الكفيل / السجل",
+        icon: <Building2 className="h-3 w-3" />,
+        value: sponsorValue,
+        values: sponsorValues,
+        onChange: onSponsorChange,
+        options: sponsorOptions,
+        placeholder: "بحث في الكفلاء والسجلات...",
+      }}
+    />
   );
 }

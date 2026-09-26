@@ -15,7 +15,7 @@ import {
   FileSpreadsheet,
   X,
 } from "lucide-react";
-import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
+import { TableHeaderColumnFilter, TableHeaderDualFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import { exportToExcel } from "@/lib/export-excel";
@@ -532,19 +532,26 @@ export default function TerminatedEmployeesPage() {
                   <th className="px-5 py-4">
                     <div className="flex items-center gap-1.5">
                       <span>{isEn ? "Name" : "الاسم"}</span>
-                      <TableHeaderColumnFilter
-                        label={isEn ? "Category" : "التصنيف"}
-                        value={headerCategoryFilter}
-                        onChange={(val) => setHeaderCategoryFilter(val)}
-                        options={categoryFilterOptions}
-                        placeholder={isEn ? "Filter by category..." : "تصفية بالتصنيف..."}
-                      />
-                      <TableHeaderColumnFilter
-                        label={isEn ? "Nationality" : "الجنسية"}
-                        value={headerNationalityFilter}
-                        onChange={(val) => setHeaderNationalityFilter(val)}
-                        options={nationalityFilterOptions}
-                        placeholder={isEn ? "Filter by nationality..." : "تصفية بالجنسية..."}
+                      <TableHeaderDualFilter
+                        label={isEn ? "Category & Nationality" : "التصنيف والجنسية"}
+                        tab1={{
+                          id: "category",
+                          label: isEn ? "Category" : "التصنيف",
+                          icon: <ShieldAlert className="h-3 w-3" />,
+                          values: headerCategoryFilter,
+                          onChange: setHeaderCategoryFilter,
+                          options: categoryFilterOptions,
+                          placeholder: isEn ? "Filter by category..." : "تصفية بالتصنيف...",
+                        }}
+                        tab2={{
+                          id: "nationality",
+                          label: isEn ? "Nationality" : "الجنسية",
+                          icon: <Globe className="h-3 w-3" />,
+                          values: headerNationalityFilter,
+                          onChange: setHeaderNationalityFilter,
+                          options: nationalityFilterOptions,
+                          placeholder: isEn ? "Filter by nationality..." : "تصفية بالجنسية...",
+                        }}
                       />
                     </div>
                   </th>
@@ -552,19 +559,26 @@ export default function TerminatedEmployeesPage() {
                   <th className="px-5 py-4">
                     <div className="flex items-center gap-1.5">
                       <span>{isEn ? "City & Role" : "المدينة والدور"}</span>
-                      <TableHeaderColumnFilter
-                        label={isEn ? "Operating City" : "المدينة التشغيلية"}
-                        value={headerCityFilter}
-                        onChange={(val) => setHeaderCityFilter(val)}
-                        options={cityFilterOptions}
-                        placeholder={isEn ? "Filter by city..." : "تصفية بالمدينة..."}
-                      />
-                      <TableHeaderColumnFilter
-                        label={isEn ? "Role" : "الدور"}
-                        value={headerRoleFilter}
-                        onChange={(val) => setHeaderRoleFilter(val)}
-                        options={roleFilterOptions}
-                        placeholder={isEn ? "Filter by role..." : "تصفية بالدور..."}
+                      <TableHeaderDualFilter
+                        label={isEn ? "City & Role" : "المدينة والدور"}
+                        tab1={{
+                          id: "city",
+                          label: isEn ? "Operating City" : "المدينة التشغيلية",
+                          icon: <MapPin className="h-3 w-3" />,
+                          values: headerCityFilter,
+                          onChange: setHeaderCityFilter,
+                          options: cityFilterOptions,
+                          placeholder: isEn ? "Filter by city..." : "تصفية بالمدينة...",
+                        }}
+                        tab2={{
+                          id: "role",
+                          label: isEn ? "Role" : "الدور",
+                          icon: <Briefcase className="h-3 w-3" />,
+                          values: headerRoleFilter,
+                          onChange: setHeaderRoleFilter,
+                          options: roleFilterOptions,
+                          placeholder: isEn ? "Filter by role..." : "تصفية بالدور...",
+                        }}
                       />
                     </div>
                   </th>

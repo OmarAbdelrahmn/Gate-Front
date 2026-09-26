@@ -19,7 +19,7 @@ import {
   FileSpreadsheet,
   X,
 } from "lucide-react";
-import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
+import { TableHeaderColumnFilter, TableHeaderDualFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { exportToExcel } from "../../../../lib/export-excel";
@@ -951,19 +951,26 @@ export default function ExternalRidersPage() {
                   <th className="px-5 py-4">
                     <div className="flex items-center gap-1.5">
                       <span>{locale === "en" ? "City & Role" : "المدينة والدور التشغيلي"}</span>
-                      <TableHeaderColumnFilter
-                        label={locale === "en" ? "Operating City" : "المدينة"}
-                        value={headerCityFilter}
-                        onChange={(val) => setHeaderCityFilter(val)}
-                        options={cityFilterOptions}
-                        placeholder={locale === "en" ? "Filter by city..." : "تصفية بالمدينة..."}
-                      />
-                      <TableHeaderColumnFilter
-                        label={locale === "en" ? "Work Type / Role" : "الدور التشغيلي"}
-                        value={headerWorkTypeFilter}
-                        onChange={(val) => setHeaderWorkTypeFilter(val)}
-                        options={workTypeFilterOptions}
-                        placeholder={locale === "en" ? "Filter by role..." : "تصفية بالدور..."}
+                      <TableHeaderDualFilter
+                        label={locale === "en" ? "City & Role" : "المدينة والدور التشغيلي"}
+                        tab1={{
+                          id: "city",
+                          label: locale === "en" ? "Operating City" : "المدينة",
+                          icon: <MapPin className="h-3 w-3" />,
+                          values: headerCityFilter,
+                          onChange: setHeaderCityFilter,
+                          options: cityFilterOptions,
+                          placeholder: locale === "en" ? "Filter by city..." : "تصفية بالمدينة...",
+                        }}
+                        tab2={{
+                          id: "workType",
+                          label: locale === "en" ? "Operational Role" : "الدور التشغيلي",
+                          icon: <Briefcase className="h-3 w-3" />,
+                          values: headerWorkTypeFilter,
+                          onChange: setHeaderWorkTypeFilter,
+                          options: workTypeFilterOptions,
+                          placeholder: locale === "en" ? "Filter by role..." : "تصفية بالدور...",
+                        }}
                       />
                     </div>
                   </th>
