@@ -248,6 +248,11 @@ export default function AuditLogsPage() {
   const [toUtc, setToUtc] = useState(getTodayDate);
   const [pageSize, setPageSize] = useState(100);
 
+  // Table Column Header Filter States (Multi-select)
+  const [headerActions, setHeaderActions] = useState<string[]>([]);
+  const [headerEntityTypes, setHeaderEntityTypes] = useState<string[]>([]);
+  const [headerActorUserIds, setHeaderActorUserIds] = useState<string[]>([]);
+
   // Pagination cursor stack: tracks beforeSequence for navigation
   const [currentCursor, setCurrentCursor] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -378,15 +383,16 @@ export default function AuditLogsPage() {
   }, [usersList, isEn]);
 
   const userFilterOptions: FilterOption[] = useMemo(() => {
-    return userOptions.map((u) => ({
-      value: u.value,
-      label: u.label,
-    }));
+    return userOptions
+      .filter((u) => u.value !== "")
+      .map((u) => ({
+        value: u.value,
+        label: u.label,
+      }));
   }, [userOptions]);
 
   const actionFilterOptions: FilterOption[] = useMemo(() => {
     return [
-      { value: "", label: isEn ? "All Actions" : "كافة العمليات" },
       { value: "Created", label: isEn ? "Created (إنشاء)" : "إنشاء جديد (Created)" },
       { value: "Updated", label: isEn ? "Updated (تعديل)" : "تعديل بيانات (Updated)" },
       { value: "SoftDeleted", label: isEn ? "Soft Deleted (حذف مؤقت)" : "حذف مؤقت (SoftDeleted)" },
@@ -395,10 +401,12 @@ export default function AuditLogsPage() {
   }, [isEn]);
 
   const entityTypeFilterOptions: FilterOption[] = useMemo(() => {
-    return COMMON_ENTITY_TYPES.map((t) => ({
-      value: t.value === "ALL" ? "" : t.value,
-      label: isEn ? t.labelEn : t.label,
-    }));
+    return COMMON_ENTITY_TYPES
+      .filter((t) => t.value !== "ALL")
+      .map((t) => ({
+        value: t.value,
+        label: isEn ? t.labelEn : t.label,
+      }));
   }, [isEn]);
 
   const recordOptions: SelectOption[] = useMemo(() => {
@@ -632,6 +640,9 @@ export default function AuditLogsPage() {
     setPageSize(100);
     setCurrentCursor(null);
     setCursorHistory([]);
+    setHeaderActions([]);
+    setHeaderEntityTypes([]);
+    setHeaderActorUserIds([]);
   };
 
   const hasActiveFilters = Boolean(
@@ -641,7 +652,10 @@ export default function AuditLogsPage() {
     entityId.trim() ||
     fromUtc !== getStartOfMonth() ||
     toUtc !== getTodayDate() ||
-    pageSize !== 100
+    pageSize !== 100 ||
+    headerActions.length > 0 ||
+    headerEntityTypes.length > 0 ||
+    headerActorUserIds.length > 0
   );
 
   const formatDateTime = (dateStr?: string) => {
@@ -716,9 +730,42 @@ export default function AuditLogsPage() {
         if (!matchesId && !matchesUsername) return false;
       }
 
+      // Multi-select column header filters
+      if (headerActions.length > 0 && !headerActions.includes(entry.action)) {
+        return false;
+      }
+
+      if (headerEntityTypes.length > 0 && !headerEntityTypes.includes(entry.entityType)) {
+        return false;
+      }
+
+      if (headerActorUserIds.length > 0) {
+        const itemUserId = entry.actorUserId || entry.actor?.userId;
+        const itemUsername = entry.actor?.userName?.toLowerCase();
+        const matchesHeaderUser = headerActorUserIds.some((selectedId) => {
+          if (itemUserId && itemUserId === selectedId) return true;
+          const u = usersList.find((usr) => usr.id === selectedId);
+          if (u?.userName && itemUsername && u.userName.toLowerCase() === itemUsername) return true;
+          return false;
+        });
+        if (!matchesHeaderUser) return false;
+      }
+
       return true;
     });
-  }, [items, isEn, docTypesMap, documentsMap, employeesList, vehiclePeriodsMap, actorUserId, usersList]);
+  }, [
+    items,
+    isEn,
+    docTypesMap,
+    documentsMap,
+    employeesList,
+    vehiclePeriodsMap,
+    actorUserId,
+    usersList,
+    headerActions,
+    headerEntityTypes,
+    headerActorUserIds,
+  ]);
 
   const handleExportExcel = async () => {
     if (processedEntries.length === 0) {
@@ -1005,6 +1052,80 @@ export default function AuditLogsPage() {
               </Button>
             </div>
           )}
+
+          {/* Active Column Filter Badges */}
+          {(headerActions.length > 0 || headerEntityTypes.length > 0 || headerActorUserIds.length > 0) && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border)]">
+              <span className="text-[11px] font-bold text-[var(--muted)]">
+                {isEn ? "Column filters:" : "فلاتر الأعمدة المحددة:"}
+              </span>
+              {headerActions.map((act) => {
+                const opt = actionFilterOptions.find((o) => o.value === act);
+                return (
+                  <span
+                    key={act}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                  >
+                    <span>{opt?.label || act}</span>
+                    <button
+                      type="button"
+                      onClick={() => setHeaderActions((prev) => prev.filter((x) => x !== act))}
+                      className="hover:text-red-500 rounded-full"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                );
+              })}
+              {headerEntityTypes.map((et) => {
+                const opt = entityTypeFilterOptions.find((o) => o.value === et);
+                return (
+                  <span
+                    key={et}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                  >
+                    <span>{opt?.label || et}</span>
+                    <button
+                      type="button"
+                      onClick={() => setHeaderEntityTypes((prev) => prev.filter((x) => x !== et))}
+                      className="hover:text-red-500 rounded-full"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                );
+              })}
+              {headerActorUserIds.map((uid) => {
+                const opt = userFilterOptions.find((o) => o.value === uid);
+                return (
+                  <span
+                    key={uid}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                  >
+                    <span>{opt?.label || uid}</span>
+                    <button
+                      type="button"
+                      onClick={() => setHeaderActorUserIds((prev) => prev.filter((x) => x !== uid))}
+                      className="hover:text-red-500 rounded-full"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  setHeaderActions([]);
+                  setHeaderEntityTypes([]);
+                  setHeaderActorUserIds([]);
+                }}
+                className="text-[11px] text-red-600 dark:text-red-400 hover:underline ms-2 font-medium"
+              >
+                {isEn ? "Clear column filters" : "مسح فلاتر الأعمدة"}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Error Notice */}
@@ -1034,8 +1155,8 @@ export default function AuditLogsPage() {
                     <span>{isEn ? "Action" : "الإجراء"}</span>
                     <TableHeaderColumnFilter
                       label={isEn ? "Action" : "الإجراء"}
-                      value={action === "ALL" ? "" : action}
-                      onChange={(val) => setAction(val || "ALL")}
+                      value={headerActions}
+                      onChange={(val) => setHeaderActions(val)}
                       options={actionFilterOptions}
                       placeholder={isEn ? "Filter by action..." : "تصفية بالإجراء..."}
                     />
@@ -1046,8 +1167,8 @@ export default function AuditLogsPage() {
                     <span>{isEn ? "Entity / Record" : "الكيان والسجل"}</span>
                     <TableHeaderColumnFilter
                       label={isEn ? "Entity Type" : "نوع الكيان"}
-                      value={entityType === "ALL" ? "" : entityType}
-                      onChange={(val) => setEntityType(val || "ALL")}
+                      value={headerEntityTypes}
+                      onChange={(val) => setHeaderEntityTypes(val)}
                       options={entityTypeFilterOptions}
                       placeholder={isEn ? "Filter by entity..." : "تصفية بالكيان..."}
                     />
@@ -1058,8 +1179,8 @@ export default function AuditLogsPage() {
                     <span>{isEn ? "Actor / User" : "القائم بالعملية"}</span>
                     <TableHeaderColumnFilter
                       label={isEn ? "Actor / User" : "المستخدم"}
-                      value={actorUserId}
-                      onChange={(val) => setActorUserId(val || "")}
+                      value={headerActorUserIds}
+                      onChange={(val) => setHeaderActorUserIds(val)}
                       options={userFilterOptions}
                       placeholder={isEn ? "Filter by user..." : "تصفية بالمستخدم..."}
                     />

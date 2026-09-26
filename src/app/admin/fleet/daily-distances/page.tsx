@@ -70,12 +70,12 @@ export default function VehicleDailyDistancesPage() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<"gps" | "manual" | "missing" | "">("");
 
-  // Table Header Column Filters
-  const [headerCityFilter, setHeaderCityFilter] = useState<string>("");
-  const [headerPlateFilter, setHeaderPlateFilter] = useState<string>("");
-  const [headerSourceFilter, setHeaderSourceFilter] = useState<string>("");
-  const [headerGpsStatusFilter, setHeaderGpsStatusFilter] = useState<string>("");
-  const [headerManualStatusFilter, setHeaderManualStatusFilter] = useState<string>("");
+  // Table Header Column Filters (Multi)
+  const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
+  const [headerPlateFilter, setHeaderPlateFilter] = useState<string[]>([]);
+  const [headerSourceFilter, setHeaderSourceFilter] = useState<string[]>([]);
+  const [headerGpsStatusFilter, setHeaderGpsStatusFilter] = useState<string[]>([]);
+  const [headerManualStatusFilter, setHeaderManualStatusFilter] = useState<string[]>([]);
 
   const GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY = "admin_fleet_daily_distances_filters_session";
   const [isRestored, setIsRestored] = useState(false);
@@ -86,11 +86,17 @@ export default function VehicleDailyDistancesPage() {
       const saved = sessionStorage.getItem(GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (typeof parsed.headerCityFilter === "string") setHeaderCityFilter(parsed.headerCityFilter);
-        if (typeof parsed.headerPlateFilter === "string") setHeaderPlateFilter(parsed.headerPlateFilter);
-        if (typeof parsed.headerSourceFilter === "string") setHeaderSourceFilter(parsed.headerSourceFilter);
-        if (typeof parsed.headerGpsStatusFilter === "string") setHeaderGpsStatusFilter(parsed.headerGpsStatusFilter);
-        if (typeof parsed.headerManualStatusFilter === "string") setHeaderManualStatusFilter(parsed.headerManualStatusFilter);
+        const toArray = (val: any): string[] => {
+          if (Array.isArray(val)) return val.map(String).filter(Boolean);
+          if (typeof val === "string" && val.trim() && val !== "ALL") return [val.trim()];
+          return [];
+        };
+
+        if (parsed.headerCityFilter) setHeaderCityFilter(toArray(parsed.headerCityFilter));
+        if (parsed.headerPlateFilter) setHeaderPlateFilter(toArray(parsed.headerPlateFilter));
+        if (parsed.headerSourceFilter) setHeaderSourceFilter(toArray(parsed.headerSourceFilter));
+        if (parsed.headerGpsStatusFilter) setHeaderGpsStatusFilter(toArray(parsed.headerGpsStatusFilter));
+        if (parsed.headerManualStatusFilter) setHeaderManualStatusFilter(toArray(parsed.headerManualStatusFilter));
         if (typeof parsed.sourceFilter === "string") setSourceFilter(parsed.sourceFilter as any);
         if (typeof parsed.searchQuery === "string") setSearchQuery(parsed.searchQuery);
       }
@@ -106,11 +112,11 @@ export default function VehicleDailyDistancesPage() {
     if (!isRestored) return;
     try {
       if (
-        headerCityFilter ||
-        headerPlateFilter ||
-        headerSourceFilter ||
-        headerGpsStatusFilter ||
-        headerManualStatusFilter ||
+        headerCityFilter.length > 0 ||
+        headerPlateFilter.length > 0 ||
+        headerSourceFilter.length > 0 ||
+        headerGpsStatusFilter.length > 0 ||
+        headerManualStatusFilter.length > 0 ||
         sourceFilter ||
         searchQuery
       ) {
@@ -667,11 +673,11 @@ export default function VehicleDailyDistancesPage() {
   }, [data?.items]);
 
   const clearHeaderFilters = () => {
-    setHeaderCityFilter("");
-    setHeaderPlateFilter("");
-    setHeaderSourceFilter("");
-    setHeaderGpsStatusFilter("");
-    setHeaderManualStatusFilter("");
+    setHeaderCityFilter([]);
+    setHeaderPlateFilter([]);
+    setHeaderSourceFilter([]);
+    setHeaderGpsStatusFilter([]);
+    setHeaderManualStatusFilter([]);
     try {
       sessionStorage.removeItem(GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY);
     } catch {
@@ -680,15 +686,18 @@ export default function VehicleDailyDistancesPage() {
   };
 
   const isHeaderFiltered = Boolean(
-    headerCityFilter || headerPlateFilter || headerSourceFilter || headerGpsStatusFilter || headerManualStatusFilter
+    headerCityFilter.length > 0 ||
+    headerPlateFilter.length > 0 ||
+    headerSourceFilter.length > 0 ||
+    headerGpsStatusFilter.length > 0 ||
+    headerManualStatusFilter.length > 0
   );
 
   // Client-filtered items based on table header filters
   const filteredItems = useMemo(() => {
     if (!data?.items) return [];
     return data.items.filter((item) => {
-      if (headerCityFilter) {
-        const c = headerCityFilter.toLowerCase();
+      if (headerCityFilter.length > 0) {
         const itemCity = (
           item.operatingCity ||
           item.operatingCityNameAr ||
@@ -696,27 +705,42 @@ export default function VehicleDailyDistancesPage() {
           vehicleCities[item.vehicleId] ||
           ""
         ).toLowerCase();
-        if (itemCity !== c && !itemCity.includes(c)) return false;
+        const match = headerCityFilter.some((cf) => {
+          const c = cf.toLowerCase();
+          return itemCity === c || itemCity.includes(c);
+        });
+        if (!match) return false;
       }
-      if (headerPlateFilter) {
-        const p = headerPlateFilter.toLowerCase();
-        const matchAr = item.plateNumberAr?.toLowerCase().includes(p);
-        const matchEn = item.plateNumberEn?.toLowerCase().includes(p);
-        const matchAsset = item.assetNumber?.toLowerCase().includes(p);
-        if (!matchAr && !matchEn && !matchAsset) return false;
+      if (headerPlateFilter.length > 0) {
+        const match = headerPlateFilter.some((pf) => {
+          const p = pf.toLowerCase();
+          const matchAr = item.plateNumberAr?.toLowerCase().includes(p);
+          const matchEn = item.plateNumberEn?.toLowerCase().includes(p);
+          const matchAsset = item.assetNumber?.toLowerCase().includes(p);
+          return matchAr || matchEn || matchAsset;
+        });
+        if (!match) return false;
       }
-      if (headerSourceFilter) {
+      if (headerSourceFilter.length > 0) {
         const s = getAppliedSourceInfo(item.appliedSource);
-        if (headerSourceFilter !== s.code) return false;
+        if (!headerSourceFilter.includes(s.code)) return false;
       }
-      if (headerGpsStatusFilter) {
-        if (headerGpsStatusFilter === "has_gps" && (item.gpsDistanceKm == null || item.gpsDistanceKm <= 0)) return false;
-        if (headerGpsStatusFilter === "zero_gps" && item.gpsDistanceKm !== 0) return false;
-        if (headerGpsStatusFilter === "no_gps" && item.gpsDistanceKm != null) return false;
+      if (headerGpsStatusFilter.length > 0) {
+        const match = headerGpsStatusFilter.some((gf) => {
+          if (gf === "has_gps") return item.gpsDistanceKm != null && item.gpsDistanceKm > 0;
+          if (gf === "zero_gps") return item.gpsDistanceKm === 0;
+          if (gf === "no_gps") return item.gpsDistanceKm == null;
+          return false;
+        });
+        if (!match) return false;
       }
-      if (headerManualStatusFilter) {
-        if (headerManualStatusFilter === "has_manual" && item.manualOdometerReading == null) return false;
-        if (headerManualStatusFilter === "no_manual" && item.manualOdometerReading != null) return false;
+      if (headerManualStatusFilter.length > 0) {
+        const match = headerManualStatusFilter.some((mf) => {
+          if (mf === "has_manual") return item.manualOdometerReading != null;
+          if (mf === "no_manual") return item.manualOdometerReading == null;
+          return false;
+        });
+        if (!match) return false;
       }
       return true;
     });
@@ -935,36 +959,36 @@ export default function VehicleDailyDistancesPage() {
       {isHeaderFiltered && (
         <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs">
           <span className="text-[var(--muted)] font-bold">فلاتر أعمدة الجدول النشطة:</span>
-          {headerCityFilter && (
-            <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 gap-1 pl-1.5 font-medium">
-              المدينة: {headerCityFilter}
-              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderCityFilter("")} />
+          {headerCityFilter.map((c) => (
+            <Badge key={c} className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 gap-1 pl-1.5 font-medium">
+              المدينة: {c}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderCityFilter(headerCityFilter.filter((x) => x !== c))} />
             </Badge>
-          )}
-          {headerPlateFilter && (
-            <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 gap-1 pl-1.5 font-medium">
-              اللوحة: {headerPlateFilter}
-              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderPlateFilter("")} />
+          ))}
+          {headerPlateFilter.map((p) => (
+            <Badge key={p} className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 gap-1 pl-1.5 font-medium">
+              اللوحة: {p}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderPlateFilter(headerPlateFilter.filter((x) => x !== p))} />
             </Badge>
-          )}
-          {headerSourceFilter && (
-            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 gap-1 pl-1.5 font-medium">
-              المصدر: {sourceOptions.find((s: FilterOption) => s.value === headerSourceFilter)?.label || headerSourceFilter}
-              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderSourceFilter("")} />
+          ))}
+          {headerSourceFilter.map((sVal) => (
+            <Badge key={sVal} className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 gap-1 pl-1.5 font-medium">
+              المصدر: {sourceOptions.find((s: FilterOption) => s.value === sVal)?.label || sVal}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderSourceFilter(headerSourceFilter.filter((x) => x !== sVal))} />
             </Badge>
-          )}
-          {headerGpsStatusFilter && (
-            <Badge className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 gap-1 pl-1.5 font-medium">
-              مسافة GPS: {gpsStatusOptions.find((s: FilterOption) => s.value === headerGpsStatusFilter)?.label || headerGpsStatusFilter}
-              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderGpsStatusFilter("")} />
+          ))}
+          {headerGpsStatusFilter.map((gVal) => (
+            <Badge key={gVal} className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 gap-1 pl-1.5 font-medium">
+              مسافة GPS: {gpsStatusOptions.find((s: FilterOption) => s.value === gVal)?.label || gVal}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderGpsStatusFilter(headerGpsStatusFilter.filter((x) => x !== gVal))} />
             </Badge>
-          )}
-          {headerManualStatusFilter && (
-            <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 gap-1 pl-1.5 font-medium">
-              العداد اليدوي: {manualStatusOptions.find((s: FilterOption) => s.value === headerManualStatusFilter)?.label || headerManualStatusFilter}
-              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderManualStatusFilter("")} />
+          ))}
+          {headerManualStatusFilter.map((mVal) => (
+            <Badge key={mVal} className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 gap-1 pl-1.5 font-medium">
+              العداد اليدوي: {manualStatusOptions.find((s: FilterOption) => s.value === mVal)?.label || mVal}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderManualStatusFilter(headerManualStatusFilter.filter((x) => x !== mVal))} />
             </Badge>
-          )}
+          ))}
           <button
             type="button"
             onClick={clearHeaderFilters}

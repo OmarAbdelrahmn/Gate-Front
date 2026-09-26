@@ -13,7 +13,9 @@ import {
   ShieldAlert,
   FileCheck,
   FileSpreadsheet,
+  X,
 } from "lucide-react";
+import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import { exportToExcel } from "@/lib/export-excel";
@@ -57,6 +59,49 @@ export default function TerminatedEmployeesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [headerCategoryFilter, setHeaderCategoryFilter] = useState<string[]>([]);
+  const [headerNationalityFilter, setHeaderNationalityFilter] = useState<string[]>([]);
+  const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
+  const [headerRoleFilter, setHeaderRoleFilter] = useState<string[]>([]);
+
+  const TERMINATED_FILTERS_SESSION_KEY = "admin_terminated_employees_filters_session";
+  const isRestoredRef = useState({ current: false })[0];
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(TERMINATED_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string") setSearch(parsed.search);
+        if (Array.isArray(parsed.headerCategoryFilter)) setHeaderCategoryFilter(parsed.headerCategoryFilter);
+        if (Array.isArray(parsed.headerNationalityFilter)) setHeaderNationalityFilter(parsed.headerNationalityFilter);
+        if (Array.isArray(parsed.headerCityFilter)) setHeaderCityFilter(parsed.headerCityFilter);
+        if (Array.isArray(parsed.headerRoleFilter)) setHeaderRoleFilter(parsed.headerRoleFilter);
+      }
+    } catch {
+      // ignore
+    } finally {
+      isRestoredRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        TERMINATED_FILTERS_SESSION_KEY,
+        JSON.stringify({
+          search,
+          headerCategoryFilter,
+          headerNationalityFilter,
+          headerCityFilter,
+          headerRoleFilter,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [search, headerCategoryFilter, headerNationalityFilter, headerCityFilter, headerRoleFilter]);
 
   const canReadEmployees = can("employees.read");
   const canReadRiders = can("riders.read");
@@ -190,8 +235,68 @@ export default function TerminatedEmployeesPage() {
     return list;
   }, [employees, externalRiders, cityMap, workTypeMap, isEn]);
 
+  // Filter Options for TableHeaderColumnFilter
+  const categoryFilterOptions: FilterOption[] = useMemo(() => [
+    { value: "SponsoredStaff", label: isEn ? "Sponsored Staff" : "إداري مكفول" },
+    { value: "SponsoredRider", label: isEn ? "Sponsored Rider" : "مندوب مكفول" },
+    { value: "OutsideRider", label: isEn ? "Outside Rider" : "مندوب خارجي" },
+  ], [isEn]);
+
+  const nationalityFilterOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    terminatedList.forEach((p) => {
+      if (p.nationality && p.nationality !== "—") set.add(p.nationality.trim());
+    });
+    return Array.from(set).sort().map((nat) => ({
+      value: nat,
+      label: nat,
+    }));
+  }, [terminatedList]);
+
+  const cityFilterOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    terminatedList.forEach((p) => {
+      if (p.cityName && p.cityName !== "—") set.add(p.cityName.trim());
+    });
+    return Array.from(set).sort().map((city) => ({
+      value: city,
+      label: city,
+    }));
+  }, [terminatedList]);
+
+  const roleFilterOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    terminatedList.forEach((p) => {
+      if (p.roleName && p.roleName !== "—") set.add(p.roleName.trim());
+    });
+    return Array.from(set).sort().map((role) => ({
+      value: role,
+      label: role,
+    }));
+  }, [terminatedList]);
+
   const filteredList = useMemo(() => {
     return terminatedList.filter((item) => {
+      if (headerCategoryFilter.length > 0) {
+        let catKey = "OutsideRider";
+        if (item.sourceType === "Sponsored") {
+          catKey = item.engagementLabel.en === "Sponsored Staff" ? "SponsoredStaff" : "SponsoredRider";
+        }
+        if (!headerCategoryFilter.includes(catKey)) return false;
+      }
+
+      if (headerNationalityFilter.length > 0) {
+        if (!item.nationality || !headerNationalityFilter.includes(item.nationality.trim())) return false;
+      }
+
+      if (headerCityFilter.length > 0) {
+        if (!item.cityName || !headerCityFilter.includes(item.cityName.trim())) return false;
+      }
+
+      if (headerRoleFilter.length > 0) {
+        if (!item.roleName || !headerRoleFilter.includes(item.roleName.trim())) return false;
+      }
+
       if (!search.trim()) return true;
       return matchesArabicSearch(
         search,
@@ -206,7 +311,7 @@ export default function TerminatedEmployeesPage() {
         item.sourceType,
       );
     });
-  }, [terminatedList, search]);
+  }, [terminatedList, search, headerCategoryFilter, headerNationalityFilter, headerCityFilter, headerRoleFilter]);
 
   const [exporting, setExporting] = useState(false);
 
@@ -271,25 +376,50 @@ export default function TerminatedEmployeesPage() {
       {/* Main Table Card */}
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] p-4">
-          <div className="relative w-full max-w-md">
-            <Search
-              className={`pointer-events-none absolute top-3 text-[var(--muted)] ${
-                isEn ? "left-3" : "right-3"
-              }`}
-              size={18}
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={
-                isEn
-                  ? "Search terminated staff by name, Iqama, phone..."
-                  : "ابحث بالاسم، رقم الإقامة، الهاتف..."
-              }
-              className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${
-                isEn ? "pl-10 pr-3" : "pr-10 pl-3"
-              }`}
-            />
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1 max-w-xl">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search
+                className={`pointer-events-none absolute top-3 text-[var(--muted)] ${
+                  isEn ? "left-3" : "right-3"
+                }`}
+                size={18}
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={
+                  isEn
+                    ? "Search terminated staff by name, Iqama, phone..."
+                    : "ابحث بالاسم، رقم الإقامة، الهاتف..."
+                }
+                className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${
+                  isEn ? "pl-10 pr-3" : "pr-10 pl-3"
+                }`}
+              />
+            </div>
+
+            {(search.trim() ||
+              headerCategoryFilter.length > 0 ||
+              headerNationalityFilter.length > 0 ||
+              headerCityFilter.length > 0 ||
+              headerRoleFilter.length > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setHeaderCategoryFilter([]);
+                  setHeaderNationalityFilter([]);
+                  setHeaderCityFilter([]);
+                  setHeaderRoleFilter([]);
+                  try {
+                    sessionStorage.removeItem(TERMINATED_FILTERS_SESSION_KEY);
+                  } catch {}
+                }}
+                className="h-11 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors shrink-0"
+              >
+                {isEn ? "Reset Filters" : "إعادة ضبط"}
+              </button>
+            )}
           </div>
 
           <span className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] shrink-0">
@@ -297,6 +427,93 @@ export default function TerminatedEmployeesPage() {
             {filteredList.length} {isEn ? "terminated" : "منتهي خدمة"}
           </span>
         </div>
+
+        {/* Active Column Filter Badges */}
+        {(headerCategoryFilter.length > 0 ||
+          headerNationalityFilter.length > 0 ||
+          headerCityFilter.length > 0 ||
+          headerRoleFilter.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/70">
+            <span className="text-[11px] font-bold text-[var(--muted)]">
+              {isEn ? "Column filters:" : "فلاتر الأعمدة:"}
+            </span>
+            {headerCategoryFilter.map((cat) => {
+              const opt = categoryFilterOptions.find((o) => o.value === cat);
+              return (
+                <span
+                  key={cat}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                >
+                  <span>{opt?.label || cat}</span>
+                  <button
+                    type="button"
+                    onClick={() => setHeaderCategoryFilter((prev) => prev.filter((x) => x !== cat))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+            {headerNationalityFilter.map((nat) => (
+              <span
+                key={nat}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+              >
+                <span>{nat}</span>
+                <button
+                  type="button"
+                  onClick={() => setHeaderNationalityFilter((prev) => prev.filter((x) => x !== nat))}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {headerCityFilter.map((city) => (
+              <span
+                key={city}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              >
+                <span>{city}</span>
+                <button
+                  type="button"
+                  onClick={() => setHeaderCityFilter((prev) => prev.filter((x) => x !== city))}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {headerRoleFilter.map((role) => (
+              <span
+                key={role}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+              >
+                <span>{role}</span>
+                <button
+                  type="button"
+                  onClick={() => setHeaderRoleFilter((prev) => prev.filter((x) => x !== role))}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setHeaderCategoryFilter([]);
+                setHeaderNationalityFilter([]);
+                setHeaderCityFilter([]);
+                setHeaderRoleFilter([]);
+              }}
+              className="text-[11px] text-red-600 dark:text-red-400 hover:underline ms-2 font-medium"
+            >
+              {isEn ? "Clear column filters" : "مسح فلاتر الأعمدة"}
+            </button>
+          </div>
+        )}
 
         {error ? (
           <div className="flex items-center gap-3 p-6 text-red-700">
@@ -312,9 +529,45 @@ export default function TerminatedEmployeesPage() {
             <table className={`min-w-[900px] w-full ${isEn ? "text-left" : "text-right"}`}>
               <thead className="bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                 <tr>
-                  <th className="px-5 py-4">{isEn ? "Name" : "الاسم"}</th>
+                  <th className="px-5 py-4">
+                    <div className="flex items-center gap-1.5">
+                      <span>{isEn ? "Name" : "الاسم"}</span>
+                      <TableHeaderColumnFilter
+                        label={isEn ? "Category" : "التصنيف"}
+                        value={headerCategoryFilter}
+                        onChange={(val) => setHeaderCategoryFilter(val)}
+                        options={categoryFilterOptions}
+                        placeholder={isEn ? "Filter by category..." : "تصفية بالتصنيف..."}
+                      />
+                      <TableHeaderColumnFilter
+                        label={isEn ? "Nationality" : "الجنسية"}
+                        value={headerNationalityFilter}
+                        onChange={(val) => setHeaderNationalityFilter(val)}
+                        options={nationalityFilterOptions}
+                        placeholder={isEn ? "Filter by nationality..." : "تصفية بالجنسية..."}
+                      />
+                    </div>
+                  </th>
                   <th className="px-5 py-4">{isEn ? "Iqama / Phone" : "رقم الإقامة / الجوال"}</th>
-                  <th className="px-5 py-4">{isEn ? "City & Role" : "المدينة والدور"}</th>
+                  <th className="px-5 py-4">
+                    <div className="flex items-center gap-1.5">
+                      <span>{isEn ? "City & Role" : "المدينة والدور"}</span>
+                      <TableHeaderColumnFilter
+                        label={isEn ? "Operating City" : "المدينة التشغيلية"}
+                        value={headerCityFilter}
+                        onChange={(val) => setHeaderCityFilter(val)}
+                        options={cityFilterOptions}
+                        placeholder={isEn ? "Filter by city..." : "تصفية بالمدينة..."}
+                      />
+                      <TableHeaderColumnFilter
+                        label={isEn ? "Role" : "الدور"}
+                        value={headerRoleFilter}
+                        onChange={(val) => setHeaderRoleFilter(val)}
+                        options={roleFilterOptions}
+                        placeholder={isEn ? "Filter by role..." : "تصفية بالدور..."}
+                      />
+                    </div>
+                  </th>
                   <th className="px-5 py-4">{t("common.status")}</th>
                   <th className="px-5 py-4 text-center">{t("common.actions")}</th>
                 </tr>

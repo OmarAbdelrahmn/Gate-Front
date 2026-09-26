@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Filter, Plus, Search, UsersRound, FileText, FileSpreadsheet } from "lucide-react";
+import { Check, Filter, Plus, Search, UsersRound, FileText, FileSpreadsheet, X } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
+import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 import { translate } from "../../../lib/i18n";
 import { exportToExcel } from "../../../lib/export-excel";
 import { hrCatalogApi, type HrRow } from "../../../lib/hr/api";
@@ -131,7 +132,13 @@ export default function EmployeesPage() {
     const [sponsors, setSponsors] = useState<HrRow[]>([]);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
-    const [engagementFilter, setEngagementFilter] = useState<string>("SponsoredInternal");
+    const [employeeTypeFilter, setEmployeeTypeFilter] = useState<string[]>([]);
+    const [engagementFilter, setEngagementFilter] = useState<string[]>(["SponsoredInternal"]);
+    const [nationalityFilter, setNationalityFilter] = useState<string[]>([]);
+    const [workTypeFilter, setWorkTypeFilter] = useState<string[]>([]);
+    const [platformFilter, setPlatformFilter] = useState<string[]>([]);
+    const [cityFilter, setCityFilter] = useState<string[]>([]);
+    const [headerStatusFilter, setHeaderStatusFilter] = useState<string[]>([]);
     const [roleFilter, setRoleFilter] = useState<"all" | "employees" | "riders">("all");
 
     const EMPLOYEES_FILTERS_SESSION_KEY = "admin_employees_filters_session";
@@ -145,7 +152,21 @@ export default function EmployeesPage() {
                 const parsed = JSON.parse(saved);
                 if (typeof parsed.search === "string") setSearch(parsed.search);
                 if (typeof parsed.statusFilter === "string") setStatusFilter(parsed.statusFilter);
-                if (typeof parsed.engagementFilter === "string") setEngagementFilter(parsed.engagementFilter);
+                if (Array.isArray(parsed.engagementFilter)) {
+                    setEngagementFilter(parsed.engagementFilter);
+                } else if (typeof parsed.engagementFilter === "string") {
+                    if (parsed.engagementFilter === "all" || !parsed.engagementFilter) {
+                        setEngagementFilter([]);
+                    } else {
+                        setEngagementFilter([parsed.engagementFilter]);
+                    }
+                }
+                if (Array.isArray(parsed.employeeTypeFilter)) setEmployeeTypeFilter(parsed.employeeTypeFilter);
+                if (Array.isArray(parsed.nationalityFilter)) setNationalityFilter(parsed.nationalityFilter);
+                if (Array.isArray(parsed.workTypeFilter)) setWorkTypeFilter(parsed.workTypeFilter);
+                if (Array.isArray(parsed.platformFilter)) setPlatformFilter(parsed.platformFilter);
+                if (Array.isArray(parsed.cityFilter)) setCityFilter(parsed.cityFilter);
+                if (Array.isArray(parsed.headerStatusFilter)) setHeaderStatusFilter(parsed.headerStatusFilter);
                 if (typeof parsed.roleFilter === "string" && ["all", "employees", "riders"].includes(parsed.roleFilter)) {
                     setRoleFilter(parsed.roleFilter as "all" | "employees" | "riders");
                 }
@@ -163,29 +184,26 @@ export default function EmployeesPage() {
         try {
             sessionStorage.setItem(
                 EMPLOYEES_FILTERS_SESSION_KEY,
-                JSON.stringify({ search, statusFilter, engagementFilter, roleFilter })
+                JSON.stringify({
+                    search,
+                    statusFilter,
+                    employeeTypeFilter,
+                    engagementFilter,
+                    nationalityFilter,
+                    workTypeFilter,
+                    platformFilter,
+                    cityFilter,
+                    headerStatusFilter,
+                    roleFilter,
+                })
             );
         } catch {
             // ignore sessionStorage errors
         }
-    }, [search, statusFilter, engagementFilter, roleFilter]);
-    const [showFilterPopup, setShowFilterPopup] = useState(false);
-    const filterBtnRef = useRef<HTMLButtonElement>(null);
-    const [popupCoords, setPopupCoords] = useState<{ top: number; left?: number; right?: number } | null>(null);
+    }, [search, statusFilter, employeeTypeFilter, engagementFilter, nationalityFilter, workTypeFilter, platformFilter, cityFilter, headerStatusFilter, roleFilter]);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-
-    const toggleFilterPopup = () => {
-        if (!showFilterPopup && filterBtnRef.current) {
-            const rect = filterBtnRef.current.getBoundingClientRect();
-            if (locale === "en") {
-                setPopupCoords({ top: rect.bottom + 6, left: rect.left });
-            } else {
-                setPopupCoords({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
-            }
-        }
-        setShowFilterPopup((prev) => !prev);
-    };
 
     useEffect(() => {
         setLoading(true);
@@ -211,7 +229,7 @@ export default function EmployeesPage() {
 
     const uniqueSponsors = useMemo(() => {
         const map = new Map<string, { id: string; nameAr: string; nameEn?: string }>();
-        
+
         sponsors.forEach((s) => {
             const nameAr = (s.nameAr || s.nameEn || s.name || s.code) as string;
             const nameEn = (s.nameEn || s.nameAr || s.name || s.code) as string;
@@ -242,38 +260,100 @@ export default function EmployeesPage() {
         return Array.from(map.values());
     }, [sponsors, employees]);
 
-    const engagementOptions = useMemo(() => {
-        const options: { key: string; labelAr: string; labelEn: string }[] = [
-            { key: "all", labelAr: "الكل", labelEn: "All " },
-            { key: "SponsoredInternal", labelAr: "على الكفالة", labelEn: "Company Sponsored" },
+    const engagementOptions: FilterOption[] = useMemo(() => {
+        const options: FilterOption[] = [
+            { value: "SponsoredInternal", label: locale === "en" ? "Company Sponsored" : "على الكفالة" },
         ];
 
         uniqueSponsors.forEach((sp) => {
             const key = sp.id.startsWith("name:") ? `sponsorName:${sp.nameAr}` : `sponsor:${sp.id}`;
             options.push({
-                key,
-                labelAr: `${sp.nameAr}`,
-                labelEn: `${sp.nameEn || sp.nameAr}`,
+                value: key,
+                label: locale === "en" ? (sp.nameEn || sp.nameAr) : sp.nameAr,
             });
         });
 
         options.push({
-            key: "OutsideRider",
-            labelAr: "مندوب خارجي",
-            labelEn: "External Delegate",
+            value: "OutsideRider",
+            label: locale === "en" ? "External Delegate" : "مندوب خارجي",
         });
 
         return options;
-    }, [uniqueSponsors]);
+    }, [uniqueSponsors, locale]);
+
+    const nationalityOptions: FilterOption[] = useMemo(() => {
+        const set = new Set<string>();
+        employees.forEach((emp) => {
+            const empRecord = emp as Record<string, unknown>;
+            const nat = (emp.nationality || (empRecord.nationalityAr as string) || "").trim();
+            if (nat) set.add(nat);
+        });
+        return Array.from(set).sort().map((nat) => ({
+            value: nat,
+            label: nat,
+        }));
+    }, [employees]);
+
+    const platformOptions: FilterOption[] = useMemo(() => {
+        const map = new Map<string, string>();
+        employees.forEach((emp) => {
+            if (emp.currentWorkPlatform) {
+                const id = emp.currentWorkPlatform.id || emp.currentWorkPlatform.code || emp.currentWorkPlatform.nameAr || "";
+                const name = locale === "en"
+                    ? emp.currentWorkPlatform.nameEn || emp.currentWorkPlatform.nameAr || emp.currentWorkPlatform.code
+                    : emp.currentWorkPlatform.nameAr || emp.currentWorkPlatform.nameEn || emp.currentWorkPlatform.code;
+                if (id && name) map.set(id, name);
+            }
+        });
+        return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+    }, [employees, locale]);
+
+    const cityOptions: FilterOption[] = useMemo(() => {
+        const map = new Map<string, string>();
+        cities.forEach((c) => {
+            const rawName = locale === "en" ? c.nameEn || c.nameAr || c.name || c.code : c.nameAr || c.nameEn || c.name || c.code;
+            const name = typeof rawName === "string" ? rawName : "";
+            if (c.id && name) map.set(c.id, name);
+        });
+        return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+    }, [cities, locale]);
+
+    const employeeTypeOptions: FilterOption[] = useMemo(() => [
+        { value: "Staff", label: locale === "en" ? "Staff" : "إداري" },
+        { value: "Delegate", label: locale === "en" ? "Delegate" : "مندوب" },
+    ], [locale]);
+
+    const workTypeOptions: FilterOption[] = useMemo(() => {
+        const map = new Map<string, string>();
+        workTypes.forEach((w) => {
+            const rawName = locale === "en" ? w.nameEn || w.nameAr || w.code : w.nameAr || w.nameEn || w.code;
+            const name = typeof rawName === "string" ? rawName : "";
+            if (w.id && name) map.set(w.id, name);
+        });
+        return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+    }, [workTypes, locale]);
+
+    const statusOptions: FilterOption[] = useMemo(() => {
+        return Object.entries(statusLabel).map(([key, val]) => ({
+            value: key,
+            label: locale === "en" ? val.en : val.ar,
+        }));
+    }, [locale]);
 
     const results = useMemo(
         () =>
             employees.filter((item) => {
+                const empRecord = item as Record<string, unknown>;
+
                 if (item.status === "Terminated") {
                     return false;
                 }
 
                 if (statusFilter !== "all" && item.status !== statusFilter) {
+                    return false;
+                }
+
+                if (headerStatusFilter.length > 0 && !headerStatusFilter.includes(item.status)) {
                     return false;
                 }
 
@@ -284,34 +364,69 @@ export default function EmployeesPage() {
                     return false;
                 }
 
-                if (engagementFilter !== "all") {
-                    const empRec = item as Record<string, unknown>;
+                if (engagementFilter.length > 0) {
                     const relKey = item.engagementType || item.relationshipType;
+                    const actualSId = item.sponsorId || item.sponsor?.id || (empRecord.sponsorId as string);
+                    const actualNameAr = item.sponsor?.nameAr || item.sponsorNameAr || (empRecord.sponsorNameAr as string);
+                    const actualNameEn = item.sponsor?.nameEn;
 
-                    if (engagementFilter === "SponsoredInternal") {
-                        if (relKey !== "SponsoredInternal") return false;
-                    } else if (engagementFilter === "OutsideRider") {
-                        if (relKey !== "OutsideRider") return false;
-                    } else if (engagementFilter.startsWith("sponsor:")) {
-                        const targetId = engagementFilter.replace("sponsor:", "");
-                        const actualSId = item.sponsorId || item.sponsor?.id || (empRec.sponsorId as string);
-                        if (actualSId !== targetId) return false;
-                    } else if (engagementFilter.startsWith("sponsorName:")) {
-                        const targetName = engagementFilter.replace("sponsorName:", "");
-                        const actualNameAr = item.sponsor?.nameAr || item.sponsorNameAr || (empRec.sponsorNameAr as string);
-                        const actualNameEn = item.sponsor?.nameEn;
-                        if (actualNameAr !== targetName && actualNameEn !== targetName) return false;
-                    }
+                    const matchesAny = engagementFilter.some((filterKey) => {
+                        if (filterKey === "SponsoredInternal") {
+                            return relKey === "SponsoredInternal";
+                        }
+                        if (filterKey === "OutsideRider") {
+                            return relKey === "OutsideRider";
+                        }
+                        if (filterKey.startsWith("sponsor:")) {
+                            const targetId = filterKey.replace("sponsor:", "");
+                            return actualSId === targetId;
+                        }
+                        if (filterKey.startsWith("sponsorName:")) {
+                            const targetName = filterKey.replace("sponsorName:", "");
+                            return actualNameAr === targetName || actualNameEn === targetName;
+                        }
+                        return false;
+                    });
+
+                    if (!matchesAny) return false;
+                }
+
+                if (employeeTypeFilter.length > 0) {
+                    const typeVal = item.isEmployee ? "Staff" : "Delegate";
+                    if (!employeeTypeFilter.includes(typeVal)) return false;
+                }
+
+                if (nationalityFilter.length > 0) {
+                    const nat = (item.nationality || (empRecord.nationalityAr as string) || "").trim();
+                    if (!nationalityFilter.includes(nat)) return false;
+                }
+
+                if (workTypeFilter.length > 0) {
+                    const wId = item.operationalWorkType?.id || (empRecord.operationalWorkTypeId as string) || (typeof item.operationalWorkType === "string" ? item.operationalWorkType : "") || "";
+                    const wCode = item.operationalWorkType?.code || "";
+                    const matchesWorkType = workTypeFilter.includes(wId) || (Boolean(wCode) && workTypeFilter.includes(wCode));
+                    if (!matchesWorkType) return false;
+                }
+
+                if (platformFilter.length > 0) {
+                    const platId = item.currentWorkPlatform?.id || item.currentWorkPlatform?.code || item.currentWorkPlatform?.nameAr || "";
+                    if (!platformFilter.includes(platId)) return false;
+                }
+
+                if (cityFilter.length > 0) {
+                    const cId = item.operatingCity?.id || (empRecord.operatingCityId as string) || (typeof item.operatingCity === "string" ? item.operatingCity : "") || "";
+                    const cCode = ((item.operatingCity as unknown) as Record<string, unknown> | null | undefined)?.code as string | undefined || "";
+                    const matchesCity = cityFilter.includes(cId) || (Boolean(cCode) && cityFilter.includes(cCode));
+                    if (!matchesCity) return false;
                 }
 
                 if (!search.trim()) return true;
 
-                const empRecord = item as Record<string, unknown>;
                 const rawValues = extractAllObjectValues(item).join(" ");
 
                 const displayNameAr = item.fullNameAr || "";
                 const displayNameEn = item.fullNameEn || "";
-                
+
                 const roleAr = item.isEmployee ? "إداري اداري موظف إداري موظف اداري" : "مندوب سائق مندوب توصيل";
                 const roleEn = item.isEmployee ? "Staff Administrative" : "Delegate Rider";
 
@@ -412,7 +527,7 @@ export default function EmployeesPage() {
                     rawValues,
                 );
             }),
-        [employees, search, cities, workTypes, locale, statusFilter, engagementFilter, roleFilter],
+        [employees, search, cities, workTypes, locale, statusFilter, headerStatusFilter, employeeTypeFilter, engagementFilter, nationalityFilter, workTypeFilter, platformFilter, cityFilter, roleFilter],
     );
 
     const [exporting, setExporting] = useState(false);
@@ -593,23 +708,39 @@ export default function EmployeesPage() {
                             </select>
                         </div>
 
-                        {(search || statusFilter !== "all" || engagementFilter !== "SponsoredInternal" || roleFilter !== "all") && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSearch("");
-                                    setStatusFilter("all");
-                                    setEngagementFilter("SponsoredInternal");
-                                    setRoleFilter("all");
-                                    try {
-                                        sessionStorage.removeItem(EMPLOYEES_FILTERS_SESSION_KEY);
-                                    } catch {}
-                                }}
-                                className="h-11 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors shrink-0"
-                            >
-                                {locale === "en" ? "Reset Filters" : "إعادة ضبط"}
-                            </button>
-                        )}
+                        {(search ||
+                            statusFilter !== "all" ||
+                            roleFilter !== "all" ||
+                            employeeTypeFilter.length > 0 ||
+                            workTypeFilter.length > 0 ||
+                            engagementFilter.length !== 1 ||
+                            engagementFilter[0] !== "SponsoredInternal" ||
+                            nationalityFilter.length > 0 ||
+                            platformFilter.length > 0 ||
+                            cityFilter.length > 0 ||
+                            headerStatusFilter.length > 0) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSearch("");
+                                        setStatusFilter("all");
+                                        setEmployeeTypeFilter([]);
+                                        setEngagementFilter(["SponsoredInternal"]);
+                                        setNationalityFilter([]);
+                                        setWorkTypeFilter([]);
+                                        setPlatformFilter([]);
+                                        setCityFilter([]);
+                                        setHeaderStatusFilter([]);
+                                        setRoleFilter("all");
+                                        try {
+                                            sessionStorage.removeItem(EMPLOYEES_FILTERS_SESSION_KEY);
+                                        } catch { }
+                                    }}
+                                    className="h-11 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors shrink-0"
+                                >
+                                    {locale === "en" ? "Reset Filters" : "إعادة ضبط"}
+                                </button>
+                            )}
                     </div>
 
                     <span className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] shrink-0">
@@ -618,6 +749,160 @@ export default function EmployeesPage() {
                         {locale === "en" ? "employees" : "موظف"}
                     </span>
                 </div>
+
+                {/* Active Column Filter Badges */}
+                {(employeeTypeFilter.length > 0 ||
+                    nationalityFilter.length > 0 ||
+                    workTypeFilter.length > 0 ||
+                    platformFilter.length > 0 ||
+                    cityFilter.length > 0 ||
+                    headerStatusFilter.length > 0 ||
+                    engagementFilter.length !== 1 ||
+                    engagementFilter[0] !== "SponsoredInternal") && (
+                        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/70">
+                            <span className="text-[11px] font-bold text-[var(--muted)]">
+                                {locale === "en" ? "Column filters:" : "فلاتر الأعمدة:"}
+                            </span>
+                            {employeeTypeFilter.map((t) => {
+                                const opt = employeeTypeOptions.find((o) => o.value === t);
+                                return (
+                                    <span
+                                        key={t}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                                    >
+                                        <span>{opt?.label || t}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEmployeeTypeFilter((prev) => prev.filter((x) => x !== t))}
+                                            className="hover:text-red-500 rounded-full"
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
+                            {nationalityFilter.map((nat) => (
+                                <span
+                                    key={nat}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                >
+                                    <span>{nat}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setNationalityFilter((prev) => prev.filter((x) => x !== nat))}
+                                        className="hover:text-red-500 rounded-full"
+                                    >
+                                        <X size={11} />
+                                    </button>
+                                </span>
+                            ))}
+                            {engagementFilter.map((eng) => {
+                                const opt = engagementOptions.find((o) => o.value === eng);
+                                return (
+                                    <span
+                                        key={eng}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                    >
+                                        <span>{opt?.label || eng}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEngagementFilter((prev) => prev.filter((x) => x !== eng))}
+                                            className="hover:text-red-500 rounded-full"
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
+                            {workTypeFilter.map((wId) => {
+                                const opt = workTypeOptions.find((o) => o.value === wId);
+                                return (
+                                    <span
+                                        key={wId}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800"
+                                    >
+                                        <span>{opt?.label || wId}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setWorkTypeFilter((prev) => prev.filter((x) => x !== wId))}
+                                            className="hover:text-red-500 rounded-full"
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
+                            {platformFilter.map((plat) => {
+                                const opt = platformOptions.find((o) => o.value === plat);
+                                return (
+                                    <span
+                                        key={plat}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                    >
+                                        <span>{opt?.label || plat}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPlatformFilter((prev) => prev.filter((x) => x !== plat))}
+                                            className="hover:text-red-500 rounded-full"
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
+                            {cityFilter.map((c) => {
+                                const opt = cityOptions.find((o) => o.value === c);
+                                return (
+                                    <span
+                                        key={c}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                    >
+                                        <span>{opt?.label || c}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCityFilter((prev) => prev.filter((x) => x !== c))}
+                                            className="hover:text-red-500 rounded-full"
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
+                            {headerStatusFilter.map((st) => {
+                                const opt = statusOptions.find((o) => o.value === st);
+                                return (
+                                    <span
+                                        key={st}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700"
+                                    >
+                                        <span>{opt?.label || st}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setHeaderStatusFilter((prev) => prev.filter((x) => x !== st))}
+                                            className="hover:text-red-500 rounded-full"
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setEmployeeTypeFilter([]);
+                                    setNationalityFilter([]);
+                                    setEngagementFilter(["SponsoredInternal"]);
+                                    setWorkTypeFilter([]);
+                                    setPlatformFilter([]);
+                                    setCityFilter([]);
+                                    setHeaderStatusFilter([]);
+                                }}
+                                className="text-[11px] text-red-600 dark:text-red-400 hover:underline ms-2 font-medium"
+                            >
+                                {locale === "en" ? "Clear column filters" : "مسح فلاتر الأعمدة"}
+                            </button>
+                        </div>
+                    )}
                 {error ? (
                     <p role="alert" className="p-6 text-red-700">
                         {error}
@@ -632,87 +917,92 @@ export default function EmployeesPage() {
                             <thead className="relative z-30 bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                                 <tr>
                                     <th className="px-5 py-4">
-                                        {locale === "en" ? "Employee" : "الموظف"}
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{locale === "en" ? "Employee" : "الموظف"}</span>
+                                            <TableHeaderColumnFilter
+                                                label={locale === "en" ? "Employee Type" : "نوع الكادر"}
+                                                value={employeeTypeFilter}
+                                                onChange={(val) => setEmployeeTypeFilter(val)}
+                                                options={employeeTypeOptions}
+                                                placeholder={locale === "en" ? "Filter by type..." : "تصفية بنوع الكادر..."}
+                                            />
+                                        </div>
                                     </th>
                                     <th className="px-5 py-4">
                                         {locale === "en" ? "Iqama / National ID" : "رقم الهوية / الإقامة"}
                                     </th>
                                     <th className="px-5 py-4">
-                                        {locale === "en" ? "Nationality" : "الجنسية"}
-                                    </th>
-                                    <th className="px-5 py-4 relative">
-                                        <div className="flex items-center gap-2">
-                                            <span>{locale === "en" ? "Relationship & Sponsor" : "الكفيل"}</span>
-                                            <div className="relative inline-block text-right">
-                                                <button
-                                                    ref={filterBtnRef}
-                                                    type="button"
-                                                    onClick={toggleFilterPopup}
-                                                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-bold transition-all ${
-                                                        engagementFilter !== "all"
-                                                            ? "border-[#1167c9] bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
-                                                            : "border-[var(--border)] text-[var(--muted)] hover:bg-slate-200/60 dark:hover:bg-slate-800"
-                                                    }`}
-                                                    title={locale === "en" ? "Filter by relationship / sponsor" : "تصفية الكفيل والعلاقة"}
-                                                >
-                                                    <Filter size={13} />
-                                                    {engagementFilter !== "all" && (
-                                                        <span className="inline-block size-1.5 rounded-full bg-[#1167c9]" />
-                                                    )}
-                                                </button>
-
-                                                {showFilterPopup && (
-                                                    <>
-                                                        <div
-                                                            className="fixed inset-0 z-[9998] bg-transparent"
-                                                            onClick={() => setShowFilterPopup(false)}
-                                                        />
-                                                        <div
-                                                            style={{
-                                                                top: popupCoords?.top ?? 0,
-                                                                ...(locale === "en"
-                                                                    ? { left: popupCoords?.left ?? 0 }
-                                                                    : { right: popupCoords?.right ?? 0 }),
-                                                            }}
-                                                            className="fixed z-[9999] max-h-72 overflow-y-auto w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-2xl"
-                                                        >
-                                                            <div className="px-2.5 py-1 text-[11px] font-black text-[var(--muted)] border-b border-[var(--border)] mb-1">
-                                                                {locale === "en" ? "Filter Relationship & Sponsor" : "تصفية الكفيل ونوع العلاقة"}
-                                                            </div>
-                                                            {engagementOptions.map((opt) => (
-                                                                <button
-                                                                    key={opt.key}
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setEngagementFilter(opt.key);
-                                                                        setShowFilterPopup(false);
-                                                                    }}
-                                                                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors text-right ${
-                                                                        engagementFilter === opt.key
-                                                                            ? "bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
-                                                                            : "text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800"
-                                                                    }`}
-                                                                >
-                                                                    <span className="truncate">{locale === "en" ? opt.labelEn : opt.labelAr}</span>
-                                                                    {engagementFilter === opt.key && <Check size={14} className="text-[#1167c9] dark:text-blue-400 shrink-0 ms-1" />}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{locale === "en" ? "Nationality" : "الجنسية"}</span>
+                                            <TableHeaderColumnFilter
+                                                label={locale === "en" ? "Nationality" : "الجنسية"}
+                                                value={nationalityFilter}
+                                                onChange={(val) => setNationalityFilter(val)}
+                                                options={nationalityOptions}
+                                                placeholder={locale === "en" ? "Filter by nationality..." : "تصفية بالجنسية..."}
+                                            />
                                         </div>
                                     </th>
                                     <th className="px-5 py-4">
-                                        {locale === "en" ? "Operational Role" : "الدور التشغيلي"}
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{locale === "en" ? "Relationship & Sponsor" : "الكفيل"}</span>
+                                            <TableHeaderColumnFilter
+                                                label={locale === "en" ? "Relationship & Sponsor" : "الكفيل"}
+                                                value={engagementFilter}
+                                                onChange={(val) => setEngagementFilter(val)}
+                                                options={engagementOptions}
+                                                placeholder={locale === "en" ? "Filter by sponsor..." : "تصفية بالكفيل..."}
+                                            />
+                                        </div>
                                     </th>
                                     <th className="px-5 py-4">
-                                        {locale === "en" ? "Work Platform" : "منصة العمل"}
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{locale === "en" ? "Operational Role" : "الدور التشغيلي"}</span>
+                                            <TableHeaderColumnFilter
+                                                label={locale === "en" ? "Operational Role" : "الدور التشغيلي"}
+                                                value={workTypeFilter}
+                                                onChange={(val) => setWorkTypeFilter(val)}
+                                                options={workTypeOptions}
+                                                placeholder={locale === "en" ? "Filter by role..." : "تصفية بالدور..."}
+                                            />
+                                        </div>
                                     </th>
                                     <th className="px-5 py-4">
-                                        {locale === "en" ? "City" : "المدينة"}
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{locale === "en" ? "Work Platform" : "منصة العمل"}</span>
+                                            <TableHeaderColumnFilter
+                                                label={locale === "en" ? "Work Platform" : "منصة العمل"}
+                                                value={platformFilter}
+                                                onChange={(val) => setPlatformFilter(val)}
+                                                options={platformOptions}
+                                                placeholder={locale === "en" ? "Filter by platform..." : "تصفية بالمنصة..."}
+                                            />
+                                        </div>
                                     </th>
-                                    <th className="px-5 py-4">{t("common.status")}</th>
+                                    <th className="px-5 py-4">
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{locale === "en" ? "City" : "المدينة"}</span>
+                                            <TableHeaderColumnFilter
+                                                label={locale === "en" ? "City" : "المدينة"}
+                                                value={cityFilter}
+                                                onChange={(val) => setCityFilter(val)}
+                                                options={cityOptions}
+                                                placeholder={locale === "en" ? "Filter by city..." : "تصفية بالمدينة..."}
+                                            />
+                                        </div>
+                                    </th>
+                                    <th className="px-5 py-4">
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{t("common.status")}</span>
+                                            <TableHeaderColumnFilter
+                                                label={t("common.status")}
+                                                value={headerStatusFilter}
+                                                onChange={(val) => setHeaderStatusFilter(val)}
+                                                options={statusOptions}
+                                                placeholder={locale === "en" ? "Filter by status..." : "تصفية بالحالة..."}
+                                            />
+                                        </div>
+                                    </th>
                                     <th className="px-5 py-4"></th>
                                 </tr>
                             </thead>
@@ -823,8 +1113,8 @@ export default function EmployeesPage() {
                                                                     {employee.currentWorkPlatform.paymentModel === "PayPerOrder"
                                                                         ? (locale === "en" ? "Pay Per Order" : "بالطلب")
                                                                         : employee.currentWorkPlatform.paymentModel === "Salary"
-                                                                        ? (locale === "en" ? "Salary" : "راتب")
-                                                                        : employee.currentWorkPlatform.paymentModel}
+                                                                            ? (locale === "en" ? "Salary" : "راتب")
+                                                                            : employee.currentWorkPlatform.paymentModel}
                                                                 </Badge>
                                                             )}
                                                         </div>

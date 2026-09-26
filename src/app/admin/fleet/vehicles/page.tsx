@@ -119,11 +119,11 @@ export default function VehiclesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [registryFilter, setRegistryFilter] = useState("");
-  const [registrationFilter, setRegistrationFilter] = useState("");
-  const [modelFilter, setModelFilter] = useState("");
-  const [cityFilter, setCityFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [registryFilter, setRegistryFilter] = useState<string[]>([]);
+  const [registrationFilter, setRegistrationFilter] = useState<string[]>([]);
+  const [modelFilter, setModelFilter] = useState<string[]>([]);
+  const [cityFilter, setCityFilter] = useState<string[]>([]);
 
   const VEHICLES_FILTERS_SESSION_KEY = "admin_fleet_vehicles_filters_session";
   const [isRestored, setIsRestored] = useState(false);
@@ -134,12 +134,18 @@ export default function VehiclesPage() {
       const saved = sessionStorage.getItem(VEHICLES_FILTERS_SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        const toArray = (val: any): string[] => {
+          if (Array.isArray(val)) return val.map(String).filter(Boolean);
+          if (typeof val === "string" && val.trim() && val !== "ALL") return [val.trim()];
+          return [];
+        };
+
         if (typeof parsed.search === "string" && parsed.search) setSearch(parsed.search);
-        if (typeof parsed.statusFilter === "string" && parsed.statusFilter) setStatusFilter(parsed.statusFilter);
-        if (typeof parsed.registryFilter === "string" && parsed.registryFilter) setRegistryFilter(parsed.registryFilter);
-        if (typeof parsed.registrationFilter === "string" && parsed.registrationFilter) setRegistrationFilter(parsed.registrationFilter);
-        if (typeof parsed.modelFilter === "string" && parsed.modelFilter) setModelFilter(parsed.modelFilter);
-        if (typeof parsed.cityFilter === "string" && parsed.cityFilter) setCityFilter(parsed.cityFilter);
+        if (parsed.statusFilter) setStatusFilter(toArray(parsed.statusFilter));
+        if (parsed.registryFilter) setRegistryFilter(toArray(parsed.registryFilter));
+        if (parsed.registrationFilter) setRegistrationFilter(toArray(parsed.registrationFilter));
+        if (parsed.modelFilter) setModelFilter(toArray(parsed.modelFilter));
+        if (parsed.cityFilter) setCityFilter(toArray(parsed.cityFilter));
       }
     } catch {
       // ignore JSON parse or sessionStorage errors
@@ -152,7 +158,14 @@ export default function VehiclesPage() {
   useEffect(() => {
     if (!isRestored) return;
     try {
-      if (search || statusFilter || registryFilter || registrationFilter || modelFilter || cityFilter) {
+      if (
+        search ||
+        statusFilter.length > 0 ||
+        registryFilter.length > 0 ||
+        registrationFilter.length > 0 ||
+        modelFilter.length > 0 ||
+        cityFilter.length > 0
+      ) {
         sessionStorage.setItem(
           VEHICLES_FILTERS_SESSION_KEY,
           JSON.stringify({
@@ -174,11 +187,11 @@ export default function VehiclesPage() {
 
   const clearAllFilters = () => {
     setSearch("");
-    setStatusFilter("");
-    setRegistryFilter("");
-    setRegistrationFilter("");
-    setModelFilter("");
-    setCityFilter("");
+    setStatusFilter([]);
+    setRegistryFilter([]);
+    setRegistrationFilter([]);
+    setModelFilter([]);
+    setCityFilter([]);
     try {
       sessionStorage.removeItem(VEHICLES_FILTERS_SESSION_KEY);
     } catch {
@@ -285,13 +298,15 @@ export default function VehiclesPage() {
       }
     }
 
-    // Preserve restored value if sponsors is still loading
-    if (registryFilter && !opts.some((o) => o.value === registryFilter)) {
-      opts.push({
-        value: registryFilter,
-        label: registryFilter,
-      });
-    }
+    // Preserve restored values if sponsors is still loading
+    registryFilter.forEach((rf) => {
+      if (!opts.some((o) => o.value === rf)) {
+        opts.push({
+          value: rf,
+          label: rf,
+        });
+      }
+    });
 
     return opts;
   }, [sponsors, allVehicles, registryFilter]);
@@ -323,15 +338,17 @@ export default function VehiclesPage() {
       });
     }
 
-    // Preserve restored value if allVehicles is still loading
-    if (registrationFilter && !opts.some((o) => o.value === registrationFilter)) {
-      const num = Number(registrationFilter);
-      const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
-      opts.push({
-        value: registrationFilter,
-        label,
-      });
-    }
+    // Preserve restored values if allVehicles is still loading
+    registrationFilter.forEach((rf) => {
+      if (!opts.some((o) => o.value === rf)) {
+        const num = Number(rf);
+        const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
+        opts.push({
+          value: rf,
+          label,
+        });
+      }
+    });
 
     return opts;
   }, [allVehicles, registrationFilter]);
@@ -367,13 +384,15 @@ export default function VehiclesPage() {
       });
     }
 
-    // Preserve restored value if allVehicles is still loading
-    if (modelFilter && !opts.some((o) => o.value === modelFilter)) {
-      opts.push({
-        value: modelFilter,
-        label: modelFilter,
-      });
-    }
+    // Preserve restored values if allVehicles is still loading
+    modelFilter.forEach((mf) => {
+      if (!opts.some((o) => o.value === mf)) {
+        opts.push({
+          value: mf,
+          label: mf,
+        });
+      }
+    });
 
     return opts;
   }, [allVehicles, modelFilter]);
@@ -401,13 +420,15 @@ export default function VehiclesPage() {
       });
     }
 
-    // Preserve restored value if allVehicles is still loading
-    if (cityFilter && !opts.some((o) => o.value === cityFilter)) {
-      opts.push({
-        value: cityFilter,
-        label: cityFilter,
-      });
-    }
+    // Preserve restored values if allVehicles is still loading
+    cityFilter.forEach((cf) => {
+      if (!opts.some((o) => o.value === cf)) {
+        opts.push({
+          value: cf,
+          label: cf,
+        });
+      }
+    });
 
     return opts;
   }, [allVehicles, cityFilter]);
@@ -428,59 +449,57 @@ export default function VehiclesPage() {
 
   const filteredData = useMemo(() => {
     return allVehicles.filter((item) => {
-      // 1. Status Filter
-      if (statusFilter) {
+      // 1. Status Filter (Multi)
+      if (statusFilter.length > 0) {
         const itemStatusStr = String(item.status);
         const enumKey = String((VehicleOperationalStatus as Record<string, any>)[item.status] || "");
-        if (itemStatusStr !== statusFilter && enumKey !== statusFilter) {
-          return false;
-        }
+        const match = statusFilter.some((sf) => sf === itemStatusStr || sf === enumKey);
+        if (!match) return false;
       }
 
-      // 2. Model Filter
-      if (modelFilter) {
+      // 2. Model Filter (Multi)
+      if (modelFilter.length > 0) {
         const itemModelCombined = [item.manufacturer, item.model].filter(Boolean).join(" ").trim();
-        const normFilter = normalizeText(modelFilter);
-        const matchesCombined = normalizeText(itemModelCombined).includes(normFilter);
-        const matchesModel = item.model ? normalizeText(item.model).includes(normFilter) : false;
-        const matchesMfg = item.manufacturer ? normalizeText(item.manufacturer).includes(normFilter) : false;
-        if (!matchesCombined && !matchesModel && !matchesMfg) {
-          return false;
-        }
+        const match = modelFilter.some((mf) => {
+          const normFilter = normalizeText(mf);
+          const matchesCombined = normalizeText(itemModelCombined).includes(normFilter);
+          const matchesModel = item.model ? normalizeText(item.model).includes(normFilter) : false;
+          const matchesMfg = item.manufacturer ? normalizeText(item.manufacturer).includes(normFilter) : false;
+          return matchesCombined || matchesModel || matchesMfg;
+        });
+        if (!match) return false;
       }
 
-      // 3. Registration Type Filter (Dynamic from backend data)
-      if (registrationFilter) {
-        if (
-          String(item.registrationType) !== registrationFilter &&
-          Number(item.registrationType) !== Number(registrationFilter)
-        ) {
-          return false;
-        }
-      }
-
-      // 4. City Filter
-      if (cityFilter) {
-        if (!item.operatingCity || normalizeText(item.operatingCity) !== normalizeText(cityFilter)) {
-          return false;
-        }
-      }
-
-      // 5. Registry (Sponsor) Filter
-      if (registryFilter) {
-        const selectedSponsor = sponsors.find((s) => s.id === registryFilter);
-        const matchesId = item.sponsorId === registryFilter;
-        const matchesName = Boolean(
-          selectedSponsor &&
-          item.sponsorName &&
-          (normalizeText(item.sponsorName) === normalizeText(selectedSponsor.registryNameAr) ||
-           (selectedSponsor.registryNameEn && normalizeText(item.sponsorName) === normalizeText(selectedSponsor.registryNameEn)))
+      // 3. Registration Type Filter (Multi)
+      if (registrationFilter.length > 0) {
+        const match = registrationFilter.some(
+          (rf) => String(item.registrationType) === rf || Number(item.registrationType) === Number(rf)
         );
-        const matchesDirectName = Boolean(item.sponsorName && normalizeText(item.sponsorName) === normalizeText(registryFilter));
+        if (!match) return false;
+      }
 
-        if (!matchesId && !matchesName && !matchesDirectName) {
-          return false;
-        }
+      // 4. City Filter (Multi)
+      if (cityFilter.length > 0) {
+        if (!item.operatingCity) return false;
+        const match = cityFilter.some((cf) => normalizeText(item.operatingCity) === normalizeText(cf));
+        if (!match) return false;
+      }
+
+      // 5. Registry (Sponsor) Filter (Multi)
+      if (registryFilter.length > 0) {
+        const match = registryFilter.some((rf) => {
+          const selectedSponsor = sponsors.find((s) => s.id === rf);
+          const matchesId = item.sponsorId === rf;
+          const matchesName = Boolean(
+            selectedSponsor &&
+            item.sponsorName &&
+            (normalizeText(item.sponsorName) === normalizeText(selectedSponsor.registryNameAr) ||
+             (selectedSponsor.registryNameEn && normalizeText(item.sponsorName) === normalizeText(selectedSponsor.registryNameEn)))
+          );
+          const matchesDirectName = Boolean(item.sponsorName && normalizeText(item.sponsorName) === normalizeText(rf));
+          return matchesId || matchesName || matchesDirectName;
+        });
+        if (!match) return false;
       }
 
       // 6. Search Query across all fields
@@ -495,11 +514,11 @@ export default function VehiclesPage() {
 
   const isFiltered = Boolean(
     search.trim() ||
-    statusFilter ||
-    modelFilter ||
-    registrationFilter ||
-    cityFilter ||
-    registryFilter
+    statusFilter.length > 0 ||
+    modelFilter.length > 0 ||
+    registrationFilter.length > 0 ||
+    cityFilter.length > 0 ||
+    registryFilter.length > 0
   );
 
   const handleSearch = (e: React.FormEvent) => {
@@ -646,39 +665,39 @@ export default function VehiclesPage() {
         </div>
 
         {/* Active Filters Summary */}
-        {(modelFilter || registrationFilter || cityFilter || registryFilter || statusFilter) && (
+        {(modelFilter.length > 0 || registrationFilter.length > 0 || cityFilter.length > 0 || registryFilter.length > 0 || statusFilter.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border)] text-xs">
             <span className="text-[var(--muted)] text-[11px] font-semibold ml-1">الفلاتر النشطة:</span>
-            {modelFilter && (
-              <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
-                الموديل: {modelFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setModelFilter("")} />
+            {modelFilter.map((m) => (
+              <Badge key={m} className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
+                الموديل: {m}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setModelFilter(modelFilter.filter((x) => x !== m))} />
               </Badge>
-            )}
-            {registrationFilter && (
-              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 gap-1 pl-1.5 font-medium">
-                نوع التسجيل: {formatVehicleRegistrationType(Number(registrationFilter) as VehicleRegistrationType)}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistrationFilter("")} />
+            ))}
+            {registrationFilter.map((rf) => (
+              <Badge key={rf} className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 gap-1 pl-1.5 font-medium">
+                نوع التسجيل: {formatVehicleRegistrationType(Number(rf) as VehicleRegistrationType)}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistrationFilter(registrationFilter.filter((x) => x !== rf))} />
               </Badge>
-            )}
-            {cityFilter && (
-              <Badge className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
-                المدينة: {cityFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCityFilter("")} />
+            ))}
+            {cityFilter.map((c) => (
+              <Badge key={c} className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
+                المدينة: {c}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCityFilter(cityFilter.filter((x) => x !== c))} />
               </Badge>
-            )}
-            {registryFilter && (
-              <Badge className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800 gap-1 pl-1.5 font-medium">
-                الكفيل: {sponsors.find((s) => s.id === registryFilter)?.registryNameAr || registryFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistryFilter("")} />
+            ))}
+            {registryFilter.map((rf) => (
+              <Badge key={rf} className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800 gap-1 pl-1.5 font-medium">
+                الكفيل: {sponsors.find((s) => s.id === rf)?.registryNameAr || rf}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistryFilter(registryFilter.filter((x) => x !== rf))} />
               </Badge>
-            )}
-            {statusFilter && (
-              <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 gap-1 pl-1.5 font-medium">
-                الحالة: {statusOptions.find((s) => s.value === statusFilter)?.label || statusFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setStatusFilter("")} />
+            ))}
+            {statusFilter.map((st) => (
+              <Badge key={st} className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 gap-1 pl-1.5 font-medium">
+                الحالة: {statusOptions.find((s) => s.value === st)?.label || st}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setStatusFilter(statusFilter.filter((x) => x !== st))} />
               </Badge>
-            )}
+            ))}
           </div>
         )}
       </div>
@@ -746,10 +765,10 @@ export default function VehiclesPage() {
                     <div className="inline-flex items-center gap-1.5">
                       <span>المدينة / الكفيل</span>
                       <TableHeaderCitySponsorFilter
-                        cityValue={cityFilter}
+                        cityValues={cityFilter}
                         onCityChange={setCityFilter}
                         cityOptions={cityOptions}
-                        sponsorValue={registryFilter}
+                        sponsorValues={registryFilter}
                         onSponsorChange={setRegistryFilter}
                         sponsorOptions={registryOptions}
                       />

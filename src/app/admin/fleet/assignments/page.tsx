@@ -64,8 +64,8 @@ export default function AssignmentsPage() {
   const [filterType, setFilterType] = useState<"assigned" | "available">("assigned");
   const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<"active" | "all" | "completed">("active");
 
-  const [cityFilter, setCityFilter] = useState("");
-  const [manufacturerFilter, setManufacturerFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState<string[]>([]);
+  const [manufacturerFilter, setManufacturerFilter] = useState<string[]>([]);
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleSummaryResponse | null>(null);
@@ -219,12 +219,14 @@ export default function AssignmentsPage() {
       });
     }
 
-    if (cityFilter && !opts.some((o) => o.value === cityFilter)) {
-      opts.push({
-        value: cityFilter,
-        label: cityFilter,
-      });
-    }
+    cityFilter.forEach((cf) => {
+      if (!opts.some((o) => o.value === cf)) {
+        opts.push({
+          value: cf,
+          label: cf,
+        });
+      }
+    });
 
     return opts;
   }, [filterType, assignments, availableVehicles, vehiclesMap, cityFilter]);
@@ -295,12 +297,14 @@ export default function AssignmentsPage() {
       }
     }
 
-    if (manufacturerFilter && !opts.some((o) => o.value === manufacturerFilter)) {
-      opts.push({
-        value: manufacturerFilter,
-        label: manufacturerFilter,
-      });
-    }
+    manufacturerFilter.forEach((mf) => {
+      if (!opts.some((o) => o.value === mf)) {
+        opts.push({
+          value: mf,
+          label: mf,
+        });
+      }
+    });
 
     return opts;
   }, [filterType, assignments, availableVehicles, vehiclesMap, manufacturerFilter]);
@@ -356,28 +360,29 @@ export default function AssignmentsPage() {
         if (!matchesSearch) return false;
       }
 
-      // 2. Operating City Filter
-      if (cityFilter) {
+      // 2. Operating City Filter (Multi)
+      if (cityFilter.length > 0) {
         const city = item.vehicleOperatingCityNameAr || vehicle?.operatingCity || "";
-        if (!city || normalizeText(city) !== normalizeText(cityFilter)) {
+        if (!city || !cityFilter.some((cf) => normalizeText(city) === normalizeText(cf))) {
           return false;
         }
       }
 
-      // 3. Manufacturer / Model Filter
-      if (manufacturerFilter) {
-        const normFilter = normalizeText(manufacturerFilter.replace(/^—\s*/, ""));
+      // 3. Manufacturer / Model Filter (Multi)
+      if (manufacturerFilter.length > 0) {
         const itemMfg = normalizeText(vehicle?.manufacturer);
         const itemMdl = normalizeText(vehicle?.model);
         const itemCombined = normalizeText([vehicle?.manufacturer, vehicle?.model].filter(Boolean).join(" "));
 
-        const matchesCombined = itemCombined.includes(normFilter);
-        const matchesMfg = itemMfg ? itemMfg.includes(normFilter) || normFilter.includes(itemMfg) : false;
-        const matchesMdl = itemMdl ? itemMdl.includes(normFilter) || normFilter.includes(itemMdl) : false;
+        const match = manufacturerFilter.some((mf) => {
+          const normFilter = normalizeText(mf.replace(/^—\s*/, ""));
+          const matchesCombined = itemCombined.includes(normFilter);
+          const matchesMfg = itemMfg ? itemMfg.includes(normFilter) || normFilter.includes(itemMfg) : false;
+          const matchesMdl = itemMdl ? itemMdl.includes(normFilter) || normFilter.includes(itemMdl) : false;
+          return matchesCombined || matchesMfg || matchesMdl;
+        });
 
-        if (!matchesCombined && !matchesMfg && !matchesMdl) {
-          return false;
-        }
+        if (!match) return false;
       }
 
       return true;
@@ -413,32 +418,33 @@ export default function AssignmentsPage() {
         if (!matchesSearch) return false;
       }
 
-      if (cityFilter) {
-        if (!item.operatingCity || normalizeText(item.operatingCity) !== normalizeText(cityFilter)) {
+      if (cityFilter.length > 0) {
+        if (!item.operatingCity || !cityFilter.some((cf) => normalizeText(item.operatingCity) === normalizeText(cf))) {
           return false;
         }
       }
 
-      if (manufacturerFilter) {
-        const normFilter = normalizeText(manufacturerFilter.replace(/^—\s*/, ""));
+      if (manufacturerFilter.length > 0) {
         const itemMfg = normalizeText(item.manufacturer);
         const itemMdl = normalizeText(item.model);
         const itemCombined = normalizeText([item.manufacturer, item.model].filter(Boolean).join(" "));
 
-        const matchesCombined = itemCombined.includes(normFilter);
-        const matchesMfg = itemMfg ? itemMfg.includes(normFilter) || normFilter.includes(itemMfg) : false;
-        const matchesMdl = itemMdl ? itemMdl.includes(normFilter) || normFilter.includes(itemMdl) : false;
+        const match = manufacturerFilter.some((mf) => {
+          const normFilter = normalizeText(mf.replace(/^—\s*/, ""));
+          const matchesCombined = itemCombined.includes(normFilter);
+          const matchesMfg = itemMfg ? itemMfg.includes(normFilter) || normFilter.includes(itemMfg) : false;
+          const matchesMdl = itemMdl ? itemMdl.includes(normFilter) || normFilter.includes(itemMdl) : false;
+          return matchesCombined || matchesMfg || matchesMdl;
+        });
 
-        if (!matchesCombined && !matchesMfg && !matchesMdl) {
-          return false;
-        }
+        if (!match) return false;
       }
 
       return true;
     });
   }, [availableVehicles, search, cityFilter, manufacturerFilter]);
 
-  const hasActiveFilters = Boolean(cityFilter || manufacturerFilter);
+  const hasActiveFilters = Boolean(cityFilter.length > 0 || manufacturerFilter.length > 0);
   const isFiltered = Boolean(search.trim() || hasActiveFilters);
 
   const handleExportExcel = async () => {
@@ -708,23 +714,23 @@ export default function AssignmentsPage() {
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 px-1">
             <span className="text-xs text-[var(--muted)]">التصفيات النشطة:</span>
-            {manufacturerFilter && (
-              <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
-                الصانع / الموديل: {manufacturerFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setManufacturerFilter("")} />
+            {manufacturerFilter.map((mf) => (
+              <Badge key={mf} className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
+                الصانع / الموديل: {mf}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setManufacturerFilter(manufacturerFilter.filter((x) => x !== mf))} />
               </Badge>
-            )}
-            {cityFilter && (
-              <Badge className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
-                المدينة: {cityFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCityFilter("")} />
+            ))}
+            {cityFilter.map((c) => (
+              <Badge key={c} className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
+                المدينة: {c}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCityFilter(cityFilter.filter((x) => x !== c))} />
               </Badge>
-            )}
+            ))}
             <button
               type="button"
               onClick={() => {
-                setCityFilter("");
-                setManufacturerFilter("");
+                setCityFilter([]);
+                setManufacturerFilter([]);
               }}
               className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 font-semibold underline cursor-pointer mr-1"
             >
@@ -747,8 +753,8 @@ export default function AssignmentsPage() {
                   variant="secondary"
                   className="mt-4 gap-1 text-xs px-3 py-1.5"
                   onClick={() => {
-                    setCityFilter("");
-                    setManufacturerFilter("");
+                    setCityFilter([]);
+                    setManufacturerFilter([]);
                   }}
                 >
                   <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية
@@ -975,8 +981,8 @@ export default function AssignmentsPage() {
                   variant="secondary"
                   className="mt-4 gap-1 text-xs px-3 py-1.5"
                   onClick={() => {
-                    setCityFilter("");
-                    setManufacturerFilter("");
+                    setCityFilter([]);
+                    setManufacturerFilter([]);
                   }}
                 >
                   <RefreshCw className="h-3.5 w-3.5" /> مسح التصفية

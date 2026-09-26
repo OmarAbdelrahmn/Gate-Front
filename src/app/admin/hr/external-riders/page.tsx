@@ -17,7 +17,9 @@ import {
   CreditCard,
   FileText,
   FileSpreadsheet,
+  X,
 } from "lucide-react";
+import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { exportToExcel } from "../../../../lib/export-excel";
@@ -48,8 +50,52 @@ export default function ExternalRidersPage() {
   const [cities, setCities] = useState<OperatingCityCatalogItem[]>([]);
   const [workTypes, setWorkTypes] = useState<OperationalWorkTypeCatalogItem[]>([]);
   const [search, setSearch] = useState("");
+  const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
+  const [headerWorkTypeFilter, setHeaderWorkTypeFilter] = useState<string[]>([]);
+  const [headerStatusFilter, setHeaderStatusFilter] = useState<string[]>([]);
+  const [headerNationalityFilter, setHeaderNationalityFilter] = useState<string[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const EXTERNAL_RIDERS_FILTERS_SESSION_KEY = "admin_external_riders_filters_session";
+  const isRestoredRef = useState({ current: false })[0];
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(EXTERNAL_RIDERS_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string") setSearch(parsed.search);
+        if (Array.isArray(parsed.headerCityFilter)) setHeaderCityFilter(parsed.headerCityFilter);
+        if (Array.isArray(parsed.headerWorkTypeFilter)) setHeaderWorkTypeFilter(parsed.headerWorkTypeFilter);
+        if (Array.isArray(parsed.headerStatusFilter)) setHeaderStatusFilter(parsed.headerStatusFilter);
+        if (Array.isArray(parsed.headerNationalityFilter)) setHeaderNationalityFilter(parsed.headerNationalityFilter);
+      }
+    } catch {
+      // ignore parse errors
+    } finally {
+      isRestoredRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        EXTERNAL_RIDERS_FILTERS_SESSION_KEY,
+        JSON.stringify({
+          search,
+          headerCityFilter,
+          headerWorkTypeFilter,
+          headerStatusFilter,
+          headerNationalityFilter,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [search, headerCityFilter, headerWorkTypeFilter, headerStatusFilter, headerNationalityFilter]);
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -164,13 +210,71 @@ export default function ExternalRidersPage() {
       }));
   }, [workTypes, locale]);
 
+  // Filter options for TableHeaderColumnFilter
+  const cityFilterOptions: FilterOption[] = useMemo(() => {
+    return cities.map((c) => ({
+      value: c.id,
+      label: locale === "en" ? (c.nameEn || c.nameAr || c.code) : (c.nameAr || c.nameEn || c.code),
+    }));
+  }, [cities, locale]);
+
+  const workTypeFilterOptions: FilterOption[] = useMemo(() => {
+    return workTypes.map((w) => ({
+      value: w.id,
+      label: locale === "en" ? (w.nameEn || w.nameAr || w.code) : (w.nameAr || w.nameEn || w.code),
+    }));
+  }, [workTypes, locale]);
+
+  const statusFilterOptions: FilterOption[] = useMemo(() => {
+    const statuses = ["Active", "Suspended", "Inactive", "Draft", "Onboarding"];
+    const statusLabels: Record<string, { ar: string; en: string }> = {
+      Active: { ar: "نشط", en: "Active" },
+      Suspended: { ar: "موقوف", en: "Suspended" },
+      Inactive: { ar: "غير نشط", en: "Inactive" },
+      Draft: { ar: "مسودة", en: "Draft" },
+      Onboarding: { ar: "قيد التهيئة", en: "Onboarding" },
+    };
+    return statuses.map((st) => ({
+      value: st,
+      label: locale === "en" ? statusLabels[st]?.en || st : statusLabels[st]?.ar || st,
+    }));
+  }, [locale]);
+
+  const nationalityFilterOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    riders.forEach((r) => {
+      if (r.nationality && r.nationality.trim()) set.add(r.nationality.trim());
+    });
+    return Array.from(set).sort().map((nat) => ({
+      value: nat,
+      label: nat,
+    }));
+  }, [riders]);
+
   const filteredRiders = useMemo(() => {
     // Terminated riders are separated to the dedicated Terminated Staff section
     const nonTerminated = riders.filter((r) => r.status !== "Terminated");
-    const query = search.trim().toLowerCase();
-    if (!query) return nonTerminated;
-    return nonTerminated.filter(
-      (r) =>
+    return nonTerminated.filter((r) => {
+      if (headerCityFilter.length > 0) {
+        if (!r.operatingCityId || !headerCityFilter.includes(r.operatingCityId)) return false;
+      }
+
+      if (headerWorkTypeFilter.length > 0) {
+        if (!r.operationalWorkTypeId || !headerWorkTypeFilter.includes(r.operationalWorkTypeId)) return false;
+      }
+
+      if (headerStatusFilter.length > 0) {
+        if (!r.status || !headerStatusFilter.includes(r.status)) return false;
+      }
+
+      if (headerNationalityFilter.length > 0) {
+        if (!r.nationality || !headerNationalityFilter.includes(r.nationality)) return false;
+      }
+
+      const query = search.trim().toLowerCase();
+      if (!query) return true;
+
+      return Boolean(
         r.fullNameAr?.toLowerCase().includes(query) ||
         r.iqamaNo?.includes(query) ||
         r.primaryPhone?.includes(query) ||
@@ -178,8 +282,9 @@ export default function ExternalRidersPage() {
         r.iban?.toLowerCase().includes(query) ||
         r.employeeId?.toLowerCase().includes(query) ||
         r.riderProfileId?.toLowerCase().includes(query)
-    );
-  }, [riders, search]);
+      );
+    });
+  }, [riders, search, headerCityFilter, headerWorkTypeFilter, headerStatusFilter, headerNationalityFilter]);
 
   const nonTerminatedCount = useMemo(
     () => riders.filter((r) => r.status !== "Terminated").length,
@@ -673,25 +778,143 @@ export default function ExternalRidersPage() {
       {/* Main Table Card */}
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] p-4">
-          <div className="relative w-full max-w-xl">
-            <Search
-              className={`pointer-events-none absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"
-                }`}
-              size={18}
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={
-                locale === "en"
-                  ? "Search by name, Iqama #, phone, or ID..."
-                  : "ابحث بالاسم، رقم الإقامة، الهاتف، أو المعرف..."
-              }
-              className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"
-                }`}
-            />
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1 max-w-xl">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search
+                className={`pointer-events-none absolute top-3 text-[var(--muted)] ${locale === "en" ? "left-3" : "right-3"
+                  }`}
+                size={18}
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={
+                  locale === "en"
+                    ? "Search by name, Iqama #, phone, or ID..."
+                    : "ابحث بالاسم، رقم الإقامة، الهاتف، أو المعرف..."
+                }
+                className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm ${locale === "en" ? "pl-10 pr-3" : "pr-10 pl-3"
+                  }`}
+              />
+            </div>
+
+            {(search.trim() ||
+              headerCityFilter.length > 0 ||
+              headerWorkTypeFilter.length > 0 ||
+              headerStatusFilter.length > 0 ||
+              headerNationalityFilter.length > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setHeaderCityFilter([]);
+                  setHeaderWorkTypeFilter([]);
+                  setHeaderStatusFilter([]);
+                  setHeaderNationalityFilter([]);
+                  try {
+                    sessionStorage.removeItem(EXTERNAL_RIDERS_FILTERS_SESSION_KEY);
+                  } catch {}
+                }}
+                className="h-11 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors shrink-0"
+              >
+                {locale === "en" ? "Reset Filters" : "إعادة ضبط"}
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Active Column Filter Badges */}
+        {(headerNationalityFilter.length > 0 ||
+          headerCityFilter.length > 0 ||
+          headerWorkTypeFilter.length > 0 ||
+          headerStatusFilter.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/70">
+            <span className="text-[11px] font-bold text-[var(--muted)]">
+              {locale === "en" ? "Column filters:" : "فلاتر الأعمدة:"}
+            </span>
+            {headerNationalityFilter.map((nat) => (
+              <span
+                key={nat}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+              >
+                <span>{nat}</span>
+                <button
+                  type="button"
+                  onClick={() => setHeaderNationalityFilter((prev) => prev.filter((x) => x !== nat))}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {headerCityFilter.map((cId) => {
+              const opt = cityFilterOptions.find((o) => o.value === cId);
+              return (
+                <span
+                  key={cId}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                >
+                  <span>{opt?.label || cId}</span>
+                  <button
+                    type="button"
+                    onClick={() => setHeaderCityFilter((prev) => prev.filter((x) => x !== cId))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+            {headerWorkTypeFilter.map((wId) => {
+              const opt = workTypeFilterOptions.find((o) => o.value === wId);
+              return (
+                <span
+                  key={wId}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                >
+                  <span>{opt?.label || wId}</span>
+                  <button
+                    type="button"
+                    onClick={() => setHeaderWorkTypeFilter((prev) => prev.filter((x) => x !== wId))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+            {headerStatusFilter.map((st) => {
+              const opt = statusFilterOptions.find((o) => o.value === st);
+              return (
+                <span
+                  key={st}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700"
+                >
+                  <span>{opt?.label || st}</span>
+                  <button
+                    type="button"
+                    onClick={() => setHeaderStatusFilter((prev) => prev.filter((x) => x !== st))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                setHeaderNationalityFilter([]);
+                setHeaderCityFilter([]);
+                setHeaderWorkTypeFilter([]);
+                setHeaderStatusFilter([]);
+              }}
+              className="text-[11px] text-red-600 dark:text-red-400 hover:underline ms-2 font-medium"
+            >
+              {locale === "en" ? "Clear column filters" : "مسح فلاتر الأعمدة"}
+            </button>
+          </div>
+        )}
 
         {error ? (
           <div className="flex items-center gap-3 p-6 text-red-700">
@@ -711,16 +934,50 @@ export default function ExternalRidersPage() {
               <thead className="bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                 <tr>
                   <th className="px-5 py-4">
-                    {locale === "en" ? "External Rider Name" : "اسم المندوب الخارجي"}
+                    <div className="flex items-center gap-1.5">
+                      <span>{locale === "en" ? "External Rider Name" : "اسم المندوب الخارجي"}</span>
+                      <TableHeaderColumnFilter
+                        label={locale === "en" ? "Nationality" : "الجنسية"}
+                        value={headerNationalityFilter}
+                        onChange={(val) => setHeaderNationalityFilter(val)}
+                        options={nationalityFilterOptions}
+                        placeholder={locale === "en" ? "Filter by nationality..." : "تصفية بالجنسية..."}
+                      />
+                    </div>
                   </th>
                   <th className="px-5 py-4">
                     {locale === "en" ? "Iqama / Phone" : "رقم الإقامة / الهاتف"}
                   </th>
                   <th className="px-5 py-4">
-                    {locale === "en" ? "City & Role" : "المدينة والدور التشغيلي"}
+                    <div className="flex items-center gap-1.5">
+                      <span>{locale === "en" ? "City & Role" : "المدينة والدور التشغيلي"}</span>
+                      <TableHeaderColumnFilter
+                        label={locale === "en" ? "Operating City" : "المدينة"}
+                        value={headerCityFilter}
+                        onChange={(val) => setHeaderCityFilter(val)}
+                        options={cityFilterOptions}
+                        placeholder={locale === "en" ? "Filter by city..." : "تصفية بالمدينة..."}
+                      />
+                      <TableHeaderColumnFilter
+                        label={locale === "en" ? "Work Type / Role" : "الدور التشغيلي"}
+                        value={headerWorkTypeFilter}
+                        onChange={(val) => setHeaderWorkTypeFilter(val)}
+                        options={workTypeFilterOptions}
+                        placeholder={locale === "en" ? "Filter by role..." : "تصفية بالدور..."}
+                      />
+                    </div>
                   </th>
                   <th className="px-5 py-4">
-                    {locale === "en" ? "Status" : "الحالة"}
+                    <div className="flex items-center gap-1.5">
+                      <span>{locale === "en" ? "Status" : "الحالة"}</span>
+                      <TableHeaderColumnFilter
+                        label={locale === "en" ? "Status" : "الحالة"}
+                        value={headerStatusFilter}
+                        onChange={(val) => setHeaderStatusFilter(val)}
+                        options={statusFilterOptions}
+                        placeholder={locale === "en" ? "Filter by status..." : "تصفية بالحالة..."}
+                      />
+                    </div>
                   </th>
                   <th className="px-5 py-4 text-center">
                     {t("common.actions")}

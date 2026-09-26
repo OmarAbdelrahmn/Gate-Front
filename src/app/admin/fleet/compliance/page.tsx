@@ -98,11 +98,11 @@ export default function CompliancePage() {
   const [error, setError] = useState<string | null>(null);
   const [checkDate, setCheckDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [search, setSearch] = useState("");
-  const [modelFilter, setModelFilter] = useState("");
-  const [registrationFilter, setRegistrationFilter] = useState("");
-  const [docTypeFilter, setDocTypeFilter] = useState("");
-  const [dateStatusFilter, setDateStatusFilter] = useState<string>("");
-  const [combinedStatusFilter, setCombinedStatusFilter] = useState<string>("");
+  const [modelFilter, setModelFilter] = useState<string[]>([]);
+  const [registrationFilter, setRegistrationFilter] = useState<string[]>([]);
+  const [docTypeFilter, setDocTypeFilter] = useState<string[]>([]);
+  const [dateStatusFilter, setDateStatusFilter] = useState<string[]>([]);
+  const [combinedStatusFilter, setCombinedStatusFilter] = useState<string[]>([]);
   const [uploadingRowKey, setUploadingRowKey] = useState<string | null>(null);
 
   // Compliance Modal state
@@ -143,12 +143,18 @@ export default function CompliancePage() {
       const saved = sessionStorage.getItem(COMPLIANCE_FILTERS_SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        const toArray = (val: any): string[] => {
+          if (Array.isArray(val)) return val.map(String).filter(Boolean);
+          if (typeof val === "string" && val.trim() && val !== "ALL") return [val.trim()];
+          return [];
+        };
+
         if (typeof parsed.search === "string" && parsed.search) setSearch(parsed.search);
-        if (typeof parsed.modelFilter === "string" && parsed.modelFilter) setModelFilter(parsed.modelFilter);
-        if (typeof parsed.registrationFilter === "string" && parsed.registrationFilter) setRegistrationFilter(parsed.registrationFilter);
-        if (typeof parsed.docTypeFilter === "string" && parsed.docTypeFilter) setDocTypeFilter(parsed.docTypeFilter);
-        if (typeof parsed.dateStatusFilter === "string" && parsed.dateStatusFilter) setDateStatusFilter(parsed.dateStatusFilter);
-        if (typeof parsed.combinedStatusFilter === "string" && parsed.combinedStatusFilter) setCombinedStatusFilter(parsed.combinedStatusFilter);
+        if (parsed.modelFilter) setModelFilter(toArray(parsed.modelFilter));
+        if (parsed.registrationFilter) setRegistrationFilter(toArray(parsed.registrationFilter));
+        if (parsed.docTypeFilter) setDocTypeFilter(toArray(parsed.docTypeFilter));
+        if (parsed.dateStatusFilter) setDateStatusFilter(toArray(parsed.dateStatusFilter));
+        if (parsed.combinedStatusFilter) setCombinedStatusFilter(toArray(parsed.combinedStatusFilter));
       }
     } catch {
       // ignore JSON parse or sessionStorage errors
@@ -161,7 +167,14 @@ export default function CompliancePage() {
   useEffect(() => {
     if (!isRestored) return;
     try {
-      if (search || modelFilter || registrationFilter || docTypeFilter || dateStatusFilter || combinedStatusFilter) {
+      if (
+        search ||
+        modelFilter.length > 0 ||
+        registrationFilter.length > 0 ||
+        docTypeFilter.length > 0 ||
+        dateStatusFilter.length > 0 ||
+        combinedStatusFilter.length > 0
+      ) {
         sessionStorage.setItem(
           COMPLIANCE_FILTERS_SESSION_KEY,
           JSON.stringify({
@@ -183,11 +196,11 @@ export default function CompliancePage() {
 
   const clearAllFilters = () => {
     setSearch("");
-    setModelFilter("");
-    setRegistrationFilter("");
-    setDocTypeFilter("");
-    setDateStatusFilter("");
-    setCombinedStatusFilter("");
+    setModelFilter([]);
+    setRegistrationFilter([]);
+    setDocTypeFilter([]);
+    setDateStatusFilter([]);
+    setCombinedStatusFilter([]);
     try {
       sessionStorage.removeItem(COMPLIANCE_FILTERS_SESSION_KEY);
     } catch {
@@ -361,12 +374,14 @@ export default function CompliancePage() {
       });
     }
 
-    if (modelFilter && !opts.some((o) => o.value === modelFilter)) {
-      opts.push({
-        value: modelFilter,
-        label: modelFilter,
-      });
-    }
+    modelFilter.forEach((mf) => {
+      if (!opts.some((o) => o.value === mf)) {
+        opts.push({
+          value: mf,
+          label: mf,
+        });
+      }
+    });
 
     return opts;
   }, [displayItems, vehiclesMap, modelFilter]);
@@ -400,14 +415,16 @@ export default function CompliancePage() {
       });
     }
 
-    if (registrationFilter && !opts.some((o) => o.value === registrationFilter)) {
-      const num = Number(registrationFilter);
-      const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
-      opts.push({
-        value: registrationFilter,
-        label,
-      });
-    }
+    registrationFilter.forEach((rf) => {
+      if (!opts.some((o) => o.value === rf)) {
+        const num = Number(rf);
+        const label = formatVehicleRegistrationType(num as VehicleRegistrationType);
+        opts.push({
+          value: rf,
+          label,
+        });
+      }
+    });
 
     return opts;
   }, [displayItems, vehiclesMap, registrationFilter]);
@@ -460,13 +477,15 @@ export default function CompliancePage() {
       });
     }
 
-    if (docTypeFilter && !opts.some((o) => o.value === docTypeFilter)) {
-      const { label } = getDocTypeInfo(docTypeFilter);
-      opts.push({
-        value: docTypeFilter,
-        label,
-      });
-    }
+    docTypeFilter.forEach((df) => {
+      if (!opts.some((o) => o.value === df)) {
+        const { label } = getDocTypeInfo(df);
+        opts.push({
+          value: df,
+          label,
+        });
+      }
+    });
 
     return opts;
   }, [displayItems, docTypeFilter]);
@@ -476,21 +495,21 @@ export default function CompliancePage() {
     return displayItems.filter((item) => {
       const v = vehiclesMap[item.vehicleId];
 
-      if (modelFilter) {
+      if (modelFilter.length > 0) {
         const mfg = (v?.manufacturer || "").trim();
         const mdl = (v?.model || "").trim();
         const label = [mfg, mdl].filter(Boolean).join(" ").trim();
-        if (label !== modelFilter) return false;
+        if (!modelFilter.includes(label)) return false;
       }
 
-      if (registrationFilter) {
+      if (registrationFilter.length > 0) {
         if (v?.registrationType === undefined || v?.registrationType === null) return false;
-        if (String(v.registrationType) !== registrationFilter) return false;
+        if (!registrationFilter.includes(String(v.registrationType))) return false;
       }
 
-      if (docTypeFilter) {
+      if (docTypeFilter.length > 0) {
         const { key } = getDocTypeInfo(item.type);
-        if (key !== docTypeFilter) return false;
+        if (!docTypeFilter.includes(key)) return false;
       }
 
       if (!search) return true;
@@ -650,31 +669,28 @@ export default function CompliancePage() {
   // Final filtered items (including date and combined status filters)
   const filtered = useMemo(() => {
     return baseFiltered.filter((item) => {
-      // Date Status Filter
-      if (dateStatusFilter) {
+      // Date Status Filter (Multi)
+      if (dateStatusFilter.length > 0) {
         const hasNoDates = !item.effectiveFrom && !item.expiryDate && !item.permitEndDate;
         const isUploadedWithoutDates = item.status === VehicleComplianceDueStatus.UploadedWithoutDates;
         const dStatus = item.dateStatus ?? item.status;
 
-        if (dateStatusFilter === "no_dates") {
-          if (!hasNoDates && !isUploadedWithoutDates) return false;
-        } else if (dateStatusFilter === "uploaded_no_dates") {
-          if (!isUploadedWithoutDates && !(item.hasUploadedFile && hasNoDates)) return false;
-        } else if (dateStatusFilter === "missing_no_dates") {
-          if (item.hasUploadedFile || isUploadedWithoutDates || !hasNoDates) return false;
-        } else if (dateStatusFilter === "due_today") {
-          if (dStatus !== VehicleComplianceDueStatus.DueToday) return false;
-        } else if (dateStatusFilter === "upcoming") {
-          if (dStatus !== VehicleComplianceDueStatus.Upcoming) return false;
-        } else if (dateStatusFilter === "expired") {
-          if (dStatus !== VehicleComplianceDueStatus.Expired) return false;
-        }
+        const matches = dateStatusFilter.some((df) => {
+          if (df === "no_dates") return hasNoDates || isUploadedWithoutDates;
+          if (df === "uploaded_no_dates") return isUploadedWithoutDates || (item.hasUploadedFile && hasNoDates);
+          if (df === "missing_no_dates") return !item.hasUploadedFile && !isUploadedWithoutDates && hasNoDates;
+          if (df === "due_today") return dStatus === VehicleComplianceDueStatus.DueToday;
+          if (df === "upcoming") return dStatus === VehicleComplianceDueStatus.Upcoming;
+          if (df === "expired") return dStatus === VehicleComplianceDueStatus.Expired;
+          return false;
+        });
+        if (!matches) return false;
       }
 
-      // Combined Status Filter
-      if (combinedStatusFilter) {
+      // Combined Status Filter (Multi)
+      if (combinedStatusFilter.length > 0) {
         const st = String(item.status ?? item.permitStatus);
-        if (st !== combinedStatusFilter) return false;
+        if (!combinedStatusFilter.includes(st)) return false;
       }
 
       return true;
@@ -1005,7 +1021,12 @@ export default function CompliancePage() {
   };
 
   const isAnyFilterActive = Boolean(
-    search || modelFilter || registrationFilter || docTypeFilter || dateStatusFilter || combinedStatusFilter
+    search ||
+    modelFilter.length > 0 ||
+    registrationFilter.length > 0 ||
+    docTypeFilter.length > 0 ||
+    dateStatusFilter.length > 0 ||
+    combinedStatusFilter.length > 0
   );
 
   const [exporting, setExporting] = useState(false);
@@ -1113,11 +1134,11 @@ export default function CompliancePage() {
           <button
             type="button"
             onClick={() => {
-              setDateStatusFilter("");
-              setCombinedStatusFilter("");
+              setDateStatusFilter([]);
+              setCombinedStatusFilter([]);
             }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-              !dateStatusFilter && !combinedStatusFilter
+              dateStatusFilter.length === 0 && combinedStatusFilter.length === 0
                 ? "bg-[#1167c9] text-white shadow-sm"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
             }`}
@@ -1126,9 +1147,15 @@ export default function CompliancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setDateStatusFilter(dateStatusFilter === "no_dates" ? "" : "no_dates")}
+            onClick={() => {
+              setDateStatusFilter(
+                dateStatusFilter.includes("no_dates")
+                  ? dateStatusFilter.filter((x) => x !== "no_dates")
+                  : [...dateStatusFilter, "no_dates"]
+              );
+            }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-              dateStatusFilter === "no_dates"
+              dateStatusFilter.includes("no_dates")
                 ? "bg-amber-600 text-white shadow-sm ring-2 ring-amber-300"
                 : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
             }`}
@@ -1140,9 +1167,15 @@ export default function CompliancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setDateStatusFilter(dateStatusFilter === "uploaded_no_dates" ? "" : "uploaded_no_dates")}
+            onClick={() => {
+              setDateStatusFilter(
+                dateStatusFilter.includes("uploaded_no_dates")
+                  ? dateStatusFilter.filter((x) => x !== "uploaded_no_dates")
+                  : [...dateStatusFilter, "uploaded_no_dates"]
+              );
+            }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-              dateStatusFilter === "uploaded_no_dates"
+              dateStatusFilter.includes("uploaded_no_dates")
                 ? "bg-sky-600 text-white shadow-sm ring-2 ring-sky-300"
                 : "bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
             }`}
@@ -1154,9 +1187,15 @@ export default function CompliancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setDateStatusFilter(dateStatusFilter === "missing_no_dates" ? "" : "missing_no_dates")}
+            onClick={() => {
+              setDateStatusFilter(
+                dateStatusFilter.includes("missing_no_dates")
+                  ? dateStatusFilter.filter((x) => x !== "missing_no_dates")
+                  : [...dateStatusFilter, "missing_no_dates"]
+              );
+            }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-              dateStatusFilter === "missing_no_dates"
+              dateStatusFilter.includes("missing_no_dates")
                 ? "bg-slate-700 text-white shadow-sm ring-2 ring-slate-400"
                 : "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
             }`}
@@ -1168,9 +1207,15 @@ export default function CompliancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setDateStatusFilter(dateStatusFilter === "due_today" ? "" : "due_today")}
+            onClick={() => {
+              setDateStatusFilter(
+                dateStatusFilter.includes("due_today")
+                  ? dateStatusFilter.filter((x) => x !== "due_today")
+                  : [...dateStatusFilter, "due_today"]
+              );
+            }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-              dateStatusFilter === "due_today"
+              dateStatusFilter.includes("due_today")
                 ? "bg-orange-600 text-white shadow-sm ring-2 ring-orange-300"
                 : "bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800"
             }`}
@@ -1182,9 +1227,15 @@ export default function CompliancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setDateStatusFilter(dateStatusFilter === "upcoming" ? "" : "upcoming")}
+            onClick={() => {
+              setDateStatusFilter(
+                dateStatusFilter.includes("upcoming")
+                  ? dateStatusFilter.filter((x) => x !== "upcoming")
+                  : [...dateStatusFilter, "upcoming"]
+              );
+            }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-              dateStatusFilter === "upcoming"
+              dateStatusFilter.includes("upcoming")
                 ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300"
                 : "bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
             }`}
@@ -1196,9 +1247,15 @@ export default function CompliancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setDateStatusFilter(dateStatusFilter === "expired" ? "" : "expired")}
+            onClick={() => {
+              setDateStatusFilter(
+                dateStatusFilter.includes("expired")
+                  ? dateStatusFilter.filter((x) => x !== "expired")
+                  : [...dateStatusFilter, "expired"]
+              );
+            }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-              dateStatusFilter === "expired"
+              dateStatusFilter.includes("expired")
                 ? "bg-red-600 text-white shadow-sm ring-2 ring-red-300"
                 : "bg-red-50 text-red-800 border border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800"
             }`}
@@ -1214,36 +1271,36 @@ export default function CompliancePage() {
         {isAnyFilterActive && (
           <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border)] text-xs">
             <span className="text-[var(--muted)] text-[11px] font-semibold ml-1">الفلاتر النشطة:</span>
-            {modelFilter && (
-              <Badge className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
-                الموديل: {modelFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setModelFilter("")} />
+            {modelFilter.map((m) => (
+              <Badge key={m} className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 gap-1 pl-1.5 font-medium">
+                الموديل: {m}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setModelFilter(modelFilter.filter((x) => x !== m))} />
               </Badge>
-            )}
-            {registrationFilter && (
-              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 gap-1 pl-1.5 font-medium">
-                نوع التسجيل: {formatVehicleRegistrationType(Number(registrationFilter) as VehicleRegistrationType)}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistrationFilter("")} />
+            ))}
+            {registrationFilter.map((rf) => (
+              <Badge key={rf} className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 gap-1 pl-1.5 font-medium">
+                نوع التسجيل: {formatVehicleRegistrationType(Number(rf) as VehicleRegistrationType)}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setRegistrationFilter(registrationFilter.filter((x) => x !== rf))} />
               </Badge>
-            )}
-            {docTypeFilter && (
-              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 gap-1 pl-1.5 font-medium">
-                نوع الوثيقة: {docTypeOptions.find((o) => o.value === docTypeFilter)?.label || docTypeFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setDocTypeFilter("")} />
+            ))}
+            {docTypeFilter.map((df) => (
+              <Badge key={df} className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 gap-1 pl-1.5 font-medium">
+                نوع الوثيقة: {docTypeOptions.find((o) => o.value === df)?.label || df}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setDocTypeFilter(docTypeFilter.filter((x) => x !== df))} />
               </Badge>
-            )}
-            {dateStatusFilter && (
-              <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 gap-1 pl-1.5 font-medium">
-                فلتر التواريخ: {dateStatusOptions.find((o) => o.value === dateStatusFilter)?.label || dateStatusFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setDateStatusFilter("")} />
+            ))}
+            {dateStatusFilter.map((df) => (
+              <Badge key={df} className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 gap-1 pl-1.5 font-medium">
+                فلتر التواريخ: {dateStatusOptions.find((o) => o.value === df)?.label || df}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setDateStatusFilter(dateStatusFilter.filter((x) => x !== df))} />
               </Badge>
-            )}
-            {combinedStatusFilter && (
-              <Badge className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
-                الحالة: {combinedStatusOptions.find((o) => o.value === combinedStatusFilter)?.label || combinedStatusFilter}
-                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCombinedStatusFilter("")} />
+            ))}
+            {combinedStatusFilter.map((st) => (
+              <Badge key={st} className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 gap-1 pl-1.5 font-medium">
+                الحالة: {combinedStatusOptions.find((o) => o.value === st)?.label || st}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCombinedStatusFilter(combinedStatusFilter.filter((x) => x !== st))} />
               </Badge>
-            )}
+            ))}
             <Button
               variant="secondary"
               onClick={clearAllFilters}
@@ -1271,16 +1328,22 @@ export default function CompliancePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <button
           type="button"
-          onClick={() => setDateStatusFilter(dateStatusFilter === "uploaded_no_dates" ? "" : "uploaded_no_dates")}
+          onClick={() => {
+            setDateStatusFilter(
+              dateStatusFilter.includes("uploaded_no_dates")
+                ? dateStatusFilter.filter((x) => x !== "uploaded_no_dates")
+                : [...dateStatusFilter, "uploaded_no_dates"]
+            );
+          }}
           className={`text-right rounded-xl border p-4 shadow-sm transition-all cursor-pointer ${
-            dateStatusFilter === "uploaded_no_dates"
+            dateStatusFilter.includes("uploaded_no_dates")
               ? "border-sky-500 bg-sky-100/70 dark:bg-sky-950/60 ring-2 ring-sky-500 shadow-md scale-[1.02]"
               : "border-sky-200 bg-sky-50/50 hover:bg-sky-100/50 dark:border-sky-900/40 dark:bg-sky-950/20 dark:hover:bg-sky-950/40"
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="text-sm font-bold text-sky-800 dark:text-sky-300">مرفوع بدون تواريخ</div>
-            {dateStatusFilter === "uploaded_no_dates" && (
+            {dateStatusFilter.includes("uploaded_no_dates") && (
               <Badge className="bg-sky-600 text-white text-[10px] px-1.5 py-0.5">محدد</Badge>
             )}
           </div>
@@ -1289,16 +1352,22 @@ export default function CompliancePage() {
 
         <button
           type="button"
-          onClick={() => setDateStatusFilter(dateStatusFilter === "no_dates" ? "" : "no_dates")}
+          onClick={() => {
+            setDateStatusFilter(
+              dateStatusFilter.includes("no_dates")
+                ? dateStatusFilter.filter((x) => x !== "no_dates")
+                : [...dateStatusFilter, "no_dates"]
+            );
+          }}
           className={`text-right rounded-xl border p-4 shadow-sm transition-all cursor-pointer ${
-            dateStatusFilter === "no_dates"
+            dateStatusFilter.includes("no_dates")
               ? "border-amber-500 bg-amber-100/70 dark:bg-amber-950/60 ring-2 ring-amber-500 shadow-md scale-[1.02]"
               : "border-amber-200 bg-amber-50/50 hover:bg-amber-100/50 dark:border-amber-900/40 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="text-sm font-bold text-amber-800 dark:text-amber-300">سجلات بدون تواريخ (الكل)</div>
-            {dateStatusFilter === "no_dates" && (
+            {dateStatusFilter.includes("no_dates") && (
               <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0.5">محدد</Badge>
             )}
           </div>
@@ -1307,16 +1376,22 @@ export default function CompliancePage() {
 
         <button
           type="button"
-          onClick={() => setDateStatusFilter(dateStatusFilter === "due_today" ? "" : "due_today")}
+          onClick={() => {
+            setDateStatusFilter(
+              dateStatusFilter.includes("due_today")
+                ? dateStatusFilter.filter((x) => x !== "due_today")
+                : [...dateStatusFilter, "due_today"]
+            );
+          }}
           className={`text-right rounded-xl border p-4 shadow-sm transition-all cursor-pointer ${
-            dateStatusFilter === "due_today"
+            dateStatusFilter.includes("due_today")
               ? "border-orange-500 bg-orange-100/70 dark:bg-orange-950/60 ring-2 ring-orange-500 shadow-md scale-[1.02]"
               : "border-orange-200 bg-orange-50/50 hover:bg-orange-100/50 dark:border-orange-900/40 dark:bg-orange-950/20 dark:hover:bg-orange-950/40"
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="text-sm font-bold text-orange-800 dark:text-orange-300">ينتهي اليوم</div>
-            {dateStatusFilter === "due_today" && (
+            {dateStatusFilter.includes("due_today") && (
               <Badge className="bg-orange-600 text-white text-[10px] px-1.5 py-0.5">محدد</Badge>
             )}
           </div>
@@ -1325,16 +1400,22 @@ export default function CompliancePage() {
 
         <button
           type="button"
-          onClick={() => setDateStatusFilter(dateStatusFilter === "upcoming" ? "" : "upcoming")}
+          onClick={() => {
+            setDateStatusFilter(
+              dateStatusFilter.includes("upcoming")
+                ? dateStatusFilter.filter((x) => x !== "upcoming")
+                : [...dateStatusFilter, "upcoming"]
+            );
+          }}
           className={`text-right rounded-xl border p-4 shadow-sm transition-all cursor-pointer ${
-            dateStatusFilter === "upcoming"
+            dateStatusFilter.includes("upcoming")
               ? "border-blue-500 bg-blue-100/70 dark:bg-blue-950/60 ring-2 ring-blue-500 shadow-md scale-[1.02]"
               : "border-blue-200 bg-blue-50/50 hover:bg-blue-100/50 dark:border-blue-900/40 dark:bg-blue-950/20 dark:hover:bg-blue-950/40"
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="text-sm font-bold text-blue-800 dark:text-blue-300">قريب الانتهاء (30 يوم)</div>
-            {dateStatusFilter === "upcoming" && (
+            {dateStatusFilter.includes("upcoming") && (
               <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5">محدد</Badge>
             )}
           </div>
