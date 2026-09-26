@@ -241,7 +241,7 @@ export function LetterheadFooter({ letterheadId = "express" }: { letterheadId?: 
 
   return (
     <div
-      className="mt-6 pt-3 border-t-2 border-gray-800 text-xs font-bold text-gray-800 dir-rtl print:mt-4 relative z-10"
+      className="mt-6 pt-3 border-t-2 border-gray-800 text-xs font-bold text-gray-800 dir-rtl print:mt-2 print:pt-1.5 relative z-10"
       style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 text-[11px]">
@@ -282,7 +282,7 @@ export function LetterheadFrame({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative bg-white text-black p-6 md:p-8 print:p-5 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[960px] print:min-h-0 print:h-auto flex flex-col justify-between overflow-hidden print:overflow-visible">
+    <div className="relative bg-white text-black p-6 md:p-8 print:p-3.5 print:py-2.5 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[960px] print:min-h-0 print:h-auto flex flex-col justify-between overflow-hidden print:overflow-visible">
       <LetterheadWatermark letterheadId={letterheadId} />
 
       <div className="relative z-10 flex-1 flex flex-col justify-between">

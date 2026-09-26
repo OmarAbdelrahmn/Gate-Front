@@ -32,11 +32,11 @@ export function SimHandoverReceiptView({ data }: { data: SimHandoverReceiptData 
   };
 
   return (
-    <div className="relative bg-white text-black p-6 md:p-10 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[920px] flex flex-col justify-between overflow-hidden">
+    <div className="relative bg-white text-black p-6 md:p-10 print:p-4 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[920px] print:min-h-0 print:h-auto flex flex-col justify-between overflow-hidden print:overflow-visible">
       {/* Background Watermark Image if letterhead is set */}
       <LetterheadWatermark letterheadId={data.letterheadId} />
 
-      <div className="relative z-10 space-y-6">
+      <div className="relative z-10 space-y-6 print:space-y-2">
         {/* Header Header if letterheadId is active */}
         {data.letterheadId && data.letterheadId !== "standard" ? (
           <LetterheadHeader

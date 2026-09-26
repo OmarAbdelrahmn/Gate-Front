@@ -114,3 +114,66 @@ export type SystemDashboardReport = {
   operations: OperationsDashboard;
   maintenanceInventory: MaintenanceInventoryDashboard;
 };
+
+// ==========================================
+// Vehicle & Rider Assignment Period Reports
+// ==========================================
+
+export type Guid = string;
+export type CalendarDate = string; // YYYY-MM-DD
+export type IsoTimestamp = string; // ISO 8601 with an explicit offset
+
+export interface VehicleAssignmentsPeriodReport {
+  fromDate: CalendarDate;
+  toDate: CalendarDate;
+  asOfUtc: IsoTimestamp;
+  vehicles: VehicleAssignmentsPeriodRow[];
+}
+
+export interface VehicleAssignmentsPeriodRow {
+  vehicleId: Guid;
+  assetNumber: string;
+  serialNumber: string | null;
+  plateNumberAr: string | null;
+  totalDaysAssignedInPeriod: number;
+  assignments: VehicleRiderPeriodAssignment[];
+}
+
+export interface RiderAssignmentsPeriodReport {
+  fromDate: CalendarDate;
+  toDate: CalendarDate;
+  asOfUtc: IsoTimestamp;
+  riders: RiderAssignmentsPeriodRow[];
+}
+
+export interface RiderAssignmentsPeriodRow {
+  riderKey: string;
+  riderProfileId: Guid | null;
+  riderName: string | null;
+  riderIqamaNo: string | null;
+  totalDaysWithVehiclesInPeriod: number;
+  assignments: VehicleRiderPeriodAssignment[];
+}
+
+export interface VehicleRiderPeriodAssignment {
+  assignmentId: Guid;
+  vehicleId: Guid;
+  assetNumber: string;
+  serialNumber: string | null;
+  plateNumberAr: string | null;
+  assignedRiderProfileId: Guid;
+  assignedEmployeeId: Guid | null;
+  assignedRiderName: string | null;
+  assignedRiderIqamaNo: string | null;
+  isRealRider: boolean;
+  actualRiderId: Guid | null;
+  actualRiderName: string | null;
+  actualRiderIqamaNo: string | null;
+  relationshipToAssignedRider: string | null;
+  startedAtUtc: IsoTimestamp;
+  endedAtUtc: IsoTimestamp | null;
+  periodStartedAtUtc: IsoTimestamp;
+  periodEndedAtUtc: IsoTimestamp;
+  daysInPeriod: number;
+  totalAssignmentDays: number;
+}

@@ -25,7 +25,9 @@ import {
   ExternalLink,
   ShieldCheck,
   X,
+  CalendarDays,
 } from "lucide-react";
+import { RiderAssignmentReportModal } from "@/components/fleet/RiderAssignmentReportModal";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import { getEmployee } from "@/lib/workforce/api";
@@ -78,6 +80,7 @@ export default function ExternalRiderProfilePage({
   // Tabs: "overview" | "documents"
   const [activeTab, setActiveTab] = useState<"overview" | "documents">("overview");
   const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
+  const [isRiderPeriodReportOpen, setIsRiderPeriodReportOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.search.includes("tab=documents")) {
@@ -451,6 +454,14 @@ export default function ExternalRiderProfilePage({
           <Button variant="secondary" onClick={() => setActiveModalTab("insurance")}>
             <ShieldCheck size={15} />
             {isEn ? "Medical Insurance" : "التأمين الطبي"}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setIsRiderPeriodReportOpen(true)}
+            className="gap-2 border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+          >
+            <CalendarDays size={15} className="text-emerald-600 dark:text-emerald-400" />
+            <span>{isEn ? "Period Report" : "تقرير فترات التعيين"}</span>
           </Button>
           <Link href={`/admin/hr/documents?riderProfileId=${rider.riderProfileId || rider.employeeId}`}>
             <Button variant="secondary" className="text-[#1167c9] border-blue-200 bg-blue-50/50 hover:bg-blue-100">
@@ -1039,6 +1050,18 @@ export default function ExternalRiderProfilePage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Rider Assignment Period Report Modal */}
+      {rider && (
+        <RiderAssignmentReportModal
+          isOpen={isRiderPeriodReportOpen}
+          onClose={() => setIsRiderPeriodReportOpen(false)}
+          riderProfileId={rider.riderProfileId || rider.employeeId}
+          riderIqamaNo={rider.iqamaNo}
+          riderName={rider.fullNameAr}
+          employeeId={rider.employeeId}
+        />
       )}
     </div>
   );

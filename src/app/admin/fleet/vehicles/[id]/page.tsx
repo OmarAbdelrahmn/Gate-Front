@@ -53,8 +53,10 @@ import {
   Landmark,
   CheckCircle2,
   Info,
+  CalendarDays,
 } from "lucide-react";
 import Link from "next/link";
+import { VehicleAssignmentReportModal } from "@/components/fleet/VehicleAssignmentReportModal";
 
 
 export default function VehicleDetailPage() {
@@ -74,6 +76,7 @@ export default function VehicleDetailPage() {
   const [selectedIssue, setSelectedIssue] = useState<VehicleIssueSummaryResponse | null>(null);
   const [isFinancingTransferOpen, setIsFinancingTransferOpen] = useState(false);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState(false);
+  const [isPeriodReportOpen, setIsPeriodReportOpen] = useState(false);
 
   const handleCompleteFinancing = async () => {
     if (!vehicle) return;
@@ -307,6 +310,15 @@ export default function VehicleDetailPage() {
               <span>سجل الأحداث الشامل</span>
             </Button>
           </Link>
+
+          <Button
+            variant="secondary"
+            onClick={() => setIsPeriodReportOpen(true)}
+            className="gap-2 border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+          >
+            <CalendarDays className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <span>تقرير فترات التعيين</span>
+          </Button>
 
           {can("fleet.vehicles.manage") && (
             <Button onClick={() => setIsUpsertOpen(true)} variant="secondary" className="gap-2">
@@ -779,6 +791,17 @@ export default function VehicleDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Vehicle Assignment Period Report Modal */}
+      <VehicleAssignmentReportModal
+        isOpen={isPeriodReportOpen}
+        onClose={() => setIsPeriodReportOpen(false)}
+        vehicleId={id}
+        assetNumber={summary.assetNumber}
+        plateNumberAr={summary.plateNumberAr}
+        serialNumber={vehicle.serialNumber}
+        manufacturerModel={`${summary.manufacturer} ${summary.model}`}
+      />
     </div>
   );
 }

@@ -61,3 +61,33 @@ export async function getOperationsDashboardReport(): Promise<OperationsDashboar
 export async function getMaintenanceInventoryDashboardReport(): Promise<MaintenanceInventoryDashboardReport> {
   return authFetch<MaintenanceInventoryDashboardReport>("/api/reports/maintenance-inventory/dashboard");
 }
+
+/**
+ * Vehicle Assignments Period Report
+ * GET /api/reports/fleet/vehicle-assignments?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD
+ * Inclusive Riyadh calendar dates (UTC+03:00).
+ */
+export async function getVehicleAssignmentsPeriodReport(
+  fromDate: string,
+  toDate: string
+): Promise<import("./types").VehicleAssignmentsPeriodReport> {
+  const query = new URLSearchParams({ fromDate, toDate });
+  return authFetch<import("./types").VehicleAssignmentsPeriodReport>(
+    `/api/reports/fleet/vehicle-assignments?${query.toString()}`
+  );
+}
+
+/**
+ * Rider Assignments Period Report
+ * GET /api/reports/fleet/rider-assignments?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD
+ * Inclusive Riyadh calendar dates (UTC+03:00).
+ */
+export async function getRiderAssignmentsPeriodReport(
+  fromDate: string,
+  toDate: string
+): Promise<import("./types").RiderAssignmentsPeriodReport> {
+  const query = new URLSearchParams({ fromDate, toDate });
+  return authFetch<import("./types").RiderAssignmentsPeriodReport>(
+    `/api/reports/fleet/rider-assignments?${query.toString()}`
+  );
+}

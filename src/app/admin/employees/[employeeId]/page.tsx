@@ -54,6 +54,7 @@ import { EmployeePlatformAccounts } from "../../../../components/employees/Emplo
 import { EmployeeRiderHistoryModal } from "../../../../components/employees/EmployeeRiderHistoryModal";
 import { DriverLicensesView } from "../../../../components/employees/DriverLicensesView";
 import { AssignmentPromissoryFiles } from "../../../../components/fleet/AssignmentPromissoryFiles";
+import { RiderAssignmentReportModal } from "@/components/fleet/RiderAssignmentReportModal";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
   SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
@@ -241,10 +242,12 @@ function VehicleTimelineCard({
   entries,
   loading,
   locale = "ar",
+  onOpenPeriodReport,
 }: {
   entries: RiderVehicleTimelineResponse[];
   loading: boolean;
   locale?: "ar" | "en";
+  onOpenPeriodReport?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isEn = locale === "en";
@@ -280,29 +283,44 @@ function VehicleTimelineCard({
 
   return (
     <Card className="p-5 transition-all">
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 text-start font-black text-[var(--foreground)] focus:outline-none select-none cursor-pointer"
-      >
-        <span className="flex items-center gap-2 text-base font-black">
-          <Car size={18} className="text-[#1167c9]" />
-          {isEn ? "Vehicle Assignment History" : "سجل عهد المركبات"}
-        </span>
-        <div className="flex items-center gap-2">
-          {entries.length > 0 && (
-            <span className="rounded-full bg-[var(--subtle-bg)] border border-[var(--border)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">
-              {entries.length}
-            </span>
-          )}
-          <ChevronDown
-            size={18}
-            className={`text-[var(--muted)] transition-transform duration-200 ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </div>
-      </button>
+      <div className="flex w-full items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="flex flex-1 items-center justify-between gap-2 text-start font-black text-[var(--foreground)] focus:outline-none select-none cursor-pointer"
+        >
+          <span className="flex items-center gap-2 text-base font-black">
+            <Car size={18} className="text-[#1167c9]" />
+            {isEn ? "Vehicle Assignment History" : "سجل عهد المركبات"}
+          </span>
+          <div className="flex items-center gap-2">
+            {entries.length > 0 && (
+              <span className="rounded-full bg-[var(--subtle-bg)] border border-[var(--border)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">
+                {entries.length}
+              </span>
+            )}
+            <ChevronDown
+              size={18}
+              className={`text-[var(--muted)] transition-transform duration-200 ${
+                isOpen ? "rotate-180" : ""
+              }`}
+            />
+          </div>
+        </button>
+        {onOpenPeriodReport && (
+          <Button
+            variant="secondary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenPeriodReport();
+            }}
+            className="!min-h-8 h-8 py-1 gap-1.5 text-xs text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 shrink-0"
+          >
+            <CalendarDays size={14} className="text-emerald-600" />
+            <span>{isEn ? "Period Report" : "تقرير فترات التعيين"}</span>
+          </Button>
+        )}
+      </div>
 
       {isOpen && (
         <div className="pt-4 border-t border-[var(--border)] mt-3">
@@ -448,6 +466,7 @@ export default function EmployeeDetailsPage({
   const [error, setError] = useState("");
   const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
   const [openRiderHistoryModal, setOpenRiderHistoryModal] = useState(false);
+  const [isRiderPeriodReportOpen, setIsRiderPeriodReportOpen] = useState(false);
 
   // Vehicle Timeline & Details State
   const [vehicleTimeline, setVehicleTimeline] = useState<RiderVehicleTimelineResponse[]>([]);
@@ -983,6 +1002,14 @@ export default function EmployeeDetailsPage({
               {locale === "en" ? "Rider Platform History" : "سجل تشغيل المنصات"}
             </Button>
           )}
+          <Button
+            variant="secondary"
+            onClick={() => setIsRiderPeriodReportOpen(true)}
+            className="gap-2 border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+          >
+            <CalendarDays size={17} className="text-emerald-600 dark:text-emerald-400" />
+            {locale === "en" ? "Vehicle Periods Report" : "تقرير فترات التعيين"}
+          </Button>
           <Link href={`/admin/employees/${employee.id}/events`}>
             <Button
               variant="secondary"
@@ -1269,6 +1296,7 @@ export default function EmployeeDetailsPage({
           entries={vehicleTimeline}
           loading={loadingVehicleTimeline}
           locale={locale}
+          onOpenPeriodReport={() => setIsRiderPeriodReportOpen(true)}
         />
         <Timeline
           title={locale === "en" ? "Sponsorship History" : "سجل الكفالة"}
@@ -1491,6 +1519,16 @@ export default function EmployeeDetailsPage({
         employeeId={employee.id}
         riderProfileId={rider?.id ?? employee.riderProfileId ?? null}
         riderName={displayName || undefined}
+      />
+
+      {/* Rider Vehicle Assignment Period Report Modal */}
+      <RiderAssignmentReportModal
+        isOpen={isRiderPeriodReportOpen}
+        onClose={() => setIsRiderPeriodReportOpen(false)}
+        riderProfileId={rider?.id ?? employee.riderProfileId ?? null}
+        riderIqamaNo={employee.iqamaNo || (employee as any).iqamaNumber || null}
+        riderName={displayName || employee.fullNameAr || null}
+        employeeId={employee.id}
       />
     </div>
   );
