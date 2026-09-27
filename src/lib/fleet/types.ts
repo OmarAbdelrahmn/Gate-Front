@@ -404,6 +404,12 @@ export interface VehicleSummaryResponse {
   permitStatus?: VehicleComplianceDueStatus | null;
   isReadyForAssignment: boolean;
   rowVersion: string;
+  /** Owner name (individual or entity). Returned by some API contexts. */
+  ownerName?: string | null;
+  /** Supplier the vehicle was purchased from. Returned by some API contexts. */
+  supplierName?: string | null;
+  /** Registered owner supplier name. */
+  registeredOwnerSupplier?: string | null;
 }
 
 export type RegisteredOwnerType = "Supplier" | "Sponsor" | null;

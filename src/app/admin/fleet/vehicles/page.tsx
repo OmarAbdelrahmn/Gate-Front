@@ -583,7 +583,31 @@ export default function VehiclesPage() {
             },
             width: 16,
           },
-          { header: "المندوب المستلم حالياً", accessor: (v) => v.currentRiderName || "—", width: 22 },
+          {
+            header: "المستخدم الحالي",
+            accessor: (v) =>
+              v.actualRider?.actualRiderName ||
+              v.currentRiderName ||
+              "—",
+            width: 26,
+          },
+          {
+            header: "المالك",
+            accessor: (v) =>
+              v.ownerName ||
+              v.registeredOwnerSupplier ||
+              v.sponsorName ||
+              "—",
+            width: 24,
+          },
+          {
+            header: "المورد",
+            accessor: (v) =>
+              v.supplierName ||
+              v.registeredOwnerSupplier ||
+              "—",
+            width: 24,
+          },
         ],
       });
     } catch (err) {
