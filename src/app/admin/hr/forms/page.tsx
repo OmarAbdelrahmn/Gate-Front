@@ -35,6 +35,7 @@ import { CashDisbursementView } from "@/components/hr/forms/CashDisbursementView
 import { PromissoryNoteView } from "@/components/hr/forms/PromissoryNoteView";
 import { CashAdvanceView } from "@/components/hr/forms/CashAdvanceView";
 import { CashCustodyPromissoryView } from "@/components/hr/forms/CashCustodyPromissoryView";
+import { CustodyReceiptView } from "@/components/hr/forms/CustodyReceiptView";
 import { GenericDocumentView } from "@/components/hr/forms/GenericDocumentView";
 import { VacationFormView } from "@/components/hr/forms/VacationFormView";
 import { SalaryCertificateView } from "@/components/hr/forms/SalaryCertificateView";
@@ -48,6 +49,7 @@ import { SimHandoverReceiptView } from "@/components/hr/forms/SimHandoverReceipt
 import { InterviewFormView } from "@/components/hr/forms/InterviewFormView";
 import { OperationsEvaluationView } from "@/components/hr/forms/OperationsEvaluationView";
 import { AbsenceWarningView } from "@/components/hr/forms/AbsenceWarningView";
+import { JobOfferView } from "@/components/hr/forms/JobOfferView";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -182,6 +184,14 @@ export default function HrFormsPage() {
   const [operationsManagerName, setOperationsManagerName] = useState<string>("مشرف إدارة التشغيل");
   const [interviewPageView, setInterviewPageView] = useState<"both" | "hr" | "operations">("both");
 
+  // SIM Handover State (Standalone, decoupled from user personal info)
+  const [simPhoneNumber, setSimPhoneNumber] = useState<string>("");
+  const [simCarrier, setSimCarrier] = useState<string>("STC");
+  const [simCarrierCustom, setSimCarrierCustom] = useState<string>("");
+  const [simIccid, setSimIccid] = useState<string>("");
+  const [simFormNo, setSimFormNo] = useState<string>("SIM-2026/001");
+  const [simEmployeeCode, setSimEmployeeCode] = useState<string>("");
+
   // Initialize today's date and default Tafreet
   useEffect(() => {
     const today = new Date();
@@ -303,9 +313,8 @@ export default function HrFormsPage() {
   const personOptions: SelectOption[] = useMemo(() => {
     return people.map((p) => ({
       value: p.id,
-      label: `${p.fullNameAr} - (إقامة: ${p.iqamaNo || "غير مسجلة"}) ${
-        p.source === "externalRider" ? "[مندوب خارجي]" : ""
-      }`,
+      label: `${p.fullNameAr} - (إقامة: ${p.iqamaNo || "غير مسجلة"}) ${p.source === "externalRider" ? "[مندوب خارجي]" : ""
+        }`,
     }));
   }, [people]);
 
@@ -395,10 +404,16 @@ export default function HrFormsPage() {
     setAmountInWords(tafreetArabicNumber(15000, selectedTemplateId !== "cash_disbursement"));
     setReason("سلفة مالية على الحساب");
     setNotes("");
+    setSimPhoneNumber("");
+    setSimCarrier("STC");
+    setSimCarrierCustom("");
+    setSimIccid("");
+    setSimFormNo("SIM-2026/001");
+    setSimEmployeeCode("");
   };
 
   return (
-    <div className="space-y-6 dir-rtl text-right min-h-screen pb-16">
+    <div className="space-y-6 dir-rtl text-right min-h-screen pb-16 print:p-0 print:m-0 print:space-y-0 print:min-h-0 print:pb-0">
       {/* Header Bar */}
       <div className="flex flex-wrap items-end justify-between gap-4 print:hidden">
         <div>
@@ -456,11 +471,10 @@ export default function HrFormsPage() {
         <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--border)]">
           <button
             onClick={() => setSelectedCategory("all")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              selectedCategory === "all"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${selectedCategory === "all"
                 ? "bg-[#1167c9] text-white shadow-xs"
                 : "bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)]"
-            }`}
+              }`}
           >
             الكل ({FORM_TEMPLATES.length})
           </button>
@@ -470,11 +484,10 @@ export default function HrFormsPage() {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                  selectedCategory === cat.id
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${selectedCategory === cat.id
                     ? "bg-[#1167c9] text-white shadow-xs"
                     : "bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                }`}
+                  }`}
               >
                 {cat.labelAr} ({count})
               </button>
@@ -491,16 +504,14 @@ export default function HrFormsPage() {
               <button
                 key={tpl.id}
                 onClick={() => setSelectedTemplateId(tpl.id)}
-                className={`flex flex-col items-center text-center p-3 rounded-xl border transition-all text-xs font-bold gap-2 ${
-                  isSelected
+                className={`flex flex-col items-center text-center p-3 rounded-xl border transition-all text-xs font-bold gap-2 ${isSelected
                     ? "border-[#1167c9] bg-blue-500/10 text-[#1167c9] shadow-xs ring-2 ring-[#1167c9]/20"
                     : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[#1167c9]/50 hover:bg-blue-500/5"
-                }`}
+                  }`}
               >
                 <div
-                  className={`p-2 rounded-lg ${
-                    isSelected ? "bg-[#1167c9] text-white" : "bg-[var(--background)] text-[var(--muted)]"
-                  }`}
+                  className={`p-2 rounded-lg ${isSelected ? "bg-[#1167c9] text-white" : "bg-[var(--background)] text-[var(--muted)]"
+                    }`}
                 >
                   <IconComponent className="w-5 h-5" />
                 </div>
@@ -533,11 +544,10 @@ export default function HrFormsPage() {
               <div
                 key={lh.id}
                 onClick={() => handleSelectLetterhead(lh.id)}
-                className={`cursor-pointer p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 text-right ${
-                  isSelected
+                className={`cursor-pointer p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 text-right ${isSelected
                     ? "border-[#1167c9] bg-blue-500/10 text-[var(--foreground)] ring-1 ring-[#1167c9]/40"
                     : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[#1167c9]/40"
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full bg-gradient-to-r ${lh.colorGradient}`} />
@@ -1663,33 +1673,30 @@ export default function HrFormsPage() {
                       <button
                         type="button"
                         onClick={() => setAbsenceLanguage("ar")}
-                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
-                          absenceLanguage === "ar"
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${absenceLanguage === "ar"
                             ? "bg-[#1167c9] text-white border-[#1167c9] shadow-sm"
                             : "border-[var(--border)] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                        }`}
+                          }`}
                       >
                         🇸🇦 بالعربية فقط
                       </button>
                       <button
                         type="button"
                         onClick={() => setAbsenceLanguage("en")}
-                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
-                          absenceLanguage === "en"
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${absenceLanguage === "en"
                             ? "bg-[#1167c9] text-white border-[#1167c9] shadow-sm"
                             : "border-[var(--border)] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                        }`}
+                          }`}
                       >
                         🇬🇧 English Only
                       </button>
                       <button
                         type="button"
                         onClick={() => setAbsenceLanguage("both")}
-                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
-                          absenceLanguage === "both"
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${absenceLanguage === "both"
                             ? "bg-[#1167c9] text-white border-[#1167c9] shadow-sm"
                             : "border-[var(--border)] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                        }`}
+                          }`}
                       >
                         🌐 اللغتان معاً
                       </button>
@@ -1761,8 +1768,106 @@ export default function HrFormsPage() {
                 </div>
               )}
 
+              {/* SIM Handover specific fields */}
+              {selectedTemplateId === "sim_handover_receipt" && (
+                <div className="space-y-4 pt-2 border-t border-[var(--border)]">
+                  <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs font-black text-blue-700 dark:text-blue-400">
+                      <span>📱</span>
+                      <span>بيانات شريحة الجوال المستلمة (مستقلة عن بيانات الموظف)</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                      يتم إدخال رقم الشريحة واسم المشغل للشريحة المسلّمة للموظف كعهدة عمل بشكل منفصل ومستقل تماماً عن رقم جواله الشخصي.
+                    </p>
+                  </div>
+
+                  {/* اسم المشغل (Carrier) */}
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted)] mb-1.5">
+                      اسم المشغل (شبكة الاتصالات)
+                    </label>
+                    <div className="grid grid-cols-5 gap-1.5 mb-2">
+                      {["STC", "موبايلي", "زين", "سلام", "أخرى"].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setSimCarrier(c)}
+                          className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all text-center ${
+                            simCarrier === c
+                              ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
+                              : "border-[var(--border)] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                    {simCarrier === "أخرى" && (
+                      <Input
+                        label="اكتب اسم المشغل"
+                        value={simCarrierCustom}
+                        onChange={(e) => setSimCarrierCustom(e.target.value)}
+                        placeholder="مثال: سلام، جوي، ريد بول..."
+                      />
+                    )}
+                  </div>
+
+                  {/* رقم شريحة الجوال (منفصل وحده) */}
+                  <Input
+                    label="رقم شريحة الجوال للعمل (SIM Mobile Number)"
+                    value={simPhoneNumber}
+                    onChange={(e) => setSimPhoneNumber(e.target.value)}
+                    placeholder="05xxxxxxxx"
+                    dir="ltr"
+                    className="text-left font-mono font-bold"
+                  />
+
+                  {/* الرقم التسلسلي للشريحة ICCID */}
+                  <Input
+                    label="الرقم التسلسلي للشريحة (ICCID / Serial No.)"
+                    value={simIccid}
+                    onChange={(e) => setSimIccid(e.target.value)}
+                    placeholder="89966..."
+                    dir="ltr"
+                    className="text-left font-mono"
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="رقم النموذج (Ref No.)"
+                      value={simFormNo}
+                      onChange={(e) => setSimFormNo(e.target.value)}
+                      placeholder="SIM-2026/001"
+                      dir="ltr"
+                    />
+                    <Input
+                      label="الرقم الوظيفي للمستلم"
+                      value={simEmployeeCode}
+                      onChange={(e) => setSimEmployeeCode(e.target.value)}
+                      placeholder="EMP-102"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="المسمى الوظيفي"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      placeholder="سائق مندوب توصيل"
+                    />
+                    <Input
+                      label="مسؤول التسليم (الموارد البشرية)"
+                      value={hrManagerName}
+                      onChange={(e) => setHrManagerName(e.target.value)}
+                      placeholder="مسؤول الموارد البشرية"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* City for templates requiring city */}
-              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && (
+              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "custody_receipt" && (
                 <Input
                   label="المدينة / الفرع"
                   value={issueCity}
@@ -1786,7 +1891,7 @@ export default function HrFormsPage() {
               )}
 
               {/* Generic Document notes */}
-              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && (
+              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "custody_receipt" && (
                 <div className="pt-2 border-t border-[var(--border)]">
                   <label className="block text-xs font-bold text-[var(--muted)] mb-1">
                     ملاحظات إضافية (اختياري)
@@ -1804,7 +1909,7 @@ export default function HrFormsPage() {
         </div>
 
         {/* Live Document Preview Column */}
-        <div className="lg:col-span-7 print:col-span-12 space-y-3">
+        <div className="lg:col-span-7 print:col-span-12 space-y-3 print:space-y-0 print:p-0 print:m-0">
           <div className="flex items-center justify-between px-4 py-2.5 rounded-t-2xl border border-[var(--border)] bg-[var(--surface)] print:hidden">
             <span className="text-xs font-black flex items-center gap-2">
               <CheckCircle2 size={16} className="text-[#1167c9]" />
@@ -1813,7 +1918,7 @@ export default function HrFormsPage() {
             <Badge tone="blue">قياس A4</Badge>
           </div>
 
-          <div className="p-4 md:p-6 rounded-b-2xl border border-[var(--border)] bg-slate-100 dark:bg-slate-900/60 shadow-inner print:p-0 print:border-none print:bg-white">
+          <div className="p-4 md:p-6 rounded-b-2xl border border-[var(--border)] bg-slate-100 dark:bg-slate-900/60 shadow-inner print:p-0 print:m-0 print:border-none print:bg-white">
             {selectedTemplateId === "cash_disbursement" && (
               <CashDisbursementView
                 data={{
@@ -2106,12 +2211,14 @@ export default function HrFormsPage() {
                 data={{
                   companyName,
                   date,
+                  formNumber: simFormNo,
                   riderName,
                   iqamaNo,
                   jobTitle,
-                  carrierName: "STC",
-                  phoneNumber: mobile || "05xxxxxxxx",
-                  iccid: "",
+                  employeeCode: simEmployeeCode,
+                  carrierName: simCarrier === "أخرى" ? (simCarrierCustom || "أخرى") : simCarrier,
+                  phoneNumber: simPhoneNumber,
+                  iccid: simIccid,
                   responsibleEmployeeName: hrManagerName,
                   letterheadId: selectedLetterhead,
                 }}
@@ -2139,7 +2246,44 @@ export default function HrFormsPage() {
               </LetterheadFrame>
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "absence_warning" && (
+            {selectedTemplateId === "custody_receipt" && (
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <CustodyReceiptView
+                  data={{
+                    riderName,
+                    iqamaNo,
+                    nationality,
+                    jobTitle,
+                    date,
+                    companyName,
+                  }}
+                />
+              </LetterheadFrame>
+            )}
+
+            {selectedTemplateId === "job_offer" && (
+              <LetterheadFrame letterheadId={selectedLetterhead} companyName={companyName} date={date}>
+                <JobOfferView
+                  data={{
+                    candidateName: riderName,
+                    iqamaNo,
+                    nationality,
+                    jobTitle,
+                    department,
+                    city: issueCity,
+                    totalSalary: amount,
+                    salaryInWords: amountInWords,
+                    date,
+                    companyName,
+                    hrManagerName,
+                    generalManagerName,
+                    notes,
+                  }}
+                />
+              </LetterheadFrame>
+            )}
+
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "custody_receipt" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "job_offer" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{

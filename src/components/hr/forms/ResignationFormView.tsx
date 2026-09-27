@@ -15,7 +15,7 @@ export interface ResignationFormData {
 
 export function ResignationFormView({ data }: { data: ResignationFormData }) {
   return (
-    <div className="bg-white text-black p-8 md:p-12 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container text-sm md:text-base">
+    <div className="bg-white text-black p-4 sm:p-5 md:p-6 print:p-3 print:py-2 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs text-sm md:text-base">
       {/* Title */}
       <div className="text-center mb-8 border-b-2 border-black pb-3">
         <h1 className="text-sm md:text-base font-extrabold text-gray-900 mb-1">

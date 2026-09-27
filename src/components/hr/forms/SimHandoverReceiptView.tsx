@@ -28,216 +28,233 @@ export function SimHandoverReceiptView({ data }: { data: SimHandoverReceiptData 
   // Helper to determine carrier badge/checkbox state
   const isCarrierSelected = (name: string) => {
     if (!activeCarrier) return false;
-    return activeCarrier.toLowerCase().includes(name.toLowerCase());
+    const lower = activeCarrier.toLowerCase();
+    if (name === "STC") return lower.includes("stc") || lower.includes("اس تي سي");
+    if (name === "موبايلي") return lower.includes("موبايلي") || lower.includes("mobily");
+    if (name === "زين") return lower.includes("زين") || lower.includes("zain");
+    if (name === "سلام") return lower.includes("سلام") || lower.includes("salam");
+    if (name === "أخرى") {
+      const known = ["stc", "اس تي سي", "موبايلي", "mobily", "زين", "zain", "سلام", "salam"];
+      return !known.some((k) => lower.includes(k)) || lower.includes("أخرى");
+    }
+    return lower.includes(name.toLowerCase());
   };
 
   return (
-    <div className="relative bg-white text-black p-6 md:p-10 print:p-4 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[920px] print:min-h-0 print:h-auto flex flex-col justify-between overflow-hidden print:overflow-visible">
+    <div
+      className="relative bg-white text-black p-5 md:p-8 print:p-3.5 print:py-2.5 rounded-xl border-2 border-black font-sans leading-normal text-right dir-rtl shadow-xs page-break-inside-avoid print-container print-page-frame min-h-[900px] md:min-h-[960px] flex flex-col justify-between overflow-hidden"
+    >
       {/* Background Watermark Image if letterhead is set */}
       <LetterheadWatermark letterheadId={data.letterheadId} />
 
-      <div className="relative z-10 space-y-6 print:space-y-2">
-        {/* Header Header if letterheadId is active */}
-        {data.letterheadId && data.letterheadId !== "standard" ? (
-          <LetterheadHeader
-            letterheadId={data.letterheadId}
-            companyName={compName}
-            date={data.date}
-            refNo={formNo}
-          />
-        ) : (
-          <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-2">
-            <div>
-              <h1 className="text-xl font-black">{compName}</h1>
-              <p className="text-xs font-semibold text-gray-700">إدارة الأسطول والاتصالات (Fleet & SIMs)</p>
-            </div>
-            <div className="text-left text-xs font-bold font-mono">
-              <p>التاريخ: {data.date || "____ / ____ / ________ م"}</p>
-              <p>رقم النموذج: {formNo}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Title */}
-        <div className="text-center my-4">
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-wide text-black border-b-2 border-black inline-block pb-1 px-4">
-            نموذج استلام شريحة جوال
-          </h2>
-        </div>
-
-        {/* Basic Form Information Header */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm md:text-base font-bold bg-gray-50/80 p-3 rounded-lg border border-black/30">
-          <div>
-            <span className="text-gray-700">اسم الشركة: </span>
-            <span className="font-extrabold text-black">{compName}</span>
-          </div>
-          <div className="text-center">
-            <span className="text-gray-700">التاريخ: </span>
-            <span className="font-extrabold text-black dir-ltr inline-block">{formattedDate}</span>
-          </div>
-          <div className="text-left">
-            <span className="text-gray-700">رقم النموذج: </span>
-            <span className="font-extrabold text-black font-mono">{formNo}</span>
-          </div>
-        </div>
-
-        {/* Section 1: Employee Information (أقر أنا الموظف) */}
-        <div className="space-y-3 pt-2">
-          <h3 className="text-base md:text-lg font-black text-black border-r-4 border-black pr-2">
-            أقر أنا الموظف
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm md:text-base font-semibold pr-2">
-            <div className="flex items-center gap-2">
-              <span className="font-bold min-w-[120px]">الاسم:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-bold underline decoration-1 underline-offset-4">
-                {data.riderName || "...................................................................."}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="font-bold min-w-[140px]">رقم الهوية / الإقامة:</span>
-              <span dir="rtl" className="border-b-2 border-dotted border-black flex-1 px-2 font-mono font-bold dir-rtl inline-block">
-                {data.iqamaNo || "...................................................................."}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="font-bold min-w-[120px]">المسمى الوظيفي:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2">
-                {data.jobTitle || "سائق مندوب توصيل"}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="font-bold min-w-[140px]">رقم الموظف:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-mono">
-                {data.employeeCode || "...................................................................."}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 2: SIM Specifications (بيانات شريحة الجوال) */}
-        <div className="space-y-4 pt-2">
-          <h3 className="text-base md:text-lg font-black text-black border-r-4 border-black pr-2">
-            بأنني استلمت من الشركة شريحة جوال بالبيانات التالية:
-          </h3>
-
-          <div className="space-y-3 font-semibold text-sm md:text-base pr-2">
-            {/* Carrier Name Selector Badges */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="font-bold min-w-[120px]">اسم المشغل:</span>
-              <div className="flex items-center gap-4 text-sm md:text-base">
-                {["موبايلي", "زين", "STC", "أخرى"].map((carrier) => {
-                  const selected = isCarrierSelected(carrier);
-                  return (
-                    <span
-                      key={carrier}
-                      className={`px-3 py-1 rounded-md border text-xs md:text-sm font-bold flex items-center gap-1.5 ${
-                        selected
-                          ? "border-black bg-black text-white"
-                          : "border-black/40 text-black bg-white"
-                      }`}
-                    >
-                      <span className="inline-block size-3 rounded-full border border-black flex-shrink-0 bg-white" style={{ background: selected ? '#000' : '#fff' }} />
-                      {carrier}
-                    </span>
-                  );
-                })}
+      <div className="relative z-10 space-y-3 print:space-y-1.5 flex-1 flex flex-col justify-between">
+        <div>
+          {/* Header if letterheadId is active */}
+          {data.letterheadId && data.letterheadId !== "standard" ? (
+            <LetterheadHeader
+              letterheadId={data.letterheadId}
+              companyName={compName}
+              date={data.date}
+              refNo={formNo}
+            />
+          ) : (
+            <div className="flex justify-between items-start border-b-2 border-black pb-2 mb-1.5">
+              <div>
+                <h1 className="text-lg font-black">{compName}</h1>
+                <p className="text-[11px] font-semibold text-gray-700">إدارة الأسطول والاتصالات (Fleet & SIMs)</p>
               </div>
-              {activeCarrier && (
-                <span className="font-extrabold text-black bg-gray-100 px-2.5 py-0.5 rounded border border-gray-300">
-                  ({activeCarrier})
-                </span>
-              )}
+              <div className="text-left text-[11px] font-bold font-mono">
+                <p>التاريخ: {data.date || "____ / ____ / ________ م"}</p>
+                <p>رقم النموذج: {formNo}</p>
+              </div>
             </div>
+          )}
 
-            {/* Phone Number */}
-            <div className="flex items-center gap-2">
-              <span className="font-bold min-w-[120px]">رقم الجوال:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-mono font-black text-base md:text-lg dir-ltr text-right">
-                {data.phoneNumber || "...................................................................."}
-              </span>
+          {/* Title */}
+          <div className="text-center my-1.5 print:my-0.5">
+            <h2 className="text-xl md:text-2xl print:text-lg font-black tracking-wide text-black border-b-2 border-black inline-block pb-0.5 px-4">
+              نموذج استلام شريحة جوال
+            </h2>
+          </div>
+
+          {/* Basic Form Information Header Strip */}
+          <div className="flex justify-between items-center text-xs print:text-[11px] font-bold bg-gray-50/80 p-2 print:p-1 rounded-md border border-black/30 mb-2 print:mb-1">
+            <div>
+              <span className="text-gray-700">اسم الشركة: </span>
+              <span className="font-extrabold text-black">{compName}</span>
             </div>
-
-            {/* SIM Serial (ICCID) */}
-            <div className="flex items-center gap-2">
-              <span className="font-bold min-w-[170px]">الرقم التسلسلي للشريحة (SIM):</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-mono font-bold text-sm md:text-base dir-ltr text-right">
-                {data.iccid || "...................................................................."}
-              </span>
+            <div>
+              <span className="text-gray-700">التاريخ: </span>
+              <span className="font-extrabold text-black dir-ltr inline-block">{formattedDate}</span>
             </div>
-
-            {/* Receipt Date */}
-            <div className="flex items-center gap-2">
-              <span className="font-bold min-w-[120px]">تاريخ الاستلام:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-mono font-bold dir-ltr text-right">
-                {receiptDate}
-              </span>
+            <div>
+              <span className="text-gray-700">رقم النموذج: </span>
+              <span className="font-extrabold text-black font-mono">{formNo}</span>
             </div>
           </div>
-        </div>
 
-        {/* Section 3: Declaration & Undertaking Text (التعهد) */}
-        <div className="p-4 rounded-xl border-2 border-black bg-gray-50/60 my-4">
-          <p className="text-sm md:text-base font-semibold leading-relaxed text-black text-justify">
-            وأتعهد بالمحافظة على الشريحة واستخدامها للأغراض الرسمية الخاصة بالعمل فقط، وعدم تسليمها لأي شخص آخر دون موافقة الشركة، وأتحمل المسؤولية الكاملة عن أي سوء استخدام أو فقدان أو إهمال، وألتزم بإعادتها عند طلب الشركة أو عند انتهاء العلاقة التعاقدية.
-          </p>
+          {/* Section 1: Employee Information (أقر أنا الموظف) */}
+          <div className="space-y-1.5 print:space-y-0.5 pt-1">
+            <h3 className="text-xs sm:text-sm print:text-[12px] font-black text-black border-r-3 border-black pr-1.5">
+              أقر أنا الموظف
+            </h3>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 print:gap-y-0.5 text-xs sm:text-sm print:text-[11px] font-semibold pr-1">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold min-w-[75px]">الاسم:</span>
+                <span className="border-b border-dotted border-black flex-1 px-1 font-bold underline decoration-1 underline-offset-2">
+                  {data.riderName || "........................................................"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold min-w-[100px]">رقم الهوية / الإقامة:</span>
+                <span dir="rtl" className="border-b border-dotted border-black flex-1 px-1 font-mono font-bold dir-rtl inline-block">
+                  {data.iqamaNo || "...................................."}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold min-w-[75px]">المسمى الوظيفي:</span>
+                <span className="border-b border-dotted border-black flex-1 px-1">
+                  {data.jobTitle || "سائق مندوب توصيل"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold min-w-[100px]">رقم الموظف:</span>
+                <span className="border-b border-dotted border-black flex-1 px-1 font-mono">
+                  {data.employeeCode || "...................................."}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: SIM Specifications (بيانات شريحة الجوال) */}
+          <div className="space-y-1.5 print:space-y-0.5 pt-2 print:pt-1">
+            <h3 className="text-xs sm:text-sm print:text-[12px] font-black text-black border-r-3 border-black pr-1.5">
+              بأنني استلمت من الشركة شريحة جوال بالبيانات التالية:
+            </h3>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 print:gap-y-0.5 font-semibold text-xs sm:text-sm print:text-[11px] pr-1">
+              {/* Carrier Selector Badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold min-w-[75px]">اسم المشغل:</span>
+                <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                  {["STC", "موبايلي", "زين", "سلام", "أخرى"].map((carrier) => {
+                    const selected = isCarrierSelected(carrier);
+                    return (
+                      <span
+                        key={carrier}
+                        className={`px-1.5 py-0.5 rounded border text-[10px] sm:text-xs font-bold flex items-center gap-1 ${
+                          selected
+                            ? "border-black bg-black text-white"
+                            : "border-black/40 text-black bg-white"
+                        }`}
+                      >
+                        <span
+                          className="inline-block size-1.5 rounded-full border border-black flex-shrink-0"
+                          style={{ background: selected ? '#fff' : '#000' }}
+                        />
+                        {carrier}
+                      </span>
+                    );
+                  })}
+                  {activeCarrier && isCarrierSelected("أخرى") && activeCarrier !== "أخرى" && (
+                    <span className="font-bold text-[11px] underline px-0.5">({activeCarrier})</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Phone Number */}
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold min-w-[75px]">رقم الجوال:</span>
+                <span className="border-b border-dotted border-black flex-1 px-1 font-mono font-black text-xs sm:text-sm dir-ltr text-right">
+                  {data.phoneNumber || "...................................."}
+                </span>
+              </div>
+
+              {/* SIM Serial (ICCID) */}
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold min-w-[125px]">الرقم التسلسلي (SIM):</span>
+                <span className="border-b border-dotted border-black flex-1 px-1 font-mono font-bold text-xs dir-ltr text-right">
+                  {data.iccid || "...................................."}
+                </span>
+              </div>
+
+              {/* Receipt Date */}
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold min-w-[75px]">تاريخ الاستلام:</span>
+                <span className="border-b border-dotted border-black flex-1 px-1 font-mono font-bold dir-ltr text-right">
+                  {receiptDate}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Declaration & Undertaking Text (التعهد) */}
+          <div className="p-2.5 print:p-2 rounded-lg border border-black bg-gray-50/60 my-2 print:my-1">
+            <p className="text-xs sm:text-sm print:text-[11px] font-semibold leading-relaxed text-black text-justify">
+              وأتعهد بالمحافظة على الشريحة واستخدامها للأغراض الرسمية الخاصة بالعمل فقط، وعدم تسليمها لأي شخص آخر دون موافقة الشركة، وأتحمل المسؤولية الكاملة عن أي سوء استخدام أو فقدان أو إهمال، وألتزم بإعادتها عند طلب الشركة أو عند انتهاء العلاقة التعاقدية.
+            </p>
+          </div>
         </div>
 
         {/* Section 4: Signatures & Approvals (التوقيع والاعتماد) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t-2 border-black font-bold text-sm md:text-base">
+        <div className="grid grid-cols-2 gap-4 pt-2 print:pt-1 border-t-2 border-black font-bold text-xs sm:text-sm print:text-[11px]">
           {/* Employee Signature Column */}
-          <div className="space-y-4 pr-2">
-            <div className="flex items-center gap-2">
+          <div className="space-y-1.5 print:space-y-1 pr-1">
+            <div className="flex items-center gap-1.5">
               <span className="whitespace-nowrap">اسم الموظف:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-bold">
-                {data.riderName || "........................................................"}
+              <span className="border-b border-dotted border-black flex-1 px-1 font-bold">
+                {data.riderName || "...................................."}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="whitespace-nowrap">التوقيع:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 h-8"></span>
+              <span className="border-b border-dotted border-black flex-1 font-normal text-gray-500">
+                ....................................
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 pt-0.5">
               <span className="whitespace-nowrap">البصمة:</span>
-              <div className="w-32 h-16 rounded border-2 border-dashed border-black/50 flex items-center justify-center text-xs text-gray-400 font-normal">
+              <div className="w-20 h-11 print:w-18 print:h-10 rounded border border-dashed border-black/50 flex items-center justify-center text-[10px] text-gray-400 font-normal">
                 (البصمة هنا)
               </div>
             </div>
           </div>
 
           {/* Delivery Officer Signature Column */}
-          <div className="space-y-4 pr-2 border-r-0 md:border-r-2 md:border-black/30 md:pr-4">
-            <div className="font-extrabold text-black text-base border-b border-black/30 pb-1">
+          <div className="space-y-1.5 print:space-y-1 pr-2 border-r border-black/30">
+            <div className="font-extrabold text-black text-xs sm:text-sm border-b border-black/30 pb-0.5">
               مسؤول التسليم
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="whitespace-nowrap">الاسم:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-bold">
-                {data.responsibleEmployeeName || "........................................................"}
+              <span className="border-b border-dotted border-black flex-1 px-1 font-bold">
+                {data.responsibleEmployeeName || "مسؤول الموارد البشرية"}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="whitespace-nowrap">التوقيع:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 h-8"></span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="whitespace-nowrap">التاريخ:</span>
-              <span className="border-b-2 border-dotted border-black flex-1 px-2 font-mono dir-ltr text-right">
-                {data.date || "____ / ____ / ________ م"}
+              <span className="border-b border-dotted border-black flex-1 font-normal text-gray-500">
+                ....................................
               </span>
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
-              <span className="whitespace-nowrap">ختم الشركة:</span>
-              <div className="w-24 h-16 rounded-full border-2 border-dashed border-black/40 flex items-center justify-center text-[10px] text-gray-400 font-normal text-center">
-                ختم الشركة
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="whitespace-nowrap">التاريخ:</span>
+                <span className="font-mono dir-ltr">{data.date || "____/____/________"}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] whitespace-nowrap">الختم:</span>
+                <div className="w-18 h-10 rounded border border-dashed border-black/40 flex items-center justify-center text-[9px] text-gray-400 font-normal text-center">
+                  ختم الشركة
+                </div>
               </div>
             </div>
           </div>
@@ -246,7 +263,7 @@ export function SimHandoverReceiptView({ data }: { data: SimHandoverReceiptData 
 
       {/* Footer if letterheadId is active */}
       {data.letterheadId && data.letterheadId !== "standard" && (
-        <div className="relative z-10 pt-4">
+        <div className="relative z-10 pt-2 print:pt-1">
           <LetterheadFooter letterheadId={data.letterheadId} />
         </div>
       )}

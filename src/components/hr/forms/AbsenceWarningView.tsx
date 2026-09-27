@@ -282,7 +282,7 @@ export function AbsenceWarningView({ data }: { data: AbsenceWarningData }) {
   );
 
   return (
-    <div className="bg-white text-black p-4 md:p-6 rounded-xl border-2 border-black font-sans leading-normal shadow-xs page-break-inside-avoid print-container flex flex-col justify-between">
+    <div className="bg-white text-black p-4 md:p-6 rounded-xl border-2 border-black font-sans leading-normal shadow-xs flex flex-col justify-between">
       {/* 1. Arabic Only */}
       {language === "ar" && renderArabicContent(false)}
 

@@ -30,7 +30,7 @@ export function ClearanceFormView({ data }: { data: ClearanceFormData }) {
   const iqamaDigits = cleanIqama.padEnd(10, " ").slice(0, 10).split("");
 
   return (
-    <div className="bg-white text-black p-4 md:p-6 rounded-xl border-2 border-black font-sans leading-tight text-right dir-rtl shadow-xs page-break-inside-avoid print-container text-xs">
+    <div className="bg-white text-black p-3 sm:p-4 md:p-5 print:p-2.5 rounded-xl border-2 border-black font-sans leading-tight text-right dir-rtl shadow-xs text-xs">
       {/* Title */}
       <div className="text-center mb-3 border-b-2 border-black pb-2">
         <h1 className="text-xs md:text-sm font-extrabold text-gray-900 mb-0.5">

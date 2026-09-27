@@ -273,16 +273,20 @@ export function LetterheadFrame({
   companyName,
   date,
   refNo,
+  className = "",
   children,
 }: {
   letterheadId?: LetterheadId;
   companyName?: string;
   date?: string;
   refNo?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative bg-white text-black p-6 md:p-8 print:p-3.5 print:py-2.5 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container min-h-[960px] print:min-h-0 print:h-auto flex flex-col justify-between overflow-hidden print:overflow-visible">
+    <div
+      className={`relative bg-white text-black p-6 md:p-8 print:p-4 print:py-3 rounded-xl border-2 border-black font-sans leading-relaxed text-right dir-rtl shadow-xs page-break-inside-avoid print-container print-page-frame min-h-[960px] md:min-h-[1000px] flex flex-col justify-between overflow-hidden ${className}`}
+    >
       <LetterheadWatermark letterheadId={letterheadId} />
 
       <div className="relative z-10 flex-1 flex flex-col justify-between">
@@ -293,7 +297,7 @@ export function LetterheadFrame({
             date={date}
             refNo={refNo}
           />
-          <div className="pt-2 print:pt-1">{children}</div>
+          <div className="pt-1.5 print:pt-1">{children}</div>
         </div>
 
         <LetterheadFooter letterheadId={letterheadId} />
