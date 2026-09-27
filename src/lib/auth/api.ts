@@ -293,6 +293,14 @@ export function getFriendlyErrorMessage(
         return "صنف المخزون غير متوافق مع نوع المركبة المحددة.";
       case "maintenance.invalid_request":
         return rawMessage || "طلب صيانة غير صالح. يرجى مراجعة الحقول والمدخلات.";
+      case "system.concurrency_conflict":
+        return "تم تعديل السجل بواسطة عملية أخرى. يرجى التحديث والمحاولة مجدداً.";
+      case "system.conflict":
+        return "تعارض في البيانات؛ السجل موجود مسبقاً أو مفتاح التكرار مستخدم.";
+      case "system.invalid_request":
+        return rawMessage || "طلب غير صالح أو مدخلات غير صحيحة.";
+      case "system.not_found":
+        return "العنصر المطلوب غير موجود أو لم يعد متاحاً.";
     }
   }
 

@@ -914,7 +914,7 @@ export default function EmployeesPage() {
                 ) : (
                     <div className="overflow-x-auto">
                         <table className={`min-w-[1180px] w-full ${locale === "en" ? "text-left" : "text-right"}`}>
-                            <thead className="relative z-30 bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
+                            <thead className="relative z-10 bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                                 <tr>
                                     <th className="px-5 py-4">
                                         <div className="flex items-center gap-1.5">

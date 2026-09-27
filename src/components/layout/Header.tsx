@@ -1,7 +1,6 @@
 "use client";
 import Link from "next/link";
 import {
-  Bell,
   ChevronDown,
   Globe2,
   KeyRound,
@@ -22,6 +21,7 @@ import { toast } from "../ui/Toast";
 import { translate } from "../../lib/i18n";
 
 import { resolveProfileImageUrl } from "../../lib/users/api";
+import { NotificationBell } from "../notifications/NotificationBell";
 
 export function Header({ onMenu }: { onMenu: () => void }) {
   const [open, setOpen] = useState(false);
@@ -81,7 +81,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
   const menuLink =
     "flex min-h-11 items-center gap-2 rounded-lg px-3 text-right font-bold hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-200";
   return (
-    <header className="sticky top-0 z-30 flex h-[72px] items-center justify-between gap-4 bg-gradient-to-l from-[#0b55a8] via-[#1167c9] to-[#2e8ce6] px-4 text-white shadow-lg md:px-7">
+    <header className="sticky top-0 z-40 flex h-[72px] items-center justify-between gap-4 bg-gradient-to-l from-[#0b55a8] via-[#1167c9] to-[#2e8ce6] px-4 text-white shadow-lg md:px-7">
       <div className="flex items-center gap-3">
         <button
           onClick={onMenu}
@@ -124,13 +124,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
         >
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-        <button
-          aria-label={t("header.notifications")}
-          className="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-white/15"
-        >
-          <Bell size={18} />
-          <i className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#f28b35]" />
-        </button>
+        <NotificationBell />
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setOpen(!open)}
