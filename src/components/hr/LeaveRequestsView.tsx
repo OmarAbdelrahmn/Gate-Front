@@ -52,10 +52,22 @@ import type {
 } from "../../lib/hr/leave-types";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
-import { SearchableSelect } from "../ui/SearchableSelect";
+import { SearchableSelect, type SelectOption } from "../ui/SearchableSelect";
 import { toast } from "../ui/Toast";
 import { systemPrompt } from "../ui/SystemDialog";
 import { translate } from "../../lib/i18n";
+import { listExternalRiders } from "../../lib/workforce/external-riders-api";
+
+export interface PersonLookupItem {
+  id: string;
+  fullNameAr: string;
+  fullNameEn?: string | null;
+  iqamaNo?: string | null;
+  code?: string | null;
+  phone?: string | null;
+  isRider: boolean;
+  source: "employee" | "externalRider";
+}
 
 // Helper to format file sizes
 function formatFileSize(bytes: number | null | undefined): string {
@@ -136,7 +148,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
   // Data States
   const [requests, setRequests] = useState<LeaveRequestResponse[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeResponse[]>([]);
-  const [employees, setEmployees] = useState<{ value: string; label: string; labelEn?: string }[]>([]);
+  const [people, setPeople] = useState<PersonLookupItem[]>([]);
   const [contracts, setContracts] = useState<{ value: string; label: string; labelEn?: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -214,23 +226,70 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
   });
   const [leaveTypeError, setLeaveTypeError] = useState("");
 
-  // Load Leave Types & Lookup catalogs
+  // Load Leave Types & Lookup catalogs (Employees + External Riders)
   const loadCatalogs = useCallback(async () => {
     try {
-      const [typesData, empData, contractsData] = await Promise.all([
+      const [typesData, empData, extRidersData, contractsData] = await Promise.all([
         hrWorkflowApi.getLeaveTypes().catch(() => []),
         authFetch<any[]>("/api/employees").catch(() => []),
+        listExternalRiders().catch(() => []),
         authFetch<any[]>("/api/platform-operations/contracts").catch(() => []),
       ]);
 
       setLeaveTypes(typesData);
-      setEmployees(
-        empData.map((e) => ({
-          value: e.id,
-          label: String(e.fullNameAr || e.nameAr || e.code || e.id),
-          labelEn: String(e.fullNameEn || e.nameEn || e.code || e.id),
-        })),
-      );
+
+      const combined: PersonLookupItem[] = [];
+      const seenIqamas = new Set<string>();
+      const seenIds = new Set<string>();
+
+      if (Array.isArray(empData)) {
+        empData.forEach((e: any) => {
+          if (!e.id) return;
+          seenIds.add(e.id);
+          const iq = (e.iqamaNo || "").trim();
+          if (iq) seenIqamas.add(iq);
+
+          const isRider =
+            e.isEmployee === false ||
+            e.workingForMeAs === "مندوب توصيل" ||
+            e.engagementType === "OutsideRider";
+
+          combined.push({
+            id: e.id,
+            fullNameAr: (e.fullNameAr || e.nameAr || "").trim(),
+            fullNameEn: (e.fullNameEn || e.nameEn || "").trim() || null,
+            iqamaNo: iq || null,
+            code: e.employeeNumber || e.code || null,
+            phone: e.primaryPhone || null,
+            isRider,
+            source: "employee",
+          });
+        });
+      }
+
+      if (Array.isArray(extRidersData)) {
+        extRidersData.forEach((r: any) => {
+          const id = r.employeeId || r.riderProfileId;
+          if (!id || seenIds.has(id)) return;
+          const iq = (r.iqamaNo || "").trim();
+          if (iq && seenIqamas.has(iq)) return;
+          if (iq) seenIqamas.add(iq);
+          seenIds.add(id);
+
+          combined.push({
+            id,
+            fullNameAr: (r.fullNameAr || "").trim(),
+            fullNameEn: null,
+            iqamaNo: iq || null,
+            code: null,
+            phone: r.primaryPhone || null,
+            isRider: true,
+            source: "externalRider",
+          });
+        });
+      }
+
+      setPeople(combined);
       setContracts(
         contractsData.map((c) => ({
           value: c.id,
@@ -249,16 +308,17 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     try {
       const data = await hrWorkflowApi.getLeaveRequests(employeeFilter || undefined);
       setRequests(data);
-      if (selectedRequest) {
-        const updated = data.find((r) => r.id === selectedRequest.id);
-        if (updated) setSelectedRequest(updated);
-      }
+      setSelectedRequest((prev) => {
+        if (!prev) return null;
+        const updated = data.find((r) => r.id === prev.id);
+        return updated || prev;
+      });
     } catch (err: any) {
       toast.error(isEn ? "Error" : "خطأ", err.message || (isEn ? "Failed to load leave requests" : "تعذر تحميل طلبات الإجازات"));
     } finally {
       setLoading(false);
     }
-  }, [employeeFilter, selectedRequest, isEn]);
+  }, [employeeFilter, isEn]);
 
   useEffect(() => {
     void loadCatalogs();
@@ -306,11 +366,25 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     [drawerTab],
   );
 
+  const selectedRequestId = selectedRequest?.id;
+
   useEffect(() => {
-    if (selectedRequest) {
-      void loadSubResources(selectedRequest.id);
+    if (selectedRequestId) {
+      void loadSubResources(selectedRequestId);
     }
-  }, [selectedRequest, drawerTab, loadSubResources]);
+  }, [selectedRequestId, drawerTab, loadSubResources]);
+
+  // Handle ESC key to exit sidebar / drawer
+  useEffect(() => {
+    if (!selectedRequest) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedRequest(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedRequest]);
 
   // English Leave Type Join map
   const leaveTypeMap = useMemo(() => {
@@ -332,30 +406,102 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
       }));
   }, [leaveTypes]);
 
+  // Lookup map for person metadata
+  const personMap = useMemo(() => {
+    const map = new Map<string, PersonLookupItem>();
+    people.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [people]);
+
+  // Options for SearchableSelect with Name and Iqama
+  const employeeOptions = useMemo<SelectOption[]>(() => {
+    return people.map((p) => {
+      const iqama = (p.iqamaNo || "").trim();
+      const displayName = isEn
+        ? p.fullNameEn || p.fullNameAr || p.code || p.id
+        : p.fullNameAr || p.fullNameEn || p.code || p.id;
+
+      const roleText =
+        p.source === "externalRider"
+          ? isEn
+            ? "External Rider"
+            : "مندوب خارجي"
+          : p.isRider
+          ? isEn
+            ? "Rider"
+            : "مندوب"
+          : isEn
+          ? "Employee"
+          : "موظف";
+
+      const sublabelParts: string[] = [];
+      if (iqama) {
+        sublabelParts.push(`${isEn ? "Iqama" : "إقامة"}: ${iqama}`);
+      }
+      sublabelParts.push(roleText);
+
+      return {
+        value: p.id,
+        label: displayName,
+        sublabel: sublabelParts.join(" • "),
+        keywords: `${iqama} ${p.fullNameAr} ${p.fullNameEn || ""} ${p.code || ""} ${p.phone || ""}`.trim(),
+      };
+    });
+  }, [people, isEn]);
+
+  // Options including current selection even if catalog is still loading
+  const employeeOptionsWithCurrent = useMemo<SelectOption[]>(() => {
+    if (
+      formData.employeeId &&
+      !employeeOptions.some((opt) => opt.value === formData.employeeId)
+    ) {
+      return [
+        {
+          value: formData.employeeId,
+          label: editingRequest?.employeeNameAr || formData.employeeId,
+          sublabel: isEn ? "Current Selection" : "المحدد حالياً",
+        },
+        ...employeeOptions,
+      ];
+    }
+    return employeeOptions;
+  }, [employeeOptions, formData.employeeId, editingRequest, isEn]);
+
+  // Currently selected person in creation/editing form
+  const selectedPerson = useMemo(() => {
+    return personMap.get(formData.employeeId);
+  }, [personMap, formData.employeeId]);
+
   // Filtered requests list
   const filteredRequests = useMemo(() => {
     return requests.filter((req) => {
       if (statusFilter !== "ALL" && req.status !== statusFilter) return false;
       if (search.trim()) {
-        const q = search.toLowerCase();
+        const q = search.toLowerCase().trim();
         const empName = req.employeeNameAr?.toLowerCase() || "";
         const reqNum = req.requestNumber?.toLowerCase() || "";
         const reason = req.reason?.toLowerCase() || "";
         const typeAr = req.leaveTypeNameAr?.toLowerCase() || "";
         const typeEn = leaveTypeMap.get(req.leaveTypeId)?.nameEn?.toLowerCase() || "";
+        const personMeta = personMap.get(req.employeeId);
+        const empIqama = personMeta?.iqamaNo?.toLowerCase() || "";
+        const empPhone = personMeta?.phone?.toLowerCase() || "";
+
         if (
           !empName.includes(q) &&
           !reqNum.includes(q) &&
           !reason.includes(q) &&
           !typeAr.includes(q) &&
-          !typeEn.includes(q)
+          !typeEn.includes(q) &&
+          !empIqama.includes(q) &&
+          !empPhone.includes(q)
         ) {
           return false;
         }
       }
       return true;
     });
-  }, [requests, statusFilter, search, leaveTypeMap]);
+  }, [requests, statusFilter, search, leaveTypeMap, personMap]);
 
   // Stats for Requests
   const stats = useMemo(() => {
@@ -562,7 +708,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     setFormError("");
 
     if (!formData.employeeId) {
-      setFormError(isEn ? "Employee is required" : "الموظف مطلوب");
+      setFormError(isEn ? "Employee or Rider is required" : "الموظف أو المندوب مطلوب");
       return;
     }
     if (!formData.leaveTypeId) {
@@ -649,11 +795,6 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
       await hrWorkflowApi.leaveTransition(selectedRequest.id, action, comment, selectedRequest.rowVersion);
       toast.success(isEn ? "Action Executed" : "تم تنفيذ الإجراء", isEn ? `Request marked as ${action}.` : "تم تحديث حالة الطلب بنجاح.");
       await loadRequests();
-      if (selectedRequest) {
-        const updated = await hrWorkflowApi.getLeaveRequests();
-        const found = updated.find((r) => r.id === selectedRequest.id);
-        if (found) setSelectedRequest(found);
-      }
     } catch (err: any) {
       toast.error(isEn ? "Failed" : "فشلت العملية", err.message);
     } finally {
@@ -688,9 +829,6 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
       await hrWorkflowApi.decideLeave(selectedRequest.id, action, comment || "", selectedRequest.rowVersion);
       toast.success(isEn ? "Decision Recorded" : "تم تسجيل القرار", isEn ? `Leave request ${action}ed.` : "تم تحديث قرار الاعتماد بنجاح.");
       await loadRequests();
-      const updated = await hrWorkflowApi.getLeaveRequests();
-      const found = updated.find((r) => r.id === selectedRequest.id);
-      if (found) setSelectedRequest(found);
     } catch (err: any) {
       toast.error(isEn ? "Failed" : "فشلت العملية", err.message);
     } finally {
@@ -716,9 +854,6 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
       await hrWorkflowApi.forceCancelLeave(selectedRequest.id, comment, selectedRequest.rowVersion);
       toast.success(isEn ? "Cancelled" : "تم الإلغاء", isEn ? "Leave request force cancelled." : "تم إلغاء الإجازة إجباريًا.");
       await loadRequests();
-      const updated = await hrWorkflowApi.getLeaveRequests();
-      const found = updated.find((r) => r.id === selectedRequest.id);
-      if (found) setSelectedRequest(found);
     } catch (err: any) {
       toast.error(isEn ? "Failed" : "فشلت العملية", err.message);
     } finally {
@@ -1062,7 +1197,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder={isEn ? "Search by request #, employee, reason..." : "ابحث برقم الطلب، اسم الموظف، السبب..."}
+                  placeholder={isEn ? "Search by request #, employee, Iqama, reason..." : "ابحث برقم الطلب، اسم الموظف، رقم الإقامة، السبب..."}
                   className={`h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] ${isEn ? "pl-10 pr-3" : "pr-10 pl-3"}`}
                 />
               </label>
@@ -1070,8 +1205,9 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 <SearchableSelect
                   value={employeeFilter}
                   onChange={(val) => setEmployeeFilter(val)}
-                  options={[{ value: "", label: isEn ? "All Employees" : "جميع الموظفين" }, ...employees]}
-                  placeholder={isEn ? "Filter Employee..." : "فلترة حسب الموظف..."}
+                  options={[{ value: "", label: isEn ? "All Employees & Riders" : "جميع الموظفين والمناديب" }, ...employeeOptions]}
+                  placeholder={isEn ? "Filter Employee or Rider..." : "فلترة حسب الموظف أو المندوب..."}
+                  searchPlaceholder={isEn ? "Search by name or Iqama..." : "ابحث بالاسم أو رقم الإقامة..."}
                 />
               </div>
             </div>
@@ -1117,8 +1253,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 <table className="w-full min-w-[840px] text-sm text-start">
                   <thead className="bg-slate-50 text-[var(--muted)] dark:bg-slate-900/50">
                     <tr>
-                      <th className="px-4 py-3 text-start">{isEn ? "Request #" : "رقم الطلب"}</th>
-                      <th className="px-4 py-3 text-start">{isEn ? "Employee" : "الموظف"}</th>
+                      <th className="px-4 py-3 text-start">{isEn ? "Employee / Rider" : "الموظف / المندوب"}</th>
                       <th className="px-4 py-3 text-start">{isEn ? "Leave Type" : "نوع الإجازة"}</th>
                       <th className="px-4 py-3 text-start">{isEn ? "Period & Days" : "الفترة والأيام"}</th>
                       <th className="px-4 py-3 text-start">{isEn ? "Expected Return" : "العودة المتوقعة"}</th>
@@ -1151,28 +1286,65 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                           key={row.id}
                           className="border-t border-[var(--border)] transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-900/20"
                         >
-                          <td className="px-4 py-3 font-mono font-bold text-slate-800 dark:text-slate-200">
-                            {row.requestNumber}
-                          </td>
                           <td className="px-4 py-3 font-medium">
                             <div className="flex items-center gap-2">
                               <div className="grid size-7 place-items-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                                 <User size={14} />
                               </div>
-                              <span>{row.employeeNameAr}</span>
+                              <div>
+                                <span className="font-bold block">{row.employeeNameAr}</span>
+                                {personMap.get(row.employeeId)?.iqamaNo && (
+                                  <span className="text-[11px] font-mono text-[var(--muted)]">
+                                    {isEn ? "Iqama" : "إقامة"}: {personMap.get(row.employeeId)?.iqamaNo}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3 font-semibold text-[#1167c9]">
                             {typeLabel}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-xs font-mono">
-                                {row.startDate ? row.startDate.slice(0, 10) : "—"} → {row.endDate ? row.endDate.slice(0, 10) : "—"}
-                              </span>
-                              <span className="inline-flex w-fit items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                                {row.calendarDays} {isEn ? "days" : "أيام"}
-                              </span>
+                            <div className="flex flex-col gap-1.5">
+                              {/* Duration Badge */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-xs font-bold text-[#1167c9] dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40">
+                                  <Clock size={12} className="shrink-0" />
+                                  <span>{row.calendarDays}</span>
+                                  <span>
+                                    {isEn
+                                      ? row.calendarDays === 1
+                                        ? "day"
+                                        : "days"
+                                      : row.calendarDays >= 3 && row.calendarDays <= 10
+                                      ? "أيام"
+                                      : "يوماً"}
+                                  </span>
+                                </span>
+                              </div>
+
+                              {/* Date Range: From / To with clear labels and direction */}
+                              <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                                    {isEn ? "From:" : "من:"}
+                                  </span>
+                                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded text-[11px]">
+                                    {row.startDate ? row.startDate.slice(0, 10) : "—"}
+                                  </span>
+                                </div>
+                                <span className="text-slate-400 font-bold">
+                                  {isEn ? "→" : "←"}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                                    {isEn ? "To:" : "إلى:"}
+                                  </span>
+                                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded text-[11px]">
+                                    {row.endDate ? row.endDate.slice(0, 10) : "—"}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs font-mono text-[var(--muted)]">
@@ -1218,7 +1390,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                     })}
                     {!filteredRequests.length && (
                       <tr>
-                        <td colSpan={8} className="p-12 text-center text-sm text-[var(--muted)]">
+                        <td colSpan={7} className="p-12 text-center text-sm text-[var(--muted)]">
                           {isEn ? "No matching leave requests found." : "لا توجد طلبات إجازة مطابقة."}
                         </td>
                       </tr>
@@ -1558,16 +1730,48 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
             )}
 
             <form onSubmit={handleSaveRequest} className="grid gap-4 md:grid-cols-2">
-              {/* Employee */}
+              {/* Employee / Rider */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold">{isEn ? "Employee *" : "الموظف *"}</label>
+                <label className="text-xs font-bold">{isEn ? "Employee / Rider *" : "الموظف / المندوب *"}</label>
                 <SearchableSelect
                   value={formData.employeeId}
-                  onChange={(val) => setFormData((prev) => ({ ...prev, employeeId: val }))}
-                  options={employees}
-                  placeholder={isEn ? "Select employee..." : "اختر الموظف..."}
+                  onChange={(val) => {
+                    const p = personMap.get(val);
+                    setFormData((prev) => ({
+                      ...prev,
+                      employeeId: val,
+                      contactPhoneDuringLeave:
+                        !prev.contactPhoneDuringLeave && p?.phone
+                          ? p.phone
+                          : prev.contactPhoneDuringLeave,
+                    }));
+                  }}
+                  options={employeeOptionsWithCurrent}
+                  placeholder={isEn ? "Select employee or rider..." : "اختر الموظف أو المندوب..."}
+                  searchPlaceholder={isEn ? "Search by name or Iqama..." : "ابحث بالاسم أو رقم الإقامة..."}
                   required
                 />
+                {selectedPerson && (
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                    {selectedPerson.iqamaNo && (
+                      <span className="font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                        {isEn ? "Iqama" : "رقم الإقامة"}: {selectedPerson.iqamaNo}
+                      </span>
+                    )}
+                    <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                      {selectedPerson.source === "externalRider"
+                        ? isEn ? "External Rider" : "مندوب خارجي"
+                        : selectedPerson.isRider
+                        ? isEn ? "Rider" : "مندوب"
+                        : isEn ? "Staff Employee" : "موظف إداري"}
+                    </span>
+                    {selectedPerson.phone && (
+                      <span className="font-mono text-[11px] text-[var(--muted)]">
+                        {selectedPerson.phone}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Leave Type (Active Only) with quick create/manage button */}
@@ -1746,8 +1950,14 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
 
       {/* ==================== DETAILS DRAWER / MODAL FOR LEAVE REQUEST ==================== */}
       {selectedRequest && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-          <div className="flex h-full w-full max-w-2xl flex-col bg-[var(--surface)] shadow-2xl transition-all">
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-150"
+          onClick={() => setSelectedRequest(null)}
+        >
+          <div
+            className="flex h-full w-full max-w-2xl flex-col bg-[var(--surface)] shadow-2xl transition-all animate-in slide-in-from-right duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Drawer Header */}
             <div className="flex items-center justify-between border-b border-[var(--border)] p-4 sm:p-5">
               <div>
@@ -1774,9 +1984,10 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
               <button
                 type="button"
                 onClick={() => setSelectedRequest(null)}
-                className="grid size-9 place-items-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="grid size-9 place-items-center rounded-xl text-[var(--muted)] hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white transition-colors"
+                title={isEn ? "Close" : "إغلاق"}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
@@ -1880,16 +2091,60 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 <div className="space-y-5">
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="rounded-xl border border-[var(--border)] p-3">
+                      <span className="text-[var(--muted)] block">{isEn ? "Employee / Rider" : "الموظف / المندوب"}</span>
+                      <span className="mt-1 text-sm font-bold block">
+                        {selectedRequest.employeeNameAr}
+                      </span>
+                      {personMap.get(selectedRequest.employeeId)?.iqamaNo && (
+                        <span className="text-[11px] font-mono text-[var(--muted)] block mt-0.5">
+                          {isEn ? "Iqama" : "رقم الإقامة"}: {personMap.get(selectedRequest.employeeId)?.iqamaNo}
+                        </span>
+                      )}
+                    </div>
+                    <div className="rounded-xl border border-[var(--border)] p-3">
                       <span className="text-[var(--muted)] block">{isEn ? "Leave Type" : "نوع الإجازة"}</span>
                       <span className="mt-1 text-sm font-bold text-[#1167c9] block">
                         {isEn ? leaveTypeMap.get(selectedRequest.leaveTypeId)?.nameEn || selectedRequest.leaveTypeNameAr : selectedRequest.leaveTypeNameAr}
                       </span>
                     </div>
-                    <div className="rounded-xl border border-[var(--border)] p-3">
+                    <div className="rounded-xl border border-[var(--border)] p-3 space-y-2">
                       <span className="text-[var(--muted)] block">{isEn ? "Duration" : "المدة"}</span>
-                      <span className="mt-1 text-sm font-bold block font-mono">
-                        {selectedRequest.calendarDays} {isEn ? "days" : "يوم"} ({selectedRequest.startDate ? selectedRequest.startDate.slice(0, 10) : "—"} → {selectedRequest.endDate ? selectedRequest.endDate.slice(0, 10) : "—"})
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-xs font-bold text-[#1167c9] dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40">
+                          <Clock size={12} className="shrink-0" />
+                          <span>{selectedRequest.calendarDays}</span>
+                          <span>
+                            {isEn
+                              ? selectedRequest.calendarDays === 1
+                                ? "day"
+                                : "days"
+                              : selectedRequest.calendarDays >= 3 && selectedRequest.calendarDays <= 10
+                              ? "أيام"
+                              : "يوم"}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 shrink-0">
+                            {isEn ? "From:" : "من:"}
+                          </span>
+                          <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">
+                            {selectedRequest.startDate ? selectedRequest.startDate.slice(0, 10) : "—"}
+                          </span>
+                        </div>
+                        <span className="text-slate-400 font-bold shrink-0">
+                          {isEn ? "→" : "←"}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 shrink-0">
+                            {isEn ? "To:" : "إلى:"}
+                          </span>
+                          <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">
+                            {selectedRequest.endDate ? selectedRequest.endDate.slice(0, 10) : "—"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                     <div className="rounded-xl border border-[var(--border)] p-3">
                       <span className="text-[var(--muted)] block">{isEn ? "Expected Return" : "العودة المتوقعة"}</span>
@@ -1999,9 +2254,17 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                       {dateChanges.map((dc) => (
                         <div key={dc.id} className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-xs">
                           <div className="flex items-center justify-between">
-                            <span className="font-mono font-bold">
-                              {dc.requestedStartDate.slice(0, 10)} → {dc.requestedEndDate.slice(0, 10)}
-                            </span>
+                            <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                              <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">
+                                {dc.requestedStartDate.slice(0, 10)}
+                              </span>
+                              <span className="text-slate-400 font-bold">
+                                {isEn ? "→" : "←"}
+                              </span>
+                              <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">
+                                {dc.requestedEndDate.slice(0, 10)}
+                              </span>
+                            </div>
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
                               dc.status === "Approved" ? "bg-emerald-100 text-emerald-800" :
                               dc.status === "Rejected" ? "bg-red-100 text-red-800" :
@@ -2215,6 +2478,21 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Drawer Footer with Close button */}
+            <div className="border-t border-[var(--border)] p-4 bg-slate-50/50 dark:bg-slate-900/30 flex justify-between items-center">
+              <span className="text-xs text-[var(--muted)] font-mono">
+                {selectedRequest.requestNumber}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => setSelectedRequest(null)}
+                className="min-h-9 px-4 text-xs font-bold"
+              >
+                <X size={14} />
+                {isEn ? "Close" : "إغلاق"}
+              </Button>
             </div>
           </div>
         </div>

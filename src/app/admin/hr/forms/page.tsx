@@ -313,8 +313,11 @@ export default function HrFormsPage() {
   const personOptions: SelectOption[] = useMemo(() => {
     return people.map((p) => ({
       value: p.id,
-      label: `${p.fullNameAr} - (إقامة: ${p.iqamaNo || "غير مسجلة"}) ${p.source === "externalRider" ? "[مندوب خارجي]" : ""
-        }`,
+      label: p.fullNameAr,
+      sublabel: `إقامة: ${p.iqamaNo || "غير مسجلة"}${
+        p.source === "externalRider" ? " • مندوب خارجي" : " • موظف"
+      }`,
+      keywords: `${p.iqamaNo || ""} ${p.fullNameAr} ${p.phone || ""}`.trim(),
     }));
   }, [people]);
 
@@ -611,6 +614,7 @@ export default function HrFormsPage() {
                 value={selectedPersonId}
                 onChange={handleSelectPerson}
                 placeholder={loadingPeople ? "جارٍ التحميل..." : "ابحث بالاسم أو رقم الإقامة..."}
+                searchPlaceholder="ابحث بالاسم أو رقم الإقامة..."
                 disabled={loadingPeople}
               />
             </div>

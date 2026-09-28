@@ -119,11 +119,24 @@ export function SearchableSelect({
 
   const filteredOptions = useMemo(() => {
     if (!query.trim()) return options;
-    const q = query.toLowerCase().trim();
+    const normalizeSearch = (s: string) =>
+      s
+        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+        .replace(/[أإآ]/g, "ا")
+        .replace(/ة/g, "ه")
+        .replace(/ى/g, "ي")
+        .toLowerCase()
+        .trim();
+
+    const q = normalizeSearch(query);
     return options.filter((opt) => {
-      const matchLabel = opt.label.toLowerCase().includes(q);
-      const matchSublabel = opt.sublabel ? opt.sublabel.toLowerCase().includes(q) : false;
-      const matchKeywords = opt.keywords ? opt.keywords.toLowerCase().includes(q) : false;
+      const matchLabel = normalizeSearch(opt.label).includes(q);
+      const matchSublabel = opt.sublabel
+        ? normalizeSearch(opt.sublabel).includes(q)
+        : false;
+      const matchKeywords = opt.keywords
+        ? normalizeSearch(opt.keywords).includes(q)
+        : false;
       return matchLabel || matchSublabel || matchKeywords;
     });
   }, [options, query]);
