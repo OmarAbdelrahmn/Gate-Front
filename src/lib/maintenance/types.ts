@@ -194,7 +194,7 @@ export interface InventoryItem {
 }
 
 export interface CreateInventoryItemRequest {
-  sku: string;
+  sku?: string | null;
   barcode?: string | null;
   itemType: ItemType;
   nameAr: string;

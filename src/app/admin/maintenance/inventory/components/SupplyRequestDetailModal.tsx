@@ -504,7 +504,7 @@ export function SupplyRequestDetailModal({
                         <tr key={lineKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                           <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
                             <div>{line.itemNameAr}</div>
-                            {line.itemNameEn && (
+                            {line.itemNameEn && line.itemNameEn !== line.itemNameAr && (
                               <div className="text-[10px] text-slate-400 font-normal">{line.itemNameEn}</div>
                             )}
                           </td>

@@ -385,7 +385,7 @@ export function ItemsTab({
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                     <td className="p-3 font-bold text-slate-900 dark:text-white">
                       <div>{item.nameAr}</div>
-                      {item.nameEn && (
+                      {item.nameEn && item.nameEn !== item.nameAr && (
                         <div className="text-[11px] text-slate-400 font-normal">{item.nameEn}</div>
                       )}
                       {item.barcode && (

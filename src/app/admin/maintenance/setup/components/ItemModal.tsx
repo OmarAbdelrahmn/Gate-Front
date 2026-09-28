@@ -48,7 +48,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
       setBarcode(item.barcode || "");
       setItemType(item.itemType || ItemType.SparePart);
       setNameAr(item.nameAr || "");
-      setNameEn(item.nameEn || "");
+      setNameEn(item.nameAr || item.nameEn || "");
       setDescriptionAr(item.descriptionAr || "");
       setDescriptionEn(item.descriptionEn || "");
       setBaseUnitOfMeasure(item.baseUnitOfMeasure || UnitOfMeasure.Piece);
@@ -92,9 +92,10 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     setMinimumStockLevel(20);
     setReorderQuantity(208);
     setIsLotTracked(true);
-    if (!sku) setSku("OIL-10W40");
-    if (!nameAr) setNameAr("زيت محرك 10W-40 (برميل)");
-    if (!nameEn) setNameEn("Engine Oil 10W-40 (Barrel)");
+    if (!nameAr) {
+      setNameAr("زيت محرك 10W-40 (برميل)");
+      setNameEn("زيت محرك 10W-40 (برميل)");
+    }
   };
 
   const applyRiderAccessoryPreset = () => {
@@ -106,9 +107,10 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     setReorderQuantity(10);
     setIsLotTracked(false);
     setIsSerialized(true);
-    if (!sku) setSku("RDR-ACC-01");
-    if (!nameAr) setNameAr("خوذة دراجة نارية قياسية");
-    if (!nameEn) setNameEn("Standard Rider Helmet");
+    if (!nameAr) {
+      setNameAr("خوذة دراجة نارية قياسية");
+      setNameEn("خوذة دراجة نارية قياسية");
+    }
   };
 
   const toggleVehicleType = (type: VehicleType) => {
@@ -128,13 +130,16 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     setValidationError(null);
     setLoading(true);
     try {
+      const trimmedName = nameAr.trim();
+      const resolvedNameEn = trimmedName;
+
       if (item) {
         await updateInventoryItem(item.id, {
-          sku,
+          sku: item.sku || sku,
           barcode: barcode || null,
           itemType: Number(itemType),
-          nameAr,
-          nameEn,
+          nameAr: trimmedName,
+          nameEn: resolvedNameEn,
           descriptionAr: descriptionAr || null,
           descriptionEn: descriptionEn || null,
           baseUnitOfMeasure: Number(baseUnitOfMeasure),
@@ -149,11 +154,11 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
         });
       } else {
         await createInventoryItem({
-          sku,
+          ...(sku ? { sku } : {}),
           barcode: barcode || null,
           itemType: Number(itemType),
-          nameAr,
-          nameEn,
+          nameAr: trimmedName,
+          nameEn: resolvedNameEn,
           descriptionAr: descriptionAr || null,
           descriptionEn: descriptionEn || null,
           baseUnitOfMeasure: Number(baseUnitOfMeasure),
@@ -216,19 +221,19 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              رمز الصنف (SKU) <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={sku}
-              onChange={(e) => setSku(e.target.value.toUpperCase())}
-              placeholder="مثال: OIL-10W40 أو BRK-PAD-01"
-              required
-              className="font-mono uppercase text-xs"
-            />
-          </div>
+        <div className={`grid grid-cols-1 ${item ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-4`}>
+          {item && (
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                رمز الصنف (SKU)
+              </label>
+              <Input
+                value={sku}
+                disabled
+                className="font-mono uppercase text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
               الباركود (Barcode)
@@ -259,32 +264,20 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              اسم الصنف بالعربية <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={nameAr}
-              onChange={(e) => setNameAr(e.target.value)}
-              placeholder="مثال: زيت محرك بترولايزر 10W-40"
-              required
-              className="text-xs"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              اسم الصنف بالإنجليزية <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={nameEn}
-              onChange={(e) => setNameEn(e.target.value)}
-              placeholder="Example: Engine Oil 10W-40"
-              required
-              dir="ltr"
-              className="text-xs"
-            />
-          </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+            اسم الصنف <span className="text-red-500">*</span>
+          </label>
+          <Input
+            value={nameAr}
+            onChange={(e) => {
+              setNameAr(e.target.value);
+              setNameEn(e.target.value);
+            }}
+            placeholder="مثال: زيت محرك بترولايزر 10W-40"
+            required
+            className="text-xs"
+          />
         </div>
 
         {/* Compatible Vehicle Types Multiselect */}
