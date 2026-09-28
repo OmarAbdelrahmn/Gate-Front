@@ -22,6 +22,8 @@
   "employees.sensitive.read": "عرض بيانات الموظفين الحساسة",
   "riders.read": "عرض المندوبين",
   "riders.manage": "إدارة المندوبين",
+  "external_riders.read": "عرض المناديب الخارجيين",
+  "external_riders.manage": "إنشاء وتحديث والتحقق واستيراد المناديب الخارجيين",
   "sponsors.read": "عرض الكفلاء",
   "sponsors.manage": "إدارة الكفلاء",
   "residency.read": "عرض الإقامات",

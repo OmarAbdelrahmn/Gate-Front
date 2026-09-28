@@ -22,6 +22,8 @@
   "employees.sensitive.read": "View sensitive employee data",
   "riders.read": "View delegates",
   "riders.manage": "Manage delegates",
+  "external_riders.read": "View external riders",
+  "external_riders.manage": "Create, update, validate, and import external riders",
   "sponsors.read": "View sponsors",
   "sponsors.manage": "Manage sponsors",
   "residency.read": "View residency cards",

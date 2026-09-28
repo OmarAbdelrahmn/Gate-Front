@@ -126,9 +126,10 @@ export default function ExternalRidersPage() {
   }>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const canCreate = can("employees.create");
-  const canUpdate = can("employees.update");
-  const canRead = can("riders.read");
+  const canManage = can("external_riders.manage");
+  const canRead = can("external_riders.read") || canManage || can("riders.read");
+  const canCreate = canManage || can("employees.create");
+  const canUpdate = canManage || can("employees.update");
   const canReadCities = can("operating_cities.read");
   const canReadWorkTypes = can("employees.read");
 

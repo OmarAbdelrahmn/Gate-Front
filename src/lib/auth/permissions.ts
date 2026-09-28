@@ -27,6 +27,8 @@ export const PERMISSIONS = [
   "employees.sensitive.read",
   "riders.read",
   "riders.manage",
+  "external_riders.read",
+  "external_riders.manage",
   "sponsors.read",
   "sponsors.manage",
 
@@ -148,4 +150,4 @@ export const PERMISSIONS = [
 ] as const;
 export type Permission=typeof PERMISSIONS[number]; export type UserStatus="PendingTemporaryPassword"|"Active"|"Locked"|"Suspended"|"Archived";
 export type AuthorizationSnapshot={userId?:string;status?:UserStatus;requiresPasswordChange?:boolean;authorizationVersion:number;permissions?:string[];effectivePermissions?:string[];effectivePermissionKeys?:string[];roles?:string[];directGrants?:string[];directPermissions?:string[];directDenies?:string[];deniedPermissionKeys?:string[]};
-export function hasPermission(snapshot:AuthorizationSnapshot|null,permission:string){if(!snapshot)return false;if(snapshot.status&&snapshot.status!=="Active")return false;if(snapshot.requiresPasswordChange)return false;const denied=new Set(snapshot.deniedPermissionKeys??snapshot.directDenies??[]);return !denied.has(permission)&&(snapshot.effectivePermissionKeys??snapshot.effectivePermissions??snapshot.permissions??[]).includes(permission);}
+export function hasPermission(snapshot:AuthorizationSnapshot|null,permission:string){if(!snapshot)return false;if(snapshot.status&&snapshot.status!=="Active")return false;if(snapshot.requiresPasswordChange)return false;const denied=new Set(snapshot.deniedPermissionKeys??snapshot.directDenies??[]);if(denied.has(permission))return false;const perms=snapshot.effectivePermissionKeys??snapshot.effectivePermissions??snapshot.permissions??[];if(perms.includes(permission))return true;const userRoles=(snapshot.roles||[]).map((r:any)=>typeof r==="string"?r.toLowerCase():String(r?.code||r?.roleCode||r?.name||"").toLowerCase());return userRoles.includes("admin")||userRoles.includes("system_admin");}

@@ -33,7 +33,7 @@ const labels: Record<PermissionGroup, { ar: string; en: string }> = {
 export function permissionGroup(key: string): PermissionGroup {
   if (/^(users|roles|permissions|audit|support_access)\./.test(key)) return "Security";
   if (/^(company_profile|operating_cities|tags)\./.test(key)) return "Catalog";
-  if (/^(employees|riders|sponsors)\./.test(key)) return "Workforce";
+  if (/^(employees|riders|external_riders|sponsors)\./.test(key)) return "Workforce";
   if (/^(residency|licenses|rider_cards|health_cards|insurance|promissory_notes)\./.test(key)) return "Compliance";
   if (key.startsWith("documents.")) return "Documents";
   if (/^(platform_accounts|platform_credentials|platform_assignments|housing|phone_sims)\./.test(key)) return "Operations";

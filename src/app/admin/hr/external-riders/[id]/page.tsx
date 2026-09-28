@@ -116,7 +116,9 @@ export default function ExternalRiderProfilePage({
     operationalWorkTypeId?: string;
   }>({});
 
-  const canUpdate = can("employees.update");
+  const canManage = can("external_riders.manage");
+  const canRead = can("external_riders.read") || canManage || can("riders.read");
+  const canUpdate = canManage || can("employees.update");
 
   const loadRiderData = async () => {
     setLoading(true);
@@ -176,10 +178,19 @@ export default function ExternalRiderProfilePage({
   };
 
   useEffect(() => {
+    if (!canRead) {
+      setLoading(false);
+      setError(
+        isEn
+          ? "You do not have permission to view external riders."
+          : "ليس لديك صلاحية لعرض المناديب الخارجيين."
+      );
+      return;
+    }
     if (employeeId) {
       loadRiderData();
     }
-  }, [employeeId]);
+  }, [employeeId, canRead, isEn]);
 
   const cityMap = useMemo(() => {
     const map = new Map<string, OperatingCityCatalogItem>();
