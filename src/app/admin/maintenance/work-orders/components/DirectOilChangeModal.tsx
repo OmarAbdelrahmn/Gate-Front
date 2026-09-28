@@ -41,6 +41,7 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [vehiclePlate, setVehiclePlate] = useState<string>("");
   const attemptKey = useRef<string | null>(null);
   const isCar = vehicleType === 2;
   const requiredQuantity = isCar ? (filterChanged ? 4 : 3.5) : Number(quantity);
@@ -52,6 +53,7 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
     getVehicleDetail(vehicleId)
       .then(async (vehicle) => {
         if (cancelled) return;
+        setVehiclePlate(vehicle.summary.plateNumberAr || vehicle.summary.plateNumberEn || "");
         setVehicleRowVersion(vehicle.summary.rowVersion);
         setVehicleType(vehicle.summary.vehicleType);
         setCurrentOdometer(vehicle.summary.currentOdometer);
@@ -163,7 +165,7 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={`تغيير الزيت مباشرة — ${reminder?.assetNumber ?? "المركبة"}`} maxWidth="max-w-2xl">
+    <Modal isOpen onClose={onClose} title={`تغيير الزيت مباشرة — ${vehiclePlate || reminder?.assetNumber || "المركبة"}`} maxWidth="max-w-2xl">
       <form onSubmit={submit} className="space-y-4 text-sm">
         {loading && <p>جارٍ تحميل بيانات المركبة والمخزون...</p>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

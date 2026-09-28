@@ -27,6 +27,7 @@ import {
   resolveNotificationContent,
   SEVERITY_CONFIG,
 } from "../../lib/notifications/utils";
+import { useVehiclePlates } from "../../lib/fleet/vehicle-plate-cache";
 
 interface NotificationDetailModalProps {
   notification: NotificationItem | null;
@@ -50,6 +51,9 @@ export function NotificationDetailModal({
   isActionLoading,
 }: NotificationDetailModalProps) {
   const router = useRouter();
+
+  // Load and subscribe to vehicle plates cache
+  useVehiclePlates();
 
   if (!isOpen || !notification) return null;
 

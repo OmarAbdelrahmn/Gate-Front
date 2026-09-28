@@ -25,6 +25,7 @@ import {
   formatDate,
 } from "@/lib/maintenance/constants";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { getVehiclePlate, useVehiclePlates } from "@/lib/fleet/vehicle-plate-cache";
 
 interface OilRemindersViewProps {
   onStartOilChange: (vehicleId: string) => void;
@@ -34,12 +35,26 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
   const { can } = useAuth();
   const canManage = can("maintenance.oil.complete") && can("inventory.stock.move");
 
+  // Subscribe to vehicle plate cache for automatic plate resolution
+  useVehiclePlates();
+
   const [reminders, setReminders] = useState<OilReminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+
+  const getPlate = (r: OilReminder) => {
+    return (
+      (r as any)?.plateNumberAr ||
+      (r as any)?.plateNumber ||
+      (r.vehicleId ? getVehiclePlate(r.vehicleId, "ar") : null) ||
+      (r.assetNumber ? getVehiclePlate(r.assetNumber, "ar") : null) ||
+      r.assetNumber ||
+      "—"
+    );
+  };
 
   const loadReminders = async () => {
     setLoading(true);
@@ -77,9 +92,16 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
     if (typeFilter !== "all" && String(r.vehicleType) !== typeFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
+      const qClean = q.replace(/[\s-]+/g, "");
+      const plate = getPlate(r).toLowerCase();
+      const plateClean = plate.replace(/[\s-]+/g, "");
       const asset = (r.assetNumber || "").toLowerCase();
-      const plate = ((r as any)?.plateNumber || "").toLowerCase();
-      if (!asset.includes(q) && !plate.includes(q)) return false;
+      const assetClean = asset.replace(/[\s-]+/g, "");
+
+      const matchesPlate = plate.includes(q) || (Boolean(qClean) && plateClean.includes(qClean));
+      const matchesAsset = asset.includes(q) || (Boolean(qClean) && assetClean.includes(qClean));
+
+      if (!matchesPlate && !matchesAsset) return false;
     }
     return true;
   });
@@ -99,7 +121,7 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
         data: filteredReminders,
         columns: [
           { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
-          { header: "رقم الأصل", accessor: (r) => r.assetNumber || "—", width: 18, isText: true },
+          { header: "رقم اللوحة", accessor: (r) => getPlate(r), width: 18, isText: true },
           { header: "نوع المركبة", accessor: (r) => r.vehicleType === 2 ? "سيارة" : r.vehicleType === 1 ? "دراجة نارية" : String(r.vehicleType), width: 16 },
           { header: "العداد الحالي (كم)", accessor: (r) => r.currentOdometer, width: 16 },
           { header: "عداد آخر تغيير (كم)", accessor: (r) => r.lastOilChangeOdometer ?? "—", width: 18 },
@@ -170,7 +192,7 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <Input
               type="text"
-              placeholder="بحث برقم الأصل أو اللوحة..."
+              placeholder="بحث برقم اللوحة..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-9 pr-8 text-xs"
@@ -237,7 +259,7 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
         <table className="w-full text-right text-xs">
           <thead className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 font-bold">
             <tr>
-              <th className="p-3">رقم الأصل / اللوحة</th>
+              <th className="p-3">رقم اللوحة</th>
               <th className="p-3">نوع المركبة</th>
               <th className="p-3 text-center">العداد الحالي</th>
               <th className="p-3 text-center">عداد آخر تغيير</th>
@@ -281,7 +303,7 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
                 return (
                   <tr key={r.vehicleId || r.assetNumber || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                     <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">
-                      {r.assetNumber || "-"}
+                      {getPlate(r)}
                     </td>
                     <td className="p-3">
                       <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300">

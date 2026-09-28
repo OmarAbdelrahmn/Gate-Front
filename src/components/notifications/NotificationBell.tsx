@@ -40,11 +40,15 @@ import {
 } from "../../lib/notifications/utils";
 import { toast } from "../ui/Toast";
 import { NotificationDetailModal } from "./NotificationDetailModal";
+import { useVehiclePlates } from "../../lib/fleet/vehicle-plate-cache";
 
 export function NotificationBell() {
   const { can, locale } = useAuth();
   const isAr = locale === "ar";
   const router = useRouter();
+
+  // Load and subscribe to vehicle plates cache
+  useVehiclePlates();
 
   // Gate the entire center on 'notifications.read'
   const canReadNotifications = can("notifications.read");

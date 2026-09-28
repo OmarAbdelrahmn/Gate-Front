@@ -1,4 +1,7 @@
 import type { NotificationSeverity } from "./types";
+import { replaceVehicleNumbersWithPlates } from "../fleet/vehicle-plate-cache";
+
+export { replaceVehicleNumbersWithPlates };
 
 /**
  * Format relative time in Arabic or English
@@ -446,13 +449,25 @@ export function resolveNotificationContent(
     }
   }
 
+  // Replace any VEH-* vehicle asset numbers with the actual plate number
+  title = replaceVehicleNumbersWithPlates(title, locale);
+  body = replaceVehicleNumbersWithPlates(body, locale);
+  const secondaryTitle = replaceVehicleNumbersWithPlates(
+    isAr ? rawTitleEn : rawTitleAr,
+    isAr ? "en" : "ar"
+  );
+  const secondaryBody = replaceVehicleNumbersWithPlates(
+    isAr ? rawBodyEn : rawBodyAr,
+    isAr ? "en" : "ar"
+  );
+
   return {
     title,
     body,
     category,
     deepLink,
-    secondaryTitle: isAr ? rawTitleEn : rawTitleAr,
-    secondaryBody: isAr ? rawBodyEn : rawBodyAr,
+    secondaryTitle,
+    secondaryBody,
   };
 }
 
