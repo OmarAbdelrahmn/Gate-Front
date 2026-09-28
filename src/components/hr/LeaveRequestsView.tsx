@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   CalendarCheck,
   Check,
@@ -328,6 +328,38 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     void loadRequests();
   }, [loadRequests]);
 
+  // Auto-open requested leave request from query param ?id=... (only once per target ID)
+  const handledTargetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetId = urlParams.get("id");
+    if (!targetId) return;
+
+    if (targetId !== handledTargetIdRef.current && requests.length > 0) {
+      handledTargetIdRef.current = targetId;
+      const match = requests.find(
+        (r) => r.id === targetId || r.requestNumber === targetId
+      );
+      if (match) {
+        setSelectedRequest(match);
+        setDrawerTab("overview");
+      }
+    }
+  }, [requests]);
+
+  const closeDrawer = useCallback(() => {
+    setSelectedRequest(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("id")) {
+        url.searchParams.delete("id");
+        window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+      }
+    }
+  }, []);
+
   // Load drawer sub-resources
   const loadSubResources = useCallback(
     async (requestId: string) => {
@@ -379,12 +411,12 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     if (!selectedRequest) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setSelectedRequest(null);
+        closeDrawer();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedRequest]);
+  }, [selectedRequest, closeDrawer]);
 
   // English Leave Type Join map
   const leaveTypeMap = useMemo(() => {
@@ -1951,11 +1983,11 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
       {/* ==================== DETAILS DRAWER / MODAL FOR LEAVE REQUEST ==================== */}
       {selectedRequest && (
         <div
-          className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-150"
-          onClick={() => setSelectedRequest(null)}
+          className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-150 cursor-pointer"
+          onClick={closeDrawer}
         >
           <div
-            className="flex h-full w-full max-w-2xl flex-col bg-[var(--surface)] shadow-2xl transition-all animate-in slide-in-from-right duration-200"
+            className="flex h-full w-full max-w-2xl flex-col bg-[var(--surface)] shadow-2xl transition-all animate-in slide-in-from-right duration-200 cursor-default"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Drawer Header */}
@@ -1983,7 +2015,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedRequest(null)}
+                onClick={closeDrawer}
                 className="grid size-9 place-items-center rounded-xl text-[var(--muted)] hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white transition-colors"
                 title={isEn ? "Close" : "إغلاق"}
               >
@@ -2487,7 +2519,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
               </span>
               <Button
                 variant="secondary"
-                onClick={() => setSelectedRequest(null)}
+                onClick={closeDrawer}
                 className="min-h-9 px-4 text-xs font-bold"
               >
                 <X size={14} />

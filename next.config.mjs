@@ -13,6 +13,26 @@ const nextConfig = {
         destination: "/admin/:path*",
         permanent: false,
       },
+      {
+        source: "/hr/leave-requests/:id",
+        destination: "/admin/hr/leave-requests?id=:id",
+        permanent: false,
+      },
+      {
+        source: "/hr/:path*",
+        destination: "/admin/hr/:path*",
+        permanent: false,
+      },
+      {
+        source: "/fleet/:path*",
+        destination: "/admin/fleet/:path*",
+        permanent: false,
+      },
+      {
+        source: "/maintenance/:path*",
+        destination: "/admin/maintenance/:path*",
+        permanent: false,
+      },
     ];
   },
 };

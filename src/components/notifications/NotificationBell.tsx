@@ -35,6 +35,7 @@ import type {
 } from "../../lib/notifications/types";
 import {
   formatRelativeTime,
+  resolveNotificationContent,
   SEVERITY_CONFIG,
 } from "../../lib/notifications/utils";
 import { toast } from "../ui/Toast";
@@ -303,15 +304,16 @@ export function NotificationBell() {
   };
 
   // Item click handler
-  const handleItemClick = (item: NotificationItem) => {
+  const handleItemClick = (item: NotificationItem, defaultRoute?: string | null) => {
     // If unread, mark read in background
     if (!item.readAtUtc) {
       void handleStateAction(item.id, "read", item.rowVersion);
     }
 
-    if (item.deepLink) {
+    const targetRoute = item.deepLink || defaultRoute;
+    if (targetRoute) {
       setIsOpen(false);
-      router.push(item.deepLink);
+      router.push(targetRoute);
     } else {
       setSelectedNotification(item);
       setIsDetailModalOpen(true);
@@ -469,7 +471,7 @@ export function NotificationBell() {
           </div>
 
           {/* Notifications List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60 max-h-[380px] p-1 bg-white dark:bg-[#152238]">
+          <div className="flex-1 overflow-y-auto space-y-2 max-h-[420px] p-2.5 bg-slate-50/60 dark:bg-[#111c30]">
             {loading && items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-[var(--muted)]">
                 <Loader2 className="h-6 w-6 animate-spin text-[#1167c9] mb-2" />
@@ -504,71 +506,75 @@ export function NotificationBell() {
                 const isUnread = !item.readAtUtc;
                 const isActing = actionLoadingId === item.id;
                 const sev = SEVERITY_CONFIG[item.severity] || SEVERITY_CONFIG.Information;
-                const title = isAr
-                  ? item.titleAr || item.titleEn
-                  : item.titleEn || item.titleAr;
-                const body = isAr
-                  ? item.bodyAr || item.bodyEn
-                  : item.bodyEn || item.bodyAr;
+                const content = resolveNotificationContent(item, locale);
 
                 return (
                   <div
                     key={item.id}
-                    onClick={() => handleItemClick(item)}
-                    className={`group relative flex items-start gap-3 p-3.5 transition-colors cursor-pointer rounded-xl ${
+                    onClick={() => handleItemClick(item, content.deepLink)}
+                    className={`group relative flex items-start gap-3 p-3.5 transition-all cursor-pointer rounded-xl border ${
                       isUnread
-                        ? "bg-blue-50/60 dark:bg-blue-950/20 hover:bg-blue-100/50 dark:hover:bg-blue-900/30"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                        ? "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800/60 hover:bg-blue-100/70 dark:hover:bg-blue-900/40 shadow-xs"
+                        : "bg-white border-slate-200/80 dark:bg-slate-900/40 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 shadow-xs"
                     }`}
                   >
+                    {/* Visual Accent for Unread: A sleek indicator strip */}
+                    {isUnread && (
+                      <span
+                        className={`absolute ${
+                          isAr ? "right-1" : "left-1"
+                        } top-3 bottom-3 w-1 rounded-full bg-[#1167c9] dark:bg-blue-400`}
+                      />
+                    )}
+
                     {/* Severity / Status icon badge */}
                     <div
-                      className={`mt-0.5 flex-shrink-0 p-2 rounded-xl border ${sev.badgeClass} shadow-xs`}
+                      className={`mt-0.5 flex-shrink-0 p-2.5 rounded-xl border ${sev.badgeClass} shadow-xs`}
                     >
                       {severityIcon(item.severity)}
                     </div>
 
                     {/* Content Details */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <h5
-                          className={`text-xs truncate ${
-                            isUnread
-                              ? "font-black text-[var(--foreground)]"
-                              : "font-semibold text-slate-700 dark:text-slate-300"
-                          }`}
-                        >
-                          {title}
-                        </h5>
+                      {/* Top meta row: Category pill + Time + Unread indicator */}
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {content.category}
+                          </span>
+                          <span className="flex items-center gap-1 text-[11px] font-medium text-[var(--muted)]">
+                            <Clock size={11} className="shrink-0" />
+                            {formatRelativeTime(item.visibleAtUtc, locale)}
+                          </span>
+                        </div>
 
-                        {/* Unread glowing indicator */}
                         {isUnread && (
-                          <span
-                            className="h-2 w-2 flex-shrink-0 rounded-full bg-[#f28b35] ring-2 ring-orange-200 dark:ring-orange-950"
-                            title={isAr ? "غير مقروء" : "Unread"}
-                          />
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#f28b35] text-white shrink-0">
+                            <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                            {isAr ? "جديد" : "New"}
+                          </span>
                         )}
                       </div>
 
+                      {/* Main Title */}
+                      <h5
+                        className={`text-xs sm:text-[13px] leading-snug mb-1 ${
+                          isUnread
+                            ? "font-black text-slate-900 dark:text-white"
+                            : "font-semibold text-slate-700 dark:text-slate-200"
+                        }`}
+                      >
+                        {content.title}
+                      </h5>
+
                       {/* Body snippet */}
-                      <p className="text-[11px] text-[var(--muted)] line-clamp-2 leading-relaxed mb-2 font-normal">
-                        {body}
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed mb-2 font-normal">
+                        {content.body}
                       </p>
 
-                      {/* Footer tags & action row */}
-                      <div className="flex items-center justify-between gap-1 text-[10px]">
+                      {/* Footer actions row without dividing line */}
+                      <div className="flex items-center justify-between gap-1 pt-1 text-[10px]">
                         <div className="flex items-center gap-1.5 text-[var(--muted)]">
-                          <span className="flex items-center gap-1 font-medium">
-                            <Clock size={11} />
-                            {formatRelativeTime(item.visibleAtUtc, locale)}
-                          </span>
-
-                          {item.eventType && (
-                            <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-400">
-                              {item.eventType}
-                            </span>
-                          )}
-
                           {item.acknowledgedAtUtc && (
                             <span className="inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-bold">
                               <Check size={11} />
@@ -577,11 +583,29 @@ export function NotificationBell() {
                           )}
                         </div>
 
-                        {/* Action Buttons (visible or on hover) */}
+                        {/* Action Buttons */}
                         <div
-                          className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
+                          {content.deepLink && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isUnread) {
+                                  void handleStateAction(item.id, "read", item.rowVersion);
+                                }
+                                setIsOpen(false);
+                                router.push(content.deepLink!);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-[#1167c9] dark:text-blue-400 hover:bg-blue-100/60 dark:hover:bg-blue-950/60 transition-colors"
+                              title={isAr ? "فتح الصفحة المرتبطة" : "Open link"}
+                            >
+                              <ExternalLink size={11} />
+                              <span>{isAr ? "فتح" : "Open"}</span>
+                            </button>
+                          )}
+
                           {/* Toggle read/unread */}
                           <button
                             type="button"
@@ -602,9 +626,15 @@ export function NotificationBell() {
                                 ? "تحديد كغير مقروء"
                                 : "Mark as unread"
                             }
-                            className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+                            className="p-1 rounded-md text-[var(--muted)] hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                           >
-                            {isUnread ? <Eye size={13} /> : <EyeOff size={13} />}
+                            {isActing ? (
+                              <Loader2 size={12} className="animate-spin text-[#1167c9]" />
+                            ) : isUnread ? (
+                              <Eye size={12} className="text-[#1167c9]" />
+                            ) : (
+                              <EyeOff size={12} />
+                            )}
                           </button>
 
                           {/* Acknowledge */}
@@ -620,9 +650,9 @@ export function NotificationBell() {
                                 )
                               }
                               title={isAr ? "تأكيد واستلام" : "Acknowledge"}
-                              className="p-1 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-950 text-emerald-600 dark:text-emerald-400 transition-colors"
+                              className="p-1 rounded-md hover:bg-emerald-100 dark:hover:bg-emerald-950 text-emerald-600 dark:text-emerald-400 transition-colors disabled:opacity-50"
                             >
-                              <Check size={13} />
+                              <Check size={12} />
                             </button>
                           )}
 
@@ -638,20 +668,10 @@ export function NotificationBell() {
                               )
                             }
                             title={isAr ? "أرشفة" : "Archive"}
-                            className="p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-950 text-red-500 hover:text-red-700 transition-colors"
+                            className="p-1 rounded-md hover:bg-red-100 dark:hover:bg-red-950 text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
                           >
-                            <Archive size={13} />
+                            <Archive size={12} />
                           </button>
-
-                          {/* Deep Link icon hint */}
-                          {item.deepLink && (
-                            <span
-                              title={isAr ? "يحتوي على رابط انتقال" : "Has destination link"}
-                              className="p-1 text-[#1167c9] dark:text-blue-400"
-                            >
-                              <ExternalLink size={13} />
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>

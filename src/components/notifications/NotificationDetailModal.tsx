@@ -24,6 +24,7 @@ import type { NotificationItem, NotificationSeverity } from "../../lib/notificat
 import {
   formatFullDateTime,
   formatRelativeTime,
+  resolveNotificationContent,
   SEVERITY_CONFIG,
 } from "../../lib/notifications/utils";
 
@@ -54,6 +55,7 @@ export function NotificationDetailModal({
 
   const isAr = locale === "ar";
   const sevConfig = SEVERITY_CONFIG[notification.severity] || SEVERITY_CONFIG.Information;
+  const content = resolveNotificationContent(notification, locale);
 
   const severityIcon = (sev: NotificationSeverity) => {
     switch (sev) {
@@ -72,12 +74,13 @@ export function NotificationDetailModal({
   };
 
   const handleDeepLink = () => {
-    if (notification.deepLink) {
+    const targetLink = notification.deepLink || content.deepLink;
+    if (targetLink) {
       if (!notification.readAtUtc) {
         void onAction(notification.id, "read", notification.rowVersion);
       }
       onClose();
-      router.push(notification.deepLink);
+      router.push(targetLink);
     }
   };
 
@@ -138,34 +141,35 @@ export function NotificationDetailModal({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Main Title */}
+          {/* Main Title & Category */}
           <div>
+            <div className="mb-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                {content.category}
+              </span>
+            </div>
             <h3 className="text-lg font-black text-[var(--foreground)] leading-snug">
-              {isAr
-                ? notification.titleAr || notification.titleEn
-                : notification.titleEn || notification.titleAr}
+              {content.title}
             </h3>
-            {notification.titleAr && notification.titleEn && notification.titleAr !== notification.titleEn && (
+            {content.secondaryTitle && content.secondaryTitle !== content.title && (
               <p className="text-xs text-[var(--muted)] mt-1 font-medium">
-                {isAr ? notification.titleEn : notification.titleAr}
+                {content.secondaryTitle}
               </p>
             )}
           </div>
 
           {/* Body Content */}
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-[var(--border)] leading-relaxed text-sm whitespace-pre-wrap">
-            {isAr
-              ? notification.bodyAr || notification.bodyEn
-              : notification.bodyEn || notification.bodyAr}
+            {content.body}
           </div>
 
           {/* Secondary translation if available */}
-          {notification.bodyAr && notification.bodyEn && notification.bodyAr !== notification.bodyEn && (
+          {content.secondaryBody && content.secondaryBody !== content.body && (
             <div className="p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/40 border border-dashed border-[var(--border)] text-xs text-[var(--muted)] leading-relaxed">
               <span className="font-bold block mb-1">
                 {isAr ? "النص بالإنجليزية:" : "Arabic text:"}
               </span>
-              {isAr ? notification.bodyEn : notification.bodyAr}
+              {content.secondaryBody}
             </div>
           )}
 
@@ -286,7 +290,7 @@ export function NotificationDetailModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {notification.deepLink && (
+            {(notification.deepLink || content.deepLink) && (
               <button
                 onClick={handleDeepLink}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#1167c9] hover:bg-[#0b55a8] text-white shadow-sm transition-colors"
