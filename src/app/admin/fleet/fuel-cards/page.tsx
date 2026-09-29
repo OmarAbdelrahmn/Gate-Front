@@ -14,6 +14,7 @@ import { AssignFuelCardRiderModal } from "./components/AssignFuelCardRiderModal"
 import { StopFuelCardRiderModal } from "./components/StopFuelCardRiderModal";
 import { FuelCardAssignmentsModal } from "./components/FuelCardAssignmentsModal";
 import { FuelCardDetailsModal } from "./components/FuelCardDetailsModal";
+import { ChangeFuelCardSponsorModal } from "./components/ChangeFuelCardSponsorModal";
 import { ShieldAlert } from "lucide-react";
 
 export default function FuelCardsPage() {
@@ -44,6 +45,7 @@ export default function FuelCardsPage() {
   const [stopModalCard, setStopModalCard] = useState<FuelCard | null>(null);
   const [historyModalCard, setHistoryModalCard] = useState<FuelCard | null>(null);
   const [detailModalCardId, setDetailModalCardId] = useState<string | null>(null);
+  const [changeSponsorCard, setChangeSponsorCard] = useState<FuelCard | null>(null);
 
   if (!canRead) {
     return (
@@ -91,6 +93,7 @@ export default function FuelCardsPage() {
           onOpenStop={(card) => setStopModalCard(card)}
           onOpenHistory={(card) => setHistoryModalCard(card)}
           onOpenDetail={(cardId) => setDetailModalCardId(cardId)}
+          onOpenChangeSponsor={(card) => setChangeSponsorCard(card)}
         />
       )}
 
@@ -151,6 +154,19 @@ export default function FuelCardsPage() {
         onOpenHistory={(card) => {
           setDetailModalCardId(null);
           setHistoryModalCard(card);
+        }}
+        onOpenChangeSponsor={(card) => {
+          setDetailModalCardId(null);
+          setChangeSponsorCard(card);
+        }}
+      />
+
+      <ChangeFuelCardSponsorModal
+        isOpen={changeSponsorCard !== null}
+        onClose={() => setChangeSponsorCard(null)}
+        card={changeSponsorCard}
+        onSuccess={() => {
+          triggerRefresh();
         }}
       />
     </div>

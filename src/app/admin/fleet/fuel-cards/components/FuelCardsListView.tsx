@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { Badge } from "@/components/ui/Badge";
-import { listRiders } from "@/lib/workforce/api";
+import { listRiders, listSponsors, Sponsor } from "@/lib/workforce/api";
 import {
   getFuelCards,
   FuelCard,
@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   UserCheck,
   Building,
+  Building2,
   X,
   Filter as FilterIcon,
   FileSpreadsheet,
@@ -44,6 +45,7 @@ interface FuelCardsListViewProps {
   onOpenStop: (card: FuelCard) => void;
   onOpenHistory: (card: FuelCard) => void;
   onOpenDetail: (cardId: string) => void;
+  onOpenChangeSponsor: (card: FuelCard) => void;
 }
 
 export function FuelCardsListView({
@@ -54,6 +56,7 @@ export function FuelCardsListView({
   onOpenStop,
   onOpenHistory,
   onOpenDetail,
+  onOpenChangeSponsor,
 }: FuelCardsListViewProps) {
   const [providerFilter, setProviderFilter] = useState<string[]>([]);
   const [riderFilterId, setRiderFilterId] = useState("");
@@ -64,6 +67,9 @@ export function FuelCardsListView({
   const [headerCardNumberFilter, setHeaderCardNumberFilter] = useState<string[]>([]);
   const [headerPlateFilter, setHeaderPlateFilter] = useState<string[]>([]);
   const [headerAssignmentFilter, setHeaderAssignmentFilter] = useState<string[]>([]);
+  const [headerSponsorFilter, setHeaderSponsorFilter] = useState<string[]>([]);
+
+  const [sponsorsMap, setSponsorsMap] = useState<Record<string, Sponsor>>({});
 
   const FUEL_CARDS_FILTERS_SESSION_KEY = "admin_fleet_fuel_cards_filters_session";
   const [isRestored, setIsRestored] = useState(false);
@@ -85,6 +91,7 @@ export function FuelCardsListView({
         if (parsed.headerCardNumberFilter) setHeaderCardNumberFilter(toArray(parsed.headerCardNumberFilter));
         if (parsed.headerPlateFilter) setHeaderPlateFilter(toArray(parsed.headerPlateFilter));
         if (parsed.headerAssignmentFilter) setHeaderAssignmentFilter(toArray(parsed.headerAssignmentFilter));
+        if (parsed.headerSponsorFilter) setHeaderSponsorFilter(toArray(parsed.headerSponsorFilter));
         if (typeof parsed.searchQuery === "string" && parsed.searchQuery) onSearchChange(parsed.searchQuery);
       }
     } catch {
@@ -104,6 +111,7 @@ export function FuelCardsListView({
         headerCardNumberFilter.length > 0 ||
         headerPlateFilter.length > 0 ||
         headerAssignmentFilter.length > 0 ||
+        headerSponsorFilter.length > 0 ||
         searchQuery
       ) {
         sessionStorage.setItem(
@@ -114,6 +122,7 @@ export function FuelCardsListView({
             headerCardNumberFilter,
             headerPlateFilter,
             headerAssignmentFilter,
+            headerSponsorFilter,
             searchQuery,
           })
         );
@@ -130,12 +139,28 @@ export function FuelCardsListView({
     headerCardNumberFilter,
     headerPlateFilter,
     headerAssignmentFilter,
+    headerSponsorFilter,
     searchQuery,
   ]);
 
   const [cardsPageData, setCardsPageData] = useState<FuelCardPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [ridersOptions, setRidersOptions] = useState<SelectOption[]>([]);
+
+  // Load sponsors to resolve names
+  useEffect(() => {
+    listSponsors()
+      .then((sponsors) => {
+        const map: Record<string, Sponsor> = {};
+        (sponsors || []).forEach((s) => {
+          map[s.id] = s;
+        });
+        setSponsorsMap(map);
+      })
+      .catch((err) => {
+        console.warn("Could not load sponsors list (user may lack sponsors.read):", err);
+      });
+  }, []);
 
   // Load riders for lookup filter
   useEffect(() => {
@@ -259,11 +284,31 @@ export function FuelCardsListView({
     return opts;
   }, [items, assignedCount, unassignedCount]);
 
+  const sponsorOptions = useMemo<FilterOption[]>(() => {
+    const map = new Map<string, number>();
+    items.forEach((c) => {
+      if (c.sponsorId) {
+        map.set(c.sponsorId, (map.get(c.sponsorId) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, count]) => {
+        const sp = sponsorsMap[id];
+        return {
+          value: id,
+          label: sp ? (sp.registryNameAr || sp.registryNameEn || sp.id) : id,
+          count,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [items, sponsorsMap]);
+
   const isHeaderFiltered = Boolean(
     providerFilter.length > 0 ||
     headerCardNumberFilter.length > 0 ||
     headerPlateFilter.length > 0 ||
-    headerAssignmentFilter.length > 0
+    headerAssignmentFilter.length > 0 ||
+    headerSponsorFilter.length > 0
   );
 
   const clearHeaderFilters = () => {
@@ -271,6 +316,7 @@ export function FuelCardsListView({
     setHeaderCardNumberFilter([]);
     setHeaderPlateFilter([]);
     setHeaderAssignmentFilter([]);
+    setHeaderSponsorFilter([]);
     try {
       sessionStorage.removeItem(FUEL_CARDS_FILTERS_SESSION_KEY);
     } catch {
@@ -302,9 +348,12 @@ export function FuelCardsListView({
         });
         if (!match) return false;
       }
+      if (headerSponsorFilter.length > 0 && !headerSponsorFilter.includes(card.sponsorId)) {
+        return false;
+      }
       return true;
     });
-  }, [items, providerFilter, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter]);
+  }, [items, providerFilter, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter, headerSponsorFilter]);
 
   const [exporting, setExporting] = useState(false);
 
@@ -332,6 +381,14 @@ export function FuelCardsListView({
           { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
           { header: "رقم البطاقة", accessor: (c) => c.cardNumber, width: 22, isText: true },
           { header: "المزود", accessor: (c) => c.providerNameAr || fuelProviderLabels[c.provider] || String(c.provider), width: 16 },
+          {
+            header: "الكفيل",
+            accessor: (c) => {
+              const sp = sponsorsMap[c.sponsorId];
+              return sp ? (sp.registryNameAr || sp.registryNameEn || sp.id) : (c.sponsorId || "—");
+            },
+            width: 24,
+          },
           { header: "اللوحة المرتبطة", accessor: (c) => c.plateNumberText || "—", width: 16, isText: true },
           { header: "المندوب المعين", accessor: (c) => c.currentRider?.riderNameAr || c.currentRider?.riderNameEn || "غير معين", width: 24 },
           { header: "تاريخ بداية التعيين", accessor: (c) => c.currentRider?.effectiveFrom ? c.currentRider.effectiveFrom.split("T")[0] : "—", width: 18 },
@@ -484,6 +541,12 @@ export function FuelCardsListView({
               <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderAssignmentFilter(headerAssignmentFilter.filter((x) => x !== aId))} />
             </Badge>
           ))}
+          {headerSponsorFilter.map((spId) => (
+            <Badge key={spId} className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 gap-1 pl-1.5 font-medium">
+              الكفيل: {sponsorsMap[spId]?.registryNameAr || sponsorsMap[spId]?.registryNameEn || spId}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderSponsorFilter(headerSponsorFilter.filter((x) => x !== spId))} />
+            </Badge>
+          ))}
           <button
             type="button"
             onClick={clearHeaderFilters}
@@ -541,6 +604,18 @@ export function FuelCardsListView({
                 </th>
                 <th className="px-4 py-3.5 text-start whitespace-nowrap">
                   <div className="inline-flex items-center gap-1.5">
+                    <span>الكفيل</span>
+                    <TableHeaderColumnFilter
+                      label="الكفيل"
+                      value={headerSponsorFilter}
+                      onChange={setHeaderSponsorFilter}
+                      options={sponsorOptions}
+                      placeholder="تصفية بالكفيل..."
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-start whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1.5">
                     <span>المندوب المعين حالياً</span>
                     <TableHeaderColumnFilter
                       label="المندوب"
@@ -558,20 +633,20 @@ export function FuelCardsListView({
             <tbody className="divide-y divide-[var(--border)] font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
                     <RefreshCw size={24} className="mx-auto animate-spin mb-2 text-[#1167c9]" />
                     جاري تحميل بطاقات الوقود...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
                     لا توجد بطاقات وقود تطابق معايير البحث.
                   </td>
                 </tr>
               ) : filteredCards.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
                     <FilterIcon size={24} className="mx-auto opacity-40 mb-2" />
                     <p className="font-bold text-sm text-[var(--foreground)]">لا توجد بطاقات وقود تطابق فلاتر الأعمدة المحددة.</p>
                     <button
@@ -622,6 +697,33 @@ export function FuelCardsListView({
                         )}
                       </td>
 
+                      {/* Sponsor */}
+                      <td className="px-4 py-3.5 text-start">
+                        {(() => {
+                          const sp = sponsorsMap[card.sponsorId];
+                          const sponsorName = sp ? (sp.registryNameAr || sp.registryNameEn || sp.id) : card.sponsorId;
+                          const isInactive = sp && sp.status && sp.status !== "Active";
+
+                          return (
+                            <div className="flex flex-col text-start max-w-[200px]">
+                              <span className="font-bold text-[var(--foreground)] truncate" title={sponsorName}>
+                                {sponsorName}
+                              </span>
+                              {sp?.employerIdentityNumber ? (
+                                <span className="text-[10px] text-[var(--muted)] font-mono">
+                                  هوية: {sp.employerIdentityNumber}
+                                </span>
+                              ) : null}
+                              {isInactive && (
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                                  ({sp.status})
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </td>
+
                       {/* Current Rider */}
                       <td className="px-4 py-3.5">
                         {card.currentRider ? (
@@ -667,6 +769,15 @@ export function FuelCardsListView({
 
                           {canManage && (
                             <>
+                              {/* Change Sponsor */}
+                              <button
+                                onClick={() => onOpenChangeSponsor(card)}
+                                className="p-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
+                                title="تغيير كفيل البطاقة"
+                              >
+                                <Building2 size={15} />
+                              </button>
+
                               {!hasRider ? (
                                 <button
                                   onClick={() => onOpenAssign(card)}

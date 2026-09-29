@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
+import { listSponsors, Sponsor } from "@/lib/workforce/api";
 import {
   importFuelSpreadsheet,
   FuelImportResult,
@@ -27,9 +29,34 @@ interface FuelImportViewProps {
 export function FuelImportView({ onNavigateToCard }: FuelImportViewProps) {
   const [file, setFile] = useState<File | null>(null);
   const [expectedMonth, setExpectedMonth] = useState("");
+  const [sponsorId, setSponsorId] = useState("");
+  const [sponsorsOptions, setSponsorsOptions] = useState<SelectOption[]>([]);
+  const [loadingSponsors, setLoadingSponsors] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FuelImportResult | null>(null);
+
+  useEffect(() => {
+    setLoadingSponsors(true);
+    listSponsors()
+      .then((sponsorsList) => {
+        const options: SelectOption[] = (sponsorsList || []).map((s: Sponsor) => {
+          const statusText = s.status && s.status !== "Active" ? ` (${s.status})` : "";
+          return {
+            value: s.id,
+            label: `${s.registryNameAr || s.registryNameEn || s.id}${statusText}`,
+            sublabel: s.employerIdentityNumber ? `رقم المنشأة: ${s.employerIdentityNumber}` : undefined,
+          };
+        });
+        setSponsorsOptions(options);
+      })
+      .catch((err) => {
+        console.error("Failed to load sponsors list for import:", err);
+      })
+      .finally(() => {
+        setLoadingSponsors(false);
+      });
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -51,13 +78,17 @@ export function FuelImportView({ onNavigateToCard }: FuelImportViewProps) {
       setError("يرجى اختيار ملف اكسل (.xls أو .xlsx)");
       return;
     }
+    if (!sponsorId) {
+      setError("يرجى تحديد الكفيل المخصص للبطاقات الجديدة التي قد يتم إنشاؤها عبر هذا الاستيراد");
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const res = await importFuelSpreadsheet(file, expectedMonth || undefined);
+      const res = await importFuelSpreadsheet(file, sponsorId, expectedMonth || undefined);
       setResult(res);
     } catch (err: any) {
       console.error("Failed to import fuel spreadsheet:", err);
@@ -107,7 +138,7 @@ export function FuelImportView({ onNavigateToCard }: FuelImportViewProps) {
                 required
               />
               <p className="mt-1 text-[11px] text-[var(--muted)]">
-                الحد الأقصى لحجم الملف: 25 ميجابايت.
+                الحد الأقصى لحجم الملف: 25 ميجابايت (.xls أو .xlsx).
               </p>
             </div>
 
@@ -129,11 +160,32 @@ export function FuelImportView({ onNavigateToCard }: FuelImportViewProps) {
             </div>
           </div>
 
+          {/* Sponsor Selector (Required for new cards created by upload) */}
+          <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20">
+            <label className="block text-xs font-bold text-[var(--foreground)] mb-1.5">
+              الكفيل المخصص للبطاقات الجديدة التي تُنشأ بواسطة هذا الملف <span className="text-red-500">*</span>
+            </label>
+            <SearchableSelect
+              value={sponsorId}
+              onChange={(val) => {
+                setSponsorId(val);
+                setError(null);
+              }}
+              options={sponsorsOptions}
+              placeholder={loadingSponsors ? "جاري تحميل قائمة الكفلاء..." : "اختر الكفيل للبطاقات الجديدة..."}
+              searchPlaceholder="بحث في أسماء أو أرقام الكفلاء..."
+              disabled={loadingSponsors || loading}
+            />
+            <p className="mt-1.5 text-[11px] text-[var(--muted)]">
+              سيتم تعيين هذا الكفيل فقط للبطاقات <strong>الجديدة</strong> التي ينشئها الاستيراد. البطاقات الموجودة مسبقاً ستحتفظ بكفيلها الحالي دون تعديل.
+            </p>
+          </div>
+
           <div className="flex items-center justify-end pt-3 border-t border-[var(--border)]">
             <Button
               type="submit"
               variant="primary"
-              disabled={loading || !file}
+              disabled={loading || !file || !sponsorId}
               className="flex items-center gap-2 h-11 px-8 rounded-xl font-bold text-xs shadow-md shadow-blue-500/20"
             >
               {loading ? (

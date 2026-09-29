@@ -14,6 +14,7 @@ import {
   History,
   Calendar,
   Building,
+  Building2,
   Tag,
   FileText,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import {
   getFuelCard,
   FuelCard,
 } from "@/lib/fleet/fuel-cards-api";
+import { listSponsors, Sponsor } from "@/lib/workforce/api";
 
 interface FuelCardDetailsModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ interface FuelCardDetailsModalProps {
   onOpenAssign: (card: FuelCard) => void;
   onOpenStop: (card: FuelCard) => void;
   onOpenHistory: (card: FuelCard) => void;
+  onOpenChangeSponsor?: (card: FuelCard) => void;
 }
 
 export function FuelCardDetailsModal({
@@ -40,8 +43,10 @@ export function FuelCardDetailsModal({
   onOpenAssign,
   onOpenStop,
   onOpenHistory,
+  onOpenChangeSponsor,
 }: FuelCardDetailsModalProps) {
   const [card, setCard] = useState<FuelCard | null>(null);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,8 +54,14 @@ export function FuelCardDetailsModal({
     if (isOpen && cardId) {
       setLoading(true);
       setError(null);
-      getFuelCard(cardId)
-        .then((data) => setCard(data))
+      Promise.all([
+        getFuelCard(cardId),
+        listSponsors().catch(() => [] as Sponsor[]),
+      ])
+        .then(([cardData, sponsorsList]) => {
+          setCard(cardData);
+          setSponsors(sponsorsList || []);
+        })
         .catch((err) => {
           console.error("Failed to load fuel card details:", err);
           setError(err?.message || "بطاقة الوقود غير موجودة");
@@ -138,6 +149,49 @@ export function FuelCardDetailsModal({
                 </div>
               </div>
 
+              {/* Sponsor Box */}
+              {(() => {
+                const currentSponsor = sponsors.find((s) => s.id === card.sponsorId);
+                const sponsorName = currentSponsor?.registryNameAr || currentSponsor?.registryNameEn || card.sponsorId;
+
+                return (
+                  <div className="p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/30 dark:bg-indigo-950/20">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5 text-[var(--muted)] font-medium">
+                        <Building2 size={15} className="text-indigo-600 dark:text-indigo-400" />
+                        <span>الكفيل المرتبط:</span>
+                      </div>
+                      {canManage && onOpenChangeSponsor && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenChangeSponsor(card)}
+                          className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                        >
+                          تغيير الكفيل
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-black text-sm text-[var(--foreground)]">
+                        {sponsorName}
+                      </div>
+                      {currentSponsor && (
+                        <div className="flex items-center gap-2 text-[11px]">
+                          {currentSponsor.employerIdentityNumber && (
+                            <span className="font-mono text-[var(--muted)]">
+                              هوية المنشأة: {currentSponsor.employerIdentityNumber}
+                            </span>
+                          )}
+                          <Badge tone={currentSponsor.status === "Active" ? "green" : "gray"}>
+                            {currentSponsor.status === "Active" ? "نشط" : currentSponsor.status || "كفيل"}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Current Rider Box */}
               <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/20">
                 <span className="text-[var(--muted)] font-medium block mb-2">المندوب المعين حالياً:</span>
@@ -191,14 +245,27 @@ export function FuelCardDetailsModal({
         {/* Footer Actions */}
         {card && (
           <div className="p-4 border-t border-[var(--border)] bg-slate-50/50 dark:bg-slate-800/50 flex flex-wrap items-center justify-between gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => onOpenHistory(card)}
-              className="h-10 px-4 text-xs rounded-xl flex items-center gap-2"
-            >
-              <History size={16} />
-              سجل التعيينات
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => onOpenHistory(card)}
+                className="h-10 px-4 text-xs rounded-xl flex items-center gap-2"
+              >
+                <History size={16} />
+                سجل التعيينات
+              </Button>
+
+              {canManage && onOpenChangeSponsor && (
+                <Button
+                  variant="secondary"
+                  onClick={() => onOpenChangeSponsor(card)}
+                  className="h-10 px-3 text-xs rounded-xl flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-bold"
+                >
+                  <Building2 size={15} />
+                  تغيير الكفيل
+                </Button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               {canManage && (

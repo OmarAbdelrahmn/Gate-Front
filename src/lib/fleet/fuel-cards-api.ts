@@ -20,6 +20,7 @@ export interface FuelCardCurrentRider {
 
 export interface FuelCard {
   id: string;
+  sponsorId: string;
   provider: FuelProvider;
   providerNameAr: string;
   identifierType: FuelCardIdentifierType;
@@ -166,11 +167,26 @@ export async function createFuelCard(payload: {
   cardNumber: string;
   plateNumberText?: string | null;
   notes?: string | null;
+  sponsorId: string;
 }): Promise<FuelCard> {
   return authFetch<FuelCard>("/api/fuel-cards", {
     method: "POST",
     body: JSON.stringify(payload),
     notifySuccess: "تم إضافة بطاقة الوقود بنجاح",
+  });
+}
+
+export async function updateFuelCardSponsor(
+  id: string,
+  payload: {
+    sponsorId: string;
+    rowVersion: string;
+  }
+): Promise<FuelCard> {
+  return authFetch<FuelCard>(`/api/fuel-cards/${encodeURIComponent(id)}/sponsor`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تحديث كفيل بطاقة الوقود بنجاح",
   });
 }
 
@@ -229,10 +245,12 @@ export async function getFuelMonthlyUsage(params: {
 
 export async function importFuelSpreadsheet(
   file: File,
+  sponsorId: string,
   expectedMonth?: string
 ): Promise<FuelImportResult> {
   const data = new FormData();
   data.append("File", file);
+  data.append("SponsorId", sponsorId);
   if (expectedMonth) {
     data.append("ExpectedMonth", expectedMonth);
   }

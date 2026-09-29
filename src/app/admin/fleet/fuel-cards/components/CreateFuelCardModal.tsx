@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
+import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { X, CreditCard, AlertTriangle } from "lucide-react";
+import { listSponsors, Sponsor } from "@/lib/workforce/api";
 import {
   createFuelCard,
   FuelCard,
@@ -25,8 +27,35 @@ export function CreateFuelCardModal({
   const [cardNumber, setCardNumber] = useState("");
   const [plateNumberText, setPlateNumberText] = useState("");
   const [notes, setNotes] = useState("");
+  const [sponsorId, setSponsorId] = useState("");
+  const [sponsorsOptions, setSponsorsOptions] = useState<SelectOption[]>([]);
+  const [loadingSponsors, setLoadingSponsors] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLoadingSponsors(true);
+      listSponsors()
+        .then((sponsorsList) => {
+          const options: SelectOption[] = (sponsorsList || []).map((s: Sponsor) => {
+            const statusText = s.status && s.status !== "Active" ? ` (${s.status})` : "";
+            return {
+              value: s.id,
+              label: `${s.registryNameAr || s.registryNameEn || s.id}${statusText}`,
+              sublabel: s.employerIdentityNumber ? `رقم المنشأة: ${s.employerIdentityNumber}` : undefined,
+            };
+          });
+          setSponsorsOptions(options);
+        })
+        .catch((err) => {
+          console.error("Failed to load sponsors list:", err);
+        })
+        .finally(() => {
+          setLoadingSponsors(false);
+        });
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -34,6 +63,10 @@ export function CreateFuelCardModal({
     e.preventDefault();
     if (!cardNumber.trim()) {
       setError("يرجى إدخال رقم البطاقة");
+      return;
+    }
+    if (!sponsorId) {
+      setError("يرجى اختيار الكفيل، حيث يجب ربط كل بطاقة وقود بكفيل");
       return;
     }
 
@@ -46,12 +79,14 @@ export function CreateFuelCardModal({
         cardNumber: cardNumber.trim(),
         plateNumberText: plateNumberText.trim() || null,
         notes: notes.trim() || null,
+        sponsorId,
       });
 
       // Reset
       setCardNumber("");
       setPlateNumberText("");
       setNotes("");
+      setSponsorId("");
       onSuccess(created);
       onClose();
     } catch (err: any) {
@@ -109,6 +144,27 @@ export function CreateFuelCardModal({
               <option value="PetroApp">{fuelProviderLabels.PetroApp}</option>
               <option value="SayaraApp">{fuelProviderLabels.SayaraApp}</option>
             </select>
+          </div>
+
+          {/* Sponsor */}
+          <div>
+            <label className="block text-xs font-bold text-[var(--foreground)] mb-1">
+              الكفيل <span className="text-red-500">*</span>
+            </label>
+            <SearchableSelect
+              value={sponsorId}
+              onChange={(val) => {
+                setSponsorId(val);
+                setError(null);
+              }}
+              options={sponsorsOptions}
+              placeholder={loadingSponsors ? "جاري تحميل قائمة الكفلاء..." : "اختر الكفيل للبطاقة..."}
+              searchPlaceholder="بحث في أسماء أو أرقام الكفلاء..."
+              disabled={loadingSponsors || loading}
+            />
+            <p className="mt-1 text-[11px] text-[var(--muted)]">
+              لكل بطاقة وقود كفيل واحد محدد، ويمكن للكفيل أن يرتبط بأي عدد من البطاقات.
+            </p>
           </div>
 
           {/* Card Number */}
