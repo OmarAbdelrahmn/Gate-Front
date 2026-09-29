@@ -274,7 +274,7 @@ export default function ExpiryCompliancePage() {
   const [operatingCityId, setOperatingCityId] = useState("all");
   const [sponsorId, setSponsorId] = useState("all");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(500);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -301,7 +301,7 @@ export default function ExpiryCompliancePage() {
         if (typeof parsed.sponsorId === "string") setSponsorId(parsed.sponsorId);
         if (typeof parsed.checkDate === "string" && parsed.checkDate) setCheckDate(parsed.checkDate);
         if (typeof parsed.page === "number" && parsed.page >= 1) setPage(parsed.page);
-        if (typeof parsed.pageSize === "number" && [25, 50, 100].includes(parsed.pageSize)) setPageSize(parsed.pageSize);
+        if (typeof parsed.pageSize === "number" && [500, 1000].includes(parsed.pageSize)) setPageSize(parsed.pageSize);
       }
     } catch {
       // ignore JSON parse or sessionStorage errors
@@ -323,7 +323,7 @@ export default function ExpiryCompliancePage() {
         sponsorId === "all" &&
         checkDate === getTodayRiyadh() &&
         page === 1 &&
-        pageSize === 50;
+        pageSize === 500;
 
       if (!isDefault) {
         sessionStorage.setItem(
@@ -359,9 +359,26 @@ export default function ExpiryCompliancePage() {
   }, []);
 
   const employeeMap = useMemo(() => {
-    const map = new Map<string, { iqamaNo?: string | null; employeeNumber?: string | null; name?: string }>();
+    const map = new Map<
+      string,
+      {
+        iqamaNo?: string | null;
+        employeeNumber?: string | null;
+        name?: string;
+        sponsorId?: string | null;
+        operatingCityId?: string | null;
+        status?: string | null;
+      }
+    >();
     for (const emp of employees) {
-      map.set(emp.id, { iqamaNo: emp.iqamaNo, employeeNumber: emp.employeeNumber, name: emp.fullNameAr });
+      map.set(emp.id, {
+        iqamaNo: emp.iqamaNo,
+        employeeNumber: emp.employeeNumber,
+        name: emp.fullNameAr,
+        sponsorId: emp.sponsorId || emp.sponsor?.id || null,
+        operatingCityId: emp.operatingCity?.id || null,
+        status: emp.status,
+      });
     }
     return map;
   }, [employees]);
@@ -468,20 +485,44 @@ export default function ExpiryCompliancePage() {
     setLoading(true);
     setError("");
     try {
-      const isKnownSourceType = ["EmployeeDocument", "DriverLicense", "RiderCard", "HealthCard", "MedicalInsurance"].includes(sourceType);
-
       const res = await getComplianceExpiries({
         checkDate,
-        sourceType: isKnownSourceType ? sourceType : undefined,
-        categoryCode: !isKnownSourceType && sourceType !== "all" ? sourceType : undefined,
-        dueStatus,
-        employeeStatus,
-        operatingCityId,
-        sponsorId,
-        page,
-        pageSize,
+        page: 1,
+        pageSize: 1000,
       });
-      setData(res);
+
+      let allItems = res.items || [];
+      const total = res.totalCount ?? allItems.length;
+
+      // If backend reports more items than returned in page 1, fetch remaining pages in parallel
+      if (total > allItems.length) {
+        const totalPages = Math.ceil(total / 1000);
+        const pagePromises: Promise<ExpiryComplianceResponse | null>[] = [];
+        for (let p = 2; p <= totalPages; p++) {
+          pagePromises.push(
+            getComplianceExpiries({
+              checkDate,
+              page: p,
+              pageSize: 1000,
+            }).catch((err) => {
+              console.warn(`Failed to load compliance expiries page ${p}:`, err);
+              return null;
+            })
+          );
+        }
+        const remaining = await Promise.all(pagePromises);
+        for (const r of remaining) {
+          if (r?.items) {
+            allItems = allItems.concat(r.items);
+          }
+        }
+      }
+
+      setData({
+        ...res,
+        items: allItems,
+        totalCount: allItems.length,
+      });
     } catch (err) {
       setError(
         err instanceof Error
@@ -498,11 +539,13 @@ export default function ExpiryCompliancePage() {
   useEffect(() => {
     if (!isRestored) return;
     void loadData();
-  }, [isRestored, checkDate, sourceType, dueStatus, employeeStatus, operatingCityId, sponsorId, page, pageSize]);
+  }, [isRestored, checkDate]);
 
-  const items = useMemo(() => {
+  // Base items: all non-general documents filtered by metadata filters (doc type, employee status, city, sponsor, search)
+  // excluding dueStatus, so that the KPI summary cards can show counts for Valid, Upcoming, DueToday, Expired, Missing
+  const baseItems = useMemo(() => {
     if (!data?.items) return [];
-    let filtered = data.items.filter((x) => !isGeneralDocument(x));
+    let list = data.items.filter((x) => !isGeneralDocument(x));
 
     // Filter by selected document type / category
     if (sourceType && sourceType !== "all") {
@@ -515,7 +558,7 @@ export default function ExpiryCompliancePage() {
           (dt.nameEn && dt.nameEn.toLowerCase() === target)
       );
 
-      filtered = filtered.filter((x) => {
+      list = list.filter((x) => {
         const itemCode = (x.categoryCode || "").trim().toLowerCase();
         const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
         const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
@@ -542,130 +585,108 @@ export default function ExpiryCompliancePage() {
       });
     }
 
-    if (!search.trim()) return filtered;
-    const q = search.toLowerCase().trim();
-    return filtered.filter((x) => {
-      const isDocNotUploaded = isDocumentNotUploaded(x);
-      const empStatus = getEmployeeStatusMeta(x.employeeStatus);
-      const catFormatted = formatCategoryName(
-        x.categoryNameAr,
-        x.categoryNameEn,
-        locale,
-        documentTypes,
-        isDocNotUploaded ? x.sourceId : undefined
-      ).toLowerCase();
-      const iqama = getIqamaNumber(x).toLowerCase();
-      const notUploadedText = isDocNotUploaded
-        ? (locale === "en" ? "document not uploaded" : "الوثيقة غير مرفوعة لم يتم الرفع")
-        : "";
+    // Filter by employee status
+    if (employeeStatus && employeeStatus !== "all") {
+      const target = employeeStatus.trim().toLowerCase();
+      list = list.filter((x) => {
+        const s = String(x.employeeStatus ?? "").trim().toLowerCase();
+        if (s === target) return true;
+        const emp = employeeMap.get(x.employeeId);
+        if (emp?.status && String(emp.status).trim().toLowerCase() === target) return true;
+        return false;
+      });
+    }
 
-      return (
-        x.employeeNameAr.toLowerCase().includes(q) ||
-        iqama.includes(q) ||
-        x.categoryNameAr.toLowerCase().includes(q) ||
-        (x.categoryNameEn && x.categoryNameEn.toLowerCase().includes(q)) ||
-        catFormatted.includes(q) ||
-        (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
-        (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
-        empStatus.ar.toLowerCase().includes(q) ||
-        empStatus.en.toLowerCase().includes(q) ||
-        (isDocNotUploaded && notUploadedText.includes(q))
-      );
+    // Filter by operating city
+    if (operatingCityId && operatingCityId !== "all") {
+      list = list.filter((x) => {
+        const emp = employeeMap.get(x.employeeId);
+        return emp?.operatingCityId === operatingCityId;
+      });
+    }
+
+    // Filter by sponsor
+    if (sponsorId && sponsorId !== "all") {
+      list = list.filter((x) => {
+        const emp = employeeMap.get(x.employeeId);
+        return emp?.sponsorId === sponsorId;
+      });
+    }
+
+    // Filter by search query
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      list = list.filter((x) => {
+        const isDocNotUploaded = isDocumentNotUploaded(x);
+        const empStatus = getEmployeeStatusMeta(x.employeeStatus);
+        const catFormatted = formatCategoryName(
+          x.categoryNameAr,
+          x.categoryNameEn,
+          locale,
+          documentTypes,
+          isDocNotUploaded ? x.sourceId : undefined
+        ).toLowerCase();
+        const iqama = getIqamaNumber(x).toLowerCase();
+        const notUploadedText = isDocNotUploaded
+          ? locale === "en"
+            ? "document not uploaded"
+            : "الوثيقة غير مرفوعة لم يتم الرفع"
+          : "";
+
+        return (
+          x.employeeNameAr.toLowerCase().includes(q) ||
+          iqama.includes(q) ||
+          x.categoryNameAr.toLowerCase().includes(q) ||
+          (x.categoryNameEn && x.categoryNameEn.toLowerCase().includes(q)) ||
+          catFormatted.includes(q) ||
+          (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
+          (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
+          empStatus.ar.toLowerCase().includes(q) ||
+          empStatus.en.toLowerCase().includes(q) ||
+          (isDocNotUploaded && notUploadedText.includes(q))
+        );
+      });
+    }
+
+    return list;
+  }, [data?.items, sourceType, employeeStatus, operatingCityId, sponsorId, search, documentTypes, locale, employeeMap, riderMap]);
+
+  // Compute KPI summary based on baseItems (all filters except dueStatus)
+  const summary: ExpiryComplianceSummary = useMemo(() => {
+    const s = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
+    for (const item of baseItems) {
+      const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocumentNotUploaded(item));
+      if (meta.rawStatus === "Valid") s.valid++;
+      else if (meta.rawStatus === "Upcoming") s.upcoming++;
+      else if (meta.rawStatus === "DueToday") s.dueToday++;
+      else if (meta.rawStatus === "Expired") s.expired++;
+      else if (meta.rawStatus === "Missing") s.missing++;
+    }
+    return s;
+  }, [baseItems]);
+
+  // Filtered items: baseItems further filtered by dueStatus (KPI card filter)
+  const filteredItems = useMemo(() => {
+    if (!dueStatus || dueStatus === "all") return baseItems;
+    return baseItems.filter((item) => {
+      const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocumentNotUploaded(item));
+      return meta.rawStatus === dueStatus;
     });
-  }, [data, search, sourceType, documentTypes, locale, employeeMap, riderMap]);
+  }, [baseItems, dueStatus]);
+
+  const totalCount = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const validPage = Math.min(Math.max(1, page), totalPages);
+
+  const paginatedItems = useMemo(() => {
+    const start = (validPage - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, validPage, pageSize]);
 
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const isKnownSourceType = ["EmployeeDocument", "DriverLicense", "RiderCard", "HealthCard", "MedicalInsurance"].includes(sourceType);
-
-      // Fetch all records with current filters
-      const res = await getComplianceExpiries({
-        checkDate,
-        sourceType: isKnownSourceType ? sourceType : undefined,
-        categoryCode: !isKnownSourceType && sourceType !== "all" ? sourceType : undefined,
-        dueStatus,
-        employeeStatus,
-        operatingCityId,
-        sponsorId,
-        page: 1,
-        pageSize: 10000,
-      });
-
-      let exportItems = (res.items || []).filter((x) => !isGeneralDocument(x));
-
-      // Filter by document type / category if custom
-      if (sourceType && sourceType !== "all") {
-        const target = sourceType.trim().toLowerCase();
-        const matchedDocType = documentTypes.find(
-          (dt) =>
-            (dt.code && dt.code.toLowerCase() === target) ||
-            (dt.id && dt.id.toLowerCase() === target) ||
-            (dt.nameAr && dt.nameAr.toLowerCase() === target) ||
-            (dt.nameEn && dt.nameEn.toLowerCase() === target)
-        );
-
-        exportItems = exportItems.filter((x) => {
-          const itemCode = (x.categoryCode || "").trim().toLowerCase();
-          const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
-          const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
-          const itemSourceTypeStr = String(x.sourceType ?? "").trim().toLowerCase();
-          const isDocNotUploaded = isDocumentNotUploaded(x);
-
-          if (itemCode === target || itemNameAr === target || itemNameEn === target) return true;
-          if (itemSourceTypeStr === target) return true;
-
-          // When sourceStatus === "Missing" and employeeDocumentId === null, sourceId is the document-type ID
-          if (isDocNotUploaded && x.sourceId) {
-            const sid = x.sourceId.toLowerCase();
-            if (sid === target) return true;
-            if (matchedDocType && matchedDocType.id.toLowerCase() === sid) return true;
-          }
-
-          if (matchedDocType) {
-            if (matchedDocType.code && itemCode === matchedDocType.code.toLowerCase()) return true;
-            if (matchedDocType.nameAr && itemNameAr === matchedDocType.nameAr.toLowerCase()) return true;
-            if (matchedDocType.nameEn && itemNameEn === matchedDocType.nameEn.toLowerCase()) return true;
-          }
-
-          return false;
-        });
-      }
-
-      // Apply search filter if user searched
-      if (search.trim()) {
-        const q = search.toLowerCase().trim();
-        exportItems = exportItems.filter((x) => {
-          const isDocNotUploaded = isDocumentNotUploaded(x);
-          const empStatus = getEmployeeStatusMeta(x.employeeStatus);
-          const catFormatted = formatCategoryName(
-            x.categoryNameAr,
-            x.categoryNameEn,
-            locale,
-            documentTypes,
-            isDocNotUploaded ? x.sourceId : undefined
-          ).toLowerCase();
-          const iqama = getIqamaNumber(x).toLowerCase();
-          const notUploadedText = isDocNotUploaded
-            ? (locale === "en" ? "document not uploaded" : "الوثيقة غير مرفوعة لم يتم الرفع")
-            : "";
-
-          return (
-            x.employeeNameAr.toLowerCase().includes(q) ||
-            iqama.includes(q) ||
-            x.categoryNameAr.toLowerCase().includes(q) ||
-            (x.categoryNameEn && x.categoryNameEn.toLowerCase().includes(q)) ||
-            catFormatted.includes(q) ||
-            (x.referenceMasked && x.referenceMasked.toLowerCase().includes(q)) ||
-            (x.employeeStatus && x.employeeStatus.toLowerCase().includes(q)) ||
-            empStatus.ar.toLowerCase().includes(q) ||
-            empStatus.en.toLowerCase().includes(q) ||
-            (isDocNotUploaded && notUploadedText.includes(q))
-          );
-        });
-      }
-
-      if (exportItems.length === 0) {
+      if (filteredItems.length === 0) {
         toast.show(
           "warning",
           locale === "en" ? "No records to export" : "لا توجد سجلات لتصديرها",
@@ -677,7 +698,7 @@ export default function ExpiryCompliancePage() {
       // Dynamically import xlsx
       const XLSX = await import("xlsx");
 
-      const rows = exportItems.map((item, idx) => {
+      const rows = filteredItems.map((item, idx) => {
         const isDocNotUploaded = isDocumentNotUploaded(item);
         const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocNotUploaded);
         const empStatusMeta = getEmployeeStatusMeta(item.employeeStatus);
@@ -762,8 +783,8 @@ export default function ExpiryCompliancePage() {
         "success",
         locale === "en" ? "Excel Exported Successfully" : "تم تصدير ملف الإكسل بنجاح",
         locale === "en"
-          ? `Exported ${exportItems.length} records.`
-          : `تم تصدير ${exportItems.length} سجل بنجاح.`
+          ? `Exported ${filteredItems.length} records.`
+          : `تم تصدير ${filteredItems.length} سجل بنجاح.`
       );
     } catch (err: any) {
       console.error("Export error:", err);
@@ -777,62 +798,6 @@ export default function ExpiryCompliancePage() {
     }
   };
 
-  const summary: ExpiryComplianceSummary = useMemo(() => {
-    const rawSummary = data?.summary ?? {
-      valid: 0,
-      upcoming: 0,
-      dueToday: 0,
-      expired: 0,
-      missing: 0,
-    };
-    if (!data?.items) return rawSummary;
-
-    // If a specific document type is selected, compute summary dynamically from filtered items
-    if (sourceType && sourceType !== "all") {
-      const s = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
-      for (const item of items) {
-        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocumentNotUploaded(item));
-        if (meta.rawStatus === "Valid") s.valid++;
-        else if (meta.rawStatus === "Upcoming") s.upcoming++;
-        else if (meta.rawStatus === "DueToday") s.dueToday++;
-        else if (meta.rawStatus === "Expired") s.expired++;
-        else if (meta.rawStatus === "Missing") s.missing++;
-      }
-      return s;
-    }
-
-    const ignoredByStatus = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
-    for (const item of data.items) {
-      if (isGeneralDocument(item)) {
-        const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocumentNotUploaded(item));
-        if (meta.rawStatus === "Valid") ignoredByStatus.valid++;
-        else if (meta.rawStatus === "Upcoming") ignoredByStatus.upcoming++;
-        else if (meta.rawStatus === "DueToday") ignoredByStatus.dueToday++;
-        else if (meta.rawStatus === "Expired") ignoredByStatus.expired++;
-        else if (meta.rawStatus === "Missing") ignoredByStatus.missing++;
-      }
-    }
-
-    return {
-      valid: Math.max(0, rawSummary.valid - ignoredByStatus.valid),
-      upcoming: Math.max(0, rawSummary.upcoming - ignoredByStatus.upcoming),
-      dueToday: Math.max(0, rawSummary.dueToday - ignoredByStatus.dueToday),
-      expired: Math.max(0, rawSummary.expired - ignoredByStatus.expired),
-      missing: Math.max(0, rawSummary.missing - ignoredByStatus.missing),
-    };
-  }, [data, items, sourceType]);
-
-  const ignoredInCurrentPage = useMemo(() => {
-    if (!data?.items) return 0;
-    return data.items.filter(isGeneralDocument).length;
-  }, [data]);
-
-  const totalCount =
-    sourceType !== "all"
-      ? items.length
-      : Math.max(0, (data?.totalCount ?? 0) - ignoredInCurrentPage);
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-
   const resetFilters = () => {
     setSearch("");
     setSourceType("all");
@@ -842,6 +807,7 @@ export default function ExpiryCompliancePage() {
     setSponsorId("all");
     setCheckDate(getTodayRiyadh());
     setPage(1);
+    setPageSize(500);
     try {
       sessionStorage.removeItem(HR_COMPLIANCE_FILTERS_SESSION_KEY);
     } catch {
@@ -911,7 +877,7 @@ export default function ExpiryCompliancePage() {
         <button
           type="button"
           onClick={() => {
-            setDueStatus("Valid");
+            setDueStatus((curr) => (curr === "Valid" ? "all" : "Valid"));
             setPage(1);
           }}
           className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Valid"
@@ -934,7 +900,7 @@ export default function ExpiryCompliancePage() {
         <button
           type="button"
           onClick={() => {
-            setDueStatus("Upcoming");
+            setDueStatus((curr) => (curr === "Upcoming" ? "all" : "Upcoming"));
             setPage(1);
           }}
           className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Upcoming"
@@ -957,7 +923,7 @@ export default function ExpiryCompliancePage() {
         <button
           type="button"
           onClick={() => {
-            setDueStatus("DueToday");
+            setDueStatus((curr) => (curr === "DueToday" ? "all" : "DueToday"));
             setPage(1);
           }}
           className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "DueToday"
@@ -980,7 +946,7 @@ export default function ExpiryCompliancePage() {
         <button
           type="button"
           onClick={() => {
-            setDueStatus("Expired");
+            setDueStatus((curr) => (curr === "Expired" ? "all" : "Expired"));
             setPage(1);
           }}
           className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Expired"
@@ -1003,7 +969,7 @@ export default function ExpiryCompliancePage() {
         <button
           type="button"
           onClick={() => {
-            setDueStatus("Missing");
+            setDueStatus((curr) => (curr === "Missing" ? "all" : "Missing"));
             setPage(1);
           }}
           className={`flex flex-col rounded-2xl border p-4 text-start transition-all ${dueStatus === "Missing"
@@ -1036,7 +1002,10 @@ export default function ExpiryCompliancePage() {
               />
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 placeholder={
                   locale === "en"
                     ? "Search employee or document category..."
@@ -1206,7 +1175,7 @@ export default function ExpiryCompliancePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {items.map((item) => {
+                {paginatedItems.map((item) => {
                   const isDocNotUploaded = isDocumentNotUploaded(item);
                   const statusMeta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocNotUploaded);
                   const StatusIcon = statusMeta.icon;
@@ -1328,7 +1297,7 @@ export default function ExpiryCompliancePage() {
                   );
                 })}
 
-                {!items.length && (
+                {!paginatedItems.length && (
                   <tr>
                     <td colSpan={7} className="p-12 text-center text-sm text-[var(--muted)]">
                       {locale === "en"
@@ -1346,8 +1315,8 @@ export default function ExpiryCompliancePage() {
         <div className="flex flex-col gap-3 border-t border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs text-[var(--muted)]">
             {locale === "en"
-              ? `Showing page ${page} of ${totalPages} (${totalCount} total records)`
-              : `عرض الصفحة ${page} من أصل ${totalPages} (إجمالي ${totalCount} سجل)`}
+              ? `Showing ${totalCount > 0 ? (validPage - 1) * pageSize + 1 : 0} to ${Math.min(validPage * pageSize, totalCount)} of ${totalCount} records (page ${validPage} of ${totalPages})`
+              : `عرض ${totalCount > 0 ? (validPage - 1) * pageSize + 1 : 0} إلى ${Math.min(validPage * pageSize, totalCount)} من إجمالي ${totalCount} سجل (الصفحة ${validPage} من أصل ${totalPages})`}
           </div>
 
           <div className="flex items-center gap-3">
@@ -1361,16 +1330,15 @@ export default function ExpiryCompliancePage() {
                 }}
                 className="h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-bold"
               >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
+                <option value={500}>500</option>
+                <option value={1000}>1000</option>
               </select>
             </label>
 
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
-                disabled={page <= 1 || loading}
+                disabled={validPage <= 1 || loading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className="h-9 px-3 text-xs"
               >
@@ -1378,13 +1346,13 @@ export default function ExpiryCompliancePage() {
               </Button>
 
               <span className="text-xs font-bold">
-                {page} / {totalPages}
+                {validPage} / {totalPages}
               </span>
 
               <Button
                 variant="secondary"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((p) => p + 1)}
+                disabled={validPage >= totalPages || loading}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="h-9 px-3 text-xs"
               >
                 {t("common.next")}
