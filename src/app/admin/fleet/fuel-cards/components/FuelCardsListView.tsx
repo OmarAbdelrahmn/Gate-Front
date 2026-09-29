@@ -61,7 +61,7 @@ export function FuelCardsListView({
   const [providerFilter, setProviderFilter] = useState<string[]>([]);
   const [riderFilterId, setRiderFilterId] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(2000);
 
   // Table Header Column Filters (Multi)
   const [headerCardNumberFilter, setHeaderCardNumberFilter] = useState<string[]>([]);
@@ -200,7 +200,7 @@ export function FuelCardsListView({
 
   const items = cardsPageData?.items || [];
   const totalCount = cardsPageData?.totalCount || 0;
-  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  const totalPages = Math.ceil(totalCount / (cardsPageData?.pageSize || pageSize)) || 1;
 
   // Statistics
   const assignedCount = items.filter((c) => c.currentRider !== null).length;
