@@ -181,6 +181,8 @@ export function getFriendlyErrorMessage(
         return "حالة الصنف المحددة غير صالحة. القيم المقبولة: غير مستخدم، مستخدم، تالف.";
       case "housing.invalid_quantity":
         return "الكمية المدخلة غير صالحة. يجب أن تكون صفر أو أكثر بحد أقصى 3 أرقام عشرية.";
+      case "housing.invalid_toDate":
+        return "نطاق التاريخ غير صالح: تاريخ النهاية يسبق تاريخ البداية.";
       case "housing.nameAr_required":
         return "الاسم بالعربية مطلوب.";
       case "phone_sim.invalid_phone_number":

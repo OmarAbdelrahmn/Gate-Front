@@ -775,4 +775,65 @@ export const transferWarehouseItemHousing = (
     },
   );
 
+// ==================== HOUSING STAY REPORT API ====================
+
+export type StayReportRecordType = "Rider" | "Employee" | "External" | "PendingMatch";
+
+export interface StayReportItem {
+  recordId: string;
+  recordType: StayReportRecordType | string;
+  housingId: string;
+  housingCode: string;
+  housingNameAr: string;
+  housingNameEn?: string | null;
+  roomId: string;
+  roomName: string;
+  floorId?: string | null;
+  floorName?: string | null;
+  employeeId?: string | null;
+  riderProfileId?: string | null;
+  iqamaNo?: string | null;
+  nameAr: string;
+  nameEn?: string | null;
+  moveInDate?: string | null;
+  moveOutDate?: string | null;
+  isCurrentlyInside: boolean;
+  totalStayDays?: number | null;
+  daysInSelectedPeriod?: number | null;
+  moveInReason?: string | null;
+  moveOutReason?: string | null;
+  sourceReference?: string | null;
+}
+
+export interface StayReportResponse {
+  fromDate?: string | null;
+  toDate?: string | null;
+  asOfDate: string;
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  items: StayReportItem[];
+}
+
+export interface StayReportParams {
+  fromDate?: string | null;
+  toDate?: string | null;
+  housingId?: string | null;
+  page?: number | null;
+  pageSize?: number | null;
+}
+
+export const getHousingStayReport = async (params: StayReportParams = {}) => {
+  const query = new URLSearchParams();
+  if (params.fromDate?.trim()) query.set("fromDate", params.fromDate.trim());
+  if (params.toDate?.trim()) query.set("toDate", params.toDate.trim());
+  if (params.housingId?.trim()) query.set("housingId", params.housingId.trim());
+  if (params.page !== undefined && params.page !== null) query.set("page", String(params.page));
+  if (params.pageSize !== undefined && params.pageSize !== null) query.set("pageSize", String(params.pageSize));
+
+  const qs = query.toString();
+  return authFetch<StayReportResponse>(`/api/housing/stay-report${qs ? `?${qs}` : ""}`);
+};
+
+
 

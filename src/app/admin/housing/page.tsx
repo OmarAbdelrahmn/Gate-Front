@@ -17,7 +17,11 @@ import {
   Filter,
   X,
   Layers,
+  ChevronDown,
+  ChevronUp,
+  FileSpreadsheet,
 } from "lucide-react";
+import HousingStayReportView from "./components/HousingStayReportView";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { authFetch } from "../../../lib/auth/api";
 import {
@@ -93,6 +97,7 @@ export default function HousingPage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
+  const [activeTab, setActiveTab] = useState<"units" | "stay-report">("units");
   const [items, setItems] = useState<Housing[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [search, setSearch] = useState("");
@@ -101,6 +106,7 @@ export default function HousingPage() {
 
   const [editing, setEditing] = useState<Housing | null>(null);
   const [openForm, setOpenForm] = useState(false);
+  const [addressOpen, setAddressOpen] = useState(false);
   const [formData, setFormData] = useState<HousingFormState>(initialFormState);
   const [formError, setFormError] = useState("");
   const [formBusy, setFormBusy] = useState(false);
@@ -193,6 +199,7 @@ export default function HousingPage() {
   function handleOpenCreate() {
     setEditing(null);
     setFormData(initialFormState);
+    setAddressOpen(false);
     setFormError("");
     setOpenForm(true);
   }
@@ -219,6 +226,7 @@ export default function HousingPage() {
       statusReason: item.statusReason || "",
       notes: item.notes || "",
     });
+    setAddressOpen(false);
     setFormError("");
     setOpenForm(true);
   }
@@ -421,13 +429,43 @@ export default function HousingPage() {
               : "إدارة الوحدات السكنية والسعة الاستيعابية والسكان والمشرفين المعينين."}
           </p>
         </div>
-        {manage && (
+        {manage && activeTab === "units" && (
           <Button onClick={handleOpenCreate} className="shadow-lg shadow-blue-500/10">
             <Plus size={18} />
             {t("housing.newHousing")}
           </Button>
         )}
       </header>
+
+      {/* Tabs Navigation Header */}
+      <div className="flex items-center gap-2 border-b border-[var(--border)] pb-1">
+        <button
+          onClick={() => setActiveTab("units")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition-all ${
+            activeTab === "units"
+              ? "border-[#1167c9] text-[#1167c9]"
+              : "border-transparent text-[var(--muted)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          <Building size={17} />
+          <span>{isEn ? "Housing Units" : "الوحدات السكنية"}</span>
+          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-black text-[#1167c9] dark:bg-blue-950/60 dark:text-blue-300">
+            {items.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("stay-report")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition-all ${
+            activeTab === "stay-report"
+              ? "border-[#1167c9] text-[#1167c9]"
+              : "border-transparent text-[var(--muted)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          <FileSpreadsheet size={17} />
+          <span>{isEn ? "Stay & Occupancy Report" : "تقرير فترات السكن والتسكين"}</span>
+        </button>
+      </div>
 
       {/* Access Denied or Fetch Error Diagnostic Banner */}
       {fetchError && (
@@ -488,8 +526,10 @@ export default function HousingPage() {
         </div>
       )}
 
-      {/* Summary KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {activeTab === "units" && (
+        <>
+          {/* Summary KPI Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-4 flex items-center gap-4 border-l-4 border-l-[#1167c9]">
           <div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-[#1167c9]">
             <Building size={24} />
@@ -795,25 +835,38 @@ export default function HousingPage() {
           </div>
         )}
       </Card>
+        </>
+      )}
+
+      {/* Stay & Occupancy Report Tab */}
+      {activeTab === "stay-report" && (
+        <HousingStayReportView housings={items} />
+      )}
 
       {/* Create / Edit Modal Form */}
       {openForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
           <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-4 border-b">
-              <div>
-                <h2 className="text-xl font-black">
-                  {editing
-                    ? isEn ? "Edit Housing Unit" : "تعديل بيانات السكن"
-                    : isEn ? "Create New Housing Unit" : "إضافة وحدة سكنية جديدة"}
-                </h2>
-                <p className="text-xs text-[var(--muted)] font-medium mt-0.5">
-                  {isEn ? "Enter unit information, address, and total capacity." : "أدخل معلومات السكن، العنوان التفصيلي، والسعة الاستيعابية."}
-                </p>
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-[#1167c9] dark:bg-blue-950/50 dark:text-blue-400">
+                  <Building size={20} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black">
+                    {editing
+                      ? isEn ? "Edit Housing Unit" : "تعديل بيانات السكن"
+                      : isEn ? "Create New Housing Unit" : "إضافة وحدة سكنية جديدة"}
+                  </h2>
+                  <p className="text-xs text-[var(--muted)] font-medium mt-0.5">
+                    {isEn ? "Enter unit information, address, and total capacity." : "أدخل معلومات السكن، العنوان التفصيلي، والسعة الاستيعابية."}
+                  </p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setOpenForm(false)}
-                className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--muted)] hover:bg-slate-100"
+                className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X size={18} />
               </button>
@@ -828,15 +881,16 @@ export default function HousingPage() {
 
             <form onSubmit={handleSave} className="mt-5 space-y-6">
               {/* Section 1: Basic Info */}
-              <div>
-                <h3 className="text-xs font-black tracking-wider text-[#1167c9] uppercase mb-3">
+              <div className="space-y-3">
+                <h3 className="text-xs font-black tracking-wider text-[#1167c9] uppercase">
                   {isEn ? "1. Basic Information" : "١. المعلومات الأساسية"}
                 </h3>
                 <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>
-                      {isEn ? "Code" : "رمز السكن"} <span className="text-rose-500">*</span>
-                    </span>
+                  <label className="field-shell block space-y-1.5 text-xs font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Code" : "رمز السكن"}</span>
+                      <span className="field-required">{isEn ? "Required" : "مطلوب"}</span>
+                    </div>
                     <input
                       required
                       value={formData.code}
@@ -846,10 +900,11 @@ export default function HousingPage() {
                     />
                   </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>
-                      {isEn ? "Arabic Name" : "الاسم بالعربية"} <span className="text-rose-500">*</span>
-                    </span>
+                  <label className="field-shell block space-y-1.5 text-xs font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Arabic Name" : "الاسم بالعربية"}</span>
+                      <span className="field-required">{isEn ? "Required" : "مطلوب"}</span>
+                    </div>
                     <input
                       required
                       value={formData.nameAr}
@@ -859,10 +914,11 @@ export default function HousingPage() {
                     />
                   </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>
-                      {isEn ? "English Name" : "الاسم بالإنجليزية"} <span className="text-rose-500">*</span>
-                    </span>
+                  <label className="field-shell block space-y-1.5 text-xs font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "English Name" : "الاسم بالإنجليزية"}</span>
+                      <span className="field-required">{isEn ? "Required" : "مطلوب"}</span>
+                    </div>
                     <input
                       required
                       value={formData.nameEn}
@@ -872,10 +928,11 @@ export default function HousingPage() {
                     />
                   </label>
 
-                  <div className="grid gap-1.5 text-xs font-bold">
-                    <span>
-                      {isEn ? "Operating City" : "مدينة التشغيل"} <span className="text-rose-500">*</span>
-                    </span>
+                  <div className="field-shell space-y-1.5 text-xs font-bold sm:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Operating City" : "مدينة التشغيل"}</span>
+                      <span className="field-required">{isEn ? "Required" : "مطلوب"}</span>
+                    </div>
                     <SearchableSelect
                       value={formData.cityId}
                       onChange={(val) => setFormData({ ...formData, cityId: val })}
@@ -886,8 +943,11 @@ export default function HousingPage() {
                     />
                   </div>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Contact Phone" : "رقم هاتف التواصل"}</span>
+                  <label className="field-shell block space-y-1.5 text-xs font-bold sm:col-span-1">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Contact Phone" : "رقم هاتف التواصل"}</span>
+                      <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                    </div>
                     <input
                       type="tel"
                       value={formData.contactPhone}
@@ -915,13 +975,16 @@ export default function HousingPage() {
               </div>
 
               {/* Section 2: Dates & Status */}
-              <div>
-                <h3 className="text-xs font-black tracking-wider text-[#1167c9] uppercase mb-3">
+              <div className="space-y-3">
+                <h3 className="text-xs font-black tracking-wider text-[#1167c9] uppercase">
                   {isEn ? "2. Status & Operating Dates" : "٢. الحالة ومواعيد التشغيل"}
                 </h3>
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Housing Status" : "حالة السكن"}</span>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="field-shell block space-y-1.5 text-xs font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Housing Status" : "حالة السكن"}</span>
+                      <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                    </div>
                     <select
                       value={formData.status}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
@@ -933,8 +996,11 @@ export default function HousingPage() {
                     </select>
                   </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Status Reason" : "سبب الحالة"}</span>
+                  <label className="field-shell block space-y-1.5 text-xs font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Status Reason" : "سبب الحالة"}</span>
+                      <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                    </div>
                     <input
                       value={formData.statusReason}
                       onChange={(e) => setFormData({ ...formData, statusReason: e.target.value })}
@@ -943,8 +1009,11 @@ export default function HousingPage() {
                     />
                   </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Opening Date" : "تاريخ الافتتاح"}</span>
+                  <label className="field-shell block space-y-1.5 text-xs font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Opening Date" : "تاريخ الافتتاح"}</span>
+                      <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                    </div>
                     <input
                       type="date"
                       value={formData.openedDate}
@@ -953,8 +1022,11 @@ export default function HousingPage() {
                     />
                   </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Closing Date" : "تاريخ الإغلاق"}</span>
+                  <label className="field-shell block space-y-1.5 text-xs font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>{isEn ? "Closing Date" : "تاريخ الإغلاق"}</span>
+                      <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                    </div>
                     <input
                       type="date"
                       value={formData.closedDate}
@@ -965,104 +1037,194 @@ export default function HousingPage() {
                 </div>
               </div>
 
-              {/* Section 3: Address & Coordinates */}
-              <div>
-                <h3 className="text-xs font-black tracking-wider text-[#1167c9] uppercase mb-3">
-                  {isEn ? "3. Address & Geolocation" : "٣. العنوان والموقع الجغرافي"}
-                </h3>
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Building Number" : "رقم المبنى"}</span>
-                    <input
-                      value={formData.buildingNumber}
-                      onChange={(e) => setFormData({ ...formData, buildingNumber: e.target.value })}
-                      placeholder="12"
-                      className={inputCls}
-                    />
-                  </label>
+              {/* Section 3: Collapsible Address & Geolocation */}
+              {(() => {
+                const hasAddressData = Boolean(
+                  formData.buildingNumber?.trim() ||
+                    formData.street?.trim() ||
+                    formData.district?.trim() ||
+                    formData.postalCode?.trim() ||
+                    formData.additionalNumber?.trim() ||
+                    formData.latitude?.trim() ||
+                    formData.longitude?.trim()
+                );
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Street" : "الشارع"}</span>
-                    <input
-                      value={formData.street}
-                      onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                      placeholder="King Fahd Road"
-                      className={inputCls}
-                    />
-                  </label>
+                const addressSummary = [
+                  formData.buildingNumber && `${isEn ? "Bldg" : "مبنى"} ${formData.buildingNumber}`,
+                  formData.street,
+                  formData.district,
+                ]
+                  .filter(Boolean)
+                  .join("، ");
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "District" : "الحي"}</span>
-                    <input
-                      value={formData.district}
-                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                      placeholder="Al Olaya"
-                      className={inputCls}
-                    />
-                  </label>
+                return (
+                  <div className="rounded-2xl border border-[var(--border)] overflow-hidden transition-all bg-[var(--surface)] shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => setAddressOpen((prev) => !prev)}
+                      className="w-full flex items-center justify-between p-3.5 bg-[var(--subtle-bg)] hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors text-start"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-[#1167c9] dark:bg-blue-950/50 dark:text-blue-400">
+                          <MapPin size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-[var(--foreground)]">
+                              {isEn ? "3. Address & Geolocation" : "٣. العنوان والموقع الجغرافي"}
+                            </span>
+                            <span className="field-optional">
+                              {isEn ? "Optional" : "اختياري"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--muted)] font-medium mt-0.5">
+                            {hasAddressData
+                              ? addressSummary || (isEn ? "Address details recorded" : "تم تسجيل بيانات العنوان")
+                              : isEn
+                              ? "Click to specify street, building, district, and GPS coordinates."
+                              : "انقر لإضافة تفاصيل المبنى، الحي، الشارع، والإحداثيات."}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#1167c9]">
+                        <span>{addressOpen ? (isEn ? "Collapse" : "طي") : isEn ? "Expand" : "توسيع"}</span>
+                        {addressOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+                    </button>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Postal Code" : "الرمز البريدي"}</span>
-                    <input
-                      value={formData.postalCode}
-                      onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                      placeholder="12345"
-                      className={inputCls}
-                    />
-                  </label>
+                    {addressOpen && (
+                      <div className="p-4 border-t border-[var(--border)] space-y-4 animate-in fade-in duration-200">
+                        {/* National & Street Address */}
+                        <div className="grid gap-3.5 sm:grid-cols-3">
+                          <label className="field-shell block space-y-1.5 text-xs font-bold">
+                            <div className="flex items-center justify-between">
+                              <span>{isEn ? "Building Number" : "رقم المبنى"}</span>
+                              <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                            </div>
+                            <input
+                              value={formData.buildingNumber}
+                              onChange={(e) => setFormData({ ...formData, buildingNumber: e.target.value })}
+                              placeholder="12"
+                              className={inputCls}
+                            />
+                          </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Additional Number" : "الرقم الإضافي"}</span>
-                    <input
-                      value={formData.additionalNumber}
-                      onChange={(e) => setFormData({ ...formData, additionalNumber: e.target.value })}
-                      placeholder="6789"
-                      className={inputCls}
-                    />
-                  </label>
+                          <label className="field-shell block space-y-1.5 text-xs font-bold">
+                            <div className="flex items-center justify-between">
+                              <span>{isEn ? "Street" : "الشارع"}</span>
+                              <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                            </div>
+                            <input
+                              value={formData.street}
+                              onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                              placeholder={isEn ? "King Fahd Road" : "طريق الملك فهد"}
+                              className={inputCls}
+                            />
+                          </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Latitude (-90 to 90)" : "خط العرض (-90 إلى 90)"}</span>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.latitude}
-                      onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                      placeholder="24.7136"
-                      className={inputCls}
-                    />
-                  </label>
+                          <label className="field-shell block space-y-1.5 text-xs font-bold">
+                            <div className="flex items-center justify-between">
+                              <span>{isEn ? "District" : "الحي"}</span>
+                              <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                            </div>
+                            <input
+                              value={formData.district}
+                              onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                              placeholder={isEn ? "Al Olaya" : "العليا"}
+                              className={inputCls}
+                            />
+                          </label>
 
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    <span>{isEn ? "Longitude (-180 to 180)" : "خط الطول (-180 إلى 180)"}</span>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.longitude}
-                      onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                      placeholder="46.6753"
-                      className={inputCls}
-                    />
-                  </label>
-                </div>
-              </div>
+                          <label className="field-shell block space-y-1.5 text-xs font-bold">
+                            <div className="flex items-center justify-between">
+                              <span>{isEn ? "Postal Code" : "الرمز البريدي"}</span>
+                              <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                            </div>
+                            <input
+                              value={formData.postalCode}
+                              onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                              placeholder="12345"
+                              className={inputCls}
+                            />
+                          </label>
+
+                          <label className="field-shell block space-y-1.5 text-xs font-bold sm:col-span-2">
+                            <div className="flex items-center justify-between">
+                              <span>{isEn ? "Additional Number" : "الرقم الإضافي"}</span>
+                              <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                            </div>
+                            <input
+                              value={formData.additionalNumber}
+                              onChange={(e) => setFormData({ ...formData, additionalNumber: e.target.value })}
+                              placeholder="6789"
+                              className={inputCls}
+                            />
+                          </label>
+                        </div>
+
+                        {/* GPS Coordinates Sub-section */}
+                        <div className="pt-3 border-t border-[var(--border)]">
+                          <p className="text-[11px] font-bold text-[var(--muted)] mb-2.5 flex items-center gap-1.5">
+                            <MapPin size={13} className="text-[#1167c9]" />
+                            <span>{isEn ? "Geographical Coordinates (GPS)" : "الإحداثيات الجغرافية (GPS)"}</span>
+                          </p>
+                          <div className="grid gap-3.5 sm:grid-cols-2">
+                            <label className="field-shell block space-y-1.5 text-xs font-bold">
+                              <div className="flex items-center justify-between">
+                                <span>{isEn ? "Latitude (-90 to 90)" : "خط العرض (-90 إلى 90)"}</span>
+                                <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                              </div>
+                              <input
+                                type="number"
+                                step="any"
+                                value={formData.latitude}
+                                onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                                placeholder="24.7136"
+                                className={inputCls}
+                              />
+                            </label>
+
+                            <label className="field-shell block space-y-1.5 text-xs font-bold">
+                              <div className="flex items-center justify-between">
+                                <span>{isEn ? "Longitude (-180 to 180)" : "خط الطول (-180 إلى 180)"}</span>
+                                <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                              </div>
+                              <input
+                                type="number"
+                                step="any"
+                                value={formData.longitude}
+                                onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                                placeholder="46.6753"
+                                className={inputCls}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Section 4: Notes */}
               <div>
-                <label className="grid gap-1.5 text-xs font-bold">
-                  <span>{isEn ? "Notes" : "ملاحظات إضافية"}</span>
+                <label className="field-shell block space-y-1.5 text-xs font-bold">
+                  <div className="flex items-center justify-between">
+                    <span>{isEn ? "4. Additional Notes" : "٤. ملاحظات إضافية"}</span>
+                    <span className="field-optional">{isEn ? "Optional" : "اختياري"}</span>
+                  </div>
                   <textarea
                     rows={2}
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     placeholder={isEn ? "Any additional notes..." : "أي ملاحظات إضافية..."}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm font-medium outline-none focus:border-[#1167c9]"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm font-medium outline-none transition-all focus:border-[#1167c9] focus:ring-2 focus:ring-blue-100"
                   />
                 </label>
               </div>
 
               {/* Actions Footer */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border)]">
                 <Button
                   type="button"
                   variant="secondary"
