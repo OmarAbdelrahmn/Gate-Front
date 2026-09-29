@@ -32,6 +32,7 @@ import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
 
 import { translate } from "../../lib/i18n";
+import { getStatusArabicLabel } from "../../lib/notifications/utils";
 
 const workflowResources = new Set([
   "leave-types",
@@ -47,7 +48,9 @@ const display = (value: unknown, locale: "ar" | "en" = "ar") =>
       ? (locale === "en" ? "No" : "لا")
       : value == null || value === ""
         ? "—"
-        : String(value);
+        : locale === "ar" && typeof value === "string"
+          ? getStatusArabicLabel(value)
+          : String(value);
 const errorMessage = (error: unknown, locale: "ar" | "en" = "ar") =>
   error instanceof Error
     ? error.message

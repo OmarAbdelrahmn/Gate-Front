@@ -27,15 +27,63 @@ export interface CurrentOccupant {
   sourceReference?: string | null;
 }
 
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  quantity: number;
+  rowVersion: string;
+}
+
+export interface AggregateEquipmentItem {
+  id: string;
+  name: string;
+  quantity: number;
+  rowVersion: string;
+}
+
+export interface ExternalOccupant {
+  id: string;
+  roomId: string;
+  name: string;
+  rowVersion: string;
+}
+
+export interface PendingOccupant {
+  id: string;
+  roomId: string;
+  iqamaNo: string;
+  name: string;
+  sourceRow: number;
+  rowVersion: string;
+}
+
 export interface Room {
   id: string;
   housingId: string;
+  floorId?: string | null;
   name: string;
   capacity: number;
   currentOccupancy: number;
   availableCapacity: number;
+  notes?: string | null;
   rowVersion: string;
+  equipment?: EquipmentItem[];
   occupants: CurrentOccupant[];
+  externalOccupants?: ExternalOccupant[];
+  pendingOccupants?: PendingOccupant[];
+}
+
+export interface Floor {
+  id: string;
+  housingId: string;
+  name: string;
+  rowVersion: string;
+  equipment?: EquipmentItem[];
+  totalEquipment?: AggregateEquipmentItem[];
+  rooms?: Room[];
+  totalCapacity?: number;
+  currentOccupancy?: number;
+  availableCapacity?: number;
 }
 
 export interface Housing {
@@ -60,6 +108,7 @@ export interface Housing {
   rowVersion: string;
   isDeleted?: boolean;
   rooms?: Room[] | null;
+  floors?: Floor[] | null;
 }
 
 export interface CreateHousingPayload {
@@ -106,22 +155,74 @@ export interface HousingPeriod {
   capacityOverrideReason?: string | null;
 }
 
+// Floor Payloads
+export interface CreateFloorPayload {
+  name: string;
+  rowVersion?: string | null;
+}
+
+export interface UpdateFloorPayload {
+  name: string;
+  rowVersion: string;
+}
+
 // Room Payloads
 export interface CreateRoomPayload {
   name: string;
   capacity: number;
+  floorId?: string | null;
+  notes?: string | null;
   rowVersion?: string | null;
 }
 
 export interface UpdateRoomPayload {
   name: string;
   capacity: number;
+  floorId?: string | null;
+  notes?: string | null;
   rowVersion: string;
 }
 
 export interface ArchiveRoomPayload {
   reason: string;
   rowVersion: string;
+}
+
+// Equipment Payloads
+export interface EquipmentPayload {
+  name: string;
+  quantity: number;
+  rowVersion?: string | null;
+}
+
+export interface UpdateEquipmentPayload {
+  name: string;
+  quantity: number;
+  rowVersion: string;
+}
+
+// Occupant Payloads (Iqama, External, Pending)
+export interface AssignByIqamaPayload {
+  iqamaNo: string;
+  effectiveFrom: string;
+  moveInReason?: string | null;
+  sourceReference?: string | null;
+}
+
+export interface CreateExternalOccupantPayload {
+  name: string;
+  roomId?: string | null;
+  rowVersion?: string | null;
+}
+
+export interface UpdateExternalOccupantPayload {
+  name: string;
+  roomId: string;
+  rowVersion: string;
+}
+
+export interface ResolvePendingOccupantPayload {
+  effectiveFrom: string;
 }
 
 export interface AssignEmployeeToRoomPayload {
@@ -265,6 +366,100 @@ export const closeSupervisor = (
     },
   );
 
+// ==================== FLOORS API ====================
+
+export const listFloors = (housingId: string) =>
+  authFetch<Floor[]>(`/api/housing/${encodeURIComponent(housingId)}/floors`);
+
+export const createFloor = (housingId: string, payload: CreateFloorPayload) =>
+  authFetch<Floor>(`/api/housing/${encodeURIComponent(housingId)}/floors`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const updateFloor = (
+  housingId: string,
+  floorId: string,
+  payload: UpdateFloorPayload,
+) =>
+  authFetch<Floor>(
+    `/api/housing/${encodeURIComponent(housingId)}/floors/${encodeURIComponent(floorId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const archiveFloor = (
+  floorId: string,
+  reason: string,
+  rowVersion: string,
+) =>
+  authFetch<void>(`/api/housing/floors/${encodeURIComponent(floorId)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ reason, rowVersion }),
+  });
+
+// ==================== EQUIPMENT API ====================
+
+export const addFloorEquipment = (
+  floorId: string,
+  payload: EquipmentPayload,
+) =>
+  authFetch<EquipmentItem>(
+    `/api/housing/floors/${encodeURIComponent(floorId)}/equipment`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const updateFloorEquipment = (
+  floorId: string,
+  equipmentId: string,
+  payload: UpdateEquipmentPayload,
+) =>
+  authFetch<EquipmentItem>(
+    `/api/housing/floors/${encodeURIComponent(floorId)}/equipment/${encodeURIComponent(equipmentId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const addRoomEquipment = (
+  roomId: string,
+  payload: EquipmentPayload,
+) =>
+  authFetch<EquipmentItem>(
+    `/api/rooms/${encodeURIComponent(roomId)}/equipment`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const updateRoomEquipment = (
+  roomId: string,
+  equipmentId: string,
+  payload: UpdateEquipmentPayload,
+) =>
+  authFetch<EquipmentItem>(
+    `/api/rooms/${encodeURIComponent(roomId)}/equipment/${encodeURIComponent(equipmentId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const deleteEquipment = (equipmentId: string) =>
+  authFetch<void>(
+    `/api/housing/equipment/${encodeURIComponent(equipmentId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+
 // ==================== ROOMS & OCCUPANTS API ====================
 
 export const listRooms = (housingId: string) =>
@@ -312,6 +507,70 @@ export const assignRiderToRoom = (
     {
       method: "POST",
       body: JSON.stringify(payload),
+    },
+  );
+
+export const assignByIqama = (
+  roomId: string,
+  payload: AssignByIqamaPayload,
+) =>
+  authFetch<CurrentOccupant>(
+    `/api/rooms/${encodeURIComponent(roomId)}/occupants/iqama`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const addExternalOccupant = (
+  roomId: string,
+  payload: CreateExternalOccupantPayload,
+) =>
+  authFetch<ExternalOccupant>(
+    `/api/rooms/${encodeURIComponent(roomId)}/occupants/external`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const updateExternalOccupant = (
+  occupantId: string,
+  payload: UpdateExternalOccupantPayload,
+) =>
+  authFetch<ExternalOccupant>(
+    `/api/rooms/occupants/external/${encodeURIComponent(occupantId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const removeExternalOccupant = (occupantId: string) =>
+  authFetch<void>(
+    `/api/rooms/occupants/external/${encodeURIComponent(occupantId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+export const resolvePendingOccupant = (
+  pendingId: string,
+  payload: ResolvePendingOccupantPayload,
+) =>
+  authFetch<CurrentOccupant>(
+    `/api/rooms/occupants/pending/${encodeURIComponent(pendingId)}/resolve`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const removePendingOccupant = (pendingId: string) =>
+  authFetch<void>(
+    `/api/rooms/occupants/pending/${encodeURIComponent(pendingId)}`,
+    {
+      method: "DELETE",
     },
   );
 

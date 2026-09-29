@@ -25,6 +25,9 @@ import {
   Bike,
   Briefcase,
   Package,
+  Wrench,
+  Edit3,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { authFetch } from "../../../../lib/auth/api";
@@ -41,6 +44,10 @@ import {
   type HousingPeriod,
   type Room,
   type CurrentOccupant,
+  type ExternalOccupant,
+  type PendingOccupant,
+  type Floor,
+  type EquipmentItem,
   type AssignSupervisorPayload,
 } from "../../../../lib/housing/api";
 import { Button } from "../../../../components/ui/Button";
@@ -56,6 +63,15 @@ import {
   AssignOccupantModal,
   MoveOccupantModal,
   RemoveOccupantModal,
+  FloorModal,
+  ArchiveFloorModal,
+  EquipmentModal,
+  DeleteEquipmentModal,
+  EditExternalOccupantModal,
+  RemoveExternalOccupantModal,
+  ResolvePendingOccupantModal,
+  RemovePendingOccupantModal,
+  type EquipmentModalTarget,
 } from "../../../../components/housing/RoomModals";
 import { WarehouseTab } from "../../../../components/housing/WarehouseTab";
 
@@ -95,6 +111,7 @@ export default function HousingDetails({
 
   // Room Modals State
   const [openCreateRoom, setOpenCreateRoom] = useState(false);
+  const [selectedFloorId, setSelectedFloorId] = useState<string | undefined>(undefined);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [archivingRoom, setArchivingRoom] = useState<Room | null>(null);
 
@@ -111,6 +128,39 @@ export default function HousingDetails({
     room: Room;
     occupant: CurrentOccupant;
   } | null>(null);
+
+  // External Occupant Modals State
+  const [editingExternal, setEditingExternal] = useState<{
+    room: Room;
+    occupant: ExternalOccupant;
+  } | null>(null);
+
+  const [removingExternal, setRemovingExternal] = useState<{
+    room: Room;
+    occupant: ExternalOccupant;
+  } | null>(null);
+
+  // Pending Occupant Modals State
+  const [resolvingPending, setResolvingPending] = useState<{
+    room: Room;
+    occupant: PendingOccupant;
+  } | null>(null);
+
+  const [removingPending, setRemovingPending] = useState<{
+    room: Room;
+    occupant: PendingOccupant;
+  } | null>(null);
+
+  // Floor Modals State
+  const [floorModalOpen, setFloorModalOpen] = useState(false);
+  const [editingFloor, setEditingFloor] = useState<Floor | null>(null);
+  const [archiveFloorTarget, setArchiveFloorTarget] = useState<Floor | null>(null);
+
+  // Equipment Modals State
+  const [equipmentModalOpen, setEquipmentModalOpen] = useState(false);
+  const [equipmentTarget, setEquipmentTarget] = useState<EquipmentModalTarget | null>(null);
+  const [editingEquipment, setEditingEquipment] = useState<EquipmentItem | null>(null);
+  const [deletingEquipment, setDeletingEquipment] = useState<EquipmentItem | null>(null);
 
   // Supervisor Modals State
   const [openSupervisorModal, setOpenSupervisorModal] = useState(false);
@@ -145,8 +195,8 @@ export default function HousingDetails({
       ]);
 
       setHousing(hRes);
-      // Prefer room array from listRooms or details
-      setRooms(rRes && rRes.length > 0 ? rRes : hRes.rooms || []);
+      // Prefer room array from details or listRooms
+      setRooms(hRes.rooms && hRes.rooms.length > 0 ? hRes.rooms : rRes || []);
       setResidents(resHistoryRes || []);
       setSupervisors(supRes || []);
       setEmployees(empRes || []);
@@ -177,9 +227,9 @@ export default function HousingDetails({
     [employees, isEn]
   );
 
-  // Filtered Rooms
-  const filteredRooms = useMemo(() => {
-    return rooms.filter((r) => {
+  // Helper to filter rooms based on search and status
+  const filterRoomList = (roomList: Room[]) => {
+    return roomList.filter((r) => {
       const q = roomSearch.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -189,6 +239,11 @@ export default function HousingDetails({
             occ.employeeNameAr?.toLowerCase().includes(q) ||
             occ.employeeNameEn?.toLowerCase().includes(q) ||
             occ.iqamaNo?.includes(q)
+        ) ||
+        r.externalOccupants?.some((ext) => ext.name.toLowerCase().includes(q)) ||
+        r.pendingOccupants?.some(
+          (pnd) =>
+            pnd.name.toLowerCase().includes(q) || pnd.iqamaNo?.includes(q)
         );
 
       const matchesStatus =
@@ -198,16 +253,7 @@ export default function HousingDetails({
 
       return matchesSearch && matchesStatus;
     });
-  }, [rooms, roomSearch, roomFilter]);
-
-  // Aggregate room stats
-  const roomStats = useMemo(() => {
-    const totalRooms = rooms.length;
-    const totalCap = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
-    const totalOccupied = rooms.reduce((acc, r) => acc + (r.currentOccupancy || 0), 0);
-    const totalAvailable = rooms.reduce((acc, r) => acc + (r.availableCapacity || 0), 0);
-    return { totalRooms, totalCap, totalOccupied, totalAvailable };
-  }, [rooms]);
+  };
 
   // Supervisor Assign Handler
   async function handleAssignSupervisor(e: FormEvent) {
@@ -344,9 +390,8 @@ export default function HousingDetails({
   }
 
   const isArchived = housing.status === "Archived" || housing.isDeleted;
-  const occupancyPct = housing.totalCapacity
-    ? Math.min(100, Math.round((housing.currentResidents / housing.totalCapacity) * 100))
-    : 0;
+  const floors = housing.floors || [];
+  const hasFloors = floors.length > 0;
 
   return (
     <div className="space-y-6">
@@ -428,7 +473,9 @@ export default function HousingDetails({
               <span>{isEn ? "Total Rooms" : "إجمالي الغرف"}</span>
               <Bed size={15} className="text-blue-500" />
             </div>
-            <p className="text-xl font-black mt-1">{roomStats.totalRooms} {isEn ? "rooms" : "غرفة"}</p>
+            <p className="text-xl font-black mt-1">
+              {housing.rooms?.length ?? rooms.length} {isEn ? "rooms" : "غرفة"}
+            </p>
           </div>
 
           <div className="rounded-xl bg-[var(--subtle-bg)] p-3.5 border border-[var(--border)]">
@@ -437,7 +484,7 @@ export default function HousingDetails({
               <Layers size={15} className="text-purple-500" />
             </div>
             <p className="text-xl font-black mt-1">
-              {housing.totalCapacity || roomStats.totalCap} {isEn ? "beds" : "سرير"}
+              {housing.totalCapacity} {isEn ? "beds" : "سرير"}
             </p>
           </div>
 
@@ -447,7 +494,7 @@ export default function HousingDetails({
               <Users size={15} className="text-amber-500" />
             </div>
             <p className="text-xl font-black text-[#1167c9] mt-1">
-              {housing.currentResidents || roomStats.totalOccupied} {isEn ? "residents" : "ساكن"}
+              {housing.currentResidents} {isEn ? "residents" : "ساكن"}
             </p>
           </div>
 
@@ -457,7 +504,7 @@ export default function HousingDetails({
               <CheckCircle2 size={15} className="text-emerald-500" />
             </div>
             <p className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
-              {housing.availableCapacity ?? roomStats.totalAvailable} {isEn ? "vacant" : "شاغر"}
+              {housing.availableCapacity} {isEn ? "vacant" : "شاغر"}
             </p>
           </div>
         </div>
@@ -515,7 +562,7 @@ export default function HousingDetails({
           }`}
         >
           <Bed size={17} />
-          <span>{isEn ? "Rooms & Occupancy" : "الغرف والتسكين"}</span>
+          <span>{isEn ? "Floors & Rooms" : "الأدوار والغرف والتسكين"}</span>
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-black text-[#1167c9] dark:bg-blue-950/60 dark:text-blue-300">
             {rooms.length}
           </span>
@@ -564,9 +611,9 @@ export default function HousingDetails({
         </button>
       </div>
 
-      {/* TAB 1: ROOMS & OCCUPANCY */}
+      {/* TAB 1: FLOORS, ROOMS & OCCUPANCY */}
       {activeTab === "rooms" && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {/* Rooms Control Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--surface)] p-4 rounded-2xl border border-[var(--border)]">
             <div className="flex flex-wrap items-center gap-3 flex-1">
@@ -579,7 +626,7 @@ export default function HousingDetails({
                 <input
                   value={roomSearch}
                   onChange={(e) => setRoomSearch(e.target.value)}
-                  placeholder={isEn ? "Search room or occupant..." : "ابحث برقم الغرفة أو اسم الساكن..."}
+                  placeholder={isEn ? "Search room, occupant, or Iqama..." : "ابحث برقم الغرفة أو اسم الساكن أو الإقامة..."}
                   className={`h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-medium ${
                     isEn ? "pl-9 pr-3" : "pr-9 pl-3"
                   } outline-none focus:border-[#1167c9]`}
@@ -608,7 +655,7 @@ export default function HousingDetails({
               </div>
             </div>
 
-            {/* Room Management Actions */}
+            {/* Management Actions */}
             {manage && !isArchived && (
               <div className="flex items-center gap-2">
                 <Button
@@ -624,7 +671,25 @@ export default function HousingDetails({
                   {isEn ? "Assign Person" : "تسكين فرد"}
                 </Button>
 
-                <Button onClick={() => setOpenCreateRoom(true)} className="h-10 px-3 text-xs">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setEditingFloor(null);
+                    setFloorModalOpen(true);
+                  }}
+                  className="h-10 px-3 text-xs"
+                >
+                  <Plus size={15} />
+                  {isEn ? "Add Floor" : "إضافة دور"}
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    setSelectedFloorId(undefined);
+                    setOpenCreateRoom(true);
+                  }}
+                  className="h-10 px-3 text-xs"
+                >
                   <Plus size={15} />
                   {isEn ? "Add Room" : "إضافة غرفة"}
                 </Button>
@@ -632,49 +697,303 @@ export default function HousingDetails({
             )}
           </div>
 
-          {/* Rooms Grid */}
-          {filteredRooms.length === 0 ? (
+          {/* Floor-Grouped Sections */}
+          {hasFloors ? (
+            <div className="space-y-6">
+              {floors.map((floor) => {
+                const floorRooms = floor.rooms || [];
+                const filteredFloorRooms = filterRoomList(floorRooms);
+                const floorCanArchive =
+                  floorRooms.length === 0 &&
+                  (!floor.equipment || floor.equipment.length === 0);
+
+                return (
+                  <div
+                    key={floor.id}
+                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-4 shadow-xs"
+                  >
+                    {/* Floor Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-10 w-10 place-items-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-300">
+                          <Layers size={20} />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-black text-[var(--foreground)]">
+                              {isEn ? `Floor ${floor.name}` : `الدور ${floor.name}`}
+                            </h3>
+                            <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-[var(--muted)] px-2 py-0.5 text-xs font-bold">
+                              {floorRooms.length} {isEn ? "rooms" : "غرف"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-[var(--muted)] font-semibold mt-0.5">
+                            <span>
+                              {isEn ? "Capacity:" : "السعة:"} <strong>{floor.totalCapacity}</strong> {isEn ? "beds" : "سرير"}
+                            </span>
+                            <span>·</span>
+                            <span>
+                              {isEn ? "Occupancy:" : "الإشغال:"} <strong className="text-[#1167c9]">{floor.currentOccupancy}</strong>
+                            </span>
+                            <span>·</span>
+                            <span className="text-emerald-700 dark:text-emerald-400">
+                              {isEn ? "Vacant:" : "الشاغر:"} <strong>{floor.availableCapacity}</strong>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Floor Action Buttons */}
+                      {manage && !isArchived && (
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              setSelectedFloorId(floor.id);
+                              setOpenCreateRoom(true);
+                            }}
+                            className="text-xs h-8 px-2.5"
+                          >
+                            <Plus size={13} />
+                            {isEn ? "Add Room to Floor" : "إضافة غرفة للدور"}
+                          </Button>
+                          <button
+                            onClick={() => {
+                              setEditingFloor(floor);
+                              setFloorModalOpen(true);
+                            }}
+                            title={isEn ? "Rename Floor" : "تعديل اسم الدور"}
+                            className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          {floorCanArchive && (
+                            <button
+                              onClick={() => setArchiveFloorTarget(floor)}
+                              title={isEn ? "Archive Floor" : "أرشفة الدور"}
+                              className="grid h-8 w-8 place-items-center rounded-lg border border-rose-100 text-rose-600 bg-rose-50/50 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/40 transition-all"
+                            >
+                              <Archive size={14} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Floor Equipment Section (Direct & Total Aggregates) */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-[var(--border)] p-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-4">
+                        {/* Direct Floor Equipment */}
+                        <div>
+                          <span className="font-bold text-[var(--muted)] flex items-center gap-1 mb-1">
+                            <Wrench size={13} className="text-[#1167c9]" />
+                            {isEn ? "Floor Equipment:" : "عهد الدور المباشرة:"}
+                          </span>
+                          {floor.equipment && floor.equipment.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {floor.equipment.map((eq) => (
+                                <span
+                                  key={eq.id}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-xs font-semibold"
+                                >
+                                  <span>{eq.name}</span>
+                                  <span className="px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-700 text-[10px] font-black">
+                                    ×{eq.quantity}
+                                  </span>
+                                  {manage && !isArchived && (
+                                    <div className="flex items-center gap-1 ml-1">
+                                      <button
+                                        onClick={() => {
+                                          setEquipmentTarget({
+                                            type: "floor",
+                                            floorId: floor.id,
+                                            floorName: floor.name,
+                                          });
+                                          setEditingEquipment(eq);
+                                          setEquipmentModalOpen(true);
+                                        }}
+                                        title={isEn ? "Edit" : "تعديل"}
+                                        className="text-slate-400 hover:text-[#1167c9]"
+                                      >
+                                        <Edit3 size={11} />
+                                      </button>
+                                      <button
+                                        onClick={() => setDeletingEquipment(eq)}
+                                        title={isEn ? "Delete" : "حذف"}
+                                        className="text-slate-400 hover:text-rose-600"
+                                      >
+                                        <Trash2 size={11} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-[var(--muted)] italic">
+                              {isEn ? "None" : "لا توجد عهد خاصة بالدور"}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Aggregate Total Equipment (Sum of Floor + Active Rooms) */}
+                        {floor.totalEquipment && floor.totalEquipment.length > 0 && (
+                          <div className="border-t sm:border-t-0 sm:border-l sm:pl-4 border-[var(--border)]">
+                            <span className="font-bold text-[var(--muted)] flex items-center gap-1 mb-1">
+                              <Layers size={13} className="text-purple-600" />
+                              {isEn ? "Floor & Rooms Total Equipment (Auto-Sum):" : "إجمالي عهد الدور والغرف (تجميع تلقائي):"}
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {floor.totalEquipment.map((tot, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/30 text-purple-900 dark:text-purple-200 text-xs font-bold"
+                                  title={isEn ? "Read-only summary aggregate" : "إجمالي تجميعي محسوب من الخادم"}
+                                >
+                                  <span>{tot.name}</span>
+                                  <span className="px-1.5 py-0.2 rounded-full bg-purple-200 dark:bg-purple-900 text-[10px] font-black">
+                                    {tot.quantity}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {manage && !isArchived && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setEquipmentTarget({
+                              type: "floor",
+                              floorId: floor.id,
+                              floorName: floor.name,
+                            });
+                            setEditingEquipment(null);
+                            setEquipmentModalOpen(true);
+                          }}
+                          className="text-xs h-8 px-2.5"
+                        >
+                          <Plus size={13} />
+                          {isEn ? "Add Floor Equipment" : "إضافة عهدة للدور"}
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Floor Rooms Grid */}
+                    {filteredFloorRooms.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-xs text-[var(--muted)]">
+                        <Bed className="mx-auto mb-2 opacity-30" size={32} />
+                        <p className="font-bold">
+                          {floorRooms.length === 0
+                            ? isEn ? "No rooms on this floor yet" : "لا توجد غرف في هذا الدور حالياً"
+                            : isEn ? "No matching rooms on this floor" : "لا توجد غرف مطابقة في هذا الدور"}
+                        </p>
+                        {floorRooms.length === 0 && manage && !isArchived && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              setSelectedFloorId(floor.id);
+                              setOpenCreateRoom(true);
+                            }}
+                            className="mt-3 text-xs h-8 px-3"
+                          >
+                            <Plus size={13} />
+                            {isEn ? "Add Room to this Floor" : "إضافة أول غرفة لهذا الدور"}
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {filteredFloorRooms.map((r) => (
+                          <RoomCard
+                            key={r.id}
+                            room={r}
+                            isEn={isEn}
+                            canManage={Boolean(manage && !isArchived)}
+                            onAssignToRoom={(targetRoom) => {
+                              setAssignRoomId(targetRoom.id);
+                              setOpenAssignModal(true);
+                            }}
+                            onEditRoom={(targetRoom) => setEditingRoom(targetRoom)}
+                            onArchiveRoom={(targetRoom) => setArchivingRoom(targetRoom)}
+                            onMoveOccupant={(sourceRoom, occ) =>
+                              setMovingOccupant({ room: sourceRoom, occupant: occ })
+                            }
+                            onRemoveOccupant={(sourceRoom, occ) =>
+                              setRemovingOccupant({ room: sourceRoom, occupant: occ })
+                            }
+                            onEditExternalOccupant={(targetRoom, occ) =>
+                              setEditingExternal({ room: targetRoom, occupant: occ })
+                            }
+                            onRemoveExternalOccupant={(targetRoom, occ) =>
+                              setRemovingExternal({ room: targetRoom, occupant: occ })
+                            }
+                            onResolvePendingOccupant={(targetRoom, occ) =>
+                              setResolvingPending({ room: targetRoom, occupant: occ })
+                            }
+                            onRemovePendingOccupant={(targetRoom, occ) =>
+                              setRemovingPending({ room: targetRoom, occupant: occ })
+                            }
+                            onAddRoomEquipment={(targetRoom) => {
+                              setEquipmentTarget({
+                                type: "room",
+                                roomId: targetRoom.id,
+                                roomName: targetRoom.name,
+                              });
+                              setEditingEquipment(null);
+                              setEquipmentModalOpen(true);
+                            }}
+                            onEditRoomEquipment={(targetRoom, eq) => {
+                              setEquipmentTarget({
+                                type: "room",
+                                roomId: targetRoom.id,
+                                roomName: targetRoom.name,
+                              });
+                              setEditingEquipment(eq);
+                              setEquipmentModalOpen(true);
+                            }}
+                            onDeleteRoomEquipment={(targetRoom, eq) => setDeletingEquipment(eq)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Fallback when housing has no floors array */
             <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center text-[var(--muted)]">
               <Bed className="mx-auto mb-3 opacity-30" size={48} />
               <h3 className="font-bold text-base text-[var(--foreground)]">
                 {rooms.length === 0
-                  ? isEn ? "No rooms created yet" : "لا توجد غرف مسجلة في هذا السكن"
-                  : isEn ? "No matching rooms found" : "لا توجد غرف مطابقة للبحث"}
+                  ? isEn ? "No floors or rooms created yet" : "لا توجد أدوار أو غرف مسجلة في هذا السكن"
+                  : isEn ? "Rooms" : "الغرف"}
               </h3>
-              <p className="mt-1 text-xs text-[var(--muted)] max-w-md mx-auto">
-                {rooms.length === 0
-                  ? isEn
-                    ? "Housing capacity is calculated from its rooms. Add the first room to start allocating beds."
-                    : "تُحسب السعة الاستيعابية الإجمالية من الغرف. أضف الغرفة الأولى لبدء تسكين الأفراد."
-                  : isEn
-                  ? "Try adjusting your search criteria."
-                  : "جرب تغيير كلمات البحث أو المرشح."}
-              </p>
-              {rooms.length === 0 && manage && !isArchived && (
-                <Button onClick={() => setOpenCreateRoom(true)} className="mt-4 text-xs">
-                  <Plus size={14} />
-                  {isEn ? "Add First Room" : "إضافة الغرفة الأولى"}
-                </Button>
+              {manage && !isArchived && (
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Button
+                    onClick={() => {
+                      setEditingFloor(null);
+                      setFloorModalOpen(true);
+                    }}
+                    className="text-xs"
+                  >
+                    <Plus size={14} />
+                    {isEn ? "Add First Floor" : "إضافة الدور الأول"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setOpenCreateRoom(true)}
+                    className="text-xs"
+                  >
+                    <Plus size={14} />
+                    {isEn ? "Add Room" : "إضافة غرفة"}
+                  </Button>
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredRooms.map((r) => (
-                <RoomCard
-                  key={r.id}
-                  room={r}
-                  isEn={isEn}
-                  canManage={Boolean(manage && !isArchived)}
-                  onAssignToRoom={(targetRoom) => {
-                    setAssignRoomId(targetRoom.id);
-                    setOpenAssignModal(true);
-                  }}
-                  onEditRoom={(targetRoom) => setEditingRoom(targetRoom)}
-                  onArchiveRoom={(targetRoom) => setArchivingRoom(targetRoom)}
-                  onMoveOccupant={(sourceRoom, occ) => setMovingOccupant({ room: sourceRoom, occupant: occ })}
-                  onRemoveOccupant={(sourceRoom, occ) => setRemovingOccupant({ room: sourceRoom, occupant: occ })}
-                />
-              ))}
             </div>
           )}
         </div>
@@ -922,6 +1241,8 @@ export default function HousingDetails({
         isOpen={openCreateRoom}
         onClose={() => setOpenCreateRoom(false)}
         housingId={housingId}
+        floors={floors}
+        initialFloorId={selectedFloorId}
         onSuccess={loadAllData}
         isEn={isEn}
       />
@@ -931,6 +1252,7 @@ export default function HousingDetails({
         isOpen={Boolean(editingRoom)}
         onClose={() => setEditingRoom(null)}
         room={editingRoom}
+        floors={floors}
         onSuccess={loadAllData}
         isEn={isEn}
       />
@@ -944,7 +1266,7 @@ export default function HousingDetails({
         isEn={isEn}
       />
 
-      {/* 4. Assign Occupant Modal */}
+      {/* 4. Assign Occupant Modal (Iqama, Rider, Staff, External) */}
       <AssignOccupantModal
         isOpen={openAssignModal}
         onClose={() => {
@@ -981,7 +1303,93 @@ export default function HousingDetails({
         isEn={isEn}
       />
 
-      {/* 7. Assign Supervisor Modal */}
+      {/* 7. Edit External Occupant Modal */}
+      <EditExternalOccupantModal
+        isOpen={Boolean(editingExternal)}
+        onClose={() => setEditingExternal(null)}
+        currentRoom={editingExternal?.room || null}
+        occupant={editingExternal?.occupant || null}
+        rooms={rooms}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 8. Remove External Occupant Modal */}
+      <RemoveExternalOccupantModal
+        isOpen={Boolean(removingExternal)}
+        onClose={() => setRemovingExternal(null)}
+        room={removingExternal?.room || null}
+        occupant={removingExternal?.occupant || null}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 9. Resolve Pending Occupant Modal */}
+      <ResolvePendingOccupantModal
+        isOpen={Boolean(resolvingPending)}
+        onClose={() => setResolvingPending(null)}
+        room={resolvingPending?.room || null}
+        occupant={resolvingPending?.occupant || null}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 10. Remove Pending Occupant Modal */}
+      <RemovePendingOccupantModal
+        isOpen={Boolean(removingPending)}
+        onClose={() => setRemovingPending(null)}
+        room={removingPending?.room || null}
+        occupant={removingPending?.occupant || null}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 11. Create / Rename Floor Modal */}
+      <FloorModal
+        isOpen={floorModalOpen}
+        onClose={() => {
+          setFloorModalOpen(false);
+          setEditingFloor(null);
+        }}
+        housingId={housingId}
+        floor={editingFloor}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 12. Archive Floor Modal */}
+      <ArchiveFloorModal
+        isOpen={Boolean(archiveFloorTarget)}
+        onClose={() => setArchiveFloorTarget(null)}
+        floor={archiveFloorTarget}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 13. Add / Edit Equipment Modal */}
+      <EquipmentModal
+        isOpen={equipmentModalOpen}
+        onClose={() => {
+          setEquipmentModalOpen(false);
+          setEquipmentTarget(null);
+          setEditingEquipment(null);
+        }}
+        target={equipmentTarget}
+        initialItem={editingEquipment}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 14. Delete Equipment Modal */}
+      <DeleteEquipmentModal
+        isOpen={Boolean(deletingEquipment)}
+        onClose={() => setDeletingEquipment(null)}
+        item={deletingEquipment}
+        onSuccess={loadAllData}
+        isEn={isEn}
+      />
+
+      {/* 15. Assign Supervisor Modal */}
       {openSupervisorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <Card className="w-full max-w-lg p-6 shadow-2xl animate-in fade-in zoom-in-95">
@@ -1057,7 +1465,7 @@ export default function HousingDetails({
         </div>
       )}
 
-      {/* 8. Close Supervisor Modal */}
+      {/* 16. Close Supervisor Modal */}
       {closeSupPeriod && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <Card className="w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
@@ -1128,7 +1536,7 @@ export default function HousingDetails({
         </div>
       )}
 
-      {/* 9. Archive Housing Modal */}
+      {/* 17. Archive Housing Modal */}
       {archiveOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <Card className="w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">

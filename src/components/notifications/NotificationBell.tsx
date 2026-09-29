@@ -62,6 +62,7 @@ export function NotificationBell() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
 
   // Selected notification for modal preview
   const [selectedNotification, setSelectedNotification] =
@@ -153,7 +154,7 @@ export function NotificationBell() {
           {
             permissions: null, // null fetches all authorized audiences + personal
             unreadOnly: tab === "unread",
-            pageSize: 20,
+            pageSize: 50,
             cursor: isInitialOrReset ? null : cursor,
           },
           { suppressErrorToast: true }
@@ -281,29 +282,136 @@ export function NotificationBell() {
     }
   };
 
-  // Mark all visible as read
-  const handleMarkAllVisibleAsRead = async () => {
-    const unreadItems = items.filter((x) => !x.readAtUtc);
-    if (unreadItems.length === 0) return;
+  // Mark all unread notifications as read across the entire account
+  const handleMarkAllAsRead = async () => {
+    if (isMarkingAllRead) return;
 
-    setLoading(true);
+    setIsMarkingAllRead(true);
+
+    // Optimistically mark currently loaded items as read and clear unread count badge
+    setItems((prev) =>
+      prev.map((item) =>
+        item.readAtUtc
+          ? item
+          : { ...item, readAtUtc: new Date().toISOString() }
+      )
+    );
+    setUnreadCount(0);
+
     try {
-      await Promise.all(
-        unreadItems.map((item) =>
-          updateNotificationState(item.id, "read", item.rowVersion, {
-            suppressErrorToast: true,
-          }).catch(() => null)
-        )
-      );
+      // 1. Gather all unread items from component state
+      const unreadMap = new Map<string, NotificationItem>();
+      for (const item of items) {
+        if (!item.readAtUtc) {
+          unreadMap.set(item.id, item);
+        }
+      }
+
+      // 2. Fetch all unread notifications from backend via pagination to ensure 100% coverage
+      let cursor: string | null = null;
+      let hasMore = true;
+      let iterations = 0;
+
+      while (hasMore && iterations < 15) {
+        iterations++;
+        try {
+          const res = await queryNotifications(
+            {
+              permissions: null,
+              unreadOnly: true,
+              pageSize: 100,
+              cursor,
+            },
+            { suppressErrorToast: true }
+          );
+
+          const fetched = res.items || [];
+          for (const it of fetched) {
+            if (!it.readAtUtc) {
+              // Always use the latest server item & rowVersion
+              unreadMap.set(it.id, it);
+            }
+          }
+
+          if (res.nextCursor && fetched.length > 0) {
+            cursor = res.nextCursor;
+          } else {
+            hasMore = false;
+          }
+        } catch {
+          hasMore = false;
+        }
+      }
+
+      const allUnreadToUpdate = Array.from(unreadMap.values());
+
+      if (allUnreadToUpdate.length > 0) {
+        // 3. Process in controlled chunks (concurrency limit 6) to avoid database lock contention & 409s
+        const BATCH_SIZE = 6;
+        const failedItems: NotificationItem[] = [];
+
+        for (let i = 0; i < allUnreadToUpdate.length; i += BATCH_SIZE) {
+          const batch = allUnreadToUpdate.slice(i, i + BATCH_SIZE);
+          await Promise.all(
+            batch.map(async (item) => {
+              try {
+                await updateNotificationState(item.id, "read", item.rowVersion, {
+                  suppressErrorToast: true,
+                });
+              } catch {
+                failedItems.push(item);
+              }
+            })
+          );
+        }
+
+        // 4. Retry any items that encountered concurrency conflicts
+        if (failedItems.length > 0) {
+          try {
+            const refreshRes = await queryNotifications(
+              {
+                permissions: null,
+                unreadOnly: true,
+                pageSize: 100,
+              },
+              { suppressErrorToast: true }
+            );
+            const freshItems = refreshRes.items || [];
+            for (const failed of failedItems) {
+              const fresh = freshItems.find((x) => x.id === failed.id);
+              if (fresh && !fresh.readAtUtc) {
+                try {
+                  await updateNotificationState(
+                    fresh.id,
+                    "read",
+                    fresh.rowVersion,
+                    { suppressErrorToast: true }
+                  );
+                } catch {
+                  // Silently ignore if already marked as read
+                }
+              }
+            }
+          } catch {
+            // Ignore retry fetch failure
+          }
+        }
+      }
+
       toast.success(
         isAr ? "تم بنجاح" : "Success",
-        isAr ? "تم تحديد كافة الإشعارات المعروضة كمقروءة" : "Marked visible notifications as read"
+        isAr
+          ? "تم تحديد كافة الإشعارات كمقروءة بنجاح"
+          : "All notifications marked as read successfully"
       );
-      void fetchFeed(activeTab, true);
-    } catch {
-      void fetchFeed(activeTab, true);
+
+      // Re-fetch feed to sync completely with backend
+      await fetchFeed(activeTab, true);
+    } catch (err) {
+      console.error("Failed to mark all as read:", err);
+      await fetchFeed(activeTab, true);
     } finally {
-      setLoading(false);
+      setIsMarkingAllRead(false);
     }
   };
 
@@ -461,15 +569,25 @@ export function NotificationBell() {
             </div>
 
             {/* Mark all as read */}
-            {items.some((i) => !i.readAtUtc) && (
+            {(unreadCount > 0 || items.some((i) => !i.readAtUtc)) && (
               <button
                 type="button"
-                onClick={handleMarkAllVisibleAsRead}
-                disabled={loading}
+                onClick={handleMarkAllAsRead}
+                disabled={loading || isMarkingAllRead}
                 className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1167c9] dark:text-blue-400 hover:underline disabled:opacity-50"
               >
-                <CheckCheck size={14} />
-                {isAr ? "تحديد الكل كمقروء" : "Mark all as read"}
+                {isMarkingAllRead ? (
+                  <Loader2 size={13} className="animate-spin text-[#1167c9]" />
+                ) : (
+                  <CheckCheck size={14} />
+                )}
+                {isMarkingAllRead
+                  ? isAr
+                    ? "جارٍ التحديد..."
+                    : "Marking as read..."
+                  : isAr
+                  ? "تحديد الكل كمقروء"
+                  : "Mark all as read"}
               </button>
             )}
           </div>

@@ -329,6 +329,175 @@ export const EVENT_TYPE_METADATA: Record<
 };
 
 /**
+ * Comprehensive mapping of system status keys to proper Arabic labels.
+ */
+export const STATUS_ARABIC_MAP: Record<string, string> = {
+  // Multi-word phrases with spaces (must match before single words)
+  "On Leave": "في إجازة",
+  "In Progress": "قيد التنفيذ",
+  "Out Of Service": "خارج الخدمة",
+  "Pending Approval": "بانتظار الاعتماد",
+  "Pending Parts": "بانتظار قطع الغيار",
+  "Awaiting Approval": "بانتظار الموافقة",
+  "Under Review": "قيد المراجعة",
+  "Returned For Changes": "معاد للتعديل",
+  "Cancellation Pending": "بانتظار الإلغاء",
+  "Pending Documents": "بانتظار الوثائق",
+  "Not Required": "غير مطلوب",
+  "Reported To Authorities": "بلاغ للجهات",
+  "Exit Or System Outage": "خروج أو انقطاع نظامي",
+  "Sponsored Internal": "على الكفالة",
+  "Outside Rider": "مندوب خارجي",
+  "Pending Payment": "بانتظار السداد",
+  "Expiring Soon": "يقترب من الانتهاء",
+
+  // Snake_case versions
+  on_leave: "في إجازة",
+  in_progress: "قيد التنفيذ",
+  out_of_service: "خارج الخدمة",
+  pending_approval: "بانتظار الاعتماد",
+  pending_parts: "بانتظار قطع الغيار",
+  awaiting_approval: "بانتظار الموافقة",
+  under_review: "قيد المراجعة",
+  returned_for_changes: "معاد للتعديل",
+  cancellation_pending: "بانتظار الإلغاء",
+  pending_documents: "بانتظار الوثائق",
+  not_required: "غير مطلوب",
+  reported_to_authorities: "بلاغ للجهات",
+  exit_or_system_outage: "خروج أو انقطاع نظامي",
+  sponsored_internal: "على الكفالة",
+  outside_rider: "مندوب خارجي",
+  pending_payment: "بانتظار السداد",
+  expiring_soon: "يقترب من الانتهاء",
+
+  // CamelCase / PascalCase compound statuses
+  OnLeave: "في إجازة",
+  InProgress: "قيد التنفيذ",
+  OutOfService: "خارج الخدمة",
+  PendingApproval: "بانتظار الاعتماد",
+  PendingParts: "بانتظار قطع الغيار",
+  AwaitingApproval: "بانتظار الموافقة",
+  UnderReview: "قيد المراجعة",
+  ReturnedForChanges: "معاد للتعديل",
+  CancellationPending: "بانتظار الإلغاء",
+  PendingDocuments: "بانتظار الوثائق",
+  NotRequired: "غير مطلوب",
+  ReportedToAuthorities: "بلاغ للجهات",
+  ExitOrSystemOutage: "خروج أو انقطاع نظامي",
+  SponsoredInternal: "على الكفالة",
+  OutsideRider: "مندوب خارجي",
+  PendingPayment: "بانتظار السداد",
+  ExpiringSoon: "يقترب من الانتهاء",
+
+  // Employee / Workforce single statuses
+  Fleeing: "هروب / انقطاع",
+  Active: "نشط",
+  Suspended: "موقوف",
+  Onboarding: "قيد التهيئة",
+  Draft: "مسودة",
+  Terminated: "منتهي الخدمة",
+  Archived: "مؤرشف",
+  Accident: "حادث",
+  Sick: "إجازة مرضية",
+  Inactive: "غير نشط",
+  Disabled: "معطل",
+
+  // Request & Workflow single statuses
+  Pending: "قيد الانتظار",
+  Approved: "معتمد",
+  Rejected: "مرفوض",
+  Returned: "معاد للتعديل",
+  Completed: "مكتمل",
+  Cancelled: "ملغى",
+  Canceled: "ملغى",
+  Resolved: "تم الحل",
+  Closed: "مغلق",
+  Open: "مفتوح",
+  Submitted: "تم التقديم",
+  Activated: "مفعل",
+  Fulfilled: "تم الصرف",
+  Delivered: "تم التسليم",
+  Expired: "منتهي الصلاحية",
+  Ready: "جاهز",
+  Scheduled: "مجدول",
+  Postponed: "مؤجل",
+  Paid: "مدفوع",
+  Unpaid: "غير مدفوع",
+
+  // Vehicle / Asset / Inventory statuses
+  Available: "متاح",
+  Assigned: "مسندة",
+  Maintenance: "في الصيانة",
+  Blocked: "محظور",
+  Unused: "غير مستخدم",
+  Used: "مستخدم",
+  Damaged: "تالف",
+  Disposed: "مستبعد",
+  Valid: "ساري",
+  Overdue: "متأخر",
+  Renewed: "مجدد",
+  Transferred: "تم النقل",
+};
+
+const STATUS_LOOKUP_LOWER = new Map<string, string>();
+for (const [key, val] of Object.entries(STATUS_ARABIC_MAP)) {
+  STATUS_LOOKUP_LOWER.set(key.toLowerCase(), val);
+}
+
+// Sort keys by descending length to match longest multi-word phrases first
+const sortedStatusKeys = Object.keys(STATUS_ARABIC_MAP).sort(
+  (a, b) => b.length - a.length
+);
+
+const escapeRegex = (str: string) =>
+  str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const STATUS_REGEX_PATTERN = sortedStatusKeys.map(escapeRegex).join("|");
+
+const STATUS_REPLACEMENT_REGEX = new RegExp(
+  `\\b(${STATUS_REGEX_PATTERN})\\b`,
+  "gi"
+);
+
+/**
+ * Returns Arabic label for a given status value if available, or the original status string.
+ */
+export function getStatusArabicLabel(
+  status: string | null | undefined
+): string {
+  if (!status || typeof status !== "string") return "";
+  const trimmed = status.trim();
+  return (
+    STATUS_ARABIC_MAP[trimmed] ||
+    STATUS_LOOKUP_LOWER.get(trimmed.toLowerCase()) ||
+    trimmed
+  );
+}
+
+/**
+ * Replaces any English status tokens embedded in a notification text with their proper Arabic translation.
+ * If locale is "en" and text has no Arabic characters, the text is kept as-is.
+ */
+export function replaceStatusesInText(
+  text: string | null | undefined,
+  locale: "ar" | "en" = "ar"
+): string {
+  if (!text || typeof text !== "string") return "";
+
+  const hasArabic = /[\u0600-\u06FF]/.test(text);
+  // Keep original if pure English interface & pure English text
+  if (locale === "en" && !hasArabic) {
+    return text;
+  }
+
+  return text.replace(STATUS_REPLACEMENT_REGEX, (match) => {
+    const key = match.trim().toLowerCase();
+    const translation = STATUS_LOOKUP_LOWER.get(key);
+    return translation !== undefined ? translation : match;
+  });
+}
+
+/**
  * Resolve human-readable title, body, category and deep link for any notification item,
  * with fallbacks for alternative field names and known event types.
  */
@@ -461,13 +630,28 @@ export function resolveNotificationContent(
     isAr ? "en" : "ar"
   );
 
+  // Replace English status enum values with their Arabic translations when rendering in Arabic
+  title = replaceStatusesInText(title, locale);
+  body = replaceStatusesInText(body, locale);
+  const finalSecondaryTitle = replaceStatusesInText(
+    secondaryTitle,
+    isAr ? "en" : "ar"
+  );
+  const finalSecondaryBody = replaceStatusesInText(
+    secondaryBody,
+    isAr ? "en" : "ar"
+  );
+  if (isAr) {
+    category = replaceStatusesInText(category, "ar");
+  }
+
   return {
     title,
     body,
     category,
     deepLink,
-    secondaryTitle,
-    secondaryBody,
+    secondaryTitle: finalSecondaryTitle,
+    secondaryBody: finalSecondaryBody,
   };
 }
 

@@ -163,16 +163,24 @@ export default function HousingPage() {
       : c.globalCityAr || c.nameAr || c.globalCityEn || c.nameEn || "";
   };
 
+  const RIYADH_CITY_ID = "019c18d5-62e1-7000-8000-000000000004";
+
   // Options for city SearchableSelect
-  const cityOptions: SelectOption[] = useMemo(
-    () =>
-      cities.map((c) => ({
-        value: c.globalCityId || c.id,
-        label: getCityName(c),
-        sublabel: c.code,
-      })),
-    [cities, isEn]
-  );
+  const cityOptions: SelectOption[] = useMemo(() => {
+    const opts = cities.map((c) => ({
+      value: c.globalCityId || c.id,
+      label: getCityName(c),
+      sublabel: c.code,
+    }));
+    if (!opts.some((o) => o.value === RIYADH_CITY_ID)) {
+      opts.unshift({
+        value: RIYADH_CITY_ID,
+        label: isEn ? "Riyadh" : "الرياض",
+        sublabel: "RYD",
+      });
+    }
+    return opts;
+  }, [cities, isEn]);
 
   const cityFilterOptions: SelectOption[] = useMemo(
     () => [
@@ -376,7 +384,11 @@ export default function HousingPage() {
         (statusFilter === "Archived" && (x.status === "Archived" || x.isDeleted));
 
       // City filter
-      const matchesCity = !cityFilter || x.cityId === cityFilter;
+      const matchesCity =
+        !cityFilter ||
+        x.cityId === cityFilter ||
+        (cityFilter === RIYADH_CITY_ID &&
+          (x.cityAr?.includes("الرياض") || x.code?.startsWith("RYD")));
 
       return matchesSearch && matchesStatus && matchesCity;
     });
@@ -570,6 +582,22 @@ export default function HousingPage() {
                 searchPlaceholder={isEn ? "Filter city..." : "تصفية حسب المدينة..."}
               />
             </div>
+
+            {/* Quick Riyadh Filter Shortcut Button */}
+            <button
+              type="button"
+              onClick={() =>
+                setCityFilter(cityFilter === RIYADH_CITY_ID ? "" : RIYADH_CITY_ID)
+              }
+              className={`rounded-xl border px-3 py-2 text-xs font-bold transition-all flex items-center gap-1.5 h-11 ${
+                cityFilter === RIYADH_CITY_ID
+                  ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
+                  : "bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)] border-[var(--border)]"
+              }`}
+            >
+              <MapPin size={14} className={cityFilter === RIYADH_CITY_ID ? "text-white" : "text-slate-400"} />
+              <span>{isEn ? "Riyadh Housing" : "سكن الرياض"}</span>
+            </button>
 
             {/* Status Pills */}
             <div className="flex items-center gap-1 rounded-xl bg-[var(--surface)] border border-[var(--border)] p-1">
