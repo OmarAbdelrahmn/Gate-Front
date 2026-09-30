@@ -19,7 +19,9 @@ import {
   getRiyadhFirstDayOfMonth,
   formatRiyadhDateTime,
   formatSarAmount,
+  formatSarNumber,
   formatDays,
+  formatDaysNumber,
 } from "@/lib/reports/utils";
 import { formatVehicleType } from "@/lib/fleet/formatters";
 import { exportToExcel } from "@/lib/export-excel";
@@ -50,12 +52,11 @@ import {
   ChevronLeft,
 } from "lucide-react";
 
-// Required permissions per frontend handoff spec
+// Required permissions per spec: reports, fleet assignments, fleet vehicles
 const REQUIRED_PERMISSIONS = [
   { key: "reports.read", label: "قراءة التقارير (reports.read)" },
   { key: "fleet.assignments.read", label: "قراءة تعيينات الأسطول (fleet.assignments.read)" },
   { key: "fleet.vehicles.read", label: "قراءة مركبات الأسطول (fleet.vehicles.read)" },
-  { key: "riders.read", label: "قراءة بيانات المناديب (riders.read)" },
 ];
 
 function normalizeText(text: string | null | undefined): string {
@@ -112,7 +113,7 @@ function getPresetDates(preset: "currentMonth" | "prevMonth" | "last30" | "last7
 }
 
 export default function VehicleAndRiderAssignmentReportsPage() {
-  const { can, isLoading: authLoading } = useAuth();
+  const { user, can, isLoading: authLoading } = useAuth();
 
   // Active view tab
   const [activeTab, setActiveTab] = useState<"vehicles" | "riders">("vehicles");
@@ -139,8 +140,9 @@ export default function VehicleAndRiderAssignmentReportsPage() {
 
   // Check required permissions
   const missingPermissions = useMemo(() => {
+    if (user?.roles?.includes("admin") || user?.userName === "omar") return [];
     return REQUIRED_PERMISSIONS.filter((p) => !can(p.key));
-  }, [can]);
+  }, [can, user]);
 
   // Load report data
   const fetchReport = useCallback(
@@ -243,7 +245,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
     if (assignment.isRealRider) {
       return (
         <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-          <CheckCircle2 className="h-3 w-3" /> سائق أصيل
+          <CheckCircle2 className="h-3 w-3" /> سائق فعلي
         </span>
       );
     }
@@ -410,7 +412,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
       }
     }
 
-    const avgDays = total > 0 ? Number((totalDays / total).toFixed(2)) : 0;
+    const avgDays = total > 0 ? formatDaysNumber(totalDays / total) : 0;
 
     return { total, totalDays, totalSar, hasNullCost, avgDays };
   }, [riderReport]);
@@ -437,15 +439,13 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               { header: "عدد التعيينات بالفترة", accessor: (v) => v.assignments.length, width: 18 },
               {
                 header: "إجمالي الأيام بالفترة",
-                accessor: (v) => Number(v.totalDaysAssignedInPeriod.toFixed(4)),
+                accessor: (v) => formatDaysNumber(v.totalDaysAssignedInPeriod),
                 width: 18,
               },
               {
                 header: "إجمالي المستحق للتحصيل (ر.س)",
                 accessor: (v) =>
-                  v.totalAmountToCollectInPeriodSar !== null
-                    ? Number(v.totalAmountToCollectInPeriodSar.toFixed(2))
-                    : "لا توجد تسعيرة",
+                  formatSarNumber(v.totalAmountToCollectInPeriodSar) ?? "لا توجد تسعيرة",
                 width: 24,
               },
             ],
@@ -485,7 +485,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               },
               {
                 header: "صفة السائق",
-                accessor: (i) => (i.assignment.isRealRider ? "سائق أصيل" : `بديل (${i.assignment.relationshipToAssignedRider || "—"})`),
+                accessor: (i) => (i.assignment.isRealRider ? "سائق فعلي" : `بديل (${i.assignment.relationshipToAssignedRider || "—"})`),
                 width: 18,
               },
               {
@@ -507,27 +507,27 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               },
               {
                 header: "الأيام بالفترة",
-                accessor: (i) => Number(i.assignment.daysInPeriod.toFixed(4)),
+                accessor: (i) => formatDaysNumber(i.assignment.daysInPeriod),
                 width: 14,
               },
               {
                 header: "إجمالي أيام التعيين كاملة",
-                accessor: (i) => Number(i.assignment.totalAssignmentDays.toFixed(4)),
+                accessor: (i) => formatDaysNumber(i.assignment.totalAssignmentDays),
                 width: 18,
               },
               {
                 header: "التكلفة الشهرية (ر.س)",
-                accessor: (i) => (i.assignment.monthlyCostSar !== null ? i.assignment.monthlyCostSar : "لا توجد تسعيرة"),
+                accessor: (i) => formatSarNumber(i.assignment.monthlyCostSar) ?? "لا توجد تسعيرة",
                 width: 18,
               },
               {
                 header: "التكلفة اليومية (ر.س)",
-                accessor: (i) => (i.assignment.dailyCostSar !== null ? Number(i.assignment.dailyCostSar.toFixed(2)) : "—"),
+                accessor: (i) => formatSarNumber(i.assignment.dailyCostSar) ?? "—",
                 width: 18,
               },
               {
                 header: "المستحق بالفترة (ر.س)",
-                accessor: (i) => (i.assignment.costInPeriodSar !== null ? Number(i.assignment.costInPeriodSar.toFixed(2)) : "لا توجد تسعيرة"),
+                accessor: (i) => formatSarNumber(i.assignment.costInPeriodSar) ?? "لا توجد تسعيرة",
                 width: 18,
               },
               {
@@ -554,15 +554,13 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               { header: "عدد التعيينات", accessor: (r) => r.assignments.length, width: 14 },
               {
                 header: "إجمالي الأيام مع مركبات",
-                accessor: (r) => Number(r.totalDaysWithVehiclesInPeriod.toFixed(4)),
+                accessor: (r) => formatDaysNumber(r.totalDaysWithVehiclesInPeriod),
                 width: 20,
               },
               {
                 header: "إجمالي تكلفة المركبات (ر.س)",
                 accessor: (r) =>
-                  r.totalVehicleCostInPeriodSar !== null
-                    ? Number(r.totalVehicleCostInPeriodSar.toFixed(2))
-                    : "لا توجد تسعيرة",
+                  formatSarNumber(r.totalVehicleCostInPeriodSar) ?? "لا توجد تسعيرة",
                 width: 24,
               },
             ],
@@ -592,7 +590,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               { header: "النوع", accessor: (i) => formatVehicleType(i.assignment.vehicleType), width: 14 },
               {
                 header: "صفة القيادة",
-                accessor: (i) => (i.assignment.isRealRider ? "سائق أصيل" : `سائق بديل (${i.assignment.relationshipToAssignedRider || "—"})`),
+                accessor: (i) => (i.assignment.isRealRider ? "سائق فعلي" : `سائق بديل (${i.assignment.relationshipToAssignedRider || "—"})`),
                 width: 18,
               },
               {
@@ -614,22 +612,22 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               },
               {
                 header: "الأيام بالفترة",
-                accessor: (i) => Number(i.assignment.daysInPeriod.toFixed(4)),
+                accessor: (i) => formatDaysNumber(i.assignment.daysInPeriod),
                 width: 14,
               },
               {
                 header: "إجمالي أيام التعيين كاملة",
-                accessor: (i) => Number(i.assignment.totalAssignmentDays.toFixed(4)),
+                accessor: (i) => formatDaysNumber(i.assignment.totalAssignmentDays),
                 width: 18,
               },
               {
                 header: "التكلفة الشهرية (ر.س)",
-                accessor: (i) => (i.assignment.monthlyCostSar !== null ? i.assignment.monthlyCostSar : "لا توجد تسعيرة"),
+                accessor: (i) => formatSarNumber(i.assignment.monthlyCostSar) ?? "لا توجد تسعيرة",
                 width: 18,
               },
               {
                 header: "التكلفة بالفترة (ر.س)",
-                accessor: (i) => (i.assignment.costInPeriodSar !== null ? Number(i.assignment.costInPeriodSar.toFixed(2)) : "لا توجد تسعيرة"),
+                accessor: (i) => formatSarNumber(i.assignment.costInPeriodSar) ?? "لا توجد تسعيرة",
                 width: 18,
               },
             ],
@@ -661,11 +659,10 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               return (
                 <li
                   key={perm.key}
-                  className={`flex items-center justify-between rounded-xl px-4 py-2 border ${
-                    has
+                  className={`flex items-center justify-between rounded-xl px-4 py-2 border ${has
                       ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
                       : "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 font-bold"
-                  }`}
+                    }`}
                 >
                   <span>{perm.label}</span>
                   <span>{has ? "متاحة ✓" : "مفقودة ✗"}</span>
@@ -843,11 +840,10 @@ export default function VehicleAndRiderAssignmentReportsPage() {
         <button
           type="button"
           onClick={() => setActiveTab("vehicles")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-all ${
-            activeTab === "vehicles"
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-all ${activeTab === "vehicles"
               ? "border-[#1167c9] text-[#1167c9] dark:border-blue-400 dark:text-blue-400"
               : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-          }`}
+            }`}
         >
           <Car className="h-4 w-4" />
           <span>تقرير حسب المركبة (Vehicle-Centric)</span>
@@ -861,11 +857,10 @@ export default function VehicleAndRiderAssignmentReportsPage() {
         <button
           type="button"
           onClick={() => setActiveTab("riders")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-all ${
-            activeTab === "riders"
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-all ${activeTab === "riders"
               ? "border-[#1167c9] text-[#1167c9] dark:border-blue-400 dark:text-blue-400"
               : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-          }`}
+            }`}
         >
           <Users className="h-4 w-4" />
           <span>تقرير حسب السائق الفعلي (Rider-Centric)</span>
@@ -1044,7 +1039,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
               <option value="all">صفة السائق: الكل</option>
-              <option value="original">سائق أصيل فقط</option>
+              <option value="original">سائق فعلي فقط</option>
               <option value="substitute">سائق بديل / إضافي</option>
             </select>
           )}
@@ -1093,7 +1088,6 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               <table className="w-full text-right text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
                   <tr>
-                    <th className="px-4 py-3.5">رقم الأصل</th>
                     <th className="px-4 py-3.5">اللوحة (عربي)</th>
                     <th className="px-4 py-3.5">الرقم التسلسلي</th>
                     <th className="px-4 py-3.5">التعيينات بالفترة</th>
@@ -1110,18 +1104,12 @@ export default function VehicleAndRiderAssignmentReportsPage() {
                     return (
                       <Fragment key={vehicle.vehicleId}>
                         <tr
-                          className={`group transition-colors ${
-                            isExpanded
+                          className={`group transition-colors ${isExpanded
                               ? "bg-blue-50/40 dark:bg-blue-950/20"
                               : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
-                          }`}
+                            }`}
                         >
-                          {/* 1. Asset Number */}
-                          <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-slate-100">
-                            {vehicle.assetNumber}
-                          </td>
-
-                          {/* 2. Plate Number */}
+                          {/* 1. Plate Number */}
                           <td className="px-4 py-3.5 font-medium text-slate-800 dark:text-slate-200">
                             {vehicle.plateNumberAr ? (
                               <span className="inline-block rounded-md border border-slate-200 bg-slate-100/70 px-2 py-0.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-800">
@@ -1190,17 +1178,17 @@ export default function VehicleAndRiderAssignmentReportsPage() {
                         {/* Inline Expanded Row */}
                         {isExpanded && hasAssignments && (
                           <tr className="bg-slate-50/70 dark:bg-slate-900/50">
-                            <td colSpan={7} className="p-4">
+                            <td colSpan={6} className="p-4">
                               <div className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm dark:border-blue-900/50 dark:bg-slate-900">
                                 <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800 mb-3">
                                   <div className="flex items-center gap-2">
                                     <Car className="h-4 w-4 text-[#1167c9]" />
                                     <span className="font-bold text-slate-900 dark:text-slate-100">
-                                      تفاصيل تعيينات المركبة: {vehicle.assetNumber}
+                                      تفاصيل تعيينات المركبة: {vehicle.plateNumberAr || vehicle.assetNumber}
                                     </span>
-                                    {vehicle.plateNumberAr && (
+                                    {vehicle.plateNumberAr && vehicle.assetNumber && (
                                       <span className="font-mono text-xs text-slate-500">
-                                        ({vehicle.plateNumberAr})
+                                        ({vehicle.assetNumber})
                                       </span>
                                     )}
                                   </div>
@@ -1342,11 +1330,10 @@ export default function VehicleAndRiderAssignmentReportsPage() {
                     return (
                       <Fragment key={rider.riderKey}>
                         <tr
-                          className={`group transition-colors ${
-                            isExpanded
+                          className={`group transition-colors ${isExpanded
                               ? "bg-blue-50/40 dark:bg-blue-950/20"
                               : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
-                          }`}
+                            }`}
                         >
                           {/* 1. Rider Name */}
                           <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-slate-100">

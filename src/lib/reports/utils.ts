@@ -121,18 +121,44 @@ export function formatSarAmount(
   if (amount === null || amount === undefined) {
     return missingLabel;
   }
-  return `${amount.toLocaleString("en-US", {
+  const num = typeof amount === "number" ? amount : Number(amount);
+  if (isNaN(num)) {
+    return missingLabel;
+  }
+  return `${num.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} ر.س`;
 }
 
 /**
+ * Returns a rounded number to 2 decimal places for SAR amounts (useful in Excel exports).
+ */
+export function formatSarNumber(amount: number | null | undefined): number | null {
+  if (amount === null || amount === undefined) return null;
+  const num = typeof amount === "number" ? amount : Number(amount);
+  if (isNaN(num)) return null;
+  return Number(num.toFixed(2));
+}
+
+/**
+ * Convert days count to 1 decimal place (e.g., 10490.2) without extraneous trailing digits.
+ */
+export function formatDaysNumber(days: number | null | undefined): number {
+  if (days === null || days === undefined) return 0;
+  const num = typeof days === "number" ? days : Number(days);
+  if (isNaN(num)) return 0;
+  return Number((Math.floor((num + 0.00001) * 10) / 10).toFixed(1));
+}
+
+/**
  * Format days count for period reports.
- * Uses exact API numbers up to 4 decimal places without artificial browser recalculation.
+ * Formats days to 1 decimal place (e.g., 10490.2) without extraneous trailing digits.
  */
 export function formatDays(days: number | null | undefined): string {
   if (days === null || days === undefined) return "0 يوم";
-  const num = Number(days.toFixed(4));
-  return `${num} يوم`;
+  const num = typeof days === "number" ? days : Number(days);
+  if (isNaN(num)) return "0 يوم";
+  return `${formatDaysNumber(num)} يوم`;
 }
+

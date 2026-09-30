@@ -281,7 +281,6 @@ export const navigation: NavItem[] = [
           "reports.read",
           "fleet.assignments.read",
           "fleet.vehicles.read",
-          "riders.read",
         ],
       },
       {
