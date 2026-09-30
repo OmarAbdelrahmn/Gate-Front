@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicleDetail, getVehicleIssues, updateVehicle } from "@/lib/fleet/api";
+import {
+  getVehicleDetail,
+  getVehicleIssues,
+  updateVehicle,
+  getVehicleAssignment,
+  getRiderVehicleTimeline,
+  getVehicleAssignments,
+} from "@/lib/fleet/api";
 import {
   VehicleOperationalStatus,
   VehicleComplianceDueStatus,
@@ -12,7 +19,10 @@ import {
   type VehicleDetailResponse,
   type VehicleIssueSummaryResponse,
   type VehicleUpsertRequest,
+  type RiderVehicleAssignmentResponse,
 } from "@/lib/fleet/types";
+import { listRiders } from "@/lib/workforce/api";
+import { listExternalRiders } from "@/lib/workforce/external-riders-api";
 import {
   formatVehicleType,
   formatVehicleFuelType,
@@ -54,6 +64,7 @@ import {
   CheckCircle2,
   Info,
   CalendarDays,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { VehicleAssignmentReportModal } from "@/components/fleet/VehicleAssignmentReportModal";
@@ -77,6 +88,8 @@ export default function VehicleDetailPage() {
   const [isFinancingTransferOpen, setIsFinancingTransferOpen] = useState(false);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState(false);
   const [isPeriodReportOpen, setIsPeriodReportOpen] = useState(false);
+  const [currentAssignment, setCurrentAssignment] = useState<RiderVehicleAssignmentResponse | null>(null);
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
 
   const handleCompleteFinancing = async () => {
     if (!vehicle) return;
@@ -151,6 +164,113 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     if (id) loadData();
   }, [id]);
+
+  useEffect(() => {
+    const summary = vehicle?.summary;
+    const riderProfileId = summary?.currentRiderProfileId;
+    const assignmentId = summary?.currentAssignmentId;
+
+    if (!riderProfileId && !assignmentId && summary?.status !== VehicleOperationalStatus.Assigned) {
+      setCurrentAssignment(null);
+      setCurrentEmployeeId(null);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const resolveCustodyAndEmployee = async () => {
+      let assignment: RiderVehicleAssignmentResponse | null = null;
+
+      // 1. Try fetching assignment directly if assignmentId exists
+      if (assignmentId) {
+        try {
+          assignment = await getVehicleAssignment(assignmentId);
+        } catch (e) {
+          console.warn("Could not fetch vehicle assignment by ID:", e);
+        }
+      }
+
+      // 2. Fallback: try fetching active assignment for vehicle
+      if (!assignment && id) {
+        try {
+          const assignmentsRes = await getVehicleAssignments({ vehicleId: id, status: 1 });
+          const items = Array.isArray(assignmentsRes)
+            ? assignmentsRes
+            : (assignmentsRes as any)?.items || (assignmentsRes as any)?.data || [];
+          const active = items.find(
+            (a: RiderVehicleAssignmentResponse) =>
+              a.status === 1 || !a.endedAtUtc || a.id === assignmentId
+          );
+          if (active) {
+            assignment = active;
+          }
+        } catch (e) {
+          console.warn("Could not fetch assignments by vehicleId:", e);
+        }
+      }
+
+      // 3. Fallback: timeline for rider
+      if (!assignment && riderProfileId) {
+        try {
+          const timeline = await getRiderVehicleTimeline(riderProfileId);
+          const active = timeline?.find(
+            (t) => t.assignment.id === assignmentId || t.assignment.status === 1 || !t.assignment.endedAtUtc
+          );
+          if (active) {
+            assignment = active.assignment;
+          }
+        } catch (e) {
+          console.warn("Could not fetch timeline for rider:", e);
+        }
+      }
+
+      if (isCancelled) return;
+      if (assignment) {
+        setCurrentAssignment(assignment);
+      }
+
+      // 4. Resolve Employee ID for the rider
+      let empId = assignment?.employeeId || null;
+      const targetRiderId = assignment?.riderProfileId || riderProfileId;
+
+      if (!empId && targetRiderId) {
+        try {
+          const [ridersRes, extRidersRes] = await Promise.allSettled([
+            listRiders(),
+            listExternalRiders(),
+          ]);
+          const riders =
+            ridersRes.status === "fulfilled" && Array.isArray(ridersRes.value)
+              ? ridersRes.value
+              : [];
+          const extRiders =
+            extRidersRes.status === "fulfilled" && Array.isArray(extRidersRes.value)
+              ? extRidersRes.value
+              : [];
+
+          const matchedRider = riders.find(
+            (r) => r.id === targetRiderId || r.employeeId === targetRiderId
+          );
+          const matchedExt = extRiders.find(
+            (r) => r.riderProfileId === targetRiderId || r.employeeId === targetRiderId
+          );
+          empId = matchedRider?.employeeId || matchedExt?.employeeId || null;
+        } catch (e) {
+          console.warn("Could not resolve employeeId from rider lists:", e);
+        }
+      }
+
+      if (!isCancelled) {
+        setCurrentEmployeeId(empId);
+      }
+    };
+
+    resolveCustodyAndEmployee();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [id, vehicle?.summary?.currentAssignmentId, vehicle?.summary?.currentRiderProfileId, vehicle?.summary?.status]);
 
   if (!can("fleet.vehicles.read")) {
     return (
@@ -565,30 +685,110 @@ export default function VehicleDetailPage() {
         <div className="space-y-6">
 
           <Card className="p-0 overflow-hidden border-[#1167c9]/20 bg-blue-50/30 dark:bg-blue-950/10">
-            <div className="px-6 py-4 border-b border-blue-100 dark:border-blue-900/30 flex items-center gap-2">
-              <Key className="h-5 w-5 text-[#1167c9]" />
-              <h3 className="font-bold text-[#1167c9]">العهدة الحالية</h3>
+            <div className="px-6 py-4 border-b border-blue-100 dark:border-blue-900/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-[#1167c9]" />
+                <h3 className="font-bold text-[#1167c9]">العهدة الحالية</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPeriodReportOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1167c9] hover:underline bg-white/80 dark:bg-blue-900/40 hover:bg-white px-2.5 py-1 rounded-lg border border-blue-200/80 dark:border-blue-800 shadow-2xs transition-colors cursor-pointer"
+                title="فتح سجل وفترات عهد هذه المركبة"
+              >
+                <History className="h-3.5 w-3.5 text-[#1167c9]" />
+                <span>سجل العهد</span>
+              </button>
             </div>
             <div className="p-6">
-              {summary.currentRiderProfileId ? (
+              {summary.currentRiderProfileId || currentAssignment ? (
                 <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-lg shrink-0">
-                      <User className="h-5 w-5" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-lg shrink-0">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        {can("employees.read") ? (
+                          <Link
+                            href={`/admin/employees/${currentEmployeeId || summary.currentRiderProfileId}`}
+                            className="font-bold text-slate-900 dark:text-slate-100 hover:text-[#1167c9] hover:underline inline-flex items-center gap-1.5 truncate max-w-full"
+                          >
+                            <span className="truncate">
+                              {currentAssignment?.riderName || summary.currentRiderName || `المندوب (${summary.currentRiderProfileId})`}
+                            </span>
+                            <ExternalLink className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          </Link>
+                        ) : (
+                          <span className="font-bold text-slate-900 dark:text-slate-100 truncate block">
+                            {currentAssignment?.riderName || summary.currentRiderName || `المندوب (${summary.currentRiderProfileId})`}
+                          </span>
+                        )}
+
+                        <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+                          {(currentAssignment?.riderIqamaNo || summary.realRider?.iqamaNo) && (
+                            <div className="font-mono">
+                              هوية/إقامة: {currentAssignment?.riderIqamaNo || summary.realRider?.iqamaNo}
+                            </div>
+                          )}
+                          {currentAssignment?.startedAtUtc && (
+                            <div>
+                              تاريخ التسليم: <span dir="ltr" className="font-mono">{formatDate(currentAssignment.startedAtUtc)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <Link href={`/admin/employees/${summary.currentRiderProfileId}`} className="font-bold text-slate-900 dark:text-slate-100 hover:text-[#1167c9] hover:underline">
-                        {summary.currentRiderName || `المندوب (${summary.currentRiderProfileId})`}
+
+                    {(currentAssignment?.id || summary.currentAssignmentId) ? (
+                      <Link
+                        href={`/admin/fleet/assignments/${currentAssignment?.id || summary.currentAssignmentId}`}
+                        className="inline-flex items-center gap-1.5 text-xs text-[#1167c9] hover:underline shrink-0 bg-blue-100/70 hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 px-2.5 py-1 rounded-md font-bold transition-colors"
+                        title="فتح صفحة تفاصيل العهدة الحالية"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>تفاصيل العهدة</span>
+                        <ExternalLink className="h-3 w-3" />
                       </Link>
-                    </div>
+                    ) : (
+                      <Link
+                        href={`/admin/fleet/assignments?search=${encodeURIComponent(summary.plateNumberAr || summary.assetNumber || "")}`}
+                        className="inline-flex items-center gap-1.5 text-xs text-[#1167c9] hover:underline shrink-0 bg-blue-100/70 hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 px-2.5 py-1 rounded-md font-bold transition-colors"
+                        title="عرض العهدة في جدول العهد"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>تفاصيل العهدة</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    )}
                   </div>
 
-                  <AssignmentPromissoryFiles riderProfileId={summary.currentRiderProfileId} />
+                  {currentAssignment?.permissionReference && (
+                    <div className="p-2.5 rounded-lg bg-blue-100/40 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-xs">
+                      <span className="text-slate-500">رقم التفويض: </span>
+                      <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{currentAssignment.permissionReference}</span>
+                      {currentAssignment.permissionEndsOn && (
+                        <span className="text-slate-500 ms-2">
+                          (ينتهي: <span dir="ltr" className="font-mono font-bold">{formatDate(currentAssignment.permissionEndsOn)}</span>)
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <AssignmentPromissoryFiles riderProfileId={summary.currentRiderProfileId || currentAssignment?.riderProfileId || ""} />
                 </div>
               ) : (
-                <div className="text-center py-6 text-slate-500">
-                  <Key className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                <div className="text-center py-6 text-slate-500 space-y-3">
+                  <Key className="h-10 w-10 mx-auto mb-1 opacity-20" />
                   <p>المركبة غير مسلمة لأي مندوب حالياً.</p>
+                  {can("fleet.assignments.manage") && (
+                    <Link href={`/admin/fleet/assignments?search=${encodeURIComponent(summary.plateNumberAr || summary.assetNumber || "")}`}>
+                      <Button variant="secondary" className="text-xs gap-1.5 h-8">
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>تسليم المركبة (بدء عهدة)</span>
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

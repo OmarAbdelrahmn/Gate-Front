@@ -30,6 +30,7 @@ import {
   FileUp,
   CheckCircle2,
   Clock,
+  Eye,
 } from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
 import { TakeVehicleModal } from "./components/TakeVehicleModal";
@@ -794,9 +795,9 @@ export default function AssignmentsPage() {
                     <th className="px-6 py-4">المندوب المنسوب</th>
                     <th className="px-6 py-4">المندوب الفعلي</th>
                     <th className="px-6 py-4">انتهاء التفويض</th>
-                    <th className="px-6 py-4">العداد (كم)</th>
+                    <th className="px-6 py-4 font-mono">العداد (كم)</th>
                     <th className="px-6 py-4 text-center">حالة التعيين</th>
-                    {can("fleet.assignments.manage") && <th className="px-6 py-4 text-center">الإجراءات السريعة</th>}
+                    <th className="px-6 py-4 text-center">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
@@ -922,10 +923,18 @@ export default function AssignmentsPage() {
                           )}
                         </td>
 
-                        {can("fleet.assignments.manage") && (
                           <td className="px-6 py-4 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              {isActive ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Link
+                                href={`/admin/fleet/assignments/${item.id}`}
+                                className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50 bg-indigo-50/50 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/50 transition-colors"
+                                title="عرض تفاصيل العهدة"
+                                aria-label="عرض تفاصيل العهدة"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Link>
+
+                              {isActive && can("fleet.assignments.manage") && (
                                 <>
                                   <button
                                     onClick={() => openModalForAssignment("return", item)}
@@ -957,12 +966,9 @@ export default function AssignmentsPage() {
                                     <FileUp className="h-4 w-4" />
                                   </button>
                                 </>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
                               )}
                             </div>
                           </td>
-                        )}
                       </tr>
                     );
                   })}

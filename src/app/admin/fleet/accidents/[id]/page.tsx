@@ -788,7 +788,7 @@ export default function AccidentDetailPage() {
               <span className="text-[11px] font-semibold text-slate-400 block">المندوب (السائق)</span>
               <div className="flex items-baseline gap-1.5 flex-wrap">
                 <Link
-                  href={`/admin/employees/${accident.summary.riderProfileId}`}
+                  href={`/admin/employees/${targetEmployeeId || accident.summary.riderProfileId}`}
                   className="text-sm font-bold text-slate-900 dark:text-white hover:text-blue-600 hover:underline truncate max-w-[140px]"
                 >
                   {riderInfo?.name || "مندوب"}

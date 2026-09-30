@@ -24,7 +24,8 @@ import {
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
 import { hrCatalogApi, type HrRow } from "../../../../lib/hr/api";
-import { getEmployee } from "../../../../lib/workforce/api";
+import { getEmployee, listRiders } from "../../../../lib/workforce/api";
+import { listExternalRiders } from "../../../../lib/workforce/external-riders-api";
 import { getRiderVehicleTimeline, getVehicleDetail } from "../../../../lib/fleet/api";
 import {
   RiderVehicleAssignmentStatus,
@@ -689,15 +690,60 @@ export default function EmployeeDetailsPage({
   useEffect(() => {
     if (!employeeId) return;
     setError("");
-    void getEmployee(employeeId)
-      .then(setDetails)
-      .catch(() =>
-        setError(
-          locale === "en"
-            ? "Unable to load employee profile or insufficient permissions."
-            : "تعذر تحميل ملف الموظف أو لا تملك صلاحيةعرضه.",
-        ),
-      );
+    let isCancelled = false;
+
+    getEmployee(employeeId)
+      .then((data) => {
+        if (!isCancelled) setDetails(data);
+      })
+      .catch(async () => {
+        // Fallback: Check if the provided employeeId is actually a riderProfileId
+        try {
+          const [ridersRes, extRidersRes] = await Promise.allSettled([
+            listRiders(),
+            listExternalRiders(),
+          ]);
+          const riders =
+            ridersRes.status === "fulfilled" && Array.isArray(ridersRes.value)
+              ? ridersRes.value
+              : [];
+          const extRiders =
+            extRidersRes.status === "fulfilled" && Array.isArray(extRidersRes.value)
+              ? extRidersRes.value
+              : [];
+
+          const matchedRider = riders.find(
+            (r) => r.id === employeeId || r.employeeId === employeeId,
+          );
+          const matchedExt = extRiders.find(
+            (r) => r.riderProfileId === employeeId || r.employeeId === employeeId,
+          );
+          const resolvedEmpId =
+            matchedRider?.employeeId || matchedExt?.employeeId;
+
+          if (resolvedEmpId && resolvedEmpId !== employeeId) {
+            const data = await getEmployee(resolvedEmpId);
+            if (!isCancelled) {
+              setDetails(data);
+              return;
+            }
+          }
+        } catch {
+          // ignore fallback lookup errors
+        }
+
+        if (!isCancelled) {
+          setError(
+            locale === "en"
+              ? "Unable to load employee profile or insufficient permissions."
+              : "تعذر تحميل ملف الموظف أو لا تملك صلاحيةعرضه.",
+          );
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [employeeId, locale]);
 
   const statusEntries = useMemo(() => {
@@ -837,10 +883,27 @@ export default function EmployeeDetailsPage({
 
   if (error) {
     return (
-      <div className="p-6">
-        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </p>
+      <div className="p-6 max-w-xl mx-auto space-y-4 mt-8">
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center space-y-3 dark:bg-red-950/20 dark:border-red-900/50">
+          <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
+          <h2 className="text-lg font-bold text-red-800 dark:text-red-200">
+            {locale === "en" ? "Unable to Load Employee Profile" : "تعذر تحميل ملف الموظف"}
+          </h2>
+          <p className="text-sm text-red-600 dark:text-red-300">
+            {error}
+          </p>
+          <div className="pt-2 flex items-center justify-center gap-3">
+            <Button variant="secondary" onClick={() => window.history.back()} className="text-xs">
+              <BackIcon className="h-4 w-4" />
+              <span>{isEn ? "Go Back" : "العودة للخلف"}</span>
+            </Button>
+            <Link href="/admin/fleet/assignments">
+              <Button variant="secondary" className="text-xs">
+                <span>{isEn ? "Fleet Assignments" : "جدول عهد المركبات"}</span>
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
