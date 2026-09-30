@@ -20,7 +20,8 @@ const permitted = (
 ) =>
   (!item.roles || item.roles.includes(role)) &&
   (!item.permission || can(item.permission)) &&
-  (!item.permissionsAny || item.permissionsAny.some(can));
+  (!item.permissionsAny || item.permissionsAny.some(can)) &&
+  (!item.permissionsAll || item.permissionsAll.every(can));
 
 export function Sidebar({
   role = "admin",

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { listRiders, listSponsors, Sponsor } from "@/lib/workforce/api";
 import {
   getFuelCards,
+  getAllFuelCards,
   FuelCard,
   FuelCardPage,
   FuelProvider,
@@ -37,6 +38,18 @@ import {
   type FilterOption,
 } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
 
+function normalizeText(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+}
+
 interface FuelCardsListViewProps {
   searchQuery: string;
   onSearchChange: (val: string) => void;
@@ -61,7 +74,7 @@ export function FuelCardsListView({
   const [providerFilter, setProviderFilter] = useState<string[]>([]);
   const [riderFilterId, setRiderFilterId] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(2000);
+  const [pageSize, setPageSize] = useState(500);
 
   // Table Header Column Filters (Multi)
   const [headerCardNumberFilter, setHeaderCardNumberFilter] = useState<string[]>([]);
@@ -143,7 +156,7 @@ export function FuelCardsListView({
     searchQuery,
   ]);
 
-  const [cardsPageData, setCardsPageData] = useState<FuelCardPage | null>(null);
+  const [allCards, setAllCards] = useState<FuelCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [ridersOptions, setRidersOptions] = useState<SelectOption[]>([]);
 
@@ -179,36 +192,27 @@ export function FuelCardsListView({
   const fetchCards = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getFuelCards({
-        search: searchQuery.trim() || undefined,
-        provider: providerFilter.length === 1 ? (providerFilter[0] as FuelProvider) : undefined,
-        riderProfileId: riderFilterId || undefined,
-        page,
-        pageSize,
-      });
-      setCardsPageData(data);
+      const data = await getAllFuelCards();
+      setAllCards(data);
     } catch (err) {
       console.error("Failed to fetch fuel cards:", err);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, providerFilter, riderFilterId, page, pageSize]);
+  }, []);
 
   useEffect(() => {
     fetchCards();
   }, [fetchCards]);
 
-  const items = cardsPageData?.items || [];
-  const totalCount = cardsPageData?.totalCount || 0;
-  const totalPages = Math.ceil(totalCount / (cardsPageData?.pageSize || pageSize)) || 1;
+  // Statistics across ALL data
+  const totalCount = allCards.length;
+  const assignedCount = allCards.filter((c) => c.currentRider !== null).length;
+  const unassignedCount = allCards.filter((c) => c.currentRider === null).length;
+  const petroCount = allCards.filter((c) => c.provider === "PetroApp").length;
+  const sayaraCount = allCards.filter((c) => c.provider === "SayaraApp").length;
 
-  // Statistics
-  const assignedCount = items.filter((c) => c.currentRider !== null).length;
-  const unassignedCount = items.filter((c) => c.currentRider === null).length;
-  const petroCount = items.filter((c) => c.provider === "PetroApp").length;
-  const sayaraCount = items.filter((c) => c.provider === "SayaraApp").length;
-
-  // Options for Table Header Filters
+  // Options for Table Header Filters (computed across all cards)
   const providerOptions = useMemo<FilterOption[]>(() => {
     return [
       { value: "PetroApp", label: fuelProviderLabels.PetroApp, count: petroCount },
@@ -218,7 +222,7 @@ export function FuelCardsListView({
 
   const cardNumberOptions = useMemo<FilterOption[]>(() => {
     const map = new Map<string, number>();
-    items.forEach((c) => {
+    allCards.forEach((c) => {
       if (c.cardNumber) {
         map.set(c.cardNumber, (map.get(c.cardNumber) || 0) + 1);
       }
@@ -230,12 +234,12 @@ export function FuelCardsListView({
         label: num,
         count,
       }));
-  }, [items]);
+  }, [allCards]);
 
   const plateOptions = useMemo<FilterOption[]>(() => {
     const map = new Map<string, number>();
     let unassignedPlates = 0;
-    items.forEach((c) => {
+    allCards.forEach((c) => {
       if (c.plateNumberText) {
         map.set(c.plateNumberText, (map.get(c.plateNumberText) || 0) + 1);
       } else {
@@ -257,7 +261,7 @@ export function FuelCardsListView({
       });
     }
     return opts;
-  }, [items]);
+  }, [allCards]);
 
   const assignmentOptions = useMemo<FilterOption[]>(() => {
     const opts: FilterOption[] = [
@@ -265,7 +269,7 @@ export function FuelCardsListView({
       { value: "unassigned", label: "شاغرة (غير مسندة)", count: unassignedCount },
     ];
     const riderMap = new Map<string, { label: string; count: number }>();
-    items.forEach((c) => {
+    allCards.forEach((c) => {
       if (c.currentRider) {
         const id = c.currentRider.riderProfileId;
         const name = c.currentRider.riderNameAr || c.currentRider.riderNameEn || "مندوب";
@@ -282,11 +286,11 @@ export function FuelCardsListView({
       });
     });
     return opts;
-  }, [items, assignedCount, unassignedCount]);
+  }, [allCards, assignedCount, unassignedCount]);
 
   const sponsorOptions = useMemo<FilterOption[]>(() => {
     const map = new Map<string, number>();
-    items.forEach((c) => {
+    allCards.forEach((c) => {
       if (c.sponsorId) {
         map.set(c.sponsorId, (map.get(c.sponsorId) || 0) + 1);
       }
@@ -301,7 +305,7 @@ export function FuelCardsListView({
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [items, sponsorsMap]);
+  }, [allCards, sponsorsMap]);
 
   const isHeaderFiltered = Boolean(
     providerFilter.length > 0 ||
@@ -324,15 +328,25 @@ export function FuelCardsListView({
     }
   };
 
-  // Client-filtered cards based on table header filters (Multi)
+  // Client-filtered cards based on top search, top provider/rider filters, and table header filters
   const filteredCards = useMemo(() => {
-    return items.filter((card) => {
+    return allCards.filter((card) => {
+      // Top Provider Filter
       if (providerFilter.length > 0 && !providerFilter.includes(card.provider)) {
         return false;
       }
+
+      // Top Rider Filter
+      if (riderFilterId && card.currentRider?.riderProfileId !== riderFilterId) {
+        return false;
+      }
+
+      // Column: Card Number Filter
       if (headerCardNumberFilter.length > 0 && !headerCardNumberFilter.includes(card.cardNumber)) {
         return false;
       }
+
+      // Column: Plate Number Filter
       if (headerPlateFilter.length > 0) {
         const match = headerPlateFilter.some((pf) => {
           if (pf === "__none__") return !card.plateNumberText;
@@ -340,6 +354,8 @@ export function FuelCardsListView({
         });
         if (!match) return false;
       }
+
+      // Column: Assignment Filter
       if (headerAssignmentFilter.length > 0) {
         const match = headerAssignmentFilter.some((af) => {
           if (af === "assigned") return Boolean(card.currentRider);
@@ -348,35 +364,72 @@ export function FuelCardsListView({
         });
         if (!match) return false;
       }
+
+      // Column: Sponsor Filter
       if (headerSponsorFilter.length > 0 && !headerSponsorFilter.includes(card.sponsorId)) {
         return false;
       }
+
+      // Global Search Query
+      if (searchQuery.trim()) {
+        const sp = sponsorsMap[card.sponsorId];
+        const sponsorName = sp ? (sp.registryNameAr || sp.registryNameEn || sp.id) : (card.sponsorId || "");
+        const searchableText = normalizeText(
+          [
+            card.cardNumber,
+            card.plateNumberText,
+            card.currentRider?.riderNameAr,
+            card.currentRider?.riderNameEn,
+            card.currentRider?.employeeId,
+            sponsorName,
+            card.notes,
+            card.providerNameAr,
+            fuelProviderLabels[card.provider],
+            card.provider,
+          ]
+            .filter(Boolean)
+            .join(" ")
+        );
+        const queryTokens = normalizeText(searchQuery).split(/\s+/).filter(Boolean);
+        const matchSearch = queryTokens.every((token) => searchableText.includes(token));
+        if (!matchSearch) return false;
+      }
+
       return true;
     });
-  }, [items, providerFilter, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter, headerSponsorFilter]);
+  }, [
+    allCards,
+    providerFilter,
+    riderFilterId,
+    headerCardNumberFilter,
+    headerPlateFilter,
+    headerAssignmentFilter,
+    headerSponsorFilter,
+    searchQuery,
+    sponsorsMap,
+  ]);
+
+  // Reset page to 1 when filters or search change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, providerFilter, riderFilterId, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter, headerSponsorFilter]);
+
+  const totalPages = Math.ceil(filteredCards.length / pageSize) || 1;
+  const paginatedCards = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredCards.slice(start, start + pageSize);
+  }, [filteredCards, page, pageSize]);
 
   const [exporting, setExporting] = useState(false);
 
   const handleExportExcel = async () => {
+    if (filteredCards.length === 0) return;
     setExporting(true);
     try {
-      const data = await getFuelCards({
-        search: searchQuery.trim() || undefined,
-        provider: providerFilter.length === 1 ? (providerFilter[0] as FuelProvider) : undefined,
-        riderProfileId: riderFilterId || undefined,
-        page: 1,
-        pageSize: 10000,
-      });
-
-      const exportItems = data?.items || [];
-      if (exportItems.length === 0) {
-        return;
-      }
-
       await exportToExcel({
         filename: `fuel-cards-${new Date().toISOString().split("T")[0]}`,
         sheetName: "بطاقات الوقود",
-        data: exportItems,
+        data: filteredCards,
         columns: [
           { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
           { header: "رقم البطاقة", accessor: (c) => c.cardNumber, width: 22, isText: true },
@@ -391,6 +444,7 @@ export function FuelCardsListView({
           },
           { header: "اللوحة المرتبطة", accessor: (c) => c.plateNumberText || "—", width: 16, isText: true },
           { header: "المندوب المعين", accessor: (c) => c.currentRider?.riderNameAr || c.currentRider?.riderNameEn || "غير معين", width: 24 },
+          { header: "الرقم الوظيفي للمندوب", accessor: (c) => c.currentRider?.employeeId || "—", width: 18, isText: true },
           { header: "تاريخ بداية التعيين", accessor: (c) => c.currentRider?.effectiveFrom ? c.currentRider.effectiveFrom.split("T")[0] : "—", width: 18 },
           { header: "حالة التعيين", accessor: (c) => c.currentRider ? "معين" : "شاغر (متاح)", width: 16 },
           { header: "ملاحظات", accessor: (c) => c.notes || "—", width: 24 },
@@ -439,7 +493,7 @@ export function FuelCardsListView({
 
         <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
           <div className="flex items-center justify-between text-xs text-[var(--muted)] font-medium">
-            <span>بترو اب / سيارة اب (بالمعروض)</span>
+            <span>بترو اب / سيارة اب</span>
             <Building size={18} className="text-indigo-500" />
           </div>
           <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
@@ -504,11 +558,11 @@ export function FuelCardsListView({
           <button
             type="button"
             onClick={handleExportExcel}
-            disabled={exporting || loading || totalCount === 0}
+            disabled={exporting || loading || filteredCards.length === 0}
             className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs hover:bg-emerald-100 transition-colors shrink-0 disabled:opacity-50"
           >
             <FileSpreadsheet size={16} />
-            تصدير إكسل
+            {exporting ? "جاري التصدير..." : "تصدير إكسل"}
           </button>
         </div>
       </div>
@@ -638,17 +692,17 @@ export function FuelCardsListView({
                     جاري تحميل بطاقات الوقود...
                   </td>
                 </tr>
-              ) : items.length === 0 ? (
+              ) : allCards.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
-                    لا توجد بطاقات وقود تطابق معايير البحث.
+                    لا توجد بطاقات وقود مسجلة.
                   </td>
                 </tr>
               ) : filteredCards.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
                     <FilterIcon size={24} className="mx-auto opacity-40 mb-2" />
-                    <p className="font-bold text-sm text-[var(--foreground)]">لا توجد بطاقات وقود تطابق فلاتر الأعمدة المحددة.</p>
+                    <p className="font-bold text-sm text-[var(--foreground)]">لا توجد بطاقات وقود تطابق فلاتر الأعمدة أو معايير البحث المحددة.</p>
                     <button
                       type="button"
                       onClick={clearHeaderFilters}
@@ -659,7 +713,7 @@ export function FuelCardsListView({
                   </td>
                 </tr>
               ) : (
-                filteredCards.map((card: FuelCard) => {
+                paginatedCards.map((card: FuelCard) => {
                   const hasRider = card.currentRider !== null;
 
                   return (
@@ -807,26 +861,53 @@ export function FuelCardsListView({
           </table>
         </div>
 
-        {/* Server Pagination */}
-        {cardsPageData && (
+        {/* Client Pagination */}
+        {allCards.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-[var(--border)] text-xs text-[var(--muted)] font-medium">
-            <div>
-              عرض {items.length} من إجمالي {totalCount} بطاقة (الصفحة {page} من {totalPages})
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                عرض <strong className="text-[var(--foreground)]">{paginatedCards.length}</strong> من أصل{" "}
+                <strong className="text-[var(--foreground)]">{filteredCards.length}</strong> بطاقة
+                {filteredCards.length !== allCards.length && (
+                  <span className="mr-1">(من إجمالي {allCards.length})</span>
+                )}
+                {" "}(الصفحة {page} من {totalPages})
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span>لكل صفحة:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="h-7 px-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] outline-none cursor-pointer"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1 || loading}
-                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+                title="الصفحة السابقة"
               >
                 <ChevronRight size={18} />
               </button>
-              <span className="px-2 font-bold text-[var(--foreground)]">{page}</span>
+              <span className="px-2 font-bold text-[var(--foreground)]">{page} / {totalPages}</span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages || loading}
-                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+                title="الصفحة التالية"
               >
                 <ChevronLeft size={18} />
               </button>

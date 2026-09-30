@@ -635,6 +635,15 @@ export default function VehiclesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/admin/fleet/vehicles/reports">
+            <Button
+              variant="secondary"
+              className="inline-flex items-center gap-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-[#1167c9]" />
+              تقارير فترات العهد
+            </Button>
+          </Link>
           <Button
             variant="secondary"
             onClick={handleExportExcel}

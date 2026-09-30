@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { listRiders } from "@/lib/workforce/api";
 import {
   getFuelMonthlyUsage,
+  getAllFuelMonthlyUsage,
   FuelMonthlyUsage,
   FuelMonthlyUsagePage,
   FuelProvider,
@@ -22,6 +23,7 @@ import {
   Coins,
   FileSpreadsheet,
 } from "lucide-react";
+import { exportToExcel } from "@/lib/export-excel";
 
 export function FuelMonthlyUsageView() {
   // Default to 1st of current month
@@ -41,6 +43,7 @@ export function FuelMonthlyUsageView() {
 
   const [data, setData] = useState<FuelMonthlyUsagePage | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [ridersOptions, setRidersOptions] = useState<SelectOption[]>([]);
 
   useEffect(() => {
@@ -85,6 +88,50 @@ export function FuelMonthlyUsageView() {
   const totalLiters = data?.totalLiters ?? 0;
   const totalAmount = data?.totalAmount ?? 0;
 
+  const handleExportExcel = async () => {
+    if (totalCount === 0) return;
+    setExporting(true);
+    try {
+      const allMonthlyItems = await getAllFuelMonthlyUsage({
+        month,
+        search: search.trim() || undefined,
+        provider: provider || undefined,
+        riderProfileId: riderProfileId || undefined,
+      });
+
+      if (allMonthlyItems.length === 0) {
+        return;
+      }
+
+      await exportToExcel({
+        filename: `fuel-monthly-usage-${month}`,
+        sheetName: `استهلاك شهر ${month}`.slice(0, 31),
+        data: allMonthlyItems,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "المزود", accessor: (item) => item.providerNameAr || fuelProviderLabels[item.provider] || item.provider, width: 16 },
+          { header: "رقم البطاقة", accessor: (item) => item.cardNumber, width: 22, isText: true },
+          { header: "رقم اللوحة", accessor: (item) => item.plateNumberText || "—", width: 16, isText: true },
+          { header: "المندوب المسند له", accessor: (item) => item.riderNameAr || item.riderNameEn || "—", width: 24 },
+          { header: "الرقم الوظيفي للمندوب", accessor: (item) => item.employeeId || "—", width: 18, isText: true },
+          { header: "الشهر", accessor: (item) => item.reportMonth, width: 14, isText: true },
+          { header: "اللترات المستهلكة", accessor: (item) => item.totalLiters ?? 0, width: 18 },
+          { header: "المبلغ قبل الضريبة (ر.س)", accessor: (item) => item.amountBeforeTax != null ? item.amountBeforeTax : "—", width: 22 },
+          { header: "مبلغ الضريبة (ر.س)", accessor: (item) => item.vatAmount != null ? item.vatAmount : "—", width: 18 },
+          { header: "الإجمالي شامل الضريبة (ر.س)", accessor: (item) => item.totalAmount ?? 0, width: 24 },
+          { header: "عدد العمليات", accessor: (item) => item.transactionCount != null ? item.transactionCount : "—", width: 14 },
+          { header: "نوع الوقود", accessor: (item) => item.fuelType || "—", width: 16 },
+          { header: "تاريخ أول عملية", accessor: (item) => item.firstTransactionAtUtc ? item.firstTransactionAtUtc.split("T")[0] : "—", width: 18 },
+          { header: "تاريخ آخر عملية", accessor: (item) => item.lastTransactionAtUtc ? item.lastTransactionAtUtc.split("T")[0] : "—", width: 18 },
+        ],
+      });
+    } catch (err) {
+      console.error("Export monthly usage error:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4" dir="rtl">
       {/* Summary KPI Cards above table */}
@@ -122,82 +169,94 @@ export function FuelMonthlyUsageView() {
 
       {/* Filters Toolbar */}
       <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          {/* Month Selector (Required) */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              الشهر المطلوب <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={month}
-              onChange={(e) => {
-                setMonth(e.target.value);
-                setPage(1);
-              }}
-              className="w-full h-10 px-3 text-xs font-bold font-mono rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
-              required
-            />
-          </div>
-
-          {/* Search */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              بحث في السجلات
-            </label>
-            <div className="relative">
-              <Search
-                size={16}
-                className="absolute start-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
-              />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-end justify-between gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 flex-1">
+            {/* Month Selector (Required) */}
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
+                الشهر المطلوب <span className="text-red-500">*</span>
+              </label>
               <input
-                type="text"
-                value={search}
+                type="date"
+                value={month}
                 onChange={(e) => {
-                  setSearch(e.target.value);
+                  setMonth(e.target.value);
                   setPage(1);
                 }}
-                placeholder="بحث برقم البطاقة، اللوحة، المندوب..."
-                className="w-full h-10 ps-9 pe-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
+                className="w-full h-10 px-3 text-xs font-bold font-mono rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
+                required
+              />
+            </div>
+
+            {/* Search */}
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
+                بحث في السجلات
+              </label>
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="absolute start-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="بحث برقم البطاقة، اللوحة، المندوب..."
+                  className="w-full h-10 ps-9 pe-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Provider Filter */}
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
+                مزود الخدمة
+              </label>
+              <select
+                value={provider}
+                onChange={(e) => {
+                  setProvider(e.target.value as FuelProvider | "");
+                  setPage(1);
+                }}
+                className="w-full h-10 px-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none cursor-pointer"
+              >
+                <option value="">جميع المزودين...</option>
+                <option value="PetroApp">{fuelProviderLabels.PetroApp}</option>
+                <option value="SayaraApp">{fuelProviderLabels.SayaraApp}</option>
+              </select>
+            </div>
+
+            {/* Rider Filter */}
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
+                تصفية حسب المندوب
+              </label>
+              <SearchableSelect
+                value={riderProfileId}
+                onChange={(val) => {
+                  setRiderProfileId(val);
+                  setPage(1);
+                }}
+                options={ridersOptions}
+                placeholder="المندوب..."
+                searchPlaceholder="بحث في المناديب..."
               />
             </div>
           </div>
 
-          {/* Provider Filter */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              مزود الخدمة
-            </label>
-            <select
-              value={provider}
-              onChange={(e) => {
-                setProvider(e.target.value as FuelProvider | "");
-                setPage(1);
-              }}
-              className="w-full h-10 px-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none cursor-pointer"
-            >
-              <option value="">جميع المزودين...</option>
-              <option value="PetroApp">{fuelProviderLabels.PetroApp}</option>
-              <option value="SayaraApp">{fuelProviderLabels.SayaraApp}</option>
-            </select>
-          </div>
-
-          {/* Rider Filter */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              تصفية حسب المندوب
-            </label>
-            <SearchableSelect
-              value={riderProfileId}
-              onChange={(val) => {
-                setRiderProfileId(val);
-                setPage(1);
-              }}
-              options={ridersOptions}
-              placeholder="المندوب..."
-              searchPlaceholder="بحث في المناديب..."
-            />
-          </div>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exporting || loading || totalCount === 0}
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs hover:bg-emerald-100 transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+          >
+            <FileSpreadsheet size={16} />
+            {exporting ? "جاري التصدير..." : "تصدير إكسل"}
+          </button>
         </div>
       </div>
 

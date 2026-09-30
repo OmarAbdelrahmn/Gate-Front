@@ -51,6 +51,7 @@ export type NavItem = {
   roles?: Role[];
   permission?: string;
   permissionsAny?: string[];
+  permissionsAll?: string[];
   children?: NavItem[];
 };
 
@@ -269,6 +270,19 @@ export const navigation: NavItem[] = [
         icon: Car,
         roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.vehicles.read",
+      },
+      {
+        label: "تقارير فترات العهد والتعيينات",
+        labelKey: "nav.assignmentPeriodReports",
+        href: "/admin/fleet/vehicles/reports",
+        icon: FileSpreadsheet,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAll: [
+          "reports.read",
+          "fleet.assignments.read",
+          "fleet.vehicles.read",
+          "riders.read",
+        ],
       },
       {
         label: "بطاقات الوقود",

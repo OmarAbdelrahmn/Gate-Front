@@ -121,7 +121,7 @@ export type SystemDashboardReport = {
 
 export type Guid = string;
 export type CalendarDate = string; // YYYY-MM-DD
-export type IsoTimestamp = string; // ISO 8601 with an explicit offset
+export type IsoTimestamp = string; // ISO 8601 with an explicit offset, such as Z or +03:00
 
 export interface VehicleAssignmentsPeriodReport {
   fromDate: CalendarDate;
@@ -136,7 +136,8 @@ export interface VehicleAssignmentsPeriodRow {
   serialNumber: string | null;
   plateNumberAr: string | null;
   totalDaysAssignedInPeriod: number;
-  assignments: VehicleRiderPeriodAssignment[];
+  totalAmountToCollectInPeriodSar: number | null;
+  assignments: RiderVehiclePeriodAssignment[];
 }
 
 export interface RiderAssignmentsPeriodReport {
@@ -152,7 +153,15 @@ export interface RiderAssignmentsPeriodRow {
   riderName: string | null;
   riderIqamaNo: string | null;
   totalDaysWithVehiclesInPeriod: number;
-  assignments: VehicleRiderPeriodAssignment[];
+  totalVehicleCostInPeriodSar: number | null;
+  assignments: RiderVehiclePeriodAssignment[];
+}
+
+export interface RiderVehiclePeriodAssignment extends VehicleRiderPeriodAssignment {
+  vehicleType: number; // 1=Motorcycle, 2=Car, 3=Van, 4=Truck, 5=Other
+  monthlyCostSar: number | null;
+  dailyCostSar: number | null;
+  costInPeriodSar: number | null;
 }
 
 export interface VehicleRiderPeriodAssignment {

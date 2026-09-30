@@ -158,6 +158,39 @@ export async function getFuelCards(params?: {
   return authFetch<FuelCardPage>(`/api/fuel-cards${str ? `?${str}` : ""}`);
 }
 
+export async function getAllFuelCards(params?: {
+  search?: string;
+  provider?: FuelProvider;
+  riderProfileId?: string;
+}): Promise<FuelCard[]> {
+  const pageSize = 300;
+  const firstRes = await getFuelCards({ ...params, page: 1, pageSize });
+  let allItems = firstRes?.items || [];
+  const totalCount = firstRes?.totalCount ?? allItems.length;
+
+  if (totalCount > allItems.length) {
+    const actualPageSize = firstRes?.pageSize || pageSize;
+    const totalPages = Math.ceil(totalCount / actualPageSize);
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getFuelCards({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
+          console.warn(`Failed to fetch fuel cards page ${p}:`, err);
+          return null;
+        })
+      );
+    }
+    const remainingResults = await Promise.all(pagePromises);
+    for (const res of remainingResults) {
+      if (res?.items) {
+        allItems = allItems.concat(res.items);
+      }
+    }
+  }
+
+  return allItems;
+}
+
 export async function getFuelCard(id: string): Promise<FuelCard> {
   return authFetch<FuelCard>(`/api/fuel-cards/${encodeURIComponent(id)}`);
 }
@@ -241,6 +274,40 @@ export async function getFuelMonthlyUsage(params: {
   if (params.page) query.set("page", params.page.toString());
   if (params.pageSize) query.set("pageSize", params.pageSize.toString());
   return authFetch<FuelMonthlyUsagePage>(`/api/fuel-cards/monthly-usage?${query.toString()}`);
+}
+
+export async function getAllFuelMonthlyUsage(params: {
+  month: string;
+  search?: string;
+  provider?: FuelProvider;
+  riderProfileId?: string;
+}): Promise<FuelMonthlyUsage[]> {
+  const pageSize = 300;
+  const firstRes = await getFuelMonthlyUsage({ ...params, page: 1, pageSize });
+  let allItems = firstRes?.items || [];
+  const totalCount = firstRes?.totalCount ?? allItems.length;
+
+  if (totalCount > allItems.length) {
+    const actualPageSize = firstRes?.pageSize || pageSize;
+    const totalPages = Math.ceil(totalCount / actualPageSize);
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getFuelMonthlyUsage({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
+          console.warn(`Failed to fetch fuel monthly usage page ${p}:`, err);
+          return null;
+        })
+      );
+    }
+    const remainingResults = await Promise.all(pagePromises);
+    for (const res of remainingResults) {
+      if (res?.items) {
+        allItems = allItems.concat(res.items);
+      }
+    }
+  }
+
+  return allItems;
 }
 
 export async function importFuelSpreadsheet(
