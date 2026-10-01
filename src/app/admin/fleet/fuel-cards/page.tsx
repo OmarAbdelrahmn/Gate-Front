@@ -15,6 +15,7 @@ import { StopFuelCardRiderModal } from "./components/StopFuelCardRiderModal";
 import { FuelCardAssignmentsModal } from "./components/FuelCardAssignmentsModal";
 import { FuelCardDetailsModal } from "./components/FuelCardDetailsModal";
 import { ChangeFuelCardSponsorModal } from "./components/ChangeFuelCardSponsorModal";
+import { ChangeFuelCardCityModal } from "./components/ChangeFuelCardCityModal";
 import { ShieldAlert } from "lucide-react";
 
 export default function FuelCardsPage() {
@@ -46,6 +47,7 @@ export default function FuelCardsPage() {
   const [historyModalCard, setHistoryModalCard] = useState<FuelCard | null>(null);
   const [detailModalCardId, setDetailModalCardId] = useState<string | null>(null);
   const [changeSponsorCard, setChangeSponsorCard] = useState<FuelCard | null>(null);
+  const [changeCityCard, setChangeCityCard] = useState<FuelCard | null>(null);
 
   if (!canRead) {
     return (
@@ -94,6 +96,7 @@ export default function FuelCardsPage() {
           onOpenHistory={(card) => setHistoryModalCard(card)}
           onOpenDetail={(cardId) => setDetailModalCardId(cardId)}
           onOpenChangeSponsor={(card) => setChangeSponsorCard(card)}
+          onOpenChangeCity={(card) => setChangeCityCard(card)}
         />
       )}
 
@@ -159,12 +162,25 @@ export default function FuelCardsPage() {
           setDetailModalCardId(null);
           setChangeSponsorCard(card);
         }}
+        onOpenChangeCity={(card) => {
+          setDetailModalCardId(null);
+          setChangeCityCard(card);
+        }}
       />
 
       <ChangeFuelCardSponsorModal
         isOpen={changeSponsorCard !== null}
         onClose={() => setChangeSponsorCard(null)}
         card={changeSponsorCard}
+        onSuccess={() => {
+          triggerRefresh();
+        }}
+      />
+
+      <ChangeFuelCardCityModal
+        isOpen={changeCityCard !== null}
+        onClose={() => setChangeCityCard(null)}
+        card={changeCityCard}
         onSuccess={() => {
           triggerRefresh();
         }}

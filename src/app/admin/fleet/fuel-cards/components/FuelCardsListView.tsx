@@ -28,6 +28,7 @@ import {
   UserCheck,
   Building,
   Building2,
+  MapPin,
   X,
   Filter as FilterIcon,
   FileSpreadsheet,
@@ -59,6 +60,7 @@ interface FuelCardsListViewProps {
   onOpenHistory: (card: FuelCard) => void;
   onOpenDetail: (cardId: string) => void;
   onOpenChangeSponsor: (card: FuelCard) => void;
+  onOpenChangeCity: (card: FuelCard) => void;
 }
 
 export function FuelCardsListView({
@@ -70,8 +72,10 @@ export function FuelCardsListView({
   onOpenHistory,
   onOpenDetail,
   onOpenChangeSponsor,
+  onOpenChangeCity,
 }: FuelCardsListViewProps) {
   const [providerFilter, setProviderFilter] = useState<string[]>([]);
+  const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
   const [riderFilterId, setRiderFilterId] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(500);
@@ -100,6 +104,7 @@ export function FuelCardsListView({
         };
 
         if (parsed.providerFilter) setProviderFilter(toArray(parsed.providerFilter));
+        if (parsed.headerCityFilter) setHeaderCityFilter(toArray(parsed.headerCityFilter));
         if (typeof parsed.riderFilterId === "string") setRiderFilterId(parsed.riderFilterId);
         if (parsed.headerCardNumberFilter) setHeaderCardNumberFilter(toArray(parsed.headerCardNumberFilter));
         if (parsed.headerPlateFilter) setHeaderPlateFilter(toArray(parsed.headerPlateFilter));
@@ -120,6 +125,7 @@ export function FuelCardsListView({
     try {
       if (
         providerFilter.length > 0 ||
+        headerCityFilter.length > 0 ||
         riderFilterId ||
         headerCardNumberFilter.length > 0 ||
         headerPlateFilter.length > 0 ||
@@ -131,6 +137,7 @@ export function FuelCardsListView({
           FUEL_CARDS_FILTERS_SESSION_KEY,
           JSON.stringify({
             providerFilter,
+            headerCityFilter,
             riderFilterId,
             headerCardNumberFilter,
             headerPlateFilter,
@@ -148,6 +155,7 @@ export function FuelCardsListView({
   }, [
     isRestored,
     providerFilter,
+    headerCityFilter,
     riderFilterId,
     headerCardNumberFilter,
     headerPlateFilter,
@@ -307,8 +315,28 @@ export function FuelCardsListView({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [allCards, sponsorsMap]);
 
+  const cityOptions = useMemo<FilterOption[]>(() => {
+    const map = new Map<string, { label: string; count: number }>();
+    allCards.forEach((c) => {
+      if (c.operatingCityId) {
+        const name = c.operatingCityNameAr || c.operatingCityNameEn || c.operatingCityId;
+        const curr = map.get(c.operatingCityId) || { label: name, count: 0 };
+        curr.count++;
+        map.set(c.operatingCityId, curr);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, info]) => ({
+        value: id,
+        label: info.label,
+        count: info.count,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [allCards]);
+
   const isHeaderFiltered = Boolean(
     providerFilter.length > 0 ||
+    headerCityFilter.length > 0 ||
     headerCardNumberFilter.length > 0 ||
     headerPlateFilter.length > 0 ||
     headerAssignmentFilter.length > 0 ||
@@ -317,6 +345,7 @@ export function FuelCardsListView({
 
   const clearHeaderFilters = () => {
     setProviderFilter([]);
+    setHeaderCityFilter([]);
     setHeaderCardNumberFilter([]);
     setHeaderPlateFilter([]);
     setHeaderAssignmentFilter([]);
@@ -333,6 +362,11 @@ export function FuelCardsListView({
     return allCards.filter((card) => {
       // Top Provider Filter
       if (providerFilter.length > 0 && !providerFilter.includes(card.provider)) {
+        return false;
+      }
+
+      // Column: Operating City Filter
+      if (headerCityFilter.length > 0 && !headerCityFilter.includes(card.operatingCityId)) {
         return false;
       }
 
@@ -378,6 +412,8 @@ export function FuelCardsListView({
           [
             card.cardNumber,
             card.plateNumberText,
+            card.operatingCityNameAr,
+            card.operatingCityNameEn,
             card.currentRider?.riderNameAr,
             card.currentRider?.riderNameEn,
             card.currentRider?.employeeId,
@@ -400,6 +436,7 @@ export function FuelCardsListView({
   }, [
     allCards,
     providerFilter,
+    headerCityFilter,
     riderFilterId,
     headerCardNumberFilter,
     headerPlateFilter,
@@ -412,7 +449,7 @@ export function FuelCardsListView({
   // Reset page to 1 when filters or search change
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, providerFilter, riderFilterId, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter, headerSponsorFilter]);
+  }, [searchQuery, providerFilter, headerCityFilter, riderFilterId, headerCardNumberFilter, headerPlateFilter, headerAssignmentFilter, headerSponsorFilter]);
 
   const totalPages = Math.ceil(filteredCards.length / pageSize) || 1;
   const paginatedCards = useMemo(() => {
@@ -434,6 +471,11 @@ export function FuelCardsListView({
           { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
           { header: "رقم البطاقة", accessor: (c) => c.cardNumber, width: 22, isText: true },
           { header: "المزود", accessor: (c) => c.providerNameAr || fuelProviderLabels[c.provider] || String(c.provider), width: 16 },
+          {
+            header: "مدينة التشغيل",
+            accessor: (c) => c.operatingCityNameAr || c.operatingCityNameEn || c.operatingCityId || "—",
+            width: 18,
+          },
           {
             header: "الكفيل",
             accessor: (c) => {
@@ -577,6 +619,12 @@ export function FuelCardsListView({
               <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setProviderFilter(providerFilter.filter((x) => x !== pf))} />
             </Badge>
           ))}
+          {headerCityFilter.map((cId) => (
+            <Badge key={cId} className="bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 gap-1 pl-1.5 font-medium">
+              المدينة: {cityOptions.find((o: FilterOption) => o.value === cId)?.label || cId}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderCityFilter(headerCityFilter.filter((x) => x !== cId))} />
+            </Badge>
+          ))}
           {headerCardNumberFilter.map((cNum) => (
             <Badge key={cNum} className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 gap-1 pl-1.5 font-medium">
               رقم البطاقة: {cNum}
@@ -629,6 +677,18 @@ export function FuelCardsListView({
                       }}
                       options={providerOptions}
                       placeholder="تصفية بالمزود..."
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-start whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1.5">
+                    <span>مدينة التشغيل</span>
+                    <TableHeaderColumnFilter
+                      label="المدينة"
+                      value={headerCityFilter}
+                      onChange={setHeaderCityFilter}
+                      options={cityOptions}
+                      placeholder="تصفية بمدينة التشغيل..."
                     />
                   </div>
                 </th>
@@ -687,20 +747,20 @@ export function FuelCardsListView({
             <tbody className="divide-y divide-[var(--border)] font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     <RefreshCw size={24} className="mx-auto animate-spin mb-2 text-[#1167c9]" />
                     جاري تحميل بطاقات الوقود...
                   </td>
                 </tr>
               ) : allCards.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     لا توجد بطاقات وقود مسجلة.
                   </td>
                 </tr>
               ) : filteredCards.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     <FilterIcon size={24} className="mx-auto opacity-40 mb-2" />
                     <p className="font-bold text-sm text-[var(--foreground)]">لا توجد بطاقات وقود تطابق فلاتر الأعمدة أو معايير البحث المحددة.</p>
                     <button
@@ -726,6 +786,21 @@ export function FuelCardsListView({
                         <Badge tone={card.provider === "PetroApp" ? "blue" : "green"}>
                           {card.providerNameAr}
                         </Badge>
+                      </td>
+
+                      {/* Operating City */}
+                      <td className="px-4 py-3.5 text-start whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin size={13} className="text-teal-600 dark:text-teal-400 shrink-0" />
+                          <span className="font-bold text-[var(--foreground)]">
+                            {card.operatingCityNameAr || card.operatingCityNameEn || card.operatingCityId || "—"}
+                          </span>
+                        </div>
+                        {card.operatingCityNameEn && card.operatingCityNameEn !== card.operatingCityNameAr && (
+                          <span className="text-[10px] text-[var(--muted)] block font-mono pr-4">
+                            {card.operatingCityNameEn}
+                          </span>
+                        )}
                       </td>
 
                       {/* Card Number with Isolated Bidi Rendering */}
@@ -830,6 +905,15 @@ export function FuelCardsListView({
                                 title="تغيير كفيل البطاقة"
                               >
                                 <Building2 size={15} />
+                              </button>
+
+                              {/* Change City */}
+                              <button
+                                onClick={() => onOpenChangeCity(card)}
+                                className="p-1.5 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300"
+                                title="تغيير مدينة تشغيل البطاقة"
+                              >
+                                <MapPin size={15} />
                               </button>
 
                               {!hasRider ? (

@@ -17,6 +17,7 @@ import {
   Building2,
   Tag,
   FileText,
+  MapPin,
 } from "lucide-react";
 import {
   getFuelCard,
@@ -33,6 +34,7 @@ interface FuelCardDetailsModalProps {
   onOpenStop: (card: FuelCard) => void;
   onOpenHistory: (card: FuelCard) => void;
   onOpenChangeSponsor?: (card: FuelCard) => void;
+  onOpenChangeCity?: (card: FuelCard) => void;
 }
 
 export function FuelCardDetailsModal({
@@ -44,6 +46,7 @@ export function FuelCardDetailsModal({
   onOpenStop,
   onOpenHistory,
   onOpenChangeSponsor,
+  onOpenChangeCity,
 }: FuelCardDetailsModalProps) {
   const [card, setCard] = useState<FuelCard | null>(null);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
@@ -192,6 +195,33 @@ export function FuelCardDetailsModal({
                 );
               })()}
 
+              {/* Operating City Box */}
+              <div className="p-3.5 rounded-xl border border-teal-100 dark:border-teal-900/40 bg-teal-50/30 dark:bg-teal-950/20">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5 text-[var(--muted)] font-medium">
+                    <MapPin size={15} className="text-teal-600 dark:text-teal-400" />
+                    <span>مدينة التشغيل:</span>
+                  </div>
+                  {canManage && onOpenChangeCity && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenChangeCity(card)}
+                      className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
+                    >
+                      تغيير المدينة
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-black text-sm text-[var(--foreground)]">
+                    {card.operatingCityNameAr || card.operatingCityNameEn || card.operatingCityId || "غير محدد"}
+                  </div>
+                  {card.operatingCityNameEn && card.operatingCityNameEn !== card.operatingCityNameAr && (
+                    <Badge tone="gray">{card.operatingCityNameEn}</Badge>
+                  )}
+                </div>
+              </div>
+
               {/* Current Rider Box */}
               <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/20">
                 <span className="text-[var(--muted)] font-medium block mb-2">المندوب المعين حالياً:</span>
@@ -263,6 +293,17 @@ export function FuelCardDetailsModal({
                 >
                   <Building2 size={15} />
                   تغيير الكفيل
+                </Button>
+              )}
+
+              {canManage && onOpenChangeCity && (
+                <Button
+                  variant="secondary"
+                  onClick={() => onOpenChangeCity(card)}
+                  className="h-10 px-3 text-xs rounded-xl flex items-center gap-1.5 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/40 font-bold"
+                >
+                  <MapPin size={15} />
+                  تغيير المدينة
                 </Button>
               )}
             </div>

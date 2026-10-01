@@ -7,9 +7,11 @@ import { getAllVehicleAssignments, getAllVehicles } from "@/lib/fleet/api";
 import {
   VehicleOperationalStatus,
   RiderVehicleAssignmentStatus,
+  VehicleType,
   type VehicleSummaryResponse,
   type RiderVehicleAssignmentResponse,
 } from "@/lib/fleet/types";
+import { formatVehicleType } from "@/lib/fleet/formatters";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -53,6 +55,48 @@ function normalizeText(text: string | null | undefined): string {
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
 }
 
+function getVehicleTypeLabel(
+  type?: VehicleType | number | string | null,
+  nameAr?: string | null
+): string {
+  if (nameAr && typeof nameAr === "string" && nameAr.trim()) {
+    return nameAr.trim();
+  }
+  if (type === null || type === undefined || type === "") return "—";
+  if (!isNaN(Number(type)) && Number(type) > 0) {
+    return formatVehicleType(Number(type), "ar");
+  }
+  const s = String(type).trim().toLowerCase();
+  if (s === "motorcycle" || s === "1") return "دراجة نارية";
+  if (s === "car" || s === "2") return "سيارة";
+  if (s === "van" || s === "3") return "فان / حافلة صغيرة";
+  if (s === "truck" || s === "4") return "شاحنة";
+  if (s === "other" || s === "5") return "أخرى";
+  return String(type);
+}
+
+function renderVehicleTypeBadge(typeStr: string) {
+  if (!typeStr || typeStr === "—") return <span className="text-[var(--muted)] font-bold">—</span>;
+  const isMotorcycle = typeStr.includes("دراجة") || typeStr.toLowerCase().includes("motorcycle");
+  const isCar = typeStr.includes("سيارة") || typeStr.toLowerCase().includes("car");
+  const isVan = typeStr.includes("فان") || typeStr.toLowerCase().includes("van");
+  const isTruck = typeStr.includes("شاحنة") || typeStr.toLowerCase().includes("truck");
+
+  const badgeClass = isMotorcycle
+    ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+    : isCar
+    ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+    : isVan || isTruck
+    ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+    : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${badgeClass} shadow-2xs whitespace-nowrap`}>
+      {typeStr}
+    </span>
+  );
+}
+
 type ActiveModal = "take" | "return" | "switch" | "renew" | "promissory" | null;
 
 export default function AssignmentsPage() {
@@ -71,6 +115,7 @@ export default function AssignmentsPage() {
 
   const [cityFilter, setCityFilter] = useState<string[]>([]);
   const [manufacturerFilter, setManufacturerFilter] = useState<string[]>([]);
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string[]>([]);
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleSummaryResponse | null>(null);
@@ -314,6 +359,62 @@ export default function AssignmentsPage() {
     return opts;
   }, [filterType, assignments, availableVehicles, vehiclesMap, manufacturerFilter]);
 
+  // Vehicle Type Options for Table Header Filter
+  const vehicleTypeOptions = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+
+    if (filterType === "assigned") {
+      for (const a of assignments) {
+        const v = vehiclesMap.get(a.vehicleId);
+        const rawType = a.vehicleType ?? (a as any).VehicleType ?? v?.vehicleType;
+        const nameAr = a.vehicleTypeNameAr ?? (a as any).VehicleTypeNameAr;
+        const label = getVehicleTypeLabel(rawType, nameAr);
+        if (label && label !== "—") {
+          const existing = counts.get(label);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            counts.set(label, { label, count: 1 });
+          }
+        }
+      }
+    } else {
+      for (const v of availableVehicles) {
+        const label = getVehicleTypeLabel(v.vehicleType, null);
+        if (label && label !== "—") {
+          const existing = counts.get(label);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            counts.set(label, { label, count: 1 });
+          }
+        }
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+    const sorted = Array.from(counts.values()).sort((a, b) => b.count - a.count);
+    for (const item of sorted) {
+      opts.push({
+        value: item.label,
+        label: item.label,
+        sublabel: `${item.count} مركبة`,
+        count: item.count,
+      });
+    }
+
+    vehicleTypeFilter.forEach((vf) => {
+      if (!opts.some((o) => o.value === vf)) {
+        opts.push({
+          value: vf,
+          label: vf,
+        });
+      }
+    });
+
+    return opts;
+  }, [filterType, assignments, availableVehicles, vehiclesMap, vehicleTypeFilter]);
+
   // Filtered assigned data
   const filteredAssignedData = useMemo(() => {
     const queryTokens = search.trim() ? normalizeText(search).split(/\s+/).filter(Boolean) : [];
@@ -354,6 +455,7 @@ export default function AssignmentsPage() {
           vehicle?.manufacturer,
           vehicle?.model,
           vehicle?.operatingCity,
+          getVehicleTypeLabel(item.vehicleType ?? (item as any).VehicleType ?? vehicle?.vehicleType, item.vehicleTypeNameAr ?? (item as any).VehicleTypeNameAr),
         ];
 
         const searchableText = parts
@@ -390,9 +492,19 @@ export default function AssignmentsPage() {
         if (!match) return false;
       }
 
+      // 4. Vehicle Type Filter (Multi)
+      if (vehicleTypeFilter.length > 0) {
+        const rawType = item.vehicleType ?? (item as any).VehicleType ?? vehicle?.vehicleType;
+        const nameAr = item.vehicleTypeNameAr ?? (item as any).VehicleTypeNameAr;
+        const label = getVehicleTypeLabel(rawType, nameAr);
+        if (!label || !vehicleTypeFilter.includes(label)) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [sortedAssignments, vehiclesMap, search, assignmentStatusFilter, cityFilter, manufacturerFilter]);
+  }, [sortedAssignments, vehiclesMap, search, assignmentStatusFilter, cityFilter, manufacturerFilter, vehicleTypeFilter]);
 
   // Filtered available data
   const filteredAvailableData = useMemo(() => {
@@ -412,6 +524,7 @@ export default function AssignmentsPage() {
           item.manufacturer,
           item.model,
           item.operatingCity,
+          getVehicleTypeLabel(item.vehicleType, null),
         ];
 
         const searchableText = parts
@@ -445,11 +558,18 @@ export default function AssignmentsPage() {
         if (!match) return false;
       }
 
+      if (vehicleTypeFilter.length > 0) {
+        const label = getVehicleTypeLabel(item.vehicleType, null);
+        if (!label || !vehicleTypeFilter.includes(label)) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [availableVehicles, search, cityFilter, manufacturerFilter]);
+  }, [availableVehicles, search, cityFilter, manufacturerFilter, vehicleTypeFilter]);
 
-  const hasActiveFilters = Boolean(cityFilter.length > 0 || manufacturerFilter.length > 0);
+  const hasActiveFilters = Boolean(cityFilter.length > 0 || manufacturerFilter.length > 0 || vehicleTypeFilter.length > 0);
   const isFiltered = Boolean(search.trim() || hasActiveFilters);
 
   const handleExportExcel = async () => {
@@ -474,6 +594,16 @@ export default function AssignmentsPage() {
               accessor: (item) => vehiclesMap.get(item.vehicleId)?.plateNumberEn || "—",
               width: 16,
               isText: true,
+            },
+            {
+              header: "نوع المركبة",
+              accessor: (item) => {
+                const v = vehiclesMap.get(item.vehicleId);
+                const rawType = item.vehicleType ?? (item as any).VehicleType ?? v?.vehicleType;
+                const nameAr = item.vehicleTypeNameAr ?? (item as any).VehicleTypeNameAr;
+                return getVehicleTypeLabel(rawType, nameAr);
+              },
+              width: 16,
             },
             {
               header: "المركبة والموديل",
@@ -560,6 +690,7 @@ export default function AssignmentsPage() {
             { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
             { header: "اللوحة (عربي)", accessor: (item) => item.plateNumberAr || "—", width: 16, isText: true },
             { header: "اللوحة (إنجليزي)", accessor: (item) => item.plateNumberEn || "—", width: 16, isText: true },
+            { header: "نوع المركبة", accessor: (item) => getVehicleTypeLabel(item.vehicleType, null), width: 16 },
             { header: "المركبة والموديل", accessor: (item) => [item.manufacturer, item.model].filter(Boolean).join(" ") || "—", width: 22 },
             { header: "الرقم التسلسلي", accessor: (item) => item.serialNumber || "—", width: 18, isText: true },
             { header: "المدينة التشغيلية", accessor: (item) => item.operatingCity || "—", width: 16 },
@@ -742,11 +873,18 @@ export default function AssignmentsPage() {
                 <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setCityFilter(cityFilter.filter((x) => x !== c))} />
               </Badge>
             ))}
+            {vehicleTypeFilter.map((vt) => (
+              <Badge key={vt} className="bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 gap-1 pl-1.5 font-medium">
+                نوع المركبة: {vt}
+                <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setVehicleTypeFilter(vehicleTypeFilter.filter((x) => x !== vt))} />
+              </Badge>
+            ))}
             <button
               type="button"
               onClick={() => {
                 setCityFilter([]);
                 setManufacturerFilter([]);
+                setVehicleTypeFilter([]);
               }}
               className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 font-semibold underline cursor-pointer mr-1"
             >
@@ -795,6 +933,18 @@ export default function AssignmentsPage() {
                       </div>
                     </th>
                     <th className="px-6 py-4 whitespace-nowrap">اللوحة</th>
+                    <th className="px-6 py-4 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>نوع المركبة</span>
+                        <TableHeaderColumnFilter
+                          label="نوع المركبة"
+                          value={vehicleTypeFilter}
+                          onChange={setVehicleTypeFilter}
+                          options={vehicleTypeOptions}
+                          placeholder="تصفية بنوع المركبة..."
+                        />
+                      </div>
+                    </th>
                     <th className="px-6 py-4 whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <span>مدينة التشغيل</span>
@@ -848,6 +998,13 @@ export default function AssignmentsPage() {
                               </div>
                             )}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(() => {
+                            const rawType = item.vehicleType ?? (item as any).VehicleType ?? vehicle?.vehicleType;
+                            const nameAr = item.vehicleTypeNameAr ?? (item as any).VehicleTypeNameAr;
+                            return renderVehicleTypeBadge(getVehicleTypeLabel(rawType, nameAr));
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">
                           {item.vehicleOperatingCityNameAr || vehicle?.operatingCity || "—"}
@@ -1030,6 +1187,18 @@ export default function AssignmentsPage() {
                     <th className="px-6 py-4 whitespace-nowrap">اللوحة</th>
                     <th className="px-6 py-4 whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
+                        <span>نوع المركبة</span>
+                        <TableHeaderColumnFilter
+                          label="نوع المركبة"
+                          value={vehicleTypeFilter}
+                          onChange={setVehicleTypeFilter}
+                          options={vehicleTypeOptions}
+                          placeholder="تصفية بنوع المركبة..."
+                        />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
                         <span>مدينة التشغيل</span>
                         <TableHeaderColumnFilter
                           label="مدينة التشغيل"
@@ -1068,6 +1237,9 @@ export default function AssignmentsPage() {
                             </div>
                           )}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {renderVehicleTypeBadge(getVehicleTypeLabel(item.vehicleType, null))}
                       </td>
                       <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">
                         {item.operatingCity || "—"}

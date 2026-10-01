@@ -10,6 +10,9 @@ import {
   FuelCard,
   FuelProvider,
   fuelProviderLabels,
+  getOperatingCitiesCatalog,
+  JEDDAH_OPERATING_CITY_ID,
+  OperatingCityOption,
 } from "@/lib/fleet/fuel-cards-api";
 
 interface CreateFuelCardModalProps {
@@ -30,11 +33,39 @@ export function CreateFuelCardModal({
   const [sponsorId, setSponsorId] = useState("");
   const [sponsorsOptions, setSponsorsOptions] = useState<SelectOption[]>([]);
   const [loadingSponsors, setLoadingSponsors] = useState(false);
+  const [operatingCityId, setOperatingCityId] = useState<string>(JEDDAH_OPERATING_CITY_ID);
+  const [citiesOptions, setCitiesOptions] = useState<SelectOption[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchCities = () => {
+    setLoadingCities(true);
+    getOperatingCitiesCatalog()
+      .then((citiesList) => {
+        const options: SelectOption[] = (citiesList || []).map((c: OperatingCityOption) => {
+          const statusText = c.status && c.status !== "Active" ? ` (${c.status})` : "";
+          return {
+            value: c.id,
+            label: `${c.nameAr || c.nameEn || c.code || c.id}${statusText}`,
+            sublabel: c.code ? `رمز المدينة: ${c.code}` : undefined,
+          };
+        });
+        setCitiesOptions(options);
+      })
+      .catch((err) => {
+        console.error("Failed to load operating cities list:", err);
+      })
+      .finally(() => {
+        setLoadingCities(false);
+      });
+  };
+
   useEffect(() => {
     if (isOpen) {
+      setOperatingCityId(JEDDAH_OPERATING_CITY_ID);
+      fetchCities();
+
       setLoadingSponsors(true);
       listSponsors()
         .then((sponsorsList) => {
@@ -69,6 +100,10 @@ export function CreateFuelCardModal({
       setError("يرجى اختيار الكفيل، حيث يجب ربط كل بطاقة وقود بكفيل");
       return;
     }
+    if (!operatingCityId) {
+      setError("يرجى اختيار مدينة التشغيل للبطاقة");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -80,6 +115,7 @@ export function CreateFuelCardModal({
         plateNumberText: plateNumberText.trim() || null,
         notes: notes.trim() || null,
         sponsorId,
+        operatingCityId,
       });
 
       // Reset
@@ -87,10 +123,17 @@ export function CreateFuelCardModal({
       setPlateNumberText("");
       setNotes("");
       setSponsorId("");
+      setOperatingCityId(JEDDAH_OPERATING_CITY_ID);
       onSuccess(created);
       onClose();
     } catch (err: any) {
-      setError(err?.message || "تعذر إنشاء بطاقة الوقود");
+      const code = err?.errorCode || err?.title || err?.code;
+      if (err?.status === 404 && code === "fuel.operating_city_not_found") {
+        setError(err?.detail || "مدينة التشغيل المحددة غير موجودة، يرجى إعادة اختيار المدينة.");
+        fetchCities();
+      } else {
+        setError(err?.detail || err?.message || "تعذر إنشاء بطاقة الوقود");
+      }
     } finally {
       setLoading(false);
     }
@@ -164,6 +207,27 @@ export function CreateFuelCardModal({
             />
             <p className="mt-1 text-[11px] text-[var(--muted)]">
               لكل بطاقة وقود كفيل واحد محدد، ويمكن للكفيل أن يرتبط بأي عدد من البطاقات.
+            </p>
+          </div>
+
+          {/* Operating City */}
+          <div>
+            <label className="block text-xs font-bold text-[var(--foreground)] mb-1">
+              مدينة التشغيل <span className="text-red-500">*</span>
+            </label>
+            <SearchableSelect
+              value={operatingCityId}
+              onChange={(val) => {
+                setOperatingCityId(val);
+                setError(null);
+              }}
+              options={citiesOptions}
+              placeholder={loadingCities ? "جاري تحميل قائمة المدن..." : "اختر مدينة التشغيل..."}
+              searchPlaceholder="بحث في أسماء أو رموز المدن..."
+              disabled={loadingCities || loading}
+            />
+            <p className="mt-1 text-[11px] text-[var(--muted)]">
+              المدينة التشغيلية التابعة للبطاقة (القيمة الافتراضية: جدة / Jeddah).
             </p>
           </div>
 

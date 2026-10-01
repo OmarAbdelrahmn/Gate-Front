@@ -8,6 +8,26 @@ export const fuelProviderLabels: Record<FuelProvider, string> = {
   SayaraApp: "شركة سيارة اب",
 };
 
+export const JEDDAH_OPERATING_CITY_ID = "019c18d5-62e1-7000-8000-000000000003";
+
+export interface FuelCardCityFields {
+  operatingCityId: string;
+  operatingCityNameAr: string | null;
+  operatingCityNameEn: string | null;
+}
+
+export interface OperatingCityOption {
+  id: string;
+  globalCityId?: string;
+  code?: string;
+  nameAr: string;
+  nameEn?: string | null;
+  status?: string;
+  enabledFrom?: string | null;
+  disabledAt?: string | null;
+  rowVersion?: string;
+}
+
 export interface FuelCardCurrentRider {
   assignmentId: string;
   riderProfileId: string;
@@ -21,6 +41,9 @@ export interface FuelCardCurrentRider {
 export interface FuelCard {
   id: string;
   sponsorId: string;
+  operatingCityId: string;
+  operatingCityNameAr: string | null;
+  operatingCityNameEn: string | null;
   provider: FuelProvider;
   providerNameAr: string;
   identifierType: FuelCardIdentifierType;
@@ -145,6 +168,7 @@ export async function getFuelCards(params?: {
   search?: string;
   provider?: FuelProvider;
   riderProfileId?: string;
+  operatingCityId?: string;
   page?: number;
   pageSize?: number;
 }): Promise<FuelCardPage> {
@@ -152,6 +176,7 @@ export async function getFuelCards(params?: {
   if (params?.search) query.set("search", params.search);
   if (params?.provider) query.set("provider", params.provider);
   if (params?.riderProfileId) query.set("riderProfileId", params.riderProfileId);
+  if (params?.operatingCityId) query.set("operatingCityId", params.operatingCityId);
   if (params?.page) query.set("page", params.page.toString());
   if (params?.pageSize) query.set("pageSize", params.pageSize.toString());
   const str = query.toString();
@@ -162,6 +187,7 @@ export async function getAllFuelCards(params?: {
   search?: string;
   provider?: FuelProvider;
   riderProfileId?: string;
+  operatingCityId?: string;
 }): Promise<FuelCard[]> {
   const pageSize = 300;
   const firstRes = await getFuelCards({ ...params, page: 1, pageSize });
@@ -201,12 +227,31 @@ export async function createFuelCard(payload: {
   plateNumberText?: string | null;
   notes?: string | null;
   sponsorId: string;
+  operatingCityId: string;
 }): Promise<FuelCard> {
   return authFetch<FuelCard>("/api/fuel-cards", {
     method: "POST",
     body: JSON.stringify(payload),
     notifySuccess: "تم إضافة بطاقة الوقود بنجاح",
   });
+}
+
+export async function updateFuelCardCity(
+  id: string,
+  payload: {
+    operatingCityId: string;
+    rowVersion: string;
+  }
+): Promise<FuelCard> {
+  return authFetch<FuelCard>(`/api/fuel-cards/${encodeURIComponent(id)}/city`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تحديث مدينة التشغيل للبطاقة بنجاح",
+  });
+}
+
+export async function getOperatingCitiesCatalog(): Promise<OperatingCityOption[]> {
+  return authFetch<OperatingCityOption[]>("/api/hr-catalogs/operating-cities");
 }
 
 export async function updateFuelCardSponsor(
@@ -313,7 +358,8 @@ export async function getAllFuelMonthlyUsage(params: {
 export async function importFuelSpreadsheet(
   file: File,
   sponsorId: string,
-  expectedMonth?: string
+  expectedMonth?: string,
+  operatingCityId?: string
 ): Promise<FuelImportResult> {
   const data = new FormData();
   data.append("File", file);
@@ -321,10 +367,108 @@ export async function importFuelSpreadsheet(
   if (expectedMonth) {
     data.append("ExpectedMonth", expectedMonth);
   }
+  if (operatingCityId) {
+    data.append("operatingCityId", operatingCityId);
+  }
   return authFetch<FuelImportResult>("/api/fuel-cards/imports", {
     method: "POST",
     body: data,
     notifySuccess: "تمت معالجة استيراد الملف بنجاح",
+  });
+}
+
+export interface FuelCardNumberImportResult {
+  importId?: string;
+  sourceRows: number;
+  createdCards: number;
+  skippedCards?: number;
+  invalidRows?: number;
+  errors?: FuelImportRowError[];
+  importedAtUtc?: string;
+}
+
+export async function validateFuelCardNumberImport(
+  file: File,
+  sponsorId: string,
+  operatingCityId?: string
+): Promise<FuelCardNumberImportResult> {
+  const data = new FormData();
+  data.append("file", file);
+  data.append("sponsorId", sponsorId);
+  if (operatingCityId) {
+    data.append("operatingCityId", operatingCityId);
+  }
+  return authFetch<FuelCardNumberImportResult>("/api/fuel-cards/card-number-imports/validate", {
+    method: "POST",
+    body: data,
+  });
+}
+
+export async function importFuelCardNumbers(
+  file: File,
+  sponsorId: string,
+  operatingCityId?: string
+): Promise<FuelCardNumberImportResult> {
+  const data = new FormData();
+  data.append("file", file);
+  data.append("sponsorId", sponsorId);
+  if (operatingCityId) {
+    data.append("operatingCityId", operatingCityId);
+  }
+  return authFetch<FuelCardNumberImportResult>("/api/fuel-cards/card-number-imports", {
+    method: "POST",
+    body: data,
+    notifySuccess: "تم استيراد أرقام البطاقات بنجاح",
+  });
+}
+
+export interface BatchFuelCardPreviewRow {
+  cardNumber: string;
+  sponsorNumber?: string | null;
+  companyName?: string | null;
+  operatingCityId: string;
+  isExisting?: boolean;
+  isValid?: boolean;
+  error?: string | null;
+}
+
+export interface BatchFuelCardImportResult {
+  sourceRows: number;
+  createdCards: number;
+  skippedCards?: number;
+  invalidRows?: number;
+  previewRows?: BatchFuelCardPreviewRow[];
+  errors?: FuelImportRowError[];
+}
+
+export async function validateBatchFuelCardsImport(
+  file: File,
+  operatingCityId?: string
+): Promise<BatchFuelCardImportResult> {
+  const data = new FormData();
+  data.append("file", file);
+  if (operatingCityId) {
+    data.append("operatingCityId", operatingCityId);
+  }
+  return authFetch<BatchFuelCardImportResult>("/api/import/fuel-cards/validate", {
+    method: "POST",
+    body: data,
+  });
+}
+
+export async function executeBatchFuelCardsImport(
+  file: File,
+  operatingCityId?: string
+): Promise<BatchFuelCardImportResult> {
+  const data = new FormData();
+  data.append("file", file);
+  if (operatingCityId) {
+    data.append("operatingCityId", operatingCityId);
+  }
+  return authFetch<BatchFuelCardImportResult>("/api/import/fuel-cards", {
+    method: "POST",
+    body: data,
+    notifySuccess: "تم استيراد بطاقات الوقود بنجاح",
   });
 }
 

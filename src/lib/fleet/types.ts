@@ -652,6 +652,9 @@ export interface RiderVehicleAssignmentResponse {
   actualRider?: ActualRiderDetail | null;
   vehicleId: string;
   assetNumber: string;
+  vehicleType?: VehicleType | number | string | null;
+  vehicleTypeNameAr?: string | null;
+  vehicleTypeNameEn?: string | null;
   vehicleOperatingCityId?: string | null;
   vehicleOperatingCityNameAr?: string | null;
   startedAtUtc: string;
@@ -1303,6 +1306,7 @@ export type CompleteHistoryEvent = {
   riderProfileId: string | null;
   assignmentId: string | null;
   summary: string;
+  createdByUserName?: string | null;
   details: Record<string, unknown>;
   files: CompleteHistoryEventFile[];
 };

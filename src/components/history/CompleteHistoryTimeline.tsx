@@ -940,6 +940,7 @@ export function translateAttributeKey(key: string, locale: "ar" | "en" = "ar"): 
     createdat: "تاريخ الإنشاء",
     updatedat: "تاريخ التحديث",
     createdby: "أنشئ بواسطة",
+    createdbyusername: "اسم المستخدم المنشئ",
     updatedby: "عُدّل بواسطة",
     createdbyname: "أنشئ بواسطة",
     updatedbyname: "عُدّل بواسطة",
@@ -1371,6 +1372,13 @@ function TimelineItem({ event, subjectType, locale, isFirst, isLast, index, vehi
     event.category.includes("issue") &&
     (event.action === "condition_report" || Boolean(event.details?.conditionReport));
   const isReturnBalanceRecorded = event.action === "return_balance_recorded";
+  const creatorUserName =
+    event.createdByUserName ||
+    (event as any).CreatedByUserName ||
+    (event.details?.createdByUserName as string | undefined) ||
+    (event.details?.CreatedByUserName as string | undefined) ||
+    (event.details?.createdByName as string | undefined) ||
+    (event.details?.createdBy as string | undefined);
 
   return (
     <li className="relative group">
@@ -1432,14 +1440,28 @@ function TimelineItem({ event, subjectType, locale, isFirst, isLast, index, vehi
                 )}
               </div>
 
-              {/* Timestamp */}
-              <div className="flex items-center gap-2 text-xs text-[var(--muted)] font-mono shrink-0">
-                <span className="hidden sm:inline" title={event.occurredAtUtc}>
-                  {formatDateFull(event.occurredAtUtc, locale)}
-                </span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">
-                  {formatRelativeTime(event.occurredAtUtc, locale)}
-                </span>
+              {/* Timestamp & Creator */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)] shrink-0">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="hidden sm:inline" title={event.occurredAtUtc}>
+                    {formatDateFull(event.occurredAtUtc, locale)}
+                  </span>
+                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                    {formatRelativeTime(event.occurredAtUtc, locale)}
+                  </span>
+                </div>
+
+                {creatorUserName && (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 shadow-2xs"
+                    title={isEn ? `Created by: ${creatorUserName}` : `بواسطة: ${creatorUserName}`}
+                  >
+                    <User className="size-3 text-slate-400 dark:text-slate-400" />
+                    <span className="max-w-[150px] truncate" dir="auto">
+                      {creatorUserName}
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1647,6 +1669,7 @@ export function CompleteHistoryTimeline({
         if (ev.category?.toLowerCase().includes(q)) return true;
         if (ev.entityId?.toLowerCase().includes(q)) return true;
         if (ev.assignmentId?.toLowerCase().includes(q)) return true;
+        if (ev.createdByUserName?.toLowerCase().includes(q)) return true;
         // Search inside details values
         if (ev.details) {
           const detailStr = JSON.stringify(ev.details).toLowerCase();

@@ -140,6 +140,7 @@ export default function EmployeesPage() {
     const [cityFilter, setCityFilter] = useState<string[]>([]);
     const [headerStatusFilter, setHeaderStatusFilter] = useState<string[]>([]);
     const [roleFilter, setRoleFilter] = useState<"all" | "employees" | "riders">("all");
+    const [licenseFilter, setLicenseFilter] = useState<string[]>([]);
 
     const EMPLOYEES_FILTERS_SESSION_KEY = "admin_employees_filters_session";
     const isRestoredRef = useRef(false);
@@ -167,6 +168,7 @@ export default function EmployeesPage() {
                 if (Array.isArray(parsed.platformFilter)) setPlatformFilter(parsed.platformFilter);
                 if (Array.isArray(parsed.cityFilter)) setCityFilter(parsed.cityFilter);
                 if (Array.isArray(parsed.headerStatusFilter)) setHeaderStatusFilter(parsed.headerStatusFilter);
+                if (Array.isArray(parsed.licenseFilter)) setLicenseFilter(parsed.licenseFilter);
                 if (typeof parsed.roleFilter === "string" && ["all", "employees", "riders"].includes(parsed.roleFilter)) {
                     setRoleFilter(parsed.roleFilter as "all" | "employees" | "riders");
                 }
@@ -194,13 +196,14 @@ export default function EmployeesPage() {
                     platformFilter,
                     cityFilter,
                     headerStatusFilter,
+                    licenseFilter,
                     roleFilter,
                 })
             );
         } catch {
             // ignore sessionStorage errors
         }
-    }, [search, statusFilter, employeeTypeFilter, engagementFilter, nationalityFilter, workTypeFilter, platformFilter, cityFilter, headerStatusFilter, roleFilter]);
+    }, [search, statusFilter, employeeTypeFilter, engagementFilter, nationalityFilter, workTypeFilter, platformFilter, cityFilter, headerStatusFilter, licenseFilter, roleFilter]);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -340,6 +343,30 @@ export default function EmployeesPage() {
         }));
     }, [locale]);
 
+    const licenseOptions: FilterOption[] = useMemo(() => {
+        const counts = new Map<string, number>();
+        employees.forEach((emp) => {
+            const empRec = emp as Record<string, unknown>;
+            const lics = emp.licenseNamesAr || (empRec.licenseNamesAr as string[]) || (empRec.LicenseNamesAr as string[]);
+            if (Array.isArray(lics)) {
+                lics.forEach((l) => {
+                    const trimmed = (l || "").trim();
+                    if (trimmed) {
+                        counts.set(trimmed, (counts.get(trimmed) || 0) + 1);
+                    }
+                });
+            }
+        });
+        return Array.from(counts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([value, count]) => ({
+                value,
+                label: value,
+                sublabel: `${count} ${locale === "en" ? "employees" : "موظف"}`,
+                count,
+            }));
+    }, [employees, locale]);
+
     const results = useMemo(
         () =>
             employees.filter((item) => {
@@ -418,6 +445,13 @@ export default function EmployeesPage() {
                     const cCode = ((item.operatingCity as unknown) as Record<string, unknown> | null | undefined)?.code as string | undefined || "";
                     const matchesCity = cityFilter.includes(cId) || (Boolean(cCode) && cityFilter.includes(cCode));
                     if (!matchesCity) return false;
+                }
+
+                if (licenseFilter.length > 0) {
+                    const lics = item.licenseNamesAr || (empRecord.licenseNamesAr as string[]) || (empRecord.LicenseNamesAr as string[]);
+                    if (!Array.isArray(lics) || lics.length === 0) return false;
+                    const matchesLicense = licenseFilter.some((f) => lics.includes(f));
+                    if (!matchesLicense) return false;
                 }
 
                 if (!search.trim()) return true;
@@ -509,6 +543,9 @@ export default function EmployeesPage() {
                     item.status,
                 ].filter(Boolean).join(" ");
 
+                const lics = (item.licenseNamesAr || (empRecord.licenseNamesAr as string[]) || (empRecord.LicenseNamesAr as string[]) || []);
+                const licenseDetails = Array.isArray(lics) ? lics.join(" ") : "";
+
                 return matchesArabicSearch(
                     search,
                     displayNameAr,
@@ -524,10 +561,11 @@ export default function EmployeesPage() {
                     platformDetails,
                     locationDetails,
                     statusDetails,
+                    licenseDetails,
                     rawValues,
                 );
             }),
-        [employees, search, cities, workTypes, locale, statusFilter, headerStatusFilter, employeeTypeFilter, engagementFilter, nationalityFilter, workTypeFilter, platformFilter, cityFilter, roleFilter],
+        [employees, search, cities, workTypes, locale, statusFilter, headerStatusFilter, employeeTypeFilter, engagementFilter, nationalityFilter, workTypeFilter, platformFilter, cityFilter, licenseFilter, roleFilter],
     );
 
     const [exporting, setExporting] = useState(false);
@@ -592,6 +630,15 @@ export default function EmployeesPage() {
                         header: locale === "en" ? "Operating City" : "المدينة التشغيلية",
                         accessor: (emp) => getCityDisplay(emp, cities, locale),
                         width: 18,
+                    },
+                    {
+                        header: locale === "en" ? "Driver Licenses" : "رخص القيادة",
+                        accessor: (emp) => {
+                            const empRec = emp as Record<string, unknown>;
+                            const lics = emp.licenseNamesAr || (empRec.licenseNamesAr as string[]) || (empRec.LicenseNamesAr as string[]) || [];
+                            return Array.isArray(lics) && lics.length > 0 ? lics.join("، ") : "—";
+                        },
+                        width: 22,
                     },
                     {
                         header: locale === "en" ? "Status" : "الحالة",
@@ -868,6 +915,24 @@ export default function EmployeesPage() {
                                     </span>
                                 );
                             })}
+                            {licenseFilter.map((lic) => {
+                                const opt = licenseOptions.find((o) => o.value === lic);
+                                return (
+                                    <span
+                                        key={lic}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                    >
+                                        <span>{opt?.label || lic}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLicenseFilter((prev) => prev.filter((x) => x !== lic))}
+                                            className="hover:text-red-500 rounded-full"
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
                             {headerStatusFilter.map((st) => {
                                 const opt = statusOptions.find((o) => o.value === st);
                                 return (
@@ -895,6 +960,7 @@ export default function EmployeesPage() {
                                     setWorkTypeFilter([]);
                                     setPlatformFilter([]);
                                     setCityFilter([]);
+                                    setLicenseFilter([]);
                                     setHeaderStatusFilter([]);
                                 }}
                                 className="text-[11px] text-red-600 dark:text-red-400 hover:underline ms-2 font-medium"
@@ -913,7 +979,7 @@ export default function EmployeesPage() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className={`min-w-[1180px] w-full ${locale === "en" ? "text-left" : "text-right"}`}>
+                        <table className={`min-w-[1280px] w-full ${locale === "en" ? "text-left" : "text-right"}`}>
                             <thead className="relative z-10 bg-slate-500/10 text-xs font-bold text-[var(--muted)]">
                                 <tr>
                                     <th className="px-5 py-4">
@@ -988,6 +1054,18 @@ export default function EmployeesPage() {
                                                 onChange={(val) => setCityFilter(val)}
                                                 options={cityOptions}
                                                 placeholder={locale === "en" ? "Filter by city..." : "تصفية بالمدينة..."}
+                                            />
+                                        </div>
+                                    </th>
+                                    <th className="px-5 py-4">
+                                        <div className="flex items-center gap-1.5">
+                                            <span>{locale === "en" ? "Driver Licenses" : "رخص القيادة"}</span>
+                                            <TableHeaderColumnFilter
+                                                label={locale === "en" ? "Driver Licenses" : "رخص القيادة"}
+                                                value={licenseFilter}
+                                                onChange={(val) => setLicenseFilter(val)}
+                                                options={licenseOptions}
+                                                placeholder={locale === "en" ? "Filter by license..." : "تصفية بالرخصة..."}
                                             />
                                         </div>
                                     </th>
@@ -1137,6 +1215,26 @@ export default function EmployeesPage() {
                                                 )}
                                             </td>
                                             <td className="px-5 py-4">
+                                                {(() => {
+                                                    const lics = employee.licenseNamesAr || (empRecord.licenseNamesAr as string[]) || (empRecord.LicenseNamesAr as string[]) || [];
+                                                    if (Array.isArray(lics) && lics.length > 0) {
+                                                        return (
+                                                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                                                {lics.map((lic, i) => (
+                                                                    <span
+                                                                        key={i}
+                                                                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 shadow-2xs"
+                                                                    >
+                                                                        {lic}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return <span className="text-[var(--muted)] font-bold">—</span>;
+                                                })()}
+                                            </td>
+                                            <td className="px-5 py-4">
                                                 <span
                                                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${employee.status === "Active"
                                                         ? "bg-emerald-500/10 text-emerald-700"
@@ -1160,7 +1258,7 @@ export default function EmployeesPage() {
                                 {!results.length && (
                                     <tr>
                                         <td
-                                            colSpan={9}
+                                            colSpan={10}
                                             className="p-10 text-center text-sm font-bold text-[var(--muted)]"
                                         >
                                             {locale === "en"
