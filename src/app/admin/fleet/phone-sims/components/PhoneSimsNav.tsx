@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Smartphone,
   ChevronRight,
@@ -8,12 +10,17 @@ import {
   RefreshCw,
   Printer,
   FileSpreadsheet,
+  MapPin,
+  UserCheck,
+  ArrowLeftRight,
+  Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 interface PhoneSimsNavProps {
   onRefresh?: () => void;
   onOpenCreate?: () => void;
+  onOpenPlaces?: () => void;
   onOpenFormTemplate?: () => void;
   onExportExcel?: () => void;
   exporting?: boolean;
@@ -24,12 +31,42 @@ interface PhoneSimsNavProps {
 export function PhoneSimsNav({
   onRefresh,
   onOpenCreate,
+  onOpenPlaces,
   onOpenFormTemplate,
   onExportExcel,
   exporting = false,
   loading = false,
   canManage = false,
 }: PhoneSimsNavProps) {
+  const pathname = usePathname();
+
+  const navTabs = [
+    {
+      label: "جميع الشرائح والمخزون",
+      href: "/admin/fleet/phone-sims",
+      icon: Smartphone,
+      isActive: pathname === "/admin/fleet/phone-sims",
+    },
+    {
+      label: "تعيينات المناديب والعهد",
+      href: "/admin/fleet/phone-sims/assignments",
+      icon: UserCheck,
+      isActive: pathname.startsWith("/admin/fleet/phone-sims/assignments"),
+    },
+    {
+      label: "سجل نقل المسؤوليات",
+      href: "/admin/fleet/phone-sims/transfers",
+      icon: ArrowLeftRight,
+      isActive: pathname.startsWith("/admin/fleet/phone-sims/transfers"),
+    },
+    {
+      label: "الشرائح المعلقة والمؤرشفة",
+      href: "/admin/fleet/phone-sims/archived",
+      icon: Archive,
+      isActive: pathname.startsWith("/admin/fleet/phone-sims/archived"),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {/* Header Title & Actions */}
@@ -51,22 +88,33 @@ export function PhoneSimsNav({
                 إدارة شرائح الاتصال (SIM)
               </h1>
               <p className="text-xs text-[var(--muted)] mt-0.5 font-medium">
-                متابعة وتوثيق مخزون شرائح الاتصال، تعيينها للمناديب، ونقل مسؤوليّة العهد بين الموظفين.
+                متابعة وتوثيق مخزون شرائح الاتصال، مواقعها، تعيينها للمناديب، ونقل مسؤوليّة العهد بين الموظفين.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {onRefresh && (
             <Button
               variant="secondary"
               onClick={onRefresh}
               disabled={loading}
-              className="flex items-center gap-2 h-10 px-4 rounded-xl shadow-xs"
+              className="flex items-center gap-1.5 h-9 sm:h-10 px-3 sm:px-4 rounded-xl shadow-xs text-xs font-bold"
             >
-              <RefreshCw size={16} className={loading ? "animate-spin text-[#1167c9]" : ""} />
-              تحديث البيانات
+              <RefreshCw size={15} className={loading ? "animate-spin text-[#1167c9]" : ""} />
+              تحديث
+            </Button>
+          )}
+
+          {onOpenPlaces && (
+            <Button
+              variant="secondary"
+              onClick={onOpenPlaces}
+              className="flex items-center gap-1.5 h-9 sm:h-10 px-3 sm:px-4 rounded-xl shadow-xs text-xs font-bold text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+            >
+              <MapPin size={15} className="text-blue-600" />
+              المواقع والمقرات
             </Button>
           )}
 
@@ -75,9 +123,9 @@ export function PhoneSimsNav({
               variant="secondary"
               onClick={onExportExcel}
               disabled={loading || exporting}
-              className="flex items-center gap-2 h-10 px-4 rounded-xl shadow-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+              className="flex items-center gap-1.5 h-9 sm:h-10 px-3 sm:px-4 rounded-xl shadow-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-xs font-bold"
             >
-              <FileSpreadsheet size={16} />
+              <FileSpreadsheet size={15} />
               تصدير إكسل
             </Button>
           )}
@@ -86,10 +134,10 @@ export function PhoneSimsNav({
             <Button
               variant="secondary"
               onClick={onOpenFormTemplate}
-              className="flex items-center gap-2 h-10 px-4 rounded-xl shadow-xs text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+              className="flex items-center gap-1.5 h-9 sm:h-10 px-3 sm:px-4 rounded-xl shadow-xs text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 text-xs font-bold"
             >
-              <Printer size={16} className="text-[#1167c9]" />
-              نموذج استلام الشريحة
+              <Printer size={15} className="text-[#1167c9]" />
+              نموذج استلام
             </Button>
           )}
 
@@ -97,14 +145,36 @@ export function PhoneSimsNav({
             <Button
               variant="primary"
               onClick={onOpenCreate}
-              className="flex items-center gap-2 h-10 px-4 rounded-xl shadow-md shadow-blue-500/20 font-bold"
+              className="flex items-center gap-1.5 h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl shadow-md shadow-blue-500/20 text-xs font-bold"
             >
-              <Plus size={18} />
-              إضافة شريحة جديدة
+              <Plus size={16} />
+              إضافة شريحة
             </Button>
           )}
         </div>
       </div>
+
+      {/* Sub-Navigation Tabs */}
+      <div className="flex items-center gap-1 border-b border-[var(--border)] overflow-x-auto pb-0">
+        {navTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all shrink-0 ${
+                tab.isActive
+                  ? "border-[#1167c9] text-[#1167c9] bg-blue-50/40 dark:bg-blue-950/20 rounded-t-xl"
+                  : "border-transparent text-[var(--muted)] hover:text-[var(--foreground)] hover:border-slate-300 dark:hover:border-slate-700"
+              }`}
+            >
+              <Icon size={15} />
+              <span>{tab.label}</span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
+

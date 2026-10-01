@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { closePhoneSimAssignment, getPhoneSim, PhoneSim } from "@/lib/fleet/phone-sims-api";
+import { closePhoneSimAssignment, getPhoneSim, getTodayRiyadhDate, PhoneSim } from "@/lib/fleet/phone-sims-api";
 
 interface ReturnSimModalProps {
   isOpen: boolean;
@@ -18,19 +18,19 @@ export function ReturnSimModal({
   sim,
   onSuccess,
 }: ReturnSimModalProps) {
-  const [effectiveTo, setEffectiveTo] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [effectiveTo, setEffectiveTo] = useState(getTodayRiyadhDate());
   const [reason, setReason] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [concurrencyMessage, setConcurrencyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && sim) {
-      setEffectiveTo(new Date().toISOString().split("T")[0]);
+      setEffectiveTo(getTodayRiyadhDate());
       setReason("");
       setErrors({});
+      setConcurrencyMessage(null);
     }
   }, [isOpen, sim]);
 
@@ -43,7 +43,7 @@ export function ReturnSimModal({
     if (!effectiveTo) {
       errs.effectiveTo = "تاريخ ارجاع الشريحة مطلوب";
     } else {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getTodayRiyadhDate();
       if (effectiveTo > today) {
         errs.effectiveTo = "تاريخ الإرجاع لا يمكن أن يكون في المستقبل";
       }
@@ -64,6 +64,7 @@ export function ReturnSimModal({
     if (!sim || !currentRider || !validate()) return;
 
     setIsSubmitting(true);
+    setConcurrencyMessage(null);
     try {
       await closePhoneSimAssignment(sim.id, currentRider.assignmentId, {
         effectiveTo,
@@ -77,7 +78,18 @@ export function ReturnSimModal({
       onClose();
     } catch (err: any) {
       console.error("Error returning SIM from rider:", err);
-      if (err?.details?.errorCode === "phone_sim.invalid_date_range") {
+      const code = err?.details?.errorCode;
+      if (code === "phone_sim.concurrency_conflict") {
+        setConcurrencyMessage(
+          "تم تعديل بيانات التعيين بواسطة مستخدم آخر بالتزامن. تم تحديث البيانات، يرجى إعادة المحاولة."
+        );
+        try {
+          const fresh = await getPhoneSim(sim.id);
+          onSuccess(fresh);
+        } catch (fErr) {
+          console.error("Failed to refresh SIM after conflict:", fErr);
+        }
+      } else if (code === "phone_sim.invalid_date_range") {
         setErrors((prev) => ({
           ...prev,
           effectiveTo: "نطاق تاريخ الإرجاع غير صالح بالنسبة لتاريخ البدء",
@@ -91,6 +103,11 @@ export function ReturnSimModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="استلام / إرجاع الشريحة من المندوب">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {concurrencyMessage && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 font-semibold">
+            {concurrencyMessage}
+          </div>
+        )}
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-950 space-y-1">
           <p className="font-bold">المندوب الحالي الممسك بالشريحة:</p>
           <p className="text-sm font-black text-emerald-950">
@@ -110,7 +127,7 @@ export function ReturnSimModal({
             type="date"
             value={effectiveTo}
             min={currentRider.effectiveFrom}
-            max={new Date().toISOString().split("T")[0]}
+            max={getTodayRiyadhDate()}
             onChange={(e) => setEffectiveTo(e.target.value)}
             className="w-full h-10 px-3 text-sm font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
           />

@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { listEmployees } from "@/lib/workforce/api";
-import { transferPhoneSimResponsibility, PhoneSim } from "@/lib/fleet/phone-sims-api";
+import { transferPhoneSimResponsibility, getPhoneSim, PhoneSim } from "@/lib/fleet/phone-sims-api";
 
 interface TransferResponsibilityModalProps {
   isOpen: boolean;
@@ -27,12 +27,14 @@ export function TransferResponsibilityModal({
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [concurrencyMessage, setConcurrencyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && sim) {
       setResponsibleEmployeeId("");
       setReason("");
       setErrors({});
+      setConcurrencyMessage(null);
       loadEmployees(sim.responsibleEmployeeId);
     }
   }, [isOpen, sim]);
@@ -43,7 +45,10 @@ export function TransferResponsibilityModal({
       const data = await listEmployees();
       const allEmps = data || [];
       const listToMap = allEmps.filter(
-        (emp) => emp.isEmployee === true && emp.id !== currentEmpId
+        (emp) =>
+          emp.isEmployee === true &&
+          emp.id !== currentEmpId &&
+          (emp.status === "Active" || emp.status === "OnLeave" || !emp.status)
       );
 
       const options = listToMap.map((emp) => ({
@@ -83,6 +88,7 @@ export function TransferResponsibilityModal({
     if (!sim || !validate()) return;
 
     setIsSubmitting(true);
+    setConcurrencyMessage(null);
     try {
       const updatedSim = await transferPhoneSimResponsibility(sim.id, {
         responsibleEmployeeId,
@@ -93,11 +99,28 @@ export function TransferResponsibilityModal({
       onClose();
     } catch (err: any) {
       console.error("Error transferring responsibility:", err);
-      if (err?.details?.errorCode === "phone_sim.responsible_employee_unavailable") {
+      const code = err?.details?.errorCode;
+      if (code === "phone_sim.concurrency_conflict") {
+        setConcurrencyMessage(
+          "تم تعديل بيانات هذه الشريحة بواسطة مستخدم آخر بالتزامن. تم تحديث البيانات، يرجى إعادة المحاولة."
+        );
+        try {
+          const fresh = await getPhoneSim(sim.id);
+          onSuccess(fresh);
+        } catch (fErr) {
+          console.error("Failed to refresh SIM after conflict:", fErr);
+        }
+      } else if (code === "phone_sim.responsible_employee_unavailable") {
         setErrors((prev) => ({
           ...prev,
-          responsibleEmployeeId: "الموظف المحدد غير متاح كمسؤول",
+          responsibleEmployeeId: "الموظف المحدد غير متاح كمسؤول. اختر موظفاً نشطاً.",
         }));
+      } else if (code === "phone_sim.responsible_employee_not_found") {
+        setErrors((prev) => ({
+          ...prev,
+          responsibleEmployeeId: "الموظف المحدد غير موجود في سجل الموظفين.",
+        }));
+        loadEmployees(sim.responsibleEmployeeId);
       }
     } finally {
       setIsSubmitting(false);
@@ -107,6 +130,11 @@ export function TransferResponsibilityModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="نقل مسؤولية عهدة الشريحة">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {concurrencyMessage && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 font-semibold">
+            {concurrencyMessage}
+          </div>
+        )}
         <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
           <p className="font-bold">المسؤول الحالي عن الشريحة ({sim.phoneNumber}):</p>
           <p className="mt-1 text-sm font-black text-amber-950">

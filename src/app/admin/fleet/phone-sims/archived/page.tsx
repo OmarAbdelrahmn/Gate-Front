@@ -16,6 +16,7 @@ import { ChangeSimStatusModal } from "../components/ChangeSimStatusModal";
 import { ArchiveSimModal } from "../components/ArchiveSimModal";
 import { SimDetailsModal } from "../components/SimDetailsModal";
 import { CreateSimModal } from "../components/CreateSimModal";
+import { ManagePlacesModal } from "../components/ManagePlacesModal";
 import {
   Archive,
   Search,
@@ -27,6 +28,7 @@ import {
   ExternalLink,
   Sliders,
   XCircle,
+  MapPin,
 } from "lucide-react";
 
 export default function PhoneSimArchivedPage() {
@@ -45,6 +47,7 @@ export default function PhoneSimArchivedPage() {
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isPlacesOpen, setIsPlacesOpen] = useState(false);
   const [activeSimForStatus, setActiveSimForStatus] = useState<PhoneSim | null>(null);
   const [activeSimForArchive, setActiveSimForArchive] = useState<PhoneSim | null>(null);
   const [activeSimForDetails, setActiveSimForDetails] = useState<PhoneSim | null>(null);
@@ -123,6 +126,7 @@ export default function PhoneSimArchivedPage() {
       <PhoneSimsNav
         onRefresh={fetchSims}
         onOpenCreate={() => setIsCreateOpen(true)}
+        onOpenPlaces={() => setIsPlacesOpen(true)}
         loading={loading}
         canManage={canManage}
       />
@@ -188,6 +192,7 @@ export default function PhoneSimArchivedPage() {
               <tr>
                 <th className="px-4 py-3.5 text-start">رقم الهاتف (SIM)</th>
                 <th className="px-4 py-3.5 text-start">المشغل / Carrier</th>
+                <th className="px-4 py-3.5 text-start">الموقع / المقر</th>
                 <th className="px-4 py-3.5 text-start">ICCID</th>
                 <th className="px-4 py-3.5 text-start">الحالة الحالية</th>
                 <th className="px-4 py-3.5 text-start">الموظف المسؤول عن العهدة</th>
@@ -198,14 +203,14 @@ export default function PhoneSimArchivedPage() {
             <tbody className="divide-y divide-[var(--border)] font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     <RefreshCw size={24} className="mx-auto animate-spin mb-2 text-[#1167c9]" />
                     جاري تحميل الشرائح المعلقة والمؤرشفة...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     لا توجد شرائح معلقة أو مؤرشفة تطابق البحث.
                   </td>
                 </tr>
@@ -224,6 +229,18 @@ export default function PhoneSimArchivedPage() {
                       {/* Carrier */}
                       <td className="px-4 py-3.5 text-[var(--foreground)]">
                         {sim.carrierName || "—"}
+                      </td>
+
+                      {/* Place */}
+                      <td className="px-4 py-3.5 text-[var(--foreground)] font-semibold">
+                        {sim.placeName ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                            <MapPin size={12} className="text-[#1167c9]" />
+                            {sim.placeName}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--muted)] text-xs italic">—</span>
+                        )}
                       </td>
 
                       {/* ICCID */}
@@ -331,6 +348,12 @@ export default function PhoneSimArchivedPage() {
         isOpen={Boolean(activeSimForDetails)}
         onClose={() => setActiveSimForDetails(null)}
         sim={activeSimForDetails}
+      />
+
+      <ManagePlacesModal
+        isOpen={isPlacesOpen}
+        onClose={() => setIsPlacesOpen(false)}
+        onPlacesChanged={fetchSims}
       />
     </div>
   );

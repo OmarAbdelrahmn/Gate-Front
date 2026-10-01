@@ -24,6 +24,7 @@ import { ChangeSimStatusModal } from "./components/ChangeSimStatusModal";
 import { ArchiveSimModal } from "./components/ArchiveSimModal";
 import { SimDetailsModal } from "./components/SimDetailsModal";
 import { SimHandoverFormModal } from "./components/SimHandoverFormModal";
+import { ManagePlacesModal } from "./components/ManagePlacesModal";
 import {
   Smartphone,
   Plus,
@@ -45,6 +46,7 @@ import {
   XCircle,
   ExternalLink,
   Printer,
+  MapPin,
 } from "lucide-react";
 
 export default function PhoneSimsPage() {
@@ -79,6 +81,7 @@ export default function PhoneSimsPage() {
   const [activeSimForDetails, setActiveSimForDetails] = useState<PhoneSim | null>(null);
   const [activeSimForPrint, setActiveSimForPrint] = useState<PhoneSim | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isPlacesOpen, setIsPlacesOpen] = useState(false);
 
   // Fetch Lookups
   useEffect(() => {
@@ -230,8 +233,9 @@ export default function PhoneSimsPage() {
         columns: [
           { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
           { header: "رقم الهاتف", accessor: (s) => s.phoneNumber, width: 18, isText: true },
-          { header: "الرقم التسلسلي (ICCID)", accessor: (s) => s.iccid || "—", width: 24, isText: true },
           { header: "شركة الاتصالات (المشغل)", accessor: (s) => s.carrierName || "—", width: 18 },
+          { header: "الموقع / المقر (Place)", accessor: (s) => s.placeName || "غير محدد", width: 20 },
+          { header: "الرقم التسلسلي (ICCID)", accessor: (s) => s.iccid || "—", width: 24, isText: true },
           {
             header: "الحالة",
             accessor: (s) => {
@@ -265,6 +269,7 @@ export default function PhoneSimsPage() {
       <PhoneSimsNav
         onRefresh={fetchSims}
         onOpenCreate={() => setIsCreateOpen(true)}
+        onOpenPlaces={() => setIsPlacesOpen(true)}
         onOpenFormTemplate={() => {
           setActiveSimForPrint(null);
           setIsPrintModalOpen(true);
@@ -396,6 +401,7 @@ export default function PhoneSimsPage() {
               <tr>
                 <th className="px-4 py-3.5 text-start">رقم الهاتف</th>
                 <th className="px-4 py-3.5 text-start">المشغل / Carrier</th>
+                <th className="px-4 py-3.5 text-start">الموقع / المقر</th>
                 <th className="px-4 py-3.5 text-start">ICCID</th>
                 <th className="px-4 py-3.5 text-start">الحالة</th>
                 <th className="px-4 py-3.5 text-start">الموظف المسؤول عن العهدة</th>
@@ -407,14 +413,14 @@ export default function PhoneSimsPage() {
             <tbody className="divide-y divide-[var(--border)] font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={9} className="py-12 text-center text-[var(--muted)]">
                     <RefreshCw size={24} className="mx-auto animate-spin mb-2 text-[#1167c9]" />
                     جاري تحميل بيانات شرائح الاتصال...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={9} className="py-12 text-center text-[var(--muted)]">
                     لا توجد شرائح اتصال تطابق معايير البحث.
                   </td>
                 </tr>
@@ -436,6 +442,18 @@ export default function PhoneSimsPage() {
                       {/* Carrier */}
                       <td className="px-4 py-3.5 text-[var(--foreground)]">
                         {sim.carrierName || "—"}
+                      </td>
+
+                      {/* Place */}
+                      <td className="px-4 py-3.5 font-semibold text-[var(--foreground)]">
+                        {sim.placeName ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                            <MapPin size={12} className="text-[#1167c9]" />
+                            {sim.placeName}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--muted)] text-xs italic">غير محدد</span>
+                        )}
                       </td>
 
                       {/* ICCID */}
@@ -692,6 +710,12 @@ export default function PhoneSimsPage() {
           setActiveSimForPrint(null);
         }}
         sim={activeSimForPrint}
+      />
+
+      <ManagePlacesModal
+        isOpen={isPlacesOpen}
+        onClose={() => setIsPlacesOpen(false)}
+        onPlacesChanged={fetchSims}
       />
     </div>
   );

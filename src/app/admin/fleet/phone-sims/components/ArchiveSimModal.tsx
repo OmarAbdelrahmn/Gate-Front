@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { archivePhoneSim, PhoneSim } from "@/lib/fleet/phone-sims-api";
+import { archivePhoneSim, getPhoneSim, PhoneSim } from "@/lib/fleet/phone-sims-api";
 
 interface ArchiveSimModalProps {
   isOpen: boolean;
   onClose: () => void;
   sim: PhoneSim | null;
   onSuccess: () => void;
+  onSimReload?: (freshSim: PhoneSim) => void;
 }
 
 export function ArchiveSimModal({
@@ -17,15 +18,18 @@ export function ArchiveSimModal({
   onClose,
   sim,
   onSuccess,
+  onSimReload,
 }: ArchiveSimModalProps) {
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [concurrencyMessage, setConcurrencyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && sim) {
       setReason("");
       setErrors({});
+      setConcurrencyMessage(null);
     }
   }, [isOpen, sim]);
 
@@ -50,6 +54,7 @@ export function ArchiveSimModal({
     if (!sim || !validate()) return;
 
     setIsSubmitting(true);
+    setConcurrencyMessage(null);
     try {
       await archivePhoneSim(sim.id, {
         reason: reason.trim(),
@@ -59,7 +64,18 @@ export function ArchiveSimModal({
       onClose();
     } catch (err: any) {
       console.error("Error archiving SIM:", err);
-      if (err?.details?.errorCode === "phone_sim.active_assignment_conflict") {
+      const code = err?.details?.errorCode;
+      if (code === "phone_sim.concurrency_conflict") {
+        setConcurrencyMessage(
+          "تم تعديل بيانات هذه الشريحة بواسطة مستخدم آخر بالتزامن. تم تحديث البيانات، يرجى إعادة المحاولة."
+        );
+        try {
+          const fresh = await getPhoneSim(sim.id);
+          if (onSimReload) onSimReload(fresh);
+        } catch (fErr) {
+          console.error("Failed to refresh SIM after conflict:", fErr);
+        }
+      } else if (code === "phone_sim.active_assignment_conflict") {
         setErrors((prev) => ({
           ...prev,
           reason: "تعذر الأرشفة لوجود تعيين نشط للمندوب",
@@ -73,6 +89,11 @@ export function ArchiveSimModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="أرشفة شريحة اتصال">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {concurrencyMessage && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 font-semibold">
+            {concurrencyMessage}
+          </div>
+        )}
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-900 space-y-2">
           <p className="font-bold text-sm text-red-950">
             تأكيد أرشفة الشريحة ({sim.phoneNumber})

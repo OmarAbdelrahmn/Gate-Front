@@ -200,7 +200,8 @@ export function SimDetailsModal({
               </div>
               <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
                 المشغل: <span className="font-bold">{sim.carrierName || "غير محدد"}</span> | 
-                العهد: <span className="font-bold">{sim.responsibleEmployeeNameAr}</span>
+                الموقع: <span className="font-bold">{sim.placeName || "غير محدد"}</span> | 
+                العهدة: <span className="font-bold">{sim.responsibleEmployeeNameAr}</span>
               </p>
             </div>
           </div>
@@ -282,6 +283,10 @@ export function SimDetailsModal({
                 <div className="flex justify-between">
                   <span className="text-[var(--muted)]">مزود الخدمة:</span>
                   <span className="font-bold">{sim.carrierName || "غير محدد"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">الموقع / المقر (Place):</span>
+                  <span className="font-bold text-[#1167c9]">{sim.placeName || "غير محدد (Unassigned)"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--muted)]">رمز التسلسلي (ICCID):</span>

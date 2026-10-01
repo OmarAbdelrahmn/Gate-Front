@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { listRiders } from "@/lib/workforce/api";
-import { assignPhoneSimToRider, getPhoneSim, PhoneSim } from "@/lib/fleet/phone-sims-api";
+import { assignPhoneSimToRider, getPhoneSim, getTodayRiyadhDate, PhoneSim } from "@/lib/fleet/phone-sims-api";
 
 interface AssignSimModalProps {
   isOpen: boolean;
@@ -21,9 +21,7 @@ export function AssignSimModal({
   onSuccess,
 }: AssignSimModalProps) {
   const [riderProfileId, setRiderProfileId] = useState("");
-  const [effectiveFrom, setEffectiveFrom] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [effectiveFrom, setEffectiveFrom] = useState(getTodayRiyadhDate());
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -31,14 +29,16 @@ export function AssignSimModal({
   const [loadingRiders, setLoadingRiders] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [concurrencyMessage, setConcurrencyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && sim) {
       setRiderProfileId("");
-      setEffectiveFrom(new Date().toISOString().split("T")[0]);
+      setEffectiveFrom(getTodayRiyadhDate());
       setReason("");
       setNotes("");
       setErrors({});
+      setConcurrencyMessage(null);
       loadRiders();
     }
   }, [isOpen, sim]);
@@ -75,7 +75,7 @@ export function AssignSimModal({
     if (!effectiveFrom) {
       errs.effectiveFrom = "تاريخ التعيين مطلوب";
     } else {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getTodayRiyadhDate();
       if (effectiveFrom > today) {
         errs.effectiveFrom = "تاريخ بداية التعيين لا يمكن أن يكون في المستقبل";
       }
@@ -93,6 +93,7 @@ export function AssignSimModal({
     if (!sim || !validate()) return;
 
     setIsSubmitting(true);
+    setConcurrencyMessage(null);
     try {
       await assignPhoneSimToRider(sim.id, {
         riderProfileId,
@@ -108,14 +109,36 @@ export function AssignSimModal({
       onClose();
     } catch (err: any) {
       console.error("Error assigning SIM to rider:", err);
-      if (err?.details?.errorCode === "phone_sim.rider_not_found") {
+      const code = err?.details?.errorCode;
+      if (code === "phone_sim.concurrency_conflict") {
+        setConcurrencyMessage(
+          "تم تعديل بيانات هذه الشريحة بواسطة مستخدم آخر. تم تحديث البيانات، يرجى إعادة المحاولة."
+        );
+        try {
+          const fresh = await getPhoneSim(sim.id);
+          onSuccess(fresh);
+        } catch (fErr) {
+          console.error("Failed to refresh SIM after conflict:", fErr);
+        }
+      } else if (code === "phone_sim.rider_not_found") {
         setErrors((prev) => ({ ...prev, riderProfileId: "المندوب غير موجود" }));
-      } else if (err?.details?.errorCode === "phone_sim.rider_unavailable") {
-        setErrors((prev) => ({ ...prev, riderProfileId: "المندوب غير متاح للتعيين" }));
-      } else if (err?.details?.errorCode === "phone_sim.active_assignment_conflict") {
+        loadRiders();
+      } else if (code === "phone_sim.rider_unavailable") {
+        setErrors((prev) => ({ ...prev, riderProfileId: "المندوب غير متاح للتعيين حالياً" }));
+      } else if (code === "phone_sim.active_assignment_conflict") {
         setErrors((prev) => ({
           ...prev,
           riderProfileId: "الشريحة معينة بالفعل لمندوب آخر. أعد تحميل الصفحة.",
+        }));
+      } else if (code === "phone_sim.assignment_conflict") {
+        setErrors((prev) => ({
+          ...prev,
+          effectiveFrom: "يوجد تعارض في التعيين. يرجى اختيار تاريخ بدء صالح أو مراجعة سجل التعيينات.",
+        }));
+      } else if (code === "phone_sim.invalid_date_range") {
+        setErrors((prev) => ({
+          ...prev,
+          effectiveFrom: "تاريخ التعيين غير صالح.",
         }));
       }
     } finally {
@@ -126,10 +149,16 @@ export function AssignSimModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تسليم الشريحة لمندوب">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {concurrencyMessage && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 font-semibold">
+            {concurrencyMessage}
+          </div>
+        )}
+
         <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900">
           <p className="font-bold">الشريحة المراد تسليمها:</p>
           <p className="mt-1 text-sm font-mono font-bold dir-ltr text-start text-blue-950">
-            {sim.phoneNumber} {sim.carrierName ? `(${sim.carrierName})` : ""}
+            {sim.phoneNumber} {sim.carrierName ? `(${sim.carrierName})` : ""} {sim.placeName ? `• ${sim.placeName}` : ""}
           </p>
         </div>
 
@@ -156,7 +185,7 @@ export function AssignSimModal({
           <input
             type="date"
             value={effectiveFrom}
-            max={new Date().toISOString().split("T")[0]}
+            max={getTodayRiyadhDate()}
             onChange={(e) => setEffectiveFrom(e.target.value)}
             className="w-full h-10 px-3 text-sm font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
           />

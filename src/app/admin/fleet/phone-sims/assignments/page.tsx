@@ -15,6 +15,7 @@ import { AssignSimModal } from "../components/AssignSimModal";
 import { ReturnSimModal } from "../components/ReturnSimModal";
 import { SimDetailsModal } from "../components/SimDetailsModal";
 import { CreateSimModal } from "../components/CreateSimModal";
+import { ManagePlacesModal } from "../components/ManagePlacesModal";
 import {
   UserCheck,
   Search,
@@ -27,6 +28,7 @@ import {
   ChevronRight,
   ExternalLink,
   Smartphone,
+  MapPin,
 } from "lucide-react";
 
 export default function PhoneSimAssignmentsPage() {
@@ -45,6 +47,7 @@ export default function PhoneSimAssignmentsPage() {
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isPlacesOpen, setIsPlacesOpen] = useState(false);
   const [activeSimForAssign, setActiveSimForAssign] = useState<PhoneSim | null>(null);
   const [activeSimForReturn, setActiveSimForReturn] = useState<PhoneSim | null>(null);
   const [activeSimForDetails, setActiveSimForDetails] = useState<PhoneSim | null>(null);
@@ -109,6 +112,7 @@ export default function PhoneSimAssignmentsPage() {
       <PhoneSimsNav
         onRefresh={fetchSims}
         onOpenCreate={() => setIsCreateOpen(true)}
+        onOpenPlaces={() => setIsPlacesOpen(true)}
         loading={loading}
         canManage={canManage}
       />
@@ -221,6 +225,7 @@ export default function PhoneSimAssignmentsPage() {
                 <th className="px-4 py-3.5 text-start">المندوب المستلم (العهدة)</th>
                 <th className="px-4 py-3.5 text-start">رقم الهاتف (SIM)</th>
                 <th className="px-4 py-3.5 text-start">المشغل / Carrier</th>
+                <th className="px-4 py-3.5 text-start">الموقع / المقر</th>
                 <th className="px-4 py-3.5 text-start">الموظف المسؤول عن الشريحة</th>
                 <th className="px-4 py-3.5 text-start">تاريخ بداية التسليم</th>
                 <th className="px-4 py-3.5 text-start">حالة التعيين</th>
@@ -230,14 +235,14 @@ export default function PhoneSimAssignmentsPage() {
             <tbody className="divide-y divide-[var(--border)] font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     <RefreshCw size={24} className="mx-auto animate-spin mb-2 text-[#1167c9]" />
                     جاري تحميل سجل تعيينات الشرائح...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     لا توجد تعيينات تطابق معايير البحث.
                   </td>
                 </tr>
@@ -279,6 +284,18 @@ export default function PhoneSimAssignmentsPage() {
                       {/* Carrier */}
                       <td className="px-4 py-3.5 text-[var(--foreground)]">
                         {sim.carrierName || "—"}
+                      </td>
+
+                      {/* Place */}
+                      <td className="px-4 py-3.5 text-[var(--foreground)] font-semibold">
+                        {sim.placeName ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                            <MapPin size={12} className="text-[#1167c9]" />
+                            {sim.placeName}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--muted)] text-xs italic">—</span>
+                        )}
                       </td>
 
                       {/* Responsible Employee */}
@@ -409,6 +426,12 @@ export default function PhoneSimAssignmentsPage() {
         isOpen={Boolean(activeSimForDetails)}
         onClose={() => setActiveSimForDetails(null)}
         sim={activeSimForDetails}
+      />
+
+      <ManagePlacesModal
+        isOpen={isPlacesOpen}
+        onClose={() => setIsPlacesOpen(false)}
+        onPlacesChanged={fetchSims}
       />
     </div>
   );

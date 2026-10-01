@@ -34,11 +34,18 @@ export type ReceiptFormMetaData = {
   sha256Checksum: string;
 };
 
+export type Place = {
+  id: string;
+  name: string;
+};
+
 export type PhoneSim = {
   id: string;
   phoneNumber: string; // canonical E.164, e.g. +966555123456
   iccid: string | null;
   carrierName: string | null;
+  placeId: string | null;
+  placeName: string | null;
   status: PhoneSimStatus;
   statusReason: string | null;
   responsibleEmployeeId: string;
@@ -94,6 +101,7 @@ export type PhoneSimResponsibilityChange = {
 export type CreatePhoneSimRequest = {
   phoneNumber: string;
   responsibleEmployeeId: string;
+  placeId: string;
   iccid?: string | null;
   carrierName?: string | null;
   notes?: string | null;
@@ -102,6 +110,7 @@ export type CreatePhoneSimRequest = {
 
 export type UpdatePhoneSimRequest = {
   phoneNumber: string;
+  placeId: string;
   iccid: string | null;
   carrierName: string | null;
   notes: string | null;
@@ -181,6 +190,7 @@ export function createPhoneSim(
     body = new FormData();
     body.append("phoneNumber", payload.phoneNumber);
     body.append("responsibleEmployeeId", payload.responsibleEmployeeId);
+    body.append("placeId", payload.placeId);
     if (payload.iccid) body.append("iccid", payload.iccid);
     if (payload.carrierName) body.append("carrierName", payload.carrierName);
     if (payload.notes) body.append("notes", payload.notes);
@@ -309,3 +319,32 @@ export function downloadPhoneSimReceiptForm(id: string) {
 export function previewPhoneSimReceiptForm(id: string) {
   return authPreviewBlob(`/api/phone-sims/${encodeURIComponent(id)}/receipt-form`);
 }
+
+// 14. GET /api/places
+export function getPlaces(): Promise<Place[]> {
+  return authFetch<Place[]>("/api/places");
+}
+
+// 15. POST /api/places
+export function createPlace(name: string): Promise<Place> {
+  return authFetch<Place>("/api/places", {
+    method: "POST",
+    body: JSON.stringify({ name: name.trim() }),
+    notifySuccess: "تم إضافة الموقع بنجاح",
+  });
+}
+
+// 16. PUT /api/places/{id}
+export function updatePlace(id: string, name: string): Promise<Place> {
+  return authFetch<Place>(`/api/places/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ name: name.trim() }),
+    notifySuccess: "تم تحديث اسم الموقع بنجاح",
+  });
+}
+
+// Utility: Riyadh date (YYYY-MM-DD)
+export function getTodayRiyadhDate(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+}
+

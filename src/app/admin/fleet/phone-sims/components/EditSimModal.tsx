@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { updatePhoneSim, PhoneSim, KNOWN_CARRIERS } from "@/lib/fleet/phone-sims-api";
+import { updatePhoneSim, getPhoneSim, getPlaces, PhoneSim, Place, KNOWN_CARRIERS } from "@/lib/fleet/phone-sims-api";
+import { ManagePlacesModal } from "./ManagePlacesModal";
 
 interface EditSimModalProps {
   isOpen: boolean;
@@ -22,15 +23,21 @@ export function EditSimModal({
   const [iccid, setIccid] = useState("");
   const [selectedCarrier, setSelectedCarrier] = useState("");
   const [customCarrier, setCustomCarrier] = useState("");
+  const [placeId, setPlaceId] = useState("");
   const [notes, setNotes] = useState("");
 
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [loadingPlaces, setLoadingPlaces] = useState(false);
+  const [isPlacesModalOpen, setIsPlacesModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [concurrencyMessage, setConcurrencyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && sim) {
       setPhoneNumber(sim.phoneNumber || "");
       setIccid(sim.iccid || "");
+      setPlaceId(sim.placeId || "");
       
       const existing = sim.carrierName || "";
       const isKnown = KNOWN_CARRIERS.some((c) => c.value === existing);
@@ -47,8 +54,22 @@ export function EditSimModal({
 
       setNotes(sim.notes || "");
       setErrors({});
+      setConcurrencyMessage(null);
+      loadPlaces();
     }
   }, [isOpen, sim]);
+
+  async function loadPlaces() {
+    setLoadingPlaces(true);
+    try {
+      const data = await getPlaces();
+      setPlaces(data || []);
+    } catch (err) {
+      console.error("Failed to load places in EditSimModal", err);
+    } finally {
+      setLoadingPlaces(false);
+    }
+  }
 
   if (!sim) return null;
 
@@ -63,6 +84,9 @@ export function EditSimModal({
         errs.iccid = "رمز ICCID يجب أن يتكون من 18 إلى 22 رقماً ويبدأ بـ 89";
       }
     }
+    if (!placeId) {
+      errs.placeId = "يرجى تحديد الموقع التابع له الشريحة (إلزامي)";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -72,12 +96,14 @@ export function EditSimModal({
     if (!sim || !validate()) return;
 
     setIsSubmitting(true);
+    setConcurrencyMessage(null);
     try {
       const carrierValue = selectedCarrier === "Other" ? customCarrier.trim() : selectedCarrier.trim();
       const updatedSim = await updatePhoneSim(sim.id, {
         phoneNumber: phoneNumber.trim(),
         iccid: iccid.trim() || null,
         carrierName: carrierValue || null,
+        placeId,
         notes: notes.trim() || null,
         rowVersion: sim.rowVersion,
       });
@@ -85,13 +111,31 @@ export function EditSimModal({
       onClose();
     } catch (err: any) {
       console.error("Error updating SIM:", err);
-      if (err?.details?.errorCode === "phone_sim.duplicate_phone_number") {
+      const code = err?.details?.errorCode;
+      if (code === "phone_sim.concurrency_conflict") {
+        setConcurrencyMessage(
+          "تم تعديل بيانات هذه الشريحة بواسطة مستخدم آخر بالتزامن. تم جلب أحدث البيانات المسجلة، يرجى مراجعتها وإعادة الحفظ."
+        );
+        try {
+          const fresh = await getPhoneSim(sim.id);
+          onSuccess(fresh);
+          setPhoneNumber(fresh.phoneNumber || "");
+          setIccid(fresh.iccid || "");
+          setPlaceId(fresh.placeId || "");
+          setNotes(fresh.notes || "");
+        } catch (fetchErr) {
+          console.error("Failed to refresh SIM after conflict:", fetchErr);
+        }
+      } else if (code === "phone_sim.place_not_found") {
+        setErrors((prev) => ({ ...prev, placeId: "الموقع المحدد غير موجود. يرجى اختيار موقع صالح." }));
+        loadPlaces();
+      } else if (code === "phone_sim.duplicate_phone_number") {
         setErrors((prev) => ({ ...prev, phoneNumber: "رقم الهاتف مسجل بالفعل" }));
-      } else if (err?.details?.errorCode === "phone_sim.duplicate_iccid") {
+      } else if (code === "phone_sim.duplicate_iccid") {
         setErrors((prev) => ({ ...prev, iccid: "رمز ICCID مسجل بالفعل" }));
-      } else if (err?.details?.errorCode === "phone_sim.invalid_iccid") {
+      } else if (code === "phone_sim.invalid_iccid") {
         setErrors((prev) => ({ ...prev, iccid: "رمز ICCID غير صالح" }));
-      } else if (err?.details?.errorCode === "phone_sim.invalid_phone_number") {
+      } else if (code === "phone_sim.invalid_phone_number") {
         setErrors((prev) => ({ ...prev, phoneNumber: "رقم الهاتف غير صالح" }));
       }
     } finally {
@@ -102,6 +146,12 @@ export function EditSimModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تعديل بيانات الشريحة">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {concurrencyMessage && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 font-semibold">
+            {concurrencyMessage}
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-bold text-[var(--foreground)] mb-1">
             رقم الهاتف <span className="text-red-500">*</span>
@@ -166,6 +216,50 @@ export function EditSimModal({
           </div>
         </div>
 
+        {/* Place Selector */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold text-[var(--foreground)]">
+              الموقع / المقر (Place) <span className="text-red-500">*</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsPlacesModalOpen(true)}
+              className="text-[11px] font-bold text-[#1167c9] dark:text-blue-400 hover:underline"
+            >
+              + إضافة موقع جديد / إدارة المواقع
+            </button>
+          </div>
+          {!sim.placeId && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded-lg border border-amber-200 mb-2 font-medium">
+              تنبيه: هذه الشريحة غير مسندة لأي موقع حالياً. يجب اختيار موقع لاعتماد حفظ التعديلات.
+            </p>
+          )}
+          <select
+            value={placeId}
+            onChange={(e) => {
+              setPlaceId(e.target.value);
+              setErrors((prev) => {
+                const next = { ...prev };
+                delete next.placeId;
+                return next;
+              });
+            }}
+            disabled={loadingPlaces}
+            className="w-full h-10 px-3 text-sm font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none cursor-pointer"
+          >
+            <option value="">{loadingPlaces ? "-- جاري تحميل المواقع --" : "-- اختر الموقع أو المقر --"}</option>
+            {places.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {errors.placeId && (
+            <p className="text-xs text-red-500 font-semibold mt-1">{errors.placeId}</p>
+          )}
+        </div>
+
         <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-800">
           <p className="font-bold">ملاحظة تنظيمية:</p>
           <p className="mt-0.5">
@@ -196,6 +290,16 @@ export function EditSimModal({
           </Button>
         </div>
       </form>
+
+      <ManagePlacesModal
+        isOpen={isPlacesModalOpen}
+        onClose={() => setIsPlacesModalOpen(false)}
+        onPlacesChanged={loadPlaces}
+        onSelectPlace={(createdPlace) => {
+          loadPlaces();
+          setPlaceId(createdPlace.id);
+        }}
+      />
     </Modal>
   );
 }

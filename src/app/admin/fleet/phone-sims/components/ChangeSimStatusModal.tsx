@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { changePhoneSimStatus, PhoneSim, PhoneSimStatus } from "@/lib/fleet/phone-sims-api";
+import { changePhoneSimStatus, getPhoneSim, PhoneSim, PhoneSimStatus } from "@/lib/fleet/phone-sims-api";
 
 interface ChangeSimStatusModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ export function ChangeSimStatusModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [concurrencyMessage, setConcurrencyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && sim) {
@@ -38,6 +39,7 @@ export function ChangeSimStatusModal({
       setStatus(isCurrentAllowed ? sim.status : "Available");
       setReason("");
       setErrors({});
+      setConcurrencyMessage(null);
     }
   }, [isOpen, sim]);
 
@@ -70,6 +72,7 @@ export function ChangeSimStatusModal({
     }
 
     setIsSubmitting(true);
+    setConcurrencyMessage(null);
     try {
       const updatedSim = await changePhoneSimStatus(sim.id, {
         status: status as "Available" | "Suspended" | "Lost" | "Deactivated",
@@ -80,10 +83,26 @@ export function ChangeSimStatusModal({
       onClose();
     } catch (err: any) {
       console.error("Error changing SIM status:", err);
-      if (err?.details?.errorCode === "phone_sim.active_assignment_conflict") {
+      const code = err?.details?.errorCode;
+      if (code === "phone_sim.concurrency_conflict") {
+        setConcurrencyMessage(
+          "تم تعديل بيانات هذه الشريحة بواسطة مستخدم آخر بالتزامن. تم تحديث البيانات، يرجى إعادة المحاولة."
+        );
+        try {
+          const fresh = await getPhoneSim(sim.id);
+          onSuccess(fresh);
+        } catch (fErr) {
+          console.error("Failed to refresh SIM after conflict:", fErr);
+        }
+      } else if (code === "phone_sim.active_assignment_conflict") {
         setErrors((prev) => ({
           ...prev,
           status: "تعذر تغيير الحالة لوجود تعيين نشط للمندوب",
+        }));
+      } else if (code === "phone_sim.invalid_status") {
+        setErrors((prev) => ({
+          ...prev,
+          status: "حالة الشريحة المحددة غير صالحة لهذا الإجراء.",
         }));
       }
     } finally {
@@ -94,6 +113,11 @@ export function ChangeSimStatusModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تغيير حالة الشريحة">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {concurrencyMessage && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 font-semibold">
+            {concurrencyMessage}
+          </div>
+        )}
         {isAssignmentOpen && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 font-medium">
             <p className="font-bold">تنبيه حظر الإجراء:</p>

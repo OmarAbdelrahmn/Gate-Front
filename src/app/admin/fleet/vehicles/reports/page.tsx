@@ -720,11 +720,11 @@ export default function VehicleAndRiderAssignmentReportsPage() {
             تصدير إكسل (الملخص)
           </Button>
           <Button
-            variant="secondary"
+            variant="ghost"
             onClick={() => handleExportExcel("detailed")}
             loading={exporting}
             disabled={exporting || loading}
-            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            className="inline-flex items-center gap-2 !bg-emerald-600 hover:!bg-emerald-700 !text-white !border border-emerald-600 shadow-sm font-bold"
           >
             <FileSpreadsheet size={16} />
             تصدير إكسل (التفصيلي)

@@ -5,7 +5,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { listEmployees } from "@/lib/workforce/api";
-import { createPhoneSim, PhoneSim, KNOWN_CARRIERS } from "@/lib/fleet/phone-sims-api";
+import { createPhoneSim, getPlaces, PhoneSim, Place, KNOWN_CARRIERS } from "@/lib/fleet/phone-sims-api";
+import { ManagePlacesModal } from "./ManagePlacesModal";
 import { toast } from "@/components/ui/Toast";
 
 interface CreateSimModalProps {
@@ -24,11 +25,15 @@ export function CreateSimModal({
   const [selectedCarrier, setSelectedCarrier] = useState("");
   const [customCarrier, setCustomCarrier] = useState("");
   const [responsibleEmployeeId, setResponsibleEmployeeId] = useState("");
+  const [placeId, setPlaceId] = useState("");
   const [notes, setNotes] = useState("");
   const [receiptFormFile, setReceiptFormFile] = useState<File | null>(null);
 
   const [employees, setEmployees] = useState<SelectOption[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [loadingPlaces, setLoadingPlaces] = useState(false);
+  const [isPlacesModalOpen, setIsPlacesModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -39,19 +44,38 @@ export function CreateSimModal({
       setSelectedCarrier("");
       setCustomCarrier("");
       setResponsibleEmployeeId("");
+      setPlaceId("");
       setNotes("");
       setReceiptFormFile(null);
       setErrors({});
       loadEmployees();
+      loadPlaces();
     }
   }, [isOpen]);
+
+  async function loadPlaces() {
+    setLoadingPlaces(true);
+    try {
+      const data = await getPlaces();
+      setPlaces(data || []);
+    } catch (err) {
+      console.error("Failed to load places for SIM creation", err);
+    } finally {
+      setLoadingPlaces(false);
+    }
+  }
 
   async function loadEmployees() {
     setLoadingEmployees(true);
     try {
       const data = await listEmployees();
       const allEmps = data || [];
-      const listToMap = allEmps.filter((emp) => emp.isEmployee === true);
+      // Allow records with isEmployee: true and status Active or OnLeave
+      const listToMap = allEmps.filter(
+        (emp) =>
+          emp.isEmployee === true &&
+          (emp.status === "Active" || emp.status === "OnLeave" || !emp.status)
+      );
       
       const activeEmployees = listToMap.map((emp) => ({
         value: emp.id,
@@ -82,6 +106,9 @@ export function CreateSimModal({
     if (!responsibleEmployeeId) {
       errs.responsibleEmployeeId = "الموظف المسؤول عن العهدة مطلوب";
     }
+    if (!placeId) {
+      errs.placeId = "يرجى تحديد موقع/مقر الشريحة";
+    }
     if (!receiptFormFile) {
       errs.receiptForm = "نموذج استلام الشريحة مطلوب";
     }
@@ -101,6 +128,7 @@ export function CreateSimModal({
         iccid: iccid.trim() || null,
         carrierName: carrierValue || null,
         responsibleEmployeeId,
+        placeId,
         notes: notes.trim() || null,
         receiptForm: receiptFormFile!,
       });
@@ -108,14 +136,29 @@ export function CreateSimModal({
       onClose();
     } catch (err: any) {
       console.error("Error creating SIM:", err);
-      if (err?.details?.errorCode === "phone_sim.duplicate_phone_number") {
+      const code = err?.details?.errorCode;
+      if (code === "phone_sim.duplicate_phone_number") {
         setErrors((prev) => ({ ...prev, phoneNumber: "رقم الهاتف مسجل بالفعل" }));
-      } else if (err?.details?.errorCode === "phone_sim.duplicate_iccid") {
+      } else if (code === "phone_sim.duplicate_iccid") {
         setErrors((prev) => ({ ...prev, iccid: "رمز ICCID مسجل بالفعل" }));
-      } else if (err?.details?.errorCode === "phone_sim.invalid_iccid") {
+      } else if (code === "phone_sim.invalid_iccid") {
         setErrors((prev) => ({ ...prev, iccid: "رمز ICCID غير صالح" }));
-      } else if (err?.details?.errorCode === "phone_sim.invalid_phone_number") {
+      } else if (code === "phone_sim.invalid_phone_number") {
         setErrors((prev) => ({ ...prev, phoneNumber: "رقم الهاتف غير صالح" }));
+      } else if (code === "phone_sim.place_not_found") {
+        setErrors((prev) => ({ ...prev, placeId: "الموقع المحدد غير موجود. يرجى اختيار موقع صالح." }));
+        loadPlaces();
+      } else if (code === "phone_sim.responsible_employee_unavailable") {
+        setErrors((prev) => ({
+          ...prev,
+          responsibleEmployeeId: "الموظف المختار غير متاح كمسؤول عهدة. اختر موظفاً نشطاً.",
+        }));
+      } else if (code === "phone_sim.responsible_employee_not_found") {
+        setErrors((prev) => ({
+          ...prev,
+          responsibleEmployeeId: "الموظف المحدد غير موجود في سجلات الموظفين.",
+        }));
+        loadEmployees();
       }
     } finally {
       setIsSubmitting(false);
@@ -266,6 +309,44 @@ export function CreateSimModal({
         </div>
 
         <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold text-[var(--foreground)]">
+              الموقع / المقر (Place) <span className="text-red-500">*</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsPlacesModalOpen(true)}
+              className="text-[11px] font-bold text-[#1167c9] dark:text-blue-400 hover:underline"
+            >
+              + إضافة موقع جديد / إدارة المواقع
+            </button>
+          </div>
+          <select
+            value={placeId}
+            onChange={(e) => {
+              setPlaceId(e.target.value);
+              setErrors((prev) => {
+                const next = { ...prev };
+                delete next.placeId;
+                return next;
+              });
+            }}
+            disabled={loadingPlaces}
+            className="w-full h-10 px-3 text-sm font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none cursor-pointer"
+          >
+            <option value="">{loadingPlaces ? "-- جاري تحميل المواقع --" : "-- اختر الموقع أو المقر --"}</option>
+            {places.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {errors.placeId && (
+            <p className="text-xs text-red-500 font-semibold mt-1">{errors.placeId}</p>
+          )}
+        </div>
+
+        <div>
           <label className="block text-xs font-bold text-[var(--foreground)] mb-1">
             ملاحظات إضافية
           </label>
@@ -287,6 +368,16 @@ export function CreateSimModal({
           </Button>
         </div>
       </form>
+
+      <ManagePlacesModal
+        isOpen={isPlacesModalOpen}
+        onClose={() => setIsPlacesModalOpen(false)}
+        onPlacesChanged={loadPlaces}
+        onSelectPlace={(createdPlace) => {
+          loadPlaces();
+          setPlaceId(createdPlace.id);
+        }}
+      />
     </Modal>
   );
 }

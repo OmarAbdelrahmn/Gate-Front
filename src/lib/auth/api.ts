@@ -201,6 +201,14 @@ export function getFriendlyErrorMessage(
         return "لم يتم العثور على ملف المندوب المحدد.";
       case "phone_sim.rider_unavailable":
         return "المندوب غير متاح حالياً للتعيين، يرجى اختيار مندوب نشط.";
+      case "phone_sim.place_not_found":
+        return "لم يتم العثور على الموقع المحدد. يرجى اختيار موقع صالح.";
+      case "place.duplicate_name":
+        return "اسم الموقع مستخدم بالفعل. يرجى اختيار اسم فريد للموقع.";
+      case "place.invalid_name":
+        return "اسم الموقع غير صالح. يجب ألا يكون فارغاً وألا يتجاوز 200 حرف.";
+      case "place.not_found":
+        return "الموقع المطلوب غير موجود.";
       case "phone_sim.duplicate_phone_number":
         return "رقم الهاتف مستخدم بالفعل لشريحة أخرى في النظام.";
       case "phone_sim.duplicate_iccid":

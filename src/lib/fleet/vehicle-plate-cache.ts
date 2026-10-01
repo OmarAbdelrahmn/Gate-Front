@@ -6,8 +6,8 @@ import { getVehiclesLookup, getAllVehicles } from "./api";
 export interface VehiclePlateEntry {
   plateNumberAr: string;
   plateNumberEn: string;
-  serialNumber?: string;
-  assetNumber?: string;
+  serialNumber?: string | null;
+  assetNumber?: string | null;
 }
 
 const vehiclePlateMap = new Map<string, VehiclePlateEntry>();
@@ -201,4 +201,42 @@ export function useVehiclePlates() {
     getVehiclePlate,
     replaceVehicleNumbersWithPlates,
   };
+}
+
+export function invalidateVehiclePlatesCache(): void {
+  vehiclePlateMap.clear();
+  isFetched = false;
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.removeItem("fleet_vehicle_plates_cache");
+    } catch {}
+  }
+  void loadVehiclePlates();
+  notifyListeners();
+}
+
+export function updateVehiclePlateCache(
+  vehicleId: string,
+  entry: Partial<VehiclePlateEntry> & { assetNumber?: string | null }
+): void {
+  if (!vehicleId) return;
+  const lowerId = vehicleId.trim().toLowerCase();
+  const existing = vehiclePlateMap.get(lowerId) || {
+    plateNumberAr: "",
+    plateNumberEn: "",
+  };
+  const updated: VehiclePlateEntry = {
+    ...existing,
+    ...entry,
+    plateNumberAr: entry.plateNumberAr ?? existing.plateNumberAr,
+    plateNumberEn: entry.plateNumberEn ?? existing.plateNumberEn,
+    serialNumber: entry.serialNumber ?? existing.serialNumber,
+    assetNumber: entry.assetNumber ?? existing.assetNumber,
+  };
+  vehiclePlateMap.set(lowerId, updated);
+  if (entry.assetNumber) {
+    vehiclePlateMap.set(entry.assetNumber.trim().toLowerCase(), updated);
+  }
+  persistCache();
+  notifyListeners();
 }

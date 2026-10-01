@@ -42,6 +42,7 @@ import { Modal } from "@/components/ui/Modal";
 import { VehicleUpsertModal } from "../components/VehicleUpsertModal";
 import { AddComplianceModal, type ComplianceTabType } from "../components/AddComplianceModal";
 import { PrivateToPublicTransitionModal } from "../components/PrivateToPublicTransitionModal";
+import { VehicleIdentityCorrectionModal } from "../components/VehicleIdentityCorrectionModal";
 import { OperationCardHistoryModal } from "../components/OperationCardHistoryModal";
 import { VehicleFilesCard } from "../components/VehicleFilesCard";
 import { IssueDetailsModal } from "../../issues/components/IssueDetailsModal";
@@ -54,6 +55,7 @@ import {
   AlertTriangle,
   Key,
   ShieldCheck,
+  ShieldAlert,
   Wrench,
   FileText,
   User,
@@ -82,6 +84,7 @@ export default function VehicleDetailPage() {
   const [isUpsertOpen, setIsUpsertOpen] = useState(false);
   const [isComplianceOpen, setIsComplianceOpen] = useState(false);
   const [isTransitionOpen, setIsTransitionOpen] = useState(false);
+  const [isIdentityCorrectionOpen, setIsIdentityCorrectionOpen] = useState(false);
   const [isOpCardHistoryOpen, setIsOpCardHistoryOpen] = useState(false);
   const [complianceType, setComplianceType] = useState<ComplianceTabType>("InsurancePolicy");
   const [selectedIssue, setSelectedIssue] = useState<VehicleIssueSummaryResponse | null>(null);
@@ -443,6 +446,18 @@ export default function VehicleDetailPage() {
           {can("fleet.vehicles.manage") && (
             <Button onClick={() => setIsUpsertOpen(true)} variant="secondary" className="gap-2">
               <Edit2 className="h-4 w-4" /> تعديل البيانات
+            </Button>
+          )}
+
+          {can("fleet.vehicles.manage") && (
+            <Button
+              onClick={() => setIsIdentityCorrectionOpen(true)}
+              variant="secondary"
+              className="gap-2 border-amber-200 bg-amber-50/50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+              title="تصحيح بيانات اللوحة أو الهيكل في سجلات التدقيق"
+            >
+              <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span>تصحيح الهوية واللوحة</span>
             </Button>
           )}
 
@@ -929,6 +944,18 @@ export default function VehicleDetailPage() {
           onClose={() => setIsTransitionOpen(false)}
           onSuccess={() => {
             setIsTransitionOpen(false);
+            loadData();
+          }}
+          vehicle={vehicle}
+        />
+      )}
+
+      {vehicle && (
+        <VehicleIdentityCorrectionModal
+          isOpen={isIdentityCorrectionOpen}
+          onClose={() => setIsIdentityCorrectionOpen(false)}
+          onSuccess={() => {
+            setIsIdentityCorrectionOpen(false);
             loadData();
           }}
           vehicle={vehicle}
