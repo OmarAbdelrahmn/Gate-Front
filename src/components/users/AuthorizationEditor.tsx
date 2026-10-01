@@ -30,6 +30,7 @@ import { toast } from "../ui/Toast";
 type ExistingRole = ManagedRoleAssignmentRequest & { roleId: string; roleCode?: string };
 type ExistingPermission = ManagedDirectPermissionAssignmentRequest;
 
+
 const roleRequest = (
   roleId: string,
   isAllHousingScope = true,
