@@ -39,6 +39,7 @@ import {
   unitOfMeasureLabels,
   itemTypeBadgeStyles,
   oilBarrelStatusConfig,
+  oilBarrelVehicleTypeConfig,
 } from "@/lib/maintenance/constants";
 import { toast } from "@/components/ui/Toast";
 
@@ -688,6 +689,7 @@ export function ReceiptDetailsModal({
                 <thead className="border-b border-[var(--border)] bg-amber-50/40 dark:bg-amber-950/20 text-slate-700 dark:text-slate-200 font-bold">
                   <tr>
                     <th className="p-2.5">رقم / باركود البرميل</th>
+                    <th className="p-2.5 text-center">النوع المسموح</th>
                     <th className="p-2.5 text-center">السعة الاسمية</th>
                     <th className="p-2.5 text-center">المتبقي الحالي</th>
                     <th className="p-2.5 text-left">سعر اللتر</th>
@@ -697,10 +699,26 @@ export function ReceiptDetailsModal({
                 <tbody className="divide-y divide-[var(--border)]">
                   {barrels.map((barrel) => {
                     const statusConf = oilBarrelStatusConfig[barrel.status];
+                    const typeConf =
+                      barrel.allowedVehicleType !== undefined && barrel.allowedVehicleType !== null
+                        ? oilBarrelVehicleTypeConfig[barrel.allowedVehicleType]
+                        : null;
+
                     return (
                       <tr key={barrel.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                         <td className="p-2.5 font-mono font-bold text-slate-900 dark:text-white">
                           {barrel.barrelNumber}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          {typeConf ? (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${typeConf.bg} ${typeConf.text} border ${typeConf.border}`}
+                            >
+                              {typeConf.badgeAr}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium">غير محدد</span>
+                          )}
                         </td>
                         <td className="p-2.5 text-center font-mono">
                           {barrel.nominalCapacityLiters} لتر

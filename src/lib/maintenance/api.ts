@@ -16,6 +16,9 @@ import type {
   StockBalance,
   CostLayer,
   OilBarrel,
+  OpenOilBarrelRequest,
+  AssignOilBarrelVehicleTypeRequest,
+  OilBarrelUsageResponse,
   OpenBarrelResponse,
   OilLossResponse,
   TransferRequest,
@@ -264,24 +267,53 @@ export async function getOilBarrels(params?: {
   inventoryLocationId?: string;
   inventoryItemId?: string;
   status?: string;
+  vehicleType?: number | null;
 }): Promise<OilBarrel[]> {
   const query = new URLSearchParams();
   if (params?.inventoryLocationId) query.set("inventoryLocationId", params.inventoryLocationId);
   if (params?.inventoryItemId) query.set("inventoryItemId", params.inventoryItemId);
   if (params?.status) query.set("status", params.status);
+  if (params?.vehicleType !== undefined && params?.vehicleType !== null) {
+    query.set("vehicleType", String(params.vehicleType));
+  }
   const qStr = query.toString();
   return authFetch<OilBarrel[]>(`/api/maintenance-inventory/oil-barrels${qStr ? `?${qStr}` : ""}`);
 }
 
 export async function openOilBarrel(
   barrelId: string,
-  payload: { openedAtUtc: string; rowVersion: string },
+  payload: OpenOilBarrelRequest,
 ): Promise<OpenBarrelResponse> {
   return authFetch<OpenBarrelResponse>(`/api/maintenance-inventory/oil-barrels/${barrelId}/open`, {
     method: "POST",
     body: JSON.stringify(payload),
     notifySuccess: false, // Let the caller decide based on `hasPreviousBarrelWarning`
   });
+}
+
+export async function assignOilBarrelVehicleType(
+  barrelId: string,
+  payload: AssignOilBarrelVehicleTypeRequest,
+): Promise<OilBarrel> {
+  return authFetch<OilBarrel>(`/api/maintenance-inventory/oil-barrels/${barrelId}/vehicle-type`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تحديد نوع المركبة للبرميل بنجاح",
+  });
+}
+
+export async function getOilBarrelUsage(
+  barrelId: string,
+  page = 1,
+  pageSize = 50,
+): Promise<OilBarrelUsageResponse> {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(Math.min(pageSize, 200)),
+  });
+  return authFetch<OilBarrelUsageResponse>(
+    `/api/maintenance-inventory/oil-barrels/${barrelId}/usage?${query}`,
+  );
 }
 
 export async function recordOilLoss(
@@ -586,8 +618,15 @@ export async function getDirectOilInventoryLocations(): Promise<DirectOilInvento
   return authFetch<DirectOilInventoryLocation[]>("/api/maintenance/oil-inventory-locations");
 }
 
-export async function getDirectOilBarrels(inventoryLocationId: string, inventoryItemId: string): Promise<DirectOilBarrel[]> {
+export async function getDirectOilBarrels(
+  inventoryLocationId: string,
+  inventoryItemId: string,
+  vehicleType?: number | null,
+): Promise<DirectOilBarrel[]> {
   const query = new URLSearchParams({ inventoryLocationId, inventoryItemId });
+  if (vehicleType !== undefined && vehicleType !== null) {
+    query.set("vehicleType", String(vehicleType));
+  }
   return authFetch<DirectOilBarrel[]>(`/api/maintenance/oil-barrels?${query}`);
 }
 

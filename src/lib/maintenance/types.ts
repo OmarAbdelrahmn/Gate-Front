@@ -414,7 +414,45 @@ export interface OilBarrel {
   status: OilBarrelStatus;
   openedAtUtc: string | null;
   depletedAtUtc: string | null;
+  allowedVehicleType?: number | null;
   rowVersion: string;
+}
+
+export interface OpenOilBarrelRequest {
+  openedAtUtc: string;
+  rowVersion: string;
+  allowedVehicleType: number; // 1 = Motorcycles, 2 = Cars
+}
+
+export interface AssignOilBarrelVehicleTypeRequest {
+  allowedVehicleType: number; // 1 = Motorcycles, 2 = Cars
+  rowVersion: string;
+}
+
+export interface OilBarrelUsageVehicleRow {
+  vehicleId: string | null;
+  assetNumber: string | null;
+  plateNumberAr: string | null;
+  plateNumberEn: string | null;
+  vehicleType: number | null;
+  issuedLiters: number;
+  reversedLiters: number;
+  netUsedLiters: number;
+  issueCount: number;
+  lastUsedAtUtc: string | null;
+  externalWorkOrderId?: string | null;
+  externalPlateOrReference?: string | null;
+}
+
+export interface OilBarrelUsageResponse {
+  barrel: OilBarrel;
+  totalIssuedLiters: number;
+  totalReversedLiters: number;
+  netUsedLiters: number;
+  vehicles: OilBarrelUsageVehicleRow[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
 }
 
 export interface OpenBarrelResponse {
@@ -422,6 +460,7 @@ export interface OpenBarrelResponse {
     id: string;
     remainingLiters: number;
     status: OilBarrelStatus;
+    allowedVehicleType?: number | null;
     rowVersion: string;
   };
   opened: boolean;
@@ -859,6 +898,7 @@ export interface DirectOilBarrel {
   inventoryItemId: string;
   status: OilBarrelStatus;
   remainingLiters: number;
+  allowedVehicleType?: number | null;
 }
 
 export interface CompleteOilChangeResult {

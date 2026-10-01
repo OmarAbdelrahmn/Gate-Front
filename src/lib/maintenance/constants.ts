@@ -295,6 +295,38 @@ export const oilBarrelStatusConfig: Record<
   },
 };
 
+export const oilBarrelVehicleTypeConfig: Record<
+  number,
+  {
+    labelAr: string;
+    labelEn: string;
+    badgeAr: string;
+    badgeEn: string;
+    bg: string;
+    text: string;
+    border: string;
+  }
+> = {
+  1: {
+    labelAr: "دراجات نارية",
+    labelEn: "Motorcycles",
+    badgeAr: "دراجات نارية فقط",
+    badgeEn: "Motorcycles only",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-300 dark:border-amber-800",
+  },
+  2: {
+    labelAr: "سيارات",
+    labelEn: "Cars",
+    badgeAr: "سيارات فقط",
+    badgeEn: "Cars only",
+    bg: "bg-blue-50 dark:bg-blue-950/40",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-300 dark:border-blue-800",
+  },
+};
+
 export const oilReminderStatusConfig: Record<
   OilReminderStatus,
   { label: string; bg: string; text: string; border: string; level: number }

@@ -5,12 +5,12 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { completeOilChange, getOilBarrels } from "@/lib/maintenance/api";
+import { completeOilChange, getDirectOilBarrels } from "@/lib/maintenance/api";
 import type {
   WorkOrder,
   InventoryItem,
   MaintenanceLocation,
-  OilBarrel,
+  DirectOilBarrel,
   VehicleType,
 } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
@@ -60,9 +60,9 @@ export function CompleteOilChangeModal({
   const [nextOilBarrelId, setNextOilBarrelId] = useState<string>("");
 
   // Barrels in selected location & item
-  const [locationBarrels, setLocationBarrels] = useState<OilBarrel[]>([]);
-  const [openBarrel, setOpenBarrel] = useState<OilBarrel | null>(null);
-  const [sealedBarrels, setSealedBarrels] = useState<OilBarrel[]>([]);
+  const [locationBarrels, setLocationBarrels] = useState<DirectOilBarrel[]>([]);
+  const [openBarrel, setOpenBarrel] = useState<DirectOilBarrel | null>(null);
+  const [sealedBarrels, setSealedBarrels] = useState<DirectOilBarrel[]>([]);
 
   useEffect(() => {
     if (workOrder) {
@@ -122,10 +122,7 @@ export function CompleteOilChangeModal({
       return;
     }
 
-    getOilBarrels({
-      inventoryLocationId,
-      inventoryItemId: oilInventoryItemId,
-    })
+    getDirectOilBarrels(inventoryLocationId, oilInventoryItemId, effectiveVehicleType)
       .then((barrels) => {
         setLocationBarrels(barrels);
         const open = barrels.find((b) => b.status === 2);
@@ -134,7 +131,7 @@ export function CompleteOilChangeModal({
         setSealedBarrels(sealed);
       })
       .catch(() => {});
-  }, [inventoryLocationId, oilInventoryItemId]);
+  }, [inventoryLocationId, oilInventoryItemId, effectiveVehicleType]);
 
   // Determine expected oil quantity
   const isCar = true; // default
@@ -357,7 +354,7 @@ export function CompleteOilChangeModal({
                     onChange={(val) => setNextOilBarrelId(val)}
                     options={sealedBarrels.map((b) => ({
                       value: b.id,
-                      label: `${b.barrelNumber} (${b.remainingLiters}L) - طرد #${b.packageSequence}`,
+                      label: `${b.barrelNumber} (${b.remainingLiters}L)${b.allowedVehicleType ? (b.allowedVehicleType === 1 ? " - دراجات فقط" : " - سيارات فقط") : " - مؤهل للفتح تلقائياً"}`,
                     }))}
                     placeholder="اختر البرميل التالي لفتحه..."
                     required

@@ -76,11 +76,11 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
   useEffect(() => {
     if (!inventoryLocationId || !oilItemId) return;
     let cancelled = false;
-    getDirectOilBarrels(inventoryLocationId, oilItemId)
+    getDirectOilBarrels(inventoryLocationId, oilItemId, vehicleType)
       .then((result) => { if (!cancelled) setBarrels(result); })
       .catch(() => { if (!cancelled) setBarrels([]); });
     return () => { cancelled = true; };
-  }, [inventoryLocationId, oilItemId]);
+  }, [inventoryLocationId, oilItemId, vehicleType]);
 
   const oilOptions = useMemo(
     () =>
@@ -195,7 +195,10 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
         )}
         {needsNextBarrel && <label>البرميل المختوم التالي
           <SearchableSelect value={nextBarrelId} onChange={(value) => { setNextBarrelId(value); attemptKey.current = null; }}
-            options={barrels.filter((barrel) => barrel.status === OilBarrelStatus.Sealed).map((barrel) => ({ value: barrel.id, label: `${barrel.barrelNumber} (${barrel.remainingLiters} لتر)` }))}
+            options={barrels.filter((barrel) => barrel.status === OilBarrelStatus.Sealed).map((barrel) => ({
+              value: barrel.id,
+              label: `${barrel.barrelNumber} (${barrel.remainingLiters} لتر)${barrel.allowedVehicleType ? (barrel.allowedVehicleType === 1 ? " - دراجات فقط" : " - سيارات فقط") : " - مؤهل للفتح تلقائياً"}`,
+            }))}
             placeholder="اختر البرميل التالي" required />
         </label>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

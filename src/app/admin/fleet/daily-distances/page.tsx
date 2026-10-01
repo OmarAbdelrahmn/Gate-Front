@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition, useMemo } from "react";
+import { useEffect, useState, useTransition, useMemo, useCallback } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -22,6 +22,7 @@ import {
   Search,
   Upload,
   UserCheck,
+  Truck,
   X,
   XCircle,
 } from "lucide-react";
@@ -49,9 +50,12 @@ import {
 } from "@/lib/fleet/daily-distances-api";
 import {
   TableHeaderColumnFilter,
+  TableHeaderDualFilter,
   type FilterOption,
 } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
 import { getVehicles } from "@/lib/fleet/api";
+import { formatVehicleType } from "@/lib/fleet/formatters";
+import { VehicleType } from "@/lib/fleet/types";
 
 function getRiyadhDateStr(daysOffset = 0): string {
   const now = new Date();
@@ -72,6 +76,7 @@ export default function VehicleDailyDistancesPage() {
 
   // Table Header Column Filters (Multi)
   const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
+  const [headerVehicleTypeFilter, setHeaderVehicleTypeFilter] = useState<string[]>([]);
   const [headerPlateFilter, setHeaderPlateFilter] = useState<string[]>([]);
   const [headerSourceFilter, setHeaderSourceFilter] = useState<string[]>([]);
   const [headerGpsStatusFilter, setHeaderGpsStatusFilter] = useState<string[]>([]);
@@ -93,6 +98,7 @@ export default function VehicleDailyDistancesPage() {
         };
 
         if (parsed.headerCityFilter) setHeaderCityFilter(toArray(parsed.headerCityFilter));
+        if (parsed.headerVehicleTypeFilter) setHeaderVehicleTypeFilter(toArray(parsed.headerVehicleTypeFilter));
         if (parsed.headerPlateFilter) setHeaderPlateFilter(toArray(parsed.headerPlateFilter));
         if (parsed.headerSourceFilter) setHeaderSourceFilter(toArray(parsed.headerSourceFilter));
         if (parsed.headerGpsStatusFilter) setHeaderGpsStatusFilter(toArray(parsed.headerGpsStatusFilter));
@@ -113,6 +119,7 @@ export default function VehicleDailyDistancesPage() {
     try {
       if (
         headerCityFilter.length > 0 ||
+        headerVehicleTypeFilter.length > 0 ||
         headerPlateFilter.length > 0 ||
         headerSourceFilter.length > 0 ||
         headerGpsStatusFilter.length > 0 ||
@@ -124,6 +131,7 @@ export default function VehicleDailyDistancesPage() {
           GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY,
           JSON.stringify({
             headerCityFilter,
+            headerVehicleTypeFilter,
             headerPlateFilter,
             headerSourceFilter,
             headerGpsStatusFilter,
@@ -141,6 +149,7 @@ export default function VehicleDailyDistancesPage() {
   }, [
     isRestored,
     headerCityFilter,
+    headerVehicleTypeFilter,
     headerPlateFilter,
     headerSourceFilter,
     headerGpsStatusFilter,
@@ -182,10 +191,11 @@ export default function VehicleDailyDistancesPage() {
   const [logs, setLogs] = useState<GpsImportLogItem[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
 
-  // Mapping of vehicleId -> operatingCity from vehicle data
+  // Mapping of vehicleId -> operatingCity and vehicleType from vehicle data
   const [vehicleCities, setVehicleCities] = useState<Record<string, string>>({});
+  const [vehicleTypes, setVehicleTypes] = useState<Record<string, number | VehicleType>>({});
 
-  // Load all vehicle cities to enrich daily distances table
+  // Load all vehicle cities and types as fallback to enrich daily distances table
   useEffect(() => {
     let isMounted = true;
     async function loadVehicleCities() {
@@ -207,16 +217,21 @@ export default function VehicleDailyDistancesPage() {
         }
         if (isMounted) {
           const cityMap: Record<string, string> = {};
+          const typeMap: Record<string, number | VehicleType> = {};
           allItems.forEach((v) => {
             const city = v.operatingCity || (v as any).operatingCityNameAr || (v as any).city;
             if (v.id && city) {
               cityMap[v.id] = city;
             }
+            if (v.id && v.vehicleType != null) {
+              typeMap[v.id] = v.vehicleType;
+            }
           });
           setVehicleCities(cityMap);
+          setVehicleTypes(typeMap);
         }
       } catch (err) {
-        console.warn("Failed to load vehicle cities:", err);
+        console.warn("Failed to load vehicle cities and types:", err);
       }
     }
     loadVehicleCities();
@@ -224,6 +239,31 @@ export default function VehicleDailyDistancesPage() {
       isMounted = false;
     };
   }, []);
+
+  const getItemCity = useCallback(
+    (item: VehicleDailyDistanceItem): string => {
+      return (
+        item.operatingCity ||
+        item.operatingCityNameAr ||
+        item.city ||
+        vehicleCities[item.vehicleId] ||
+        ""
+      );
+    },
+    [vehicleCities]
+  );
+
+  const getItemVehicleType = useCallback(
+    (item: VehicleDailyDistanceItem): VehicleType | number | null => {
+      const raw =
+        item.vehicleType ??
+        (item as any).VehicleType ??
+        vehicleTypes[item.vehicleId];
+      if (raw == null || raw === "") return null;
+      return typeof raw === "string" && !isNaN(Number(raw)) ? Number(raw) : (raw as any);
+    },
+    [vehicleTypes]
+  );
 
   const fetchDailyDistances = async (query = debouncedSearchQuery) => {
     setLoading(true);
@@ -489,7 +529,11 @@ export default function VehicleDailyDistancesPage() {
 
       const rows = filteredItems.map((item, idx) => {
         const sourceInfo = getAppliedSourceInfo(item.appliedSource);
-        const cityName = item.operatingCity || item.operatingCityNameAr || item.city || vehicleCities[item.vehicleId] || "—";
+        const cityName = getItemCity(item) || "—";
+        const vehicleTypeName = (() => {
+          const vt = getItemVehicleType(item);
+          return vt != null ? formatVehicleType(vt, locale) : "—";
+        })();
 
         if (locale === "en") {
           return {
@@ -497,6 +541,10 @@ export default function VehicleDailyDistancesPage() {
             "Vehicle (Plate Ar)": item.plateNumberAr || "—",
             "Plate (En)": item.plateNumberEn || "—",
             "City": cityName,
+            "Vehicle Type": (() => {
+              const vt = getItemVehicleType(item);
+              return vt != null ? formatVehicleType(vt, "en") : "—";
+            })(),
             "GPS Distance (KM)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
             "Manual Odometer": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
             "Manual Baseline": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
@@ -518,6 +566,7 @@ export default function VehicleDailyDistancesPage() {
           "المركبة (اللوحة عربي)": item.plateNumberAr || "—",
           "اللوحة (إنجليزي)": item.plateNumberEn || "—",
           "المدينة": cityName,
+          "نوع المركبة": vehicleTypeName,
           "مسافة GPS (كم)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
           "قراءة العداد اليدوية": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
           "قراءة الأساس اليدوية": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
@@ -591,7 +640,7 @@ export default function VehicleDailyDistancesPage() {
     if (!data?.items) return [];
     const map = new Map<string, number>();
     data.items.forEach((item) => {
-      const city = item.operatingCity || item.operatingCityNameAr || item.city || vehicleCities[item.vehicleId];
+      const city = getItemCity(item);
       if (city) {
         map.set(city, (map.get(city) || 0) + 1);
       }
@@ -603,7 +652,29 @@ export default function VehicleDailyDistancesPage() {
         label: city,
         count,
       }));
-  }, [data?.items, vehicleCities]);
+  }, [data?.items, getItemCity]);
+
+  const vehicleTypeOptions = useMemo<FilterOption[]>(() => {
+    if (!data?.items) return [];
+    const map = new Map<string, { label: string; count: number }>();
+    data.items.forEach((item) => {
+      const vType = getItemVehicleType(item);
+      if (vType != null) {
+        const key = String(vType);
+        const label = formatVehicleType(vType, locale);
+        const current = map.get(key) || { label, count: 0 };
+        current.count++;
+        map.set(key, current);
+      }
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].label.localeCompare(b[1].label))
+      .map(([value, { label, count }]) => ({
+        value,
+        label,
+        count,
+      }));
+  }, [data?.items, getItemVehicleType, locale]);
 
   const plateOptions = useMemo<FilterOption[]>(() => {
     if (!data?.items) return [];
@@ -674,6 +745,7 @@ export default function VehicleDailyDistancesPage() {
 
   const clearHeaderFilters = () => {
     setHeaderCityFilter([]);
+    setHeaderVehicleTypeFilter([]);
     setHeaderPlateFilter([]);
     setHeaderSourceFilter([]);
     setHeaderGpsStatusFilter([]);
@@ -687,6 +759,7 @@ export default function VehicleDailyDistancesPage() {
 
   const isHeaderFiltered = Boolean(
     headerCityFilter.length > 0 ||
+    headerVehicleTypeFilter.length > 0 ||
     headerPlateFilter.length > 0 ||
     headerSourceFilter.length > 0 ||
     headerGpsStatusFilter.length > 0 ||
@@ -698,16 +771,23 @@ export default function VehicleDailyDistancesPage() {
     if (!data?.items) return [];
     return data.items.filter((item) => {
       if (headerCityFilter.length > 0) {
-        const itemCity = (
-          item.operatingCity ||
-          item.operatingCityNameAr ||
-          item.city ||
-          vehicleCities[item.vehicleId] ||
-          ""
-        ).toLowerCase();
+        const itemCity = getItemCity(item).toLowerCase();
         const match = headerCityFilter.some((cf) => {
           const c = cf.toLowerCase();
           return itemCity === c || itemCity.includes(c);
+        });
+        if (!match) return false;
+      }
+      if (headerVehicleTypeFilter.length > 0) {
+        const vType = getItemVehicleType(item);
+        if (vType == null) return false;
+        const vTypeStr = String(vType);
+        const vTypeLabel = formatVehicleType(vType, locale).toLowerCase();
+        const match = headerVehicleTypeFilter.some((filterVal) => {
+          return (
+            filterVal === vTypeStr ||
+            filterVal.toLowerCase() === vTypeLabel
+          );
         });
         if (!match) return false;
       }
@@ -744,7 +824,18 @@ export default function VehicleDailyDistancesPage() {
       }
       return true;
     });
-  }, [data?.items, headerCityFilter, headerPlateFilter, headerSourceFilter, headerGpsStatusFilter, headerManualStatusFilter, vehicleCities]);
+  }, [
+    data?.items,
+    headerCityFilter,
+    headerVehicleTypeFilter,
+    headerPlateFilter,
+    headerSourceFilter,
+    headerGpsStatusFilter,
+    headerManualStatusFilter,
+    getItemCity,
+    getItemVehicleType,
+    locale,
+  ]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -965,6 +1056,12 @@ export default function VehicleDailyDistancesPage() {
               <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderCityFilter(headerCityFilter.filter((x) => x !== c))} />
             </Badge>
           ))}
+          {headerVehicleTypeFilter.map((vtVal) => (
+            <Badge key={vtVal} className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 gap-1 pl-1.5 font-medium">
+              نوع المركبة: {vehicleTypeOptions.find((o) => o.value === vtVal)?.label || vtVal}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderVehicleTypeFilter(headerVehicleTypeFilter.filter((x) => x !== vtVal))} />
+            </Badge>
+          ))}
           {headerPlateFilter.map((p) => (
             <Badge key={p} className="bg-blue-50 text-[#1167c9] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 gap-1 pl-1.5 font-medium">
               اللوحة: {p}
@@ -1049,14 +1146,31 @@ export default function VehicleDailyDistancesPage() {
                     </div>
                   </th>
                   <th className="px-3.5 py-3.5 whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
-                      <span>المدينة</span>
-                      <TableHeaderColumnFilter
-                        label="المدينة"
-                        value={headerCityFilter}
-                        onChange={setHeaderCityFilter}
-                        options={cityOptions}
-                        placeholder="بحث في المدن..."
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col">
+                        <span className="leading-tight">المدينة</span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">نوع المركبة</span>
+                      </div>
+                      <TableHeaderDualFilter
+                        label="المدينة ونوع المركبة"
+                        tab1={{
+                          id: "city",
+                          label: "المدينة",
+                          icon: <MapPin className="h-3 w-3" />,
+                          values: headerCityFilter,
+                          onChange: setHeaderCityFilter,
+                          options: cityOptions,
+                          placeholder: "بحث في المدن...",
+                        }}
+                        tab2={{
+                          id: "vehicleType",
+                          label: "نوع المركبة",
+                          icon: <Truck className="h-3 w-3" />,
+                          values: headerVehicleTypeFilter,
+                          onChange: setHeaderVehicleTypeFilter,
+                          options: vehicleTypeOptions,
+                          placeholder: "تصفية حسب نوع المركبة...",
+                        }}
                       />
                     </div>
                   </th>
@@ -1122,9 +1236,24 @@ export default function VehicleDailyDistancesPage() {
                         </Link>
                       </td>
 
-                      {/* City */}
-                      <td className="px-3.5 py-3 whitespace-nowrap font-medium text-slate-800 dark:text-slate-200">
-                        {item.operatingCity || item.operatingCityNameAr || item.city || vehicleCities[item.vehicleId] || "—"}
+                      {/* City & Vehicle Type */}
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          {getItemCity(item) || "—"}
+                        </div>
+                        <div className="mt-1">
+                          {(() => {
+                            const vType = getItemVehicleType(item);
+                            if (vType == null) {
+                              return <span className="text-[10px] text-slate-400">—</span>;
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700">
+                                {formatVehicleType(vType, locale)}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </td>
 
                       {/* GPS Distance */}

@@ -1,4 +1,5 @@
 import { authFetch } from "../auth/api";
+import type { VehicleType } from "./types";
 
 export type VehicleDailyDistanceItem = {
   id: string | null;
@@ -7,6 +8,10 @@ export type VehicleDailyDistanceItem = {
   assetNumber: string;
   plateNumberAr: string | null;
   plateNumberEn: string | null;
+  vehicleType?: VehicleType | number | string | null;
+  VehicleType?: VehicleType | number | string | null;
+  vehicleTypeName?: string | null;
+  vehicleTypeNameAr?: string | null;
   currentOdometer: number;
   vehicleTrackedDistanceKm: number;
   gpsDistanceKm: number | null;
