@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, Search, ShieldCheck, X, House, Layers, CheckCircle2 } from "lucide-react";
+import { Plus, Save, Search, ShieldCheck, X, House, Layers, CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { getUserAuthorization } from "../../lib/auth/authorization-api";
 import { permissionLabel } from "../../lib/permission-labels";
@@ -15,6 +15,7 @@ import {
   listRoles,
   replaceUserPermissions,
   replaceUserRoles,
+  getRolePermissionKeys,
 } from "../../lib/users/api";
 import type {
   ManagedDirectPermissionAssignmentRequest,
@@ -77,6 +78,8 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [syncingRoleId, setSyncingRoleId] = useState<string | null>(null);
+  const [syncingAllRoles, setSyncingAllRoles] = useState(false);
 
   // Data Scopes states (required by backend RBAC for housing.read, platform_accounts.read, etc.)
   const [isAllHousingScope, setIsAllHousingScope] = useState(true);
@@ -109,6 +112,34 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         setAssignPermissions(loadedPermissions);
         setRoles(allRoles);
         setCatalog(allPermissions);
+
+        // Pre-fetch permission keys for assigned roles in background so badges and unassign know their permissions
+        if (loadedRoles.length > 0) {
+          void (async () => {
+            try {
+              const updated = [...allRoles];
+              let hasChanges = false;
+              for (const assigned of loadedRoles) {
+                const r = updated.find((x) => x.id === assigned.roleId || x.code === assigned.roleCode);
+                if (r && (!r.permissionKeys || r.permissionKeys.length === 0)) {
+                  const perms = await getRolePermissionKeys(r);
+                  if (perms.length > 0) {
+                    const idx = updated.findIndex((x) => x.id === r.id);
+                    if (idx !== -1) {
+                      updated[idx] = { ...r, permissionKeys: perms };
+                      hasChanges = true;
+                    }
+                  }
+                }
+              }
+              if (hasChanges) {
+                setRoles(updated);
+              }
+            } catch {
+              // ignore
+            }
+          })();
+        }
 
         // Detect initial scope state from existing assignments if present
         const firstRole = loadedRoles[0];
@@ -211,63 +242,241 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     );
   };
 
-  async function saveRoles() {
-    setSaving(true);
-    setMessage("");
-    try {
-      const payload = assignRoles.map((r) => ({
-        ...r,
+  // Role toggle with automatic permission population
+  const toggleRoleSelection = async (role: Role) => {
+    const isSelected = assignRoles.some(
+      (item) => item.roleId === role.id || item.roleCode === role.code || item.roleId === role.code,
+    );
+
+    if (isSelected) {
+      // Uncheck role
+      const remainingRoles = assignRoles.filter(
+        (item) => item.roleId !== role.id && item.roleCode !== role.code && item.roleId !== role.code,
+      );
+      setAssignRoles(remainingRoles);
+
+      // Collect permissions belonging to remaining active roles
+      const remainingRoleKeys = new Set<string>();
+      for (const rem of remainingRoles) {
+        const matched = roles.find((rc) => rc.id === rem.roleId || rc.code === rem.roleCode);
+        if (matched) {
+          if (matched.permissionKeys && matched.permissionKeys.length > 0) {
+            matched.permissionKeys.forEach((k) => remainingRoleKeys.add(k));
+          } else {
+            try {
+              const perms = await getRolePermissionKeys(matched);
+              perms.forEach((k) => remainingRoleKeys.add(k));
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+
+      let thisRolePerms = role.permissionKeys ?? [];
+      if (thisRolePerms.length === 0) {
+        try {
+          thisRolePerms = await getRolePermissionKeys(role);
+        } catch {
+          thisRolePerms = [];
+        }
+      }
+
+      // Remove permissions of this role UNLESS they are still granted by another remaining role
+      if (thisRolePerms.length > 0) {
+        setAssignPermissions((prev) =>
+          prev.filter(
+            (p) => remainingRoleKeys.has(p.permissionKey) || !thisRolePerms.includes(p.permissionKey),
+          ),
+        );
+      }
+
+      toast.info(
+        locale === "en" ? "Role Removed" : "تمت إزالة الدور",
+        locale === "en"
+          ? `Removed role "${role.nameEn || role.nameAr}".`
+          : `تمت إزالة دور "${role.nameAr}".`,
+      );
+    } else {
+      // Check role
+      setSyncingRoleId(role.id);
+
+      // Add to assigned roles
+      const newRoleItem = roleRequest(
+        role.id,
         isAllHousingScope,
         isAllClientScope,
         includesFuturePlatformContracts,
-      }));
-      await replaceUserRoles(userId, payload);
-      const msg =
+      );
+      setAssignRoles((prev) => [...prev, newRoleItem]);
+
+      // Fetch role permissions
+      let rolePerms: string[] = [];
+      try {
+        rolePerms = await getRolePermissionKeys(role);
+        if (rolePerms.length > 0 && (!role.permissionKeys || role.permissionKeys.length === 0)) {
+          setRoles((prev) =>
+            prev.map((r) => (r.id === role.id ? { ...r, permissionKeys: rolePerms } : r)),
+          );
+        }
+      } catch (err) {
+        console.error("Failed to load role permissions:", err);
+      } finally {
+        setSyncingRoleId(null);
+      }
+
+      // Auto-assign permissions of this role to user's direct permissions
+      if (rolePerms.length > 0) {
+        setAssignPermissions((prev) => {
+          const existingKeys = new Set(prev.map((p) => p.permissionKey));
+          const newItems = rolePerms
+            .filter((k) => !existingKeys.has(k))
+            .map((k) =>
+              permissionRequest(
+                k,
+                isAllHousingScope,
+                isAllClientScope,
+                includesFuturePlatformContracts,
+              ),
+            );
+          return [...prev, ...newItems];
+        });
+
+        toast.success(
+          locale === "en" ? "Permissions Assigned" : "تم تعيين صلاحيات الدور",
+          locale === "en"
+            ? `Assigned ${rolePerms.length} permissions from role "${role.nameEn || role.nameAr}" to this user.`
+            : `تم تعيين ${rolePerms.length} صلاحية تلقائياً للمستخدم من دور "${role.nameAr}".`,
+        );
+      } else {
+        toast.success(
+          locale === "en" ? "Role Assigned" : "تم تعيين الدور",
+          locale === "en"
+            ? `Assigned role "${role.nameEn || role.nameAr}".`
+            : `تم تعيين دور "${role.nameAr}".`,
+        );
+      }
+    }
+  };
+
+  // Sync permissions from all currently assigned roles
+  const syncAllSelectedRolesPermissions = async () => {
+    if (assignRoles.length === 0) {
+      toast.info(
+        locale === "en" ? "No Roles Assigned" : "لا توجد أدوار معيّنة",
         locale === "en"
-          ? "Roles saved and user authorization updated."
-          : "تم حفظ الأدوار وتحديث صلاحيات ونطاقات المستخدم بنجاح.";
-      setMessage(msg);
+          ? "Please select at least one role to sync permissions."
+          : "يرجى تحديد دور واحد على الأقل لمزامنة الصلاحيات.",
+      );
+      return;
+    }
+    setSyncingAllRoles(true);
+    try {
+      const allRolePerms: string[] = [];
+      const updatedRoles = [...roles];
+
+      for (const assigned of assignRoles) {
+        const matched = updatedRoles.find(
+          (r) => r.id === assigned.roleId || r.code === assigned.roleCode,
+        );
+        if (matched) {
+          const perms = await getRolePermissionKeys(matched);
+          if (perms.length > 0 && (!matched.permissionKeys || matched.permissionKeys.length === 0)) {
+            const idx = updatedRoles.findIndex((r) => r.id === matched.id);
+            if (idx !== -1) {
+              updatedRoles[idx] = { ...matched, permissionKeys: perms };
+            }
+          }
+          allRolePerms.push(...perms);
+        }
+      }
+
+      setRoles(updatedRoles);
+      const uniquePerms = Array.from(new Set(allRolePerms));
+
+      let addedCount = 0;
+      setAssignPermissions((prev) => {
+        const existingKeys = new Set(prev.map((p) => p.permissionKey));
+        const newItems = uniquePerms
+          .filter((k) => !existingKeys.has(k))
+          .map((k) =>
+            permissionRequest(
+              k,
+              isAllHousingScope,
+              isAllClientScope,
+              includesFuturePlatformContracts,
+            ),
+          );
+        addedCount = newItems.length;
+        return [...prev, ...newItems];
+      });
+
       toast.success(
-        locale === "en" ? "Roles Updated" : "تم تحديث الأدوار",
-        msg,
+        locale === "en" ? "Permissions Synced" : "تمت مزامنة الصلاحيات",
+        locale === "en"
+          ? `Added ${addedCount} new permissions from ${assignRoles.length} assigned roles.`
+          : `تمت إضافة ${addedCount} صلاحية جديدة من ${assignRoles.length} أدوار معيّنة بنجاح.`,
       );
     } catch (err: any) {
-      const msg =
+      toast.error(
+        locale === "en" ? "Sync Failed" : "فشل المزامنة",
         err?.message ||
-        (locale === "en" ? "Failed to save roles." : "تعذر حفظ الأدوار.");
-      setMessage(msg);
-      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
+          (locale === "en"
+            ? "Failed to sync role permissions."
+            : "تعذر مزامنة صلاحيات الأدوار."),
+      );
     } finally {
-      setSaving(false);
+      setSyncingAllRoles(false);
     }
-  }
+  };
 
-  async function savePermissions() {
+  async function saveAll() {
     setSaving(true);
     setMessage("");
     try {
-      const payload = assignPermissions.map((p) => ({
-        ...p,
+      const rolePayload = assignRoles.map((r) => ({
+        roleId: r.roleId,
+        startsAtUtc: r.startsAtUtc ?? null,
+        expiresAtUtc: r.expiresAtUtc ?? null,
+        reason: r.reason ?? null,
         isAllHousingScope,
         isAllClientScope,
         includesFuturePlatformContracts,
+        scopes: r.scopes ?? [],
       }));
-      await replaceUserPermissions(userId, payload);
+
+      const permPayload = assignPermissions.map((p) => ({
+        permissionKey: p.permissionKey,
+        effect: p.effect || "Grant",
+        startsAtUtc: p.startsAtUtc ?? null,
+        expiresAtUtc: p.expiresAtUtc ?? null,
+        reason: p.reason ?? null,
+        isAllHousingScope,
+        isAllClientScope,
+        includesFuturePlatformContracts,
+        scopes: p.scopes ?? [],
+      }));
+
+      await Promise.all([
+        replaceUserRoles(userId, rolePayload),
+        replaceUserPermissions(userId, permPayload),
+      ]);
+
       const msg =
         locale === "en"
-          ? "Direct permissions saved and user authorization updated."
-          : "تم حفظ الصلاحيات المباشرة ونطاقات المستخدم بنجاح.";
+          ? "All roles and permissions saved successfully."
+          : "تم حفظ جميع الأدوار والصلاحيات المباشرة ونطاقات المستخدم بنجاح.";
       setMessage(msg);
       toast.success(
-        locale === "en" ? "Permissions Updated" : "تم تحديث الصلاحيات",
+        locale === "en" ? "Authorization Saved" : "تم حفظ الصلاحيات والأدوار",
         msg,
       );
     } catch (err: any) {
       const msg =
         err?.message ||
         (locale === "en"
-          ? "Failed to save direct permissions."
-          : "تعذر حفظ الصلاحيات المباشرة.");
+          ? "Failed to save authorization changes."
+          : "تعذر حفظ تغييرات الأدوار والصلاحيات.");
       setMessage(msg);
       toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
     } finally {
@@ -275,22 +484,38 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     }
   }
 
+  async function saveRoles() {
+    return saveAll();
+  }
+
+  async function savePermissions() {
+    return saveAll();
+  }
+
   if (!canManageRoles && !canManagePermissions) return null;
   return (
     <Card className="p-5 sm:p-7">
-      <div className="flex items-center gap-2">
-        <ShieldCheck size={20} className="text-[#1167c9]" />
-        <h2 className="text-lg font-black">
-          {locale === "en"
-            ? "Edit Roles & Permissions"
-            : "تعديل الأدوار والصلاحيات"}
-        </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+        <div className="flex items-center gap-2.5">
+          <ShieldCheck size={24} className="text-[#1167c9]" />
+          <div>
+            <h2 className="text-lg font-black">
+              {locale === "en"
+                ? "Edit Roles & Permissions"
+                : "تعديل الأدوار والصلاحيات"}
+            </h2>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              {locale === "en"
+                ? "Choosing a role automatically assigns its permissions to this user."
+                : "اختيار أي دور يعيّن صلاحيات هذا الدور للمستخدم تلقائياً."}
+            </p>
+          </div>
+        </div>
+        <Button loading={saving} onClick={() => void saveAll()} className="shadow-sm">
+          <Save size={16} />
+          {locale === "en" ? "Save All Changes" : "حفظ جميع التغييرات"}
+        </Button>
       </div>
-      <p className="mt-2 text-sm text-[var(--muted)]">
-        {locale === "en"
-          ? "Saving replaces the current assignments list. Keep required roles or permissions before saving."
-          : "الحفظ يستبدل قائمة التعيينات الحالية. حافظ على الأدوار أو الصلاحيات المطلوبة قبل الحفظ."}
-      </p>
       {message && (
         <p
           role="status"
@@ -369,24 +594,39 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
           </section>
           {canManageRoles && (
             <section className="rounded-xl border border-[var(--border)] p-5">
-              <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <div>
                   <h3 className="font-black text-base">
                     {locale === "en" ? "Assigned Roles" : "الأدوار المعيّنة"}
                   </h3>
                   <p className="text-xs text-[var(--muted)] mt-0.5">
                     {locale === "en"
-                      ? "Select roles to assign to this user."
-                      : "حدد الأدوار المراد تعيينها لهذا المستخدم."}
+                      ? "Select roles to assign. Choosing a role automatically assigns its permissions to this user."
+                      : "حدد الأدوار المراد تعيينها. اختيار أي دور يعيّن صلاحياته للمستخدم تلقائياً."}
                   </p>
                 </div>
-                <Button
-                  loading={saving}
-                  onClick={() => void saveRoles()}
-                >
-                  <Save size={16} />
-                  {locale === "en" ? "Save Roles" : "حفظ الأدوار"}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    loading={syncingAllRoles}
+                    onClick={() => void syncAllSelectedRolesPermissions()}
+                    title={
+                      locale === "en"
+                        ? "Sync all permissions from assigned roles to direct permissions"
+                        : "مزامنة جميع صلاحيات الأدوار المحددة إلى الصلاحيات المباشرة"
+                    }
+                  >
+                    <Sparkles size={14} className="text-amber-500" />
+                    {locale === "en" ? "Sync Role Permissions" : "مزامنة صلاحيات الأدوار"}
+                  </Button>
+                  <Button
+                    loading={saving}
+                    onClick={() => void saveRoles()}
+                  >
+                    <Save size={16} />
+                    {locale === "en" ? "Save Roles" : "حفظ الأدوار"}
+                  </Button>
+                </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {roles
@@ -403,6 +643,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                       locale === "en"
                         ? role.descriptionEn || role.descriptionAr
                         : role.descriptionAr;
+                    const isSyncingThis = syncingRoleId === role.id;
                     return (
                       <label
                         key={role.id}
@@ -410,39 +651,39 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                           selected
                             ? "border-[#1167c9] bg-blue-50/60 dark:bg-blue-950/30 font-bold"
                             : "border-[var(--border)] hover:bg-slate-500/5"
-                        }`}
+                        } ${isSyncingThis ? "opacity-70 pointer-events-none" : ""}`}
                       >
                         <input
                           type="checkbox"
                           checked={selected}
-                          onChange={() =>
-                            setAssignRoles((current) =>
-                              selected
-                                ? current.filter(
-                                    (item) => item.roleId !== role.id && item.roleCode !== role.code,
-                                  )
-                                : [
-                                    ...current,
-                                    roleRequest(
-                                      role.id,
-                                      isAllHousingScope,
-                                      isAllClientScope,
-                                      includesFuturePlatformContracts,
-                                    ),
-                                  ],
-                            )
-                          }
+                          disabled={isSyncingThis}
+                          onChange={() => void toggleRoleSelection(role)}
                           className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <b className="text-sm">{roleName}</b>
-                            <span
-                              className="font-mono text-xs text-[var(--muted)] shrink-0"
-                              dir="ltr"
-                            >
-                              {role.code}
-                            </span>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <b className="text-sm truncate">{roleName}</b>
+                              {isSyncingThis && (
+                                <span className="text-[10px] text-[#1167c9] font-bold animate-pulse">
+                                  {locale === "en" ? "Assigning..." : "جارٍ التعيين..."}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {role.permissionKeys && role.permissionKeys.length > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-[#1167c9]">
+                                  <Sparkles size={10} />
+                                  {role.permissionKeys.length}
+                                </span>
+                              )}
+                              <span
+                                className="font-mono text-xs text-[var(--muted)]"
+                                dir="ltr"
+                              >
+                                {role.code}
+                              </span>
+                            </div>
                           </div>
                           {roleDesc && (
                             <p className="mt-1 text-xs text-[var(--muted)] font-normal line-clamp-2">
