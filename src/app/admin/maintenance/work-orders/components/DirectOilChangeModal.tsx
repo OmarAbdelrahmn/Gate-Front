@@ -126,8 +126,8 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
       toast.error("كمية الزيت مطلوبة", "أدخل كمية الزيت الفعلية باللتر للدراجة النارية.");
       return;
     }
-    if (odometer < currentOdometer) {
-      toast.error("قراءة العداد غير صالحة", "قراءة التغيير لا يمكن أن تقل عن القراءة الحالية.");
+    if (odometer < 0) {
+      toast.error("قراءة العداد غير صالحة", "قراءة العداد يجب أن تكون صفر أو قيمة موجبة.");
       return;
     }
     if (needsNextBarrel && !nextBarrelId) {
@@ -170,7 +170,7 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
         {loading && <p>جارٍ تحميل بيانات المركبة والمخزون...</p>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label>تاريخ ووقت التغيير <Input type="datetime-local" value={performedAtLocal} onChange={(event) => { setPerformedAtLocal(event.target.value); attemptKey.current = null; }} required /></label>
-          <label>قراءة العداد (كم) <Input type="number" min={currentOdometer} value={odometer} onChange={(event) => { setOdometer(Number(event.target.value)); attemptKey.current = null; }} required /></label>
+          <label>قراءة العداد (كم) <Input type="number" min={0} value={odometer} onChange={(event) => { setOdometer(Number(event.target.value)); attemptKey.current = null; }} required /></label>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label>موقع الصيانة والمخزون

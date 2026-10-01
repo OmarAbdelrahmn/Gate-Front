@@ -260,6 +260,11 @@ export function VehicleAssignmentReportModal({
                     SN: {serialNumber}
                   </span>
                 )}
+                {currentVehicleRow?.sponsorName && (
+                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-200 font-medium">
+                    الكفيل: {currentVehicleRow.sponsorName}
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-[var(--muted)] mt-0.5">
                 {manufacturerModel || "سجل فترات تشغيل وعهدة المركبة مع المناديب"}
@@ -630,6 +635,7 @@ export function VehicleAssignmentReportModal({
                         <th className="px-3.5 py-2.5 text-start">رقم الأصل</th>
                         <th className="px-3.5 py-2.5 text-start">اللوحة</th>
                         <th className="px-3.5 py-2.5 text-start">الرقم التسلسلي</th>
+                        <th className="px-3.5 py-2.5 text-start">الكفيل المسؤول</th>
                         <th className="px-3.5 py-2.5 text-start">أيام التعيين بالفترة</th>
                         <th className="px-3.5 py-2.5 text-start">فترات التعيين</th>
                         <th className="px-3.5 py-2.5 text-start"></th>
@@ -655,6 +661,15 @@ export function VehicleAssignmentReportModal({
                             </td>
                             <td className="px-3.5 py-2">{v.plateNumberAr || "—"}</td>
                             <td className="px-3.5 py-2 font-mono">{v.serialNumber || "—"}</td>
+                            <td className="px-3.5 py-2">
+                              {v.sponsorName ? (
+                                <span className="text-purple-700 dark:text-purple-300 font-medium">
+                                  {v.sponsorName}
+                                </span>
+                              ) : (
+                                <span className="text-[var(--muted)]">—</span>
+                              )}
+                            </td>
                             <td className="px-3.5 py-2 font-mono">
                               <span
                                 className={

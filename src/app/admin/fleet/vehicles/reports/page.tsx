@@ -50,7 +50,13 @@ import {
   Filter,
   Layers,
   ChevronLeft,
+  Building2,
+  X,
 } from "lucide-react";
+import {
+  TableHeaderColumnFilter,
+  type FilterOption,
+} from "@/components/ui/TableHeaderFilter";
 
 // Required permissions per spec: reports, fleet assignments, fleet vehicles
 const REQUIRED_PERMISSIONS = [
@@ -133,6 +139,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>("all");
   const [hasAssignmentFilter, setHasAssignmentFilter] = useState<string>("all");
   const [realRiderFilter, setRealRiderFilter] = useState<string>("all");
+  const [sponsorFilter, setSponsorFilter] = useState<string[]>([]);
 
   // Expanded row keys (vehicleId or riderKey)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
@@ -269,6 +276,50 @@ export default function VehicleAndRiderAssignmentReportsPage() {
   };
 
   // ----------------------------------------------------
+  // Sponsor Filter Options for Vehicles
+  // ----------------------------------------------------
+  const sponsorOptions = useMemo<FilterOption[]>(() => {
+    if (!vehicleReport?.vehicles) return [];
+    const counts = new Map<string, { label: string; count: number }>();
+    let unlinkedCount = 0;
+
+    for (const v of vehicleReport.vehicles) {
+      if (v.sponsorId || v.sponsorName) {
+        const key = v.sponsorId || v.sponsorName || "";
+        const label = v.sponsorName || v.sponsorId || "غير محدد";
+        const curr = counts.get(key) || { label, count: 0 };
+        curr.count += 1;
+        counts.set(key, curr);
+      } else {
+        unlinkedCount += 1;
+      }
+    }
+
+    const opts: FilterOption[] = [{ value: "", label: "الكل" }];
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1].count - a[1].count);
+
+    for (const [key, item] of sorted) {
+      opts.push({
+        value: key,
+        label: item.label,
+        sublabel: `${item.count} مركبة`,
+        count: item.count,
+      });
+    }
+
+    if (unlinkedCount > 0) {
+      opts.push({
+        value: "__unlinked__",
+        label: "بدون كفيل (غير مرتبط)",
+        sublabel: `${unlinkedCount} مركبة`,
+        count: unlinkedCount,
+      });
+    }
+
+    return opts;
+  }, [vehicleReport]);
+
+  // ----------------------------------------------------
   // Filtered Vehicle Rows
   // ----------------------------------------------------
   const filteredVehicles = useMemo(() => {
@@ -288,12 +339,24 @@ export default function VehicleAndRiderAssignmentReportsPage() {
         if (!matchesType && v.assignments.length > 0) return false;
       }
 
+      // Sponsor filter (multi-select)
+      if (sponsorFilter.length > 0) {
+        const matchesSponsor = sponsorFilter.some((sf) => {
+          if (sf === "__unlinked__") {
+            return !v.sponsorId && !v.sponsorName;
+          }
+          return v.sponsorId === sf || v.sponsorName === sf;
+        });
+        if (!matchesSponsor) return false;
+      }
+
       // Search query
       if (query) {
         const searchable = [
           v.assetNumber,
           v.plateNumberAr,
           v.serialNumber,
+          v.sponsorName,
           ...v.assignments.flatMap((a) => [
             a.actualRiderName,
             a.actualRiderIqamaNo,
@@ -310,7 +373,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
 
       return true;
     });
-  }, [vehicleReport, search, hasAssignmentFilter, vehicleTypeFilter]);
+  }, [vehicleReport, search, hasAssignmentFilter, vehicleTypeFilter, sponsorFilter]);
 
   // ----------------------------------------------------
   // Filtered Rider Rows
@@ -436,6 +499,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               { header: "رقم الأصل", accessor: (v) => v.assetNumber, width: 16, isText: true },
               { header: "اللوحة (عربي)", accessor: (v) => v.plateNumberAr || "—", width: 16, isText: true },
               { header: "الرقم التسلسلي", accessor: (v) => v.serialNumber || "—", width: 18, isText: true },
+              { header: "الكفيل المسؤول", accessor: (v) => v.sponsorName || "—", width: 22, isText: true },
               { header: "عدد التعيينات بالفترة", accessor: (v) => v.assignments.length, width: 18 },
               {
                 header: "إجمالي الأيام بالفترة",
@@ -470,6 +534,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
               { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
               { header: "رقم الأصل", accessor: (i) => i.vehicle.assetNumber, width: 16, isText: true },
               { header: "اللوحة", accessor: (i) => i.vehicle.plateNumberAr || "—", width: 16, isText: true },
+              { header: "الكفيل المسؤول", accessor: (i) => i.vehicle.sponsorName || "—", width: 22, isText: true },
               { header: "النوع", accessor: (i) => formatVehicleType(i.assignment.vehicleType), width: 14 },
               {
                 header: "السائق الفعلي",
@@ -1064,6 +1129,36 @@ export default function VehicleAndRiderAssignmentReportsPage() {
         </div>
       </div>
 
+      {/* Active Sponsor Filters Badge Row */}
+      {activeTab === "vehicles" && sponsorFilter.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-xs shadow-xs">
+          <span className="text-slate-500 text-[11px] font-semibold ml-1">تصفية الكفلاء النشطة:</span>
+          {sponsorFilter.map((sf) => {
+            const opt = sponsorOptions.find((o) => o.value === sf);
+            const label = opt ? opt.label : sf;
+            return (
+              <Badge
+                key={sf}
+                className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800 gap-1 pl-1.5 font-medium"
+              >
+                {label}
+                <X
+                  className="h-3 w-3 cursor-pointer hover:text-red-600"
+                  onClick={() => setSponsorFilter(sponsorFilter.filter((x) => x !== sf))}
+                />
+              </Badge>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setSponsorFilter([])}
+            className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-semibold cursor-pointer underline mr-1"
+          >
+            مسح تصفية الكفلاء
+          </button>
+        </div>
+      )}
+
       {/* Main Table Content */}
       {loading ? (
         <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center">
@@ -1090,6 +1185,18 @@ export default function VehicleAndRiderAssignmentReportsPage() {
                   <tr>
                     <th className="px-4 py-3.5">اللوحة (عربي)</th>
                     <th className="px-4 py-3.5">الرقم التسلسلي</th>
+                    <th className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>الكفيل المسؤول</span>
+                        <TableHeaderColumnFilter
+                          label="الكفيل المسؤول"
+                          value={sponsorFilter}
+                          onChange={setSponsorFilter}
+                          options={sponsorOptions}
+                          placeholder="تصفية بالكفيل..."
+                        />
+                      </div>
+                    </th>
                     <th className="px-4 py-3.5">التعيينات بالفترة</th>
                     <th className="px-4 py-3.5">الأيام بالفترة</th>
                     <th className="px-4 py-3.5">المستحق للتحصيل (ر.س)</th>
@@ -1120,9 +1227,21 @@ export default function VehicleAndRiderAssignmentReportsPage() {
                             )}
                           </td>
 
-                          {/* 3. Serial Number */}
+                          {/* 2. Serial Number */}
                           <td className="px-4 py-3.5 font-mono text-xs text-slate-600 dark:text-slate-400">
                             {vehicle.serialNumber || "—"}
+                          </td>
+
+                          {/* 3. Sponsor Name */}
+                          <td className="px-4 py-3.5">
+                            {vehicle.sponsorName ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60">
+                                <Building2 className="h-3 w-3 shrink-0 text-purple-500" />
+                                <span>{vehicle.sponsorName}</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-normal">بلا كفيل</span>
+                            )}
                           </td>
 
                           {/* 4. Assignments Count & Inline Toggle */}
@@ -1178,7 +1297,7 @@ export default function VehicleAndRiderAssignmentReportsPage() {
                         {/* Inline Expanded Row */}
                         {isExpanded && hasAssignments && (
                           <tr className="bg-slate-50/70 dark:bg-slate-900/50">
-                            <td colSpan={6} className="p-4">
+                            <td colSpan={7} className="p-4">
                               <div className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm dark:border-blue-900/50 dark:bg-slate-900">
                                 <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800 mb-3">
                                   <div className="flex items-center gap-2">
@@ -1189,6 +1308,11 @@ export default function VehicleAndRiderAssignmentReportsPage() {
                                     {vehicle.plateNumberAr && vehicle.assetNumber && (
                                       <span className="font-mono text-xs text-slate-500">
                                         ({vehicle.assetNumber})
+                                      </span>
+                                    )}
+                                    {vehicle.sponsorName && (
+                                      <span className="text-xs text-purple-700 dark:text-purple-300 font-semibold bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800/50">
+                                        الكفيل المسؤول: {vehicle.sponsorName}
                                       </span>
                                     )}
                                   </div>

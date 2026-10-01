@@ -164,8 +164,8 @@ export function CompleteOilChangeModal({
       return;
     }
 
-    if (workOrder.odometerAtOpen && odometerAtChange < workOrder.odometerAtOpen) {
-      alert("قراءة العداد عند تغيير الزيت يجب ألا تقل عن قراءة فتح أمر العمل.");
+    if (odometerAtChange < 0) {
+      alert("قراءة العداد عند تغيير الزيت يجب أن تكون صفر أو قيمة موجبة.");
       return;
     }
 
@@ -270,7 +270,7 @@ export function CompleteOilChangeModal({
             </label>
             <Input
               type="number"
-              min={workOrder?.odometerAtOpen || 0}
+              min={0}
               value={odometerAtChange}
               onChange={(e) => setOdometerAtChange(parseInt(e.target.value) || 0)}
               required

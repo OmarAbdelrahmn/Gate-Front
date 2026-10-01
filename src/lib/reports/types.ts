@@ -135,6 +135,8 @@ export interface VehicleAssignmentsPeriodRow {
   assetNumber: string;
   serialNumber: string | null;
   plateNumberAr: string | null;
+  sponsorId?: string | null;
+  sponsorName?: string | null;
   totalDaysAssignedInPeriod: number;
   totalAmountToCollectInPeriodSar: number | null;
   assignments: RiderVehiclePeriodAssignment[];
