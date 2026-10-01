@@ -146,11 +146,35 @@ export function VehicleFilesCard({ vehicleId, registrationType, vehicleType, onC
       if (res && res.length > 0) {
         const current = res.find((c) => c.isCurrent) || res[0];
         setCurrentOpCard(current);
+        const cardNum =
+          current.cardNumber ||
+          (current as any).operationCardNumber ||
+          (current as any).card_number ||
+          (current as any).CardNumber ||
+          "";
+        const issueD =
+          current.issueDate ||
+          (current as any).cardIssueDate ||
+          (current as any).operationCardIssueDate ||
+          (current as any).IssueDate ||
+          "";
+        const expiryD =
+          current.expiryDate ||
+          (current as any).cardExpiryDate ||
+          (current as any).operationCardExpiryDate ||
+          (current as any).ExpiryDate ||
+          "";
+        const auth =
+          current.issuingAuthority ||
+          (current as any).issuing_authority ||
+          (current as any).IssuingAuthority ||
+          "الهيئة العامة للنقل";
+
         setOpCardForm({
-          cardNumber: current.cardNumber || "",
-          issuingAuthority: current.issuingAuthority || "الهيئة العامة للنقل",
-          issueDate: current.issueDate ? current.issueDate.split("T")[0] : new Date().toISOString().split("T")[0],
-          expiryDate: current.expiryDate ? current.expiryDate.split("T")[0] : "",
+          cardNumber: cardNum,
+          issuingAuthority: auth,
+          issueDate: issueD ? issueD.split("T")[0] : "",
+          expiryDate: expiryD ? expiryD.split("T")[0] : "",
           notes: current.notes || "",
         });
       }
@@ -461,26 +485,79 @@ export function VehicleFilesCard({ vehicleId, registrationType, vehicleType, onC
                 ) : null}
 
                 {/* Operation Card Details Card in Slot */}
-                {slot.kind === VehicleFileKind.OperationCard && isOperationCardEligible && currentOpCard && (
-                  <div className="mt-3 p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 dark:text-slate-400">رقم الكرت:</span>
-                      <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">{currentOpCard.cardNumber}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 dark:text-slate-400">تاريخ البداية (الإصدار):</span>
-                      <span className="font-medium text-slate-700 dark:text-slate-300 font-mono" dir="ltr">{formatDate(currentOpCard.issueDate)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 dark:text-slate-400">تاريخ النهاية (الانتهاء):</span>
-                      <span className="font-medium text-slate-700 dark:text-slate-300">{formatDate(currentOpCard.expiryDate)}</span>
-                    </div>
-                    {currentOpCard.issuingAuthority && (
-                      <div className="flex justify-between items-center text-[11px] text-slate-400">
-                        <span>جهة الإصدار:</span>
-                        <span>{currentOpCard.issuingAuthority}</span>
+                {slot.kind === VehicleFileKind.OperationCard && isOperationCardEligible && currentOpCard && (() => {
+                  const cardNum =
+                    currentOpCard.cardNumber ||
+                    (currentOpCard as any).operationCardNumber ||
+                    (currentOpCard as any).card_number ||
+                    (currentOpCard as any).CardNumber;
+                  const issueD =
+                    currentOpCard.issueDate ||
+                    (currentOpCard as any).cardIssueDate ||
+                    (currentOpCard as any).operationCardIssueDate ||
+                    (currentOpCard as any).IssueDate;
+                  const expiryD =
+                    currentOpCard.expiryDate ||
+                    (currentOpCard as any).cardExpiryDate ||
+                    (currentOpCard as any).operationCardExpiryDate ||
+                    (currentOpCard as any).ExpiryDate;
+                  const auth =
+                    currentOpCard.issuingAuthority ||
+                    (currentOpCard as any).issuing_authority ||
+                    (currentOpCard as any).IssuingAuthority;
+
+                  return (
+                    <div className="mt-3 p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-slate-400">رقم الكرت:</span>
+                        <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
+                          {cardNum ? (
+                            cardNum
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-400 font-sans font-normal text-[11px]">
+                              لم يُسجل (انقر تعديل البيانات)
+                            </span>
+                          )}
+                        </span>
                       </div>
-                    )}
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-slate-400">تاريخ البداية (الإصدار):</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300 font-mono" dir="ltr">
+                          {issueD ? (
+                            formatDate(issueD)
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-400 font-sans font-normal text-[11px]">
+                              لم يُسجل
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-slate-400">تاريخ النهاية (الانتهاء):</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300 font-mono" dir="ltr">
+                          {expiryD ? formatDate(expiryD) : "-"}
+                        </span>
+                      </div>
+                      {auth && (
+                        <div className="flex justify-between items-center text-[11px] text-slate-400">
+                          <span>جهة الإصدار:</span>
+                          <span>{auth}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* File Uploaded but No Card Data Saved Notice */}
+                {slot.kind === VehicleFileKind.OperationCard && isOperationCardEligible && !currentOpCard && att && (
+                  <div className="mt-3 p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span>ملف كرت التشغيل مرفوع، ولم تُحفظ بيانات الكرت بعد</span>
+                    </div>
+                    <p className="text-[11px] text-amber-700/90 dark:text-amber-400">
+                      يرجى النقر على &quot;تعديل البيانات&quot; لإدخال رقم كرت التشغيل وتواريخ الإصدار والانتهاء.
+                    </p>
                   </div>
                 )}
               </div>

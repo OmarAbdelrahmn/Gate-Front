@@ -513,15 +513,65 @@ export const addVehicleInspection = (vehicleId: string, payload: T.VehicleInspec
     notifySuccess: "تمت إضافة الفحص الدوري بنجاح",
   });
 
-export const getVehicleOperationCards = (vehicleId: string) =>
-  authFetch<T.VehicleOperationCardResponse[]>(`/api/vehicles/${vehicleId}/operation-cards`);
+export const getVehicleOperationCards = async (
+  vehicleId: string
+): Promise<T.VehicleOperationCardResponse[]> => {
+  const raw = await authFetch<any[]>(`/api/vehicles/${vehicleId}/operation-cards`);
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item: any) => ({
+    id: item.id,
+    vehicleId: item.vehicleId,
+    type: item.type || "OperationCard",
+    cardNumber: item.number ?? item.cardNumber ?? item.operationCardNumber ?? "",
+    issuingAuthority: item.issuer ?? item.issuingAuthority ?? "الهيئة العامة للنقل",
+    issueDate: item.effectiveFrom ?? item.issueDate ?? item.cardIssueDate ?? "",
+    expiryDate: item.expiryDate ?? item.cardExpiryDate ?? "",
+    status: item.dueStatus ?? item.status,
+    isCurrent: Boolean(item.isCurrent),
+    previousRecordId: item.previousRecordId ?? null,
+    rowVersion: item.rowVersion,
+    notes: item.notes ?? null,
+    number: item.number,
+    issuer: item.issuer,
+    effectiveFrom: item.effectiveFrom,
+    dueStatus: item.dueStatus,
+  }));
+};
 
-export const renewVehicleOperationCard = (vehicleId: string, payload: T.VehicleOperationCardRequest) =>
-  authFetch<T.VehicleOperationCardResponse>(`/api/vehicles/${vehicleId}/operation-cards`, {
+export const renewVehicleOperationCard = async (
+  vehicleId: string,
+  payload: T.VehicleOperationCardRequest
+): Promise<T.VehicleOperationCardResponse> => {
+  const raw = await authFetch<any>(`/api/vehicles/${vehicleId}/operation-cards`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      cardNumber: payload.cardNumber,
+      issuingAuthority: payload.issuingAuthority,
+      issueDate: payload.issueDate,
+      expiryDate: payload.expiryDate,
+      notes: payload.notes || "",
+    }),
     notifySuccess: "تم تحديث كرت التشغيل بنجاح",
   });
+  return {
+    id: raw.id,
+    vehicleId: raw.vehicleId,
+    type: raw.type || "OperationCard",
+    cardNumber: raw.number ?? raw.cardNumber ?? payload.cardNumber,
+    issuingAuthority: raw.issuer ?? raw.issuingAuthority ?? payload.issuingAuthority ?? "الهيئة العامة للنقل",
+    issueDate: raw.effectiveFrom ?? raw.issueDate ?? payload.issueDate,
+    expiryDate: raw.expiryDate ?? payload.expiryDate,
+    status: raw.dueStatus ?? raw.status,
+    isCurrent: Boolean(raw.isCurrent ?? true),
+    previousRecordId: raw.previousRecordId ?? null,
+    rowVersion: raw.rowVersion,
+    notes: raw.notes ?? payload.notes ?? null,
+    number: raw.number,
+    issuer: raw.issuer,
+    effectiveFrom: raw.effectiveFrom,
+    dueStatus: raw.dueStatus,
+  };
+};
 
 export const getVehicleComplianceDue = (
   checkDate?: string,

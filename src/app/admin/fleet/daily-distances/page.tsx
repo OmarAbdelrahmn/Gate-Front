@@ -22,6 +22,7 @@ import {
   Search,
   Upload,
   UserCheck,
+  UserX,
   Truck,
   X,
   XCircle,
@@ -53,9 +54,15 @@ import {
   TableHeaderDualFilter,
   type FilterOption,
 } from "@/app/admin/fleet/vehicles/components/TableHeaderFilter";
-import { getVehicles } from "@/lib/fleet/api";
+import { getVehicles, getAllVehicles, getAllVehicleAssignments } from "@/lib/fleet/api";
 import { formatVehicleType } from "@/lib/fleet/formatters";
-import { VehicleType } from "@/lib/fleet/types";
+import {
+  VehicleType,
+  VehicleOperationalStatus,
+  RiderVehicleAssignmentStatus,
+  type VehicleSummaryResponse,
+  type RiderVehicleAssignmentResponse,
+} from "@/lib/fleet/types";
 
 function getRiyadhDateStr(daysOffset = 0): string {
   const now = new Date();
@@ -73,6 +80,7 @@ export default function VehicleDailyDistancesPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<"gps" | "manual" | "missing" | "">("");
+  const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned" | "unassigned">("all");
 
   // Table Header Column Filters (Multi)
   const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
@@ -104,6 +112,9 @@ export default function VehicleDailyDistancesPage() {
         if (parsed.headerGpsStatusFilter) setHeaderGpsStatusFilter(toArray(parsed.headerGpsStatusFilter));
         if (parsed.headerManualStatusFilter) setHeaderManualStatusFilter(toArray(parsed.headerManualStatusFilter));
         if (typeof parsed.sourceFilter === "string") setSourceFilter(parsed.sourceFilter as any);
+        if (parsed.assignmentFilter && ["all", "assigned", "unassigned"].includes(parsed.assignmentFilter)) {
+          setAssignmentFilter(parsed.assignmentFilter as any);
+        }
         if (typeof parsed.searchQuery === "string") setSearchQuery(parsed.searchQuery);
       }
     } catch {
@@ -125,6 +136,7 @@ export default function VehicleDailyDistancesPage() {
         headerGpsStatusFilter.length > 0 ||
         headerManualStatusFilter.length > 0 ||
         sourceFilter ||
+        assignmentFilter !== "all" ||
         searchQuery
       ) {
         sessionStorage.setItem(
@@ -137,6 +149,7 @@ export default function VehicleDailyDistancesPage() {
             headerGpsStatusFilter,
             headerManualStatusFilter,
             sourceFilter,
+            assignmentFilter,
             searchQuery,
           })
         );
@@ -155,6 +168,7 @@ export default function VehicleDailyDistancesPage() {
     headerGpsStatusFilter,
     headerManualStatusFilter,
     sourceFilter,
+    assignmentFilter,
     searchQuery,
   ]);
 
@@ -191,34 +205,35 @@ export default function VehicleDailyDistancesPage() {
   const [logs, setLogs] = useState<GpsImportLogItem[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
 
-  // Mapping of vehicleId -> operatingCity and vehicleType from vehicle data
+  // Mapping of vehicleId -> metadata (city, type, assignment status, rider name)
   const [vehicleCities, setVehicleCities] = useState<Record<string, string>>({});
   const [vehicleTypes, setVehicleTypes] = useState<Record<string, number | VehicleType>>({});
+  const [vehicleAssignedMap, setVehicleAssignedMap] = useState<Record<string, boolean>>({});
+  const [vehicleRiderMap, setVehicleRiderMap] = useState<Record<string, string>>({});
 
-  // Load all vehicle cities and types as fallback to enrich daily distances table
+  // Load all vehicle metadata and active assignments to enrich daily distances table
   useEffect(() => {
     let isMounted = true;
-    async function loadVehicleCities() {
+    async function loadVehicleMetadata() {
       try {
-        const firstRes = await getVehicles({ page: 1, pageSize: 200 });
-        let allItems = firstRes?.items || [];
-        const totalCount = firstRes?.totalCount ?? allItems.length;
-        if (totalCount > allItems.length) {
-          const pageSize = firstRes.pageSize || 200;
-          const totalPages = Math.ceil(totalCount / pageSize);
-          const pagePromises = [];
-          for (let p = 2; p <= totalPages; p++) {
-            pagePromises.push(getVehicles({ page: p, pageSize }));
-          }
-          const remainingResults = await Promise.all(pagePromises);
-          remainingResults.forEach((res) => {
-            if (res?.items) allItems = allItems.concat(res.items);
-          });
-        }
+        const [vehiclesRes, assignmentsRes] = await Promise.all([
+          getAllVehicles().catch((err) => {
+            console.warn("Failed to load vehicles via getAllVehicles:", err);
+            return [] as VehicleSummaryResponse[];
+          }),
+          getAllVehicleAssignments().catch((err) => {
+            console.warn("Failed to load vehicle assignments via getAllVehicleAssignments:", err);
+            return [] as RiderVehicleAssignmentResponse[];
+          }),
+        ]);
+
         if (isMounted) {
           const cityMap: Record<string, string> = {};
           const typeMap: Record<string, number | VehicleType> = {};
-          allItems.forEach((v) => {
+          const assignedMap: Record<string, boolean> = {};
+          const riderMap: Record<string, string> = {};
+
+          (vehiclesRes || []).forEach((v) => {
             const city = v.operatingCity || (v as any).operatingCityNameAr || (v as any).city;
             if (v.id && city) {
               cityMap[v.id] = city;
@@ -226,19 +241,75 @@ export default function VehicleDailyDistancesPage() {
             if (v.id && v.vehicleType != null) {
               typeMap[v.id] = v.vehicleType;
             }
+            const isAssigned = Boolean(
+              v.currentAssignmentId ||
+              v.currentRiderProfileId ||
+              v.currentRiderName ||
+              v.status === VehicleOperationalStatus.Assigned ||
+              (v as any).status === 2 ||
+              (v as any).status === "Assigned" ||
+              (v as any).isAssigned
+            );
+            if (v.id) {
+              assignedMap[v.id] = isAssigned;
+              if (v.currentRiderName) {
+                riderMap[v.id] = v.currentRiderName;
+              }
+            }
           });
+
+          (assignmentsRes || []).forEach((a) => {
+            const isActive =
+              a.status === RiderVehicleAssignmentStatus.Active ||
+              a.status === 1 ||
+              (a as any).status === "Active" ||
+              !a.endedAtUtc;
+            if (a.vehicleId && isActive) {
+              assignedMap[a.vehicleId] = true;
+              if (a.riderName) {
+                riderMap[a.vehicleId] = a.riderName;
+              }
+            }
+          });
+
           setVehicleCities(cityMap);
           setVehicleTypes(typeMap);
+          setVehicleAssignedMap(assignedMap);
+          setVehicleRiderMap(riderMap);
         }
       } catch (err) {
-        console.warn("Failed to load vehicle cities and types:", err);
+        console.warn("Failed to load vehicle metadata:", err);
       }
     }
-    loadVehicleCities();
+    loadVehicleMetadata();
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const isItemAssigned = useCallback(
+    (item: VehicleDailyDistanceItem): boolean => {
+      if ((item as any).isAssigned !== undefined) return Boolean((item as any).isAssigned);
+      if ((item as any).is_assigned !== undefined) return Boolean((item as any).is_assigned);
+      if ((item as any).currentAssignmentId) return true;
+      if ((item as any).assignmentId) return true;
+      if ((item as any).currentRiderName || (item as any).riderName) return true;
+      return Boolean(vehicleAssignedMap[item.vehicleId]);
+    },
+    [vehicleAssignedMap]
+  );
+
+  const getItemRiderName = useCallback(
+    (item: VehicleDailyDistanceItem): string | null => {
+      return (
+        (item as any).currentRiderName ||
+        (item as any).riderName ||
+        vehicleRiderMap[item.vehicleId] ||
+        null
+      );
+    },
+    [vehicleRiderMap]
+  );
 
   const getItemCity = useCallback(
     (item: VehicleDailyDistanceItem): string => {
@@ -535,6 +606,9 @@ export default function VehicleDailyDistancesPage() {
           return vt != null ? formatVehicleType(vt, locale) : "—";
         })();
 
+        const isAssigned = isItemAssigned(item);
+        const riderName = getItemRiderName(item);
+
         if (locale === "en") {
           return {
             "#": idx + 1,
@@ -545,6 +619,8 @@ export default function VehicleDailyDistancesPage() {
               const vt = getItemVehicleType(item);
               return vt != null ? formatVehicleType(vt, "en") : "—";
             })(),
+            "Assignment Status": isAssigned ? "Assigned" : "Unassigned",
+            "Assigned Rider": riderName || "—",
             "GPS Distance (KM)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
             "Manual Odometer": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
             "Manual Baseline": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
@@ -567,6 +643,8 @@ export default function VehicleDailyDistancesPage() {
           "اللوحة (إنجليزي)": item.plateNumberEn || "—",
           "المدينة": cityName,
           "نوع المركبة": vehicleTypeName,
+          "حالة التعيين": isAssigned ? "معينة" : "غير معينة",
+          "المندوب المستلم": riderName || "—",
           "مسافة GPS (كم)": item.gpsDistanceKm != null ? item.gpsDistanceKm : "—",
           "قراءة العداد اليدوية": item.manualOdometerReading != null ? item.manualOdometerReading : "—",
           "قراءة الأساس اليدوية": item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading : "—",
@@ -743,6 +821,17 @@ export default function VehicleDailyDistancesPage() {
     ];
   }, [data?.items]);
 
+  const { assignedCount, unassignedCount } = useMemo(() => {
+    if (!data?.items) return { assignedCount: 0, unassignedCount: 0 };
+    let assigned = 0;
+    let unassigned = 0;
+    data.items.forEach((item) => {
+      if (isItemAssigned(item)) assigned++;
+      else unassigned++;
+    });
+    return { assignedCount: assigned, unassignedCount: unassigned };
+  }, [data?.items, isItemAssigned]);
+
   const clearHeaderFilters = () => {
     setHeaderCityFilter([]);
     setHeaderVehicleTypeFilter([]);
@@ -750,6 +839,7 @@ export default function VehicleDailyDistancesPage() {
     setHeaderSourceFilter([]);
     setHeaderGpsStatusFilter([]);
     setHeaderManualStatusFilter([]);
+    setAssignmentFilter("all");
     try {
       sessionStorage.removeItem(GPS_DAILY_DISTANCES_FILTERS_SESSION_KEY);
     } catch {
@@ -763,13 +853,19 @@ export default function VehicleDailyDistancesPage() {
     headerPlateFilter.length > 0 ||
     headerSourceFilter.length > 0 ||
     headerGpsStatusFilter.length > 0 ||
-    headerManualStatusFilter.length > 0
+    headerManualStatusFilter.length > 0 ||
+    assignmentFilter !== "all"
   );
 
-  // Client-filtered items based on table header filters
+  // Client-filtered items based on table header filters and assignment
   const filteredItems = useMemo(() => {
     if (!data?.items) return [];
     return data.items.filter((item) => {
+      if (assignmentFilter === "assigned") {
+        if (!isItemAssigned(item)) return false;
+      } else if (assignmentFilter === "unassigned") {
+        if (isItemAssigned(item)) return false;
+      }
       if (headerCityFilter.length > 0) {
         const itemCity = getItemCity(item).toLowerCase();
         const match = headerCityFilter.some((cf) => {
@@ -826,6 +922,8 @@ export default function VehicleDailyDistancesPage() {
     });
   }, [
     data?.items,
+    assignmentFilter,
+    isItemAssigned,
     headerCityFilter,
     headerVehicleTypeFilter,
     headerPlateFilter,
@@ -933,66 +1031,117 @@ export default function VehicleDailyDistancesPage() {
           </form>
         </div>
 
-        {/* Source Filter Tabs */}
-        <div className="flex items-center gap-2 border-t border-[var(--border)] pt-3">
-          <span className="text-xs font-bold text-[var(--muted)] ml-2 flex items-center gap-1">
-            <Filter className="h-3.5 w-3.5" />
-            مصدر المسافة:
-          </span>
+        {/* Source & Assignment Filter Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+          {/* Source Tabs */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-[var(--muted)] ml-1 flex items-center gap-1">
+              <Filter className="h-3.5 w-3.5" />
+              مصدر المسافة:
+            </span>
 
-          <button
-            type="button"
-            onClick={() => setSourceFilter("")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-              sourceFilter === ""
-                ? "bg-[#1167c9] text-white shadow-xs"
-                : "bg-[var(--subtle-bg)] text-[var(--foreground)] hover:bg-slate-200 dark:hover:bg-slate-800"
-            }`}
-          >
-            الكل {data ? `(${data.totalCount})` : ""}
-          </button>
+            <button
+              type="button"
+              onClick={() => setSourceFilter("")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                sourceFilter === ""
+                  ? "bg-[#1167c9] text-white shadow-xs"
+                  : "bg-[var(--subtle-bg)] text-[var(--foreground)] hover:bg-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              الكل {data ? `(${data.totalCount})` : ""}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSourceFilter("gps")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
-              sourceFilter === "gps"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100"
-            }`}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span>GPS معتمد</span>
-            {data && <span className="font-mono text-[11px]">({data.gpsCount})</span>}
-          </button>
+            <button
+              type="button"
+              onClick={() => setSourceFilter("gps")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                sourceFilter === "gps"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100"
+              }`}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>GPS معتمد</span>
+              {data && <span className="font-mono text-[11px]">({data.gpsCount})</span>}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSourceFilter("manual")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
-              sourceFilter === "manual"
-                ? "bg-amber-600 text-white shadow-xs"
-                : "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 hover:bg-amber-100"
-            }`}
-          >
-            <Edit3 className="h-3.5 w-3.5" />
-            <span>بديل يدوي</span>
-            {data && <span className="font-mono text-[11px]">({data.manualFallbackCount})</span>}
-          </button>
+            <button
+              type="button"
+              onClick={() => setSourceFilter("manual")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                sourceFilter === "manual"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 hover:bg-amber-100"
+              }`}
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+              <span>بديل يدوي</span>
+              {data && <span className="font-mono text-[11px]">({data.manualFallbackCount})</span>}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSourceFilter("missing")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
-              sourceFilter === "missing"
-                ? "bg-slate-700 text-white shadow-xs"
-                : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200"
-            }`}
-          >
-            <AlertCircle className="h-3.5 w-3.5" />
-            <span>بدون مسافة</span>
-            {data && <span className="font-mono text-[11px]">({data.missingCount})</span>}
-          </button>
+            <button
+              type="button"
+              onClick={() => setSourceFilter("missing")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                sourceFilter === "missing"
+                  ? "bg-slate-700 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200"
+              }`}
+            >
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span>بدون مسافة</span>
+              {data && <span className="font-mono text-[11px]">({data.missingCount})</span>}
+            </button>
+          </div>
+
+          {/* Vehicle Assignment Status Filter */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-[var(--muted)] ml-1 flex items-center gap-1">
+              <UserCheck className="h-3.5 w-3.5 text-indigo-500" />
+              حالة التعيين:
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setAssignmentFilter("all")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                assignmentFilter === "all"
+                  ? "bg-[#1167c9] text-white shadow-xs"
+                  : "bg-[var(--subtle-bg)] text-[var(--foreground)] hover:bg-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              الكل {data ? `(${data.items.length})` : ""}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAssignmentFilter("assigned")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                assignmentFilter === "assigned"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 hover:bg-indigo-100"
+              }`}
+            >
+              <UserCheck className="h-3.5 w-3.5" />
+              <span>معينة (على مندوب)</span>
+              {data && <span className="font-mono text-[11px]">({assignedCount})</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAssignmentFilter("unassigned")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                assignmentFilter === "unassigned"
+                  ? "bg-slate-700 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200"
+              }`}
+            >
+              <UserX className="h-3.5 w-3.5" />
+              <span>غير معينة (متاحة)</span>
+              {data && <span className="font-mono text-[11px]">({unassignedCount})</span>}
+            </button>
+          </div>
         </div>
       </Card>
 
@@ -1086,6 +1235,12 @@ export default function VehicleDailyDistancesPage() {
               <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setHeaderManualStatusFilter(headerManualStatusFilter.filter((x) => x !== mVal))} />
             </Badge>
           ))}
+          {assignmentFilter !== "all" && (
+            <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 gap-1 pl-1.5 font-medium">
+              التعيين: {assignmentFilter === "assigned" ? "معينة (على مندوب)" : "غير معينة (متاحة)"}
+              <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setAssignmentFilter("all")} />
+            </Badge>
+          )}
           <button
             type="button"
             onClick={clearHeaderFilters}
@@ -1234,6 +1389,22 @@ export default function VehicleDailyDistancesPage() {
                           <div className="font-bold text-[var(--foreground)] group-hover:text-[#1167c9] transition-colors">{item.plateNumberAr || "—"}</div>
                           <div className="font-mono text-[10px] text-[var(--muted)]">{item.plateNumberEn || "—"}</div>
                         </Link>
+                        <div className="mt-1">
+                          {isItemAssigned(item) ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900"
+                              title={getItemRiderName(item) ? `المندوب: ${getItemRiderName(item)}` : "المركبة معينة"}
+                            >
+                              <UserCheck className="h-3 w-3" />
+                              <span className="truncate max-w-[120px]">{getItemRiderName(item) || "معينة"}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800/80 dark:text-slate-400 dark:border-slate-700">
+                              <UserX className="h-3 w-3 text-slate-400" />
+                              <span>غير معينة</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* City & Vehicle Type */}

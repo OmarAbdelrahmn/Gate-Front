@@ -936,6 +936,7 @@ export default function VehicleDetailPage() {
         isOpen={isOpCardHistoryOpen}
         onClose={() => setIsOpCardHistoryOpen(false)}
         vehicleId={id}
+        hasUploadedFile={Boolean(summary?.operationCardFileUploaded)}
       />
 
       {vehicle && (

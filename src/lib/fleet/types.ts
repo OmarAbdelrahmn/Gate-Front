@@ -814,6 +814,7 @@ export interface VehicleInspectionRequest {
 export interface VehicleOperationCardResponse {
   id: string;
   vehicleId: string;
+  type?: "OperationCard" | string;
   cardNumber: string;
   issuingAuthority?: string | null;
   issueDate: string;
@@ -821,8 +822,14 @@ export interface VehicleOperationCardResponse {
   status?: VehicleComplianceDueStatus;
   isCurrent: boolean;
   notes?: string | null;
+  previousRecordId?: string | null;
   rowVersion?: string;
   createdAtUtc?: string;
+  // Generic API properties from backend contract
+  number?: string;
+  issuer?: string;
+  effectiveFrom?: string;
+  dueStatus?: number;
 }
 
 export interface VehicleOperationCardRequest {
