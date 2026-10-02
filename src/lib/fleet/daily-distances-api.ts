@@ -81,6 +81,74 @@ export type GpsImportLogItem = {
   importedAtUtc: string;
 };
 
+export type VehicleReportIdentity = {
+  vehicleId: string;
+  assetNumber: string;
+  plateNumberAr?: string | null;
+  plateNumberEn?: string | null;
+  vehicleType: number;
+  currentOperationalStatus: number;
+  operatingCityId?: string | null;
+  operatingCity?: string | null;
+};
+
+export type VehicleDailyReportDay = {
+  id: string | null;
+  workDate: string;
+  hasRecord: boolean;
+  hasDistance: boolean;
+  gpsDistanceKm: number | null;
+  gpsPlateNumber: string | null;
+  manualOdometerReading: number | null;
+  manualBaselineOdometerReading: number | null;
+  manualDistanceKm: number | null;
+  appliedDistanceKm: number;
+  appliedSource: number; // 0 = None, 1 = Manual, 2 = Gps
+  effectiveOdometerAfterKm: number | null;
+  gpsImportedAtUtc: string | null;
+  lastGpsImportId: string | null;
+  gpsImportedByUserId: string | null;
+  manualEnteredAtUtc: string | null;
+  manualEnteredByUserId: string | null;
+  manualNotes: string | null;
+};
+
+export type VehicleDailyDistanceReportResponse = {
+  vehicle: VehicleReportIdentity;
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  recordedDays: number;
+  gpsDays: number;
+  manualDays: number;
+  manualFallbackDays: number;
+  missingDays: number;
+  gpsTotalKm: number;
+  manualTotalKm: number;
+  appliedTotalKm: number;
+  days: VehicleDailyReportDay[];
+};
+
+export type MissingDailyRecordVehicleItem = {
+  vehicle: VehicleReportIdentity;
+  recordedDays: number;
+  missingDays: number;
+  missingDates: string[];
+};
+
+export type MissingDailyRecordsReportResponse = {
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  workingStatus: number;
+  workingVehicleCount: number;
+  totalCount: number;
+  totalMissingDays: number;
+  page: number;
+  pageSize: number;
+  items: MissingDailyRecordVehicleItem[];
+};
+
 /**
  * Fetch daily distance records for a given date with optional search & filter
  */
@@ -141,6 +209,52 @@ export async function importGpsFile(
 export async function getGpsImportLogs(workDate?: string): Promise<GpsImportLogItem[]> {
   const query = workDate ? `?workDate=${encodeURIComponent(workDate)}` : "";
   return await authFetch<GpsImportLogItem[]>(`/api/vehicle-daily-distances/gps-imports${query}`);
+}
+
+/**
+ * Fetch detailed daily GPS and manual distance report for a single vehicle across a date range
+ * GET /api/vehicle-daily-distances/reports/vehicles/{vehicleId}?fromDate=...&toDate=...
+ */
+export async function getVehicleDailyDistanceReport(
+  vehicleId: string,
+  params: { fromDate: string; toDate: string }
+): Promise<VehicleDailyDistanceReportResponse> {
+  const query = new URLSearchParams();
+  query.set("fromDate", params.fromDate);
+  query.set("toDate", params.toDate);
+
+  return await authFetch<VehicleDailyDistanceReportResponse>(
+    `/api/vehicle-daily-distances/reports/vehicles/${encodeURIComponent(vehicleId)}?${query.toString()}`
+  );
+}
+
+/**
+ * Fetch currently working vehicles with missing daily distance records across a date range
+ * GET /api/vehicle-daily-distances/reports/missing-records?fromDate=...&toDate=...&page=...&pageSize=...
+ */
+export async function getMissingDailyRecordsReport(params: {
+  fromDate: string;
+  toDate: string;
+  search?: string;
+  operatingCityId?: string;
+  vehicleType?: number;
+  page?: number;
+  pageSize?: number;
+}): Promise<MissingDailyRecordsReportResponse> {
+  const query = new URLSearchParams();
+  query.set("fromDate", params.fromDate);
+  query.set("toDate", params.toDate);
+  if (params.search?.trim()) query.set("search", params.search.trim());
+  if (params.operatingCityId) query.set("operatingCityId", params.operatingCityId);
+  if (params.vehicleType != null && params.vehicleType > 0) {
+    query.set("vehicleType", params.vehicleType.toString());
+  }
+  if (params.page) query.set("page", params.page.toString());
+  if (params.pageSize) query.set("pageSize", params.pageSize.toString());
+
+  return await authFetch<MissingDailyRecordsReportResponse>(
+    `/api/vehicle-daily-distances/reports/missing-records?${query.toString()}`
+  );
 }
 
 /**
@@ -224,6 +338,27 @@ export function getDailyDistanceErrorMessage(errorCode?: string, defaultMessage?
       return {
         title: "تعارض في التحديث",
         description: "تم تعديل السجل بواسطة مستخدم آخر أثناء التعديل؛ تم تحديث البيانات تلقائياً، يرجى المحاولة مجدداً.",
+      };
+    case "fleet.daily_distance.invalid_report_period":
+      return {
+        title: "فترة التقرير غير صالحة",
+        description:
+          "يجب تحديد تاريخ بداية وتاريخ نهاية صحيحين، بحيث لا يتجاوز النطاق 366 يوماً تقويمياً وأن يكون تاريخ النهاية لاحقاً أو مساوياً لتاريخ البداية.",
+      };
+    case "fleet.invalid_request":
+      return {
+        title: "طلب غير صالح",
+        description: defaultMessage || "القيم أو المعايير المحددة غير صالحة. يرجى مراجعة المدخلات والمحاولة مجدداً.",
+      };
+    case "fleet.forbidden":
+      return {
+        title: "غير مصرح",
+        description: "ليس لديك الصلاحية الكافية للوصول إلى هذا التقرير.",
+      };
+    case "fleet.not_found":
+      return {
+        title: "المركبة غير موجودة",
+        description: "لم يتم العثور على المركبة المحددة أو قد تكون محذوفة من النظام.",
       };
     default:
       return {

@@ -205,6 +205,7 @@ export default function VehicleDailyDistancesPage() {
   const [logs, setLogs] = useState<GpsImportLogItem[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
 
+
   // Mapping of vehicleId -> metadata (city, type, assignment status, rider name)
   const [vehicleCities, setVehicleCities] = useState<Record<string, string>>({});
   const [vehicleTypes, setVehicleTypes] = useState<Record<string, number | VehicleType>>({});
@@ -967,10 +968,32 @@ export default function VehicleDailyDistancesPage() {
           )}
 
           {(can("fleet.daily_distances.read") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
-            <Button variant="secondary" onClick={handleOpenLogs} className="gap-2 text-xs font-bold">
-              <History className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-              سجل عمليات الرفع
-            </Button>
+            <>
+              <Link href="/admin/fleet/daily-distances/vehicle-report">
+                <Button
+                  variant="secondary"
+                  className="gap-2 text-xs font-bold hover:text-[#1167c9]"
+                >
+                  <Gauge className="h-4 w-4 text-[#1167c9]" />
+                  تقرير مسافات مركبة
+                </Button>
+              </Link>
+
+              <Link href="/admin/fleet/daily-distances/missing-records">
+                <Button
+                  variant="secondary"
+                  className="gap-2 text-xs font-bold hover:text-amber-600"
+                >
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  تقرير السجلات المفقودة
+                </Button>
+              </Link>
+
+              <Button variant="secondary" onClick={handleOpenLogs} className="gap-2 text-xs font-bold">
+                <History className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                سجل عمليات الرفع
+              </Button>
+            </>
           )}
 
           {(can("fleet.daily_distances.import") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
@@ -1551,16 +1574,33 @@ export default function VehicleDailyDistancesPage() {
 
                       {/* Actions */}
                       <td className="px-3 py-3 text-center whitespace-nowrap">
-                        {(can("fleet.daily_distances.manage") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
-                          <Button
-                            variant="secondary"
-                            onClick={() => handleOpenManualModal(item)}
-                            className="text-[11px] py-1 px-2.5 gap-1 font-bold"
-                          >
-                            <Edit3 className="h-3.5 w-3.5 text-[#1167c9]" />
-                            <span>{item.manualOdometerReading != null ? "تعديل العداد" : "إدخال العداد"}</span>
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-center gap-1.5">
+                          {(can("fleet.daily_distances.read") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
+                            <Link
+                              href={`/admin/fleet/daily-distances/vehicle-report?vehicleId=${encodeURIComponent(item.vehicleId)}&workDate=${encodeURIComponent(item.workDate)}`}
+                            >
+                              <Button
+                                variant="secondary"
+                                className="text-[11px] py-1 px-2.5 gap-1 font-bold text-slate-700 dark:text-slate-300 hover:text-[#1167c9]"
+                                title="عرض تقرير مسافات المركبة"
+                              >
+                                <FileSpreadsheet className="h-3.5 w-3.5 text-[#1167c9]" />
+                                <span>التقرير</span>
+                              </Button>
+                            </Link>
+                          )}
+
+                          {(can("fleet.daily_distances.manage") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleOpenManualModal(item)}
+                              className="text-[11px] py-1 px-2.5 gap-1 font-bold"
+                            >
+                              <Edit3 className="h-3.5 w-3.5 text-[#1167c9]" />
+                              <span>{item.manualOdometerReading != null ? "تعديل العداد" : "إدخال العداد"}</span>
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
