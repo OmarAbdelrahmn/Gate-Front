@@ -9,7 +9,10 @@ import {
   getPhoneSims,
   PhoneSim,
   PhoneSimPage,
+  getPlaces,
+  Place,
 } from "@/lib/fleet/phone-sims-api";
+import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { PhoneSimsNav } from "../components/PhoneSimsNav";
 import { AssignSimModal } from "../components/AssignSimModal";
 import { ReturnSimModal } from "../components/ReturnSimModal";
@@ -29,6 +32,7 @@ import {
   ExternalLink,
   Smartphone,
   MapPin,
+  X,
 } from "lucide-react";
 
 export default function PhoneSimAssignmentsPage() {
@@ -39,6 +43,8 @@ export default function PhoneSimAssignmentsPage() {
   // States
   const [search, setSearch] = useState("");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned" | "available">("assigned");
+  const [selectedPlaceId, setSelectedPlaceId] = useState("");
+  const [places, setPlaces] = useState<Place[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -52,6 +58,21 @@ export default function PhoneSimAssignmentsPage() {
   const [activeSimForReturn, setActiveSimForReturn] = useState<PhoneSim | null>(null);
   const [activeSimForDetails, setActiveSimForDetails] = useState<PhoneSim | null>(null);
 
+  const loadPlaces = useCallback(async () => {
+    try {
+      const data = await getPlaces();
+      setPlaces(data || []);
+    } catch (err) {
+      console.error("Failed to load places:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (canRead) {
+      loadPlaces();
+    }
+  }, [canRead, loadPlaces]);
+
   const fetchSims = useCallback(async () => {
     if (!canRead) return;
     setLoading(true);
@@ -60,6 +81,7 @@ export default function PhoneSimAssignmentsPage() {
       const data = await getPhoneSims({
         search: search.trim() || undefined,
         status: statusFilter,
+        placeId: selectedPlaceId || undefined,
         page,
         pageSize,
       });
@@ -69,7 +91,7 @@ export default function PhoneSimAssignmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canRead, search, assignmentFilter, page, pageSize]);
+  }, [canRead, search, assignmentFilter, selectedPlaceId, page, pageSize]);
 
   useEffect(() => {
     fetchSims();
@@ -102,7 +124,20 @@ export default function PhoneSimAssignmentsPage() {
     );
   }
 
-  const items = simPageData?.items || [];
+  const placeOptions: SelectOption[] = [
+    { value: "", label: "كل المواقع / المقرات" },
+    ...places.map((p) => ({
+      value: p.id,
+      label: p.name,
+    })),
+  ];
+
+  const selectedPlace = places.find((p) => p.id === selectedPlaceId);
+  const rawItems = simPageData?.items || [];
+  const items = rawItems.filter((s) => {
+    if (!selectedPlaceId) return true;
+    return s.placeId === selectedPlaceId || (selectedPlace && s.placeName === selectedPlace.name);
+  });
   const totalCount = simPageData?.totalCount || 0;
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
@@ -152,27 +187,42 @@ export default function PhoneSimAssignmentsPage() {
 
       {/* Toolbar & Filters */}
       <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative w-full sm:w-80">
-            <Search
-              size={16}
-              className="absolute start-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="بحث باسم المندوب، رقم الهاتف، ICCID..."
-              className="w-full h-10 ps-9 pe-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
-            />
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+            {/* Search Box */}
+            <div className="relative w-full sm:w-72">
+              <Search
+                size={16}
+                className="absolute start-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="بحث باسم المندوب، رقم الهاتف، ICCID..."
+                className="w-full h-10 ps-9 pe-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none"
+              />
+            </div>
+
+            {/* Place Filter Dropdown */}
+            <div className="w-full sm:w-56">
+              <SearchableSelect
+                options={placeOptions}
+                value={selectedPlaceId}
+                onChange={(val) => {
+                  setSelectedPlaceId(val);
+                  setPage(1);
+                }}
+                placeholder="الموقع / المقر (Place)..."
+              />
+            </div>
           </div>
 
           {/* Quick Tab Toggle Filter */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-[var(--border)] text-xs font-bold w-full sm:w-auto">
+          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-[var(--border)] text-xs font-bold w-full md:w-auto">
             <button
               onClick={() => {
                 setAssignmentFilter("assigned");
@@ -214,6 +264,24 @@ export default function PhoneSimAssignmentsPage() {
             </button>
           </div>
         </div>
+
+        {/* Active Filters Summary */}
+        {selectedPlaceId && (
+          <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)] text-xs">
+            <span className="text-[var(--muted)] font-medium">الفلاتر المطبقة:</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-semibold border border-blue-200 dark:border-blue-800">
+              <MapPin size={12} />
+              المقر: {places.find((p) => p.id === selectedPlaceId)?.name || selectedPlaceId}
+              <button
+                onClick={() => setSelectedPlaceId("")}
+                className="hover:text-red-500 transition-colors"
+                title="إلغاء التصفية بالمقر"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -431,7 +499,10 @@ export default function PhoneSimAssignmentsPage() {
       <ManagePlacesModal
         isOpen={isPlacesOpen}
         onClose={() => setIsPlacesOpen(false)}
-        onPlacesChanged={fetchSims}
+        onPlacesChanged={() => {
+          loadPlaces();
+          fetchSims();
+        }}
       />
     </div>
   );

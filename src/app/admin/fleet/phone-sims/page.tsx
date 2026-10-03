@@ -9,9 +9,11 @@ import { Badge } from "@/components/ui/Badge";
 import { listEmployees, listRiders } from "@/lib/workforce/api";
 import {
   getPhoneSims,
+  getPlaces,
   PhoneSim,
   PhoneSimPage,
   PhoneSimStatus,
+  Place,
 } from "@/lib/fleet/phone-sims-api";
 import { exportToExcel } from "@/lib/export-excel";
 import { PhoneSimsNav } from "./components/PhoneSimsNav";
@@ -57,6 +59,7 @@ export default function PhoneSimsPage() {
   // Filter States
   const [search, setSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<PhoneSimStatus | "">("");
+  const [selectedPlaceId, setSelectedPlaceId] = useState("");
   const [selectedResponsibleId, setSelectedResponsibleId] = useState("");
   const [selectedRiderId, setSelectedRiderId] = useState("");
   const [page, setPage] = useState(1);
@@ -69,6 +72,7 @@ export default function PhoneSimsPage() {
   // Selectors Data
   const [employees, setEmployees] = useState<SelectOption[]>([]);
   const [riders, setRiders] = useState<SelectOption[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
 
   // Active Modals States
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -83,13 +87,23 @@ export default function PhoneSimsPage() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isPlacesOpen, setIsPlacesOpen] = useState(false);
 
+  const loadPlaces = useCallback(async () => {
+    try {
+      const data = await getPlaces();
+      setPlaces(data || []);
+    } catch (err) {
+      console.error("Failed to load places:", err);
+    }
+  }, []);
+
   // Fetch Lookups
   useEffect(() => {
     async function loadLookups() {
       try {
-        const [empRes, riderRes] = await Promise.allSettled([
+        const [empRes, riderRes, placesRes] = await Promise.allSettled([
           listEmployees(),
           listRiders(),
+          getPlaces(),
         ]);
         if (empRes.status === "fulfilled") {
           const empOptions = (empRes.value || [])
@@ -108,6 +122,9 @@ export default function PhoneSimsPage() {
             sublabel: `هوية: ${r.iqamaNo || ""}`,
           }));
           setRiders(riderOptions);
+        }
+        if (placesRes.status === "fulfilled") {
+          setPlaces(placesRes.value || []);
         }
       } catch (err) {
         console.error("Failed to load SIM filter lookups", err);
@@ -128,6 +145,7 @@ export default function PhoneSimsPage() {
         status: selectedStatus || undefined,
         responsibleEmployeeId: selectedResponsibleId || undefined,
         riderProfileId: selectedRiderId || undefined,
+        placeId: selectedPlaceId || undefined,
         page,
         pageSize,
       });
@@ -137,7 +155,7 @@ export default function PhoneSimsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canRead, search, selectedStatus, selectedResponsibleId, selectedRiderId, page, pageSize]);
+  }, [canRead, search, selectedStatus, selectedResponsibleId, selectedRiderId, selectedPlaceId, page, pageSize]);
 
   useEffect(() => {
     fetchSims();
@@ -198,7 +216,16 @@ export default function PhoneSimsPage() {
     );
   }
 
-  const items = simPageData?.items || [];
+  const rawItems = simPageData?.items || [];
+  const selectedPlace = places.find((p) => p.id === selectedPlaceId);
+  const items = selectedPlaceId
+    ? rawItems.filter(
+        (s) =>
+          s.placeId === selectedPlaceId ||
+          (selectedPlace?.name &&
+            s.placeName?.trim().toLowerCase() === selectedPlace.name.trim().toLowerCase())
+      )
+    : rawItems;
   const totalCount = simPageData?.totalCount || 0;
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
@@ -219,11 +246,20 @@ export default function PhoneSimsPage() {
         status: selectedStatus || undefined,
         responsibleEmployeeId: selectedResponsibleId || undefined,
         riderProfileId: selectedRiderId || undefined,
+        placeId: selectedPlaceId || undefined,
         page: 1,
         pageSize: 10000,
       });
 
-      const exportItems = data?.items || [];
+      let exportItems = data?.items || [];
+      if (selectedPlaceId) {
+        exportItems = exportItems.filter(
+          (s) =>
+            s.placeId === selectedPlaceId ||
+            (selectedPlace?.name &&
+              s.placeName?.trim().toLowerCase() === selectedPlace.name.trim().toLowerCase())
+        );
+      }
       if (exportItems.length === 0) return;
 
       await exportToExcel({
@@ -325,7 +361,7 @@ export default function PhoneSimsPage() {
 
       {/* Filters & Search Toolbar */}
       <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Search */}
           <div className="relative">
             <Search
@@ -363,6 +399,20 @@ export default function PhoneSimsPage() {
             </select>
           </div>
 
+          {/* Place Filter */}
+          <div>
+            <SearchableSelect
+              value={selectedPlaceId}
+              onChange={(val) => {
+                setSelectedPlaceId(val);
+                setPage(1);
+              }}
+              options={places.map((p) => ({ value: p.id, label: p.name }))}
+              placeholder="الموقع / المقر (Place)..."
+              searchPlaceholder="بحث في المواقع والمقرات..."
+            />
+          </div>
+
           {/* Responsible Employee Filter */}
           <div>
             <SearchableSelect
@@ -391,6 +441,42 @@ export default function PhoneSimsPage() {
             />
           </div>
         </div>
+
+        {Boolean(search || selectedStatus || selectedPlaceId || selectedResponsibleId || selectedRiderId) && (
+          <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)] text-xs flex-wrap">
+            <span className="text-[var(--muted)] font-semibold">تصفية نشطة:</span>
+            {selectedPlaceId && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-[#1167c9] dark:bg-blue-950/40 dark:text-blue-300 font-bold">
+                <MapPin size={12} />
+                {places.find((p) => p.id === selectedPlaceId)?.name || "موقع محدد"}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPlaceId("");
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold text-xs"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setSelectedStatus("");
+                setSelectedPlaceId("");
+                setSelectedResponsibleId("");
+                setSelectedRiderId("");
+                setPage(1);
+              }}
+              className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline ms-auto cursor-pointer"
+            >
+              إعادة ضبط الفلاتر
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Inventory Table */}
@@ -715,7 +801,10 @@ export default function PhoneSimsPage() {
       <ManagePlacesModal
         isOpen={isPlacesOpen}
         onClose={() => setIsPlacesOpen(false)}
-        onPlacesChanged={fetchSims}
+        onPlacesChanged={() => {
+          fetchSims();
+          loadPlaces();
+        }}
       />
     </div>
   );

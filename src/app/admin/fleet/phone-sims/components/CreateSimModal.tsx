@@ -109,9 +109,6 @@ export function CreateSimModal({
     if (!placeId) {
       errs.placeId = "يرجى تحديد موقع/مقر الشريحة";
     }
-    if (!receiptFormFile) {
-      errs.receiptForm = "نموذج استلام الشريحة مطلوب";
-    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -130,7 +127,7 @@ export function CreateSimModal({
         responsibleEmployeeId,
         placeId,
         notes: notes.trim() || null,
-        receiptForm: receiptFormFile!,
+        receiptForm: receiptFormFile || null,
       });
       onSuccess(newSim);
       onClose();
@@ -262,7 +259,7 @@ export function CreateSimModal({
 
         <div>
           <label className="block text-xs font-bold text-[var(--foreground)] mb-1">
-            نموذج استلام الشريحة <span className="text-red-500">*</span>
+            نموذج استلام الشريحة <span className="text-xs text-[var(--muted)] font-normal">(اختياري)</span>
           </label>
           <input
             type="file"

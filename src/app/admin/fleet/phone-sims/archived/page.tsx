@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
   getPhoneSims,
+  getPlaces,
   PhoneSim,
   PhoneSimPage,
   PhoneSimStatus,
+  Place,
 } from "@/lib/fleet/phone-sims-api";
 import { PhoneSimsNav } from "../components/PhoneSimsNav";
 import { ChangeSimStatusModal } from "../components/ChangeSimStatusModal";
@@ -39,6 +41,8 @@ export default function PhoneSimArchivedPage() {
   // States
   const [search, setSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<PhoneSimStatus | "">("");
+  const [selectedPlaceId, setSelectedPlaceId] = useState("");
+  const [places, setPlaces] = useState<Place[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -52,6 +56,21 @@ export default function PhoneSimArchivedPage() {
   const [activeSimForArchive, setActiveSimForArchive] = useState<PhoneSim | null>(null);
   const [activeSimForDetails, setActiveSimForDetails] = useState<PhoneSim | null>(null);
 
+  const loadPlaces = useCallback(async () => {
+    try {
+      const data = await getPlaces();
+      setPlaces(data || []);
+    } catch (err) {
+      console.error("Failed to load places:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (canRead) {
+      loadPlaces();
+    }
+  }, [canRead, loadPlaces]);
+
   const fetchSims = useCallback(async () => {
     if (!canRead) return;
     setLoading(true);
@@ -61,6 +80,7 @@ export default function PhoneSimArchivedPage() {
       const data = await getPhoneSims({
         search: search.trim() || undefined,
         status: statusParam,
+        placeId: selectedPlaceId || undefined,
         page,
         pageSize,
       });
@@ -70,7 +90,7 @@ export default function PhoneSimArchivedPage() {
     } finally {
       setLoading(false);
     }
-  }, [canRead, search, selectedStatus, page, pageSize]);
+  }, [canRead, search, selectedStatus, selectedPlaceId, page, pageSize]);
 
   useEffect(() => {
     fetchSims();
@@ -114,8 +134,18 @@ export default function PhoneSimArchivedPage() {
   }
 
   // Filter for suspended, lost, deactivated, or items when no specific status filter is chosen
+  const selectedPlace = places.find((p) => p.id === selectedPlaceId);
   const items = (simPageData?.items || []).filter((sim) => {
-    if (selectedStatus) return sim.status === selectedStatus;
+    if (selectedStatus && sim.status !== selectedStatus) return false;
+    if (
+      selectedPlaceId &&
+      sim.placeId !== selectedPlaceId &&
+      (!selectedPlace?.name ||
+        sim.placeName?.trim().toLowerCase() !== selectedPlace.name.trim().toLowerCase())
+    ) {
+      return false;
+    }
+    if (selectedStatus) return true;
     return sim.status === "Suspended" || sim.status === "Lost" || sim.status === "Deactivated";
   });
   const totalCount = items.length;
@@ -181,7 +211,60 @@ export default function PhoneSimArchivedPage() {
               <option value="Deactivated">ملغاة (Deactivated)</option>
             </select>
           </div>
+
+          {/* Place Filter */}
+          <div>
+            <select
+              value={selectedPlaceId}
+              onChange={(e) => {
+                setSelectedPlaceId(e.target.value);
+                setPage(1);
+              }}
+              className="w-full h-10 px-3 text-xs font-semibold rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-[#1167c9] outline-none cursor-pointer"
+            >
+              <option value="">جميع المواقع والمقرات (Place)...</option>
+              {places.map((place) => (
+                <option key={place.id} value={place.id}>
+                  {place.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+
+        {Boolean(search || selectedStatus || selectedPlaceId) && (
+          <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)] text-xs flex-wrap">
+            <span className="text-[var(--muted)] font-semibold">تصفية نشطة:</span>
+            {selectedPlaceId && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-[#1167c9] dark:bg-blue-950/40 dark:text-blue-300 font-bold">
+                <MapPin size={12} />
+                {places.find((p) => p.id === selectedPlaceId)?.name || "موقع محدد"}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPlaceId("");
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold text-xs"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setSelectedStatus("");
+                setSelectedPlaceId("");
+                setPage(1);
+              }}
+              className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline ms-auto cursor-pointer"
+            >
+              إعادة ضبط الفلاتر
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -353,7 +436,10 @@ export default function PhoneSimArchivedPage() {
       <ManagePlacesModal
         isOpen={isPlacesOpen}
         onClose={() => setIsPlacesOpen(false)}
-        onPlacesChanged={fetchSims}
+        onPlacesChanged={() => {
+          fetchSims();
+          loadPlaces();
+        }}
       />
     </div>
   );

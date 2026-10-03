@@ -105,7 +105,7 @@ export type CreatePhoneSimRequest = {
   iccid?: string | null;
   carrierName?: string | null;
   notes?: string | null;
-  receiptForm: File;
+  receiptForm?: File | null;
 };
 
 export type UpdatePhoneSimRequest = {
@@ -153,6 +153,7 @@ export type PhoneSimQueryFilters = {
   status?: PhoneSimStatus;
   responsibleEmployeeId?: string;
   riderProfileId?: string;
+  placeId?: string;
   page?: number;
   pageSize?: number;
 };
@@ -166,6 +167,7 @@ export async function getPhoneSims(
   if (filters?.status) query.set("status", filters.status);
   if (filters?.responsibleEmployeeId) query.set("responsibleEmployeeId", filters.responsibleEmployeeId);
   if (filters?.riderProfileId) query.set("riderProfileId", filters.riderProfileId);
+  if (filters?.placeId) query.set("placeId", filters.placeId);
   if (filters?.page) query.set("page", String(filters.page));
   if (filters?.pageSize) query.set("pageSize", String(filters.pageSize));
 
