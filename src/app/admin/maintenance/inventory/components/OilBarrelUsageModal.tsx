@@ -16,9 +16,12 @@ import {
   HelpCircle,
   TrendingDown,
   RotateCcw,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { toast } from "@/components/ui/Toast";
+import { exportToExcel } from "@/lib/export-excel";
 import { getOilBarrelUsage } from "@/lib/maintenance/api";
 import type {
   OilBarrel,
@@ -51,6 +54,134 @@ export function OilBarrelUsageModal({
   const [data, setData] = useState<OilBarrelUsageResponse | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (!barrel || !data) return;
+    setExporting(true);
+    try {
+      let allVehicles: OilBarrelUsageVehicleRow[] = [];
+
+      // If there are more records than currently loaded in this single page, fetch all
+      if (data.totalCount > data.vehicles.length) {
+        const fetchPageSize = 200;
+        const totalPages = Math.ceil(data.totalCount / fetchPageSize);
+        for (let p = 1; p <= totalPages; p++) {
+          const res = await getOilBarrelUsage(barrel.id, p, fetchPageSize);
+          if (res.vehicles && res.vehicles.length > 0) {
+            allVehicles.push(...res.vehicles);
+          }
+        }
+      } else {
+        allVehicles = [...data.vehicles];
+      }
+
+      if (allVehicles.length === 0) {
+        toast.error("لا توجد بيانات", "لا توجد سجلات استهلاك لتصديرها لهذا البرميل.");
+        return;
+      }
+
+      const safeSheetName = `استهلاك برميل ${barrel.barrelNumber}`.replace(/[\\/*?:[\]]/g, "_").slice(0, 31);
+      const filename = `oil-barrel-usage-${barrel.barrelNumber}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+      await exportToExcel<OilBarrelUsageVehicleRow>({
+        filename,
+        sheetName: safeSheetName,
+        data: allVehicles,
+        columns: [
+          {
+            header: "م",
+            accessor: (_, idx) => idx + 1,
+            width: 6,
+          },
+          {
+            header: "رقم البرميل",
+            accessor: () => barrel.barrelNumber,
+            isText: true,
+            width: 18,
+          },
+          {
+            header: "صنف الزيت",
+            accessor: () => itemName || "—",
+            width: 22,
+          },
+          {
+            header: "المستودع / الموقع",
+            accessor: () => locationName || "—",
+            width: 20,
+          },
+          {
+            header: "رقم اللوحة (عربي)",
+            accessor: (row) => row.plateNumberAr || (row.externalPlateOrReference ? row.externalPlateOrReference : "—"),
+            isText: true,
+            width: 18,
+          },
+          {
+            header: "رقم اللوحة (إنجليزي)",
+            accessor: (row) => row.plateNumberEn || "—",
+            isText: true,
+            width: 18,
+          },
+          {
+            header: "رقم الأصل / المرجع",
+            accessor: (row) => row.assetNumber || (row.externalWorkOrderId ? `أمر عمل #${row.externalWorkOrderId}` : "—"),
+            isText: true,
+            width: 18,
+          },
+          {
+            header: "تصنيف السجل",
+            accessor: (row) => {
+              if (row.vehicleId) return "مركبة أسطول";
+              if (row.externalWorkOrderId || row.externalPlateOrReference) return "مركبة خارجية";
+              return "استهلاك سابق للترقية";
+            },
+            width: 18,
+          },
+          {
+            header: "نوع المركبة",
+            accessor: (row) => {
+              if (row.vehicleType === 1) return "دراجة نارية";
+              if (row.vehicleType === 2) return "سيارة";
+              return "—";
+            },
+            width: 14,
+          },
+          {
+            header: "صافي الاستهلاك (لتر)",
+            accessor: (row) => Number(row.netUsedLiters.toFixed(2)),
+            width: 18,
+          },
+          {
+            header: "إجمالي المنصرف (لتر)",
+            accessor: (row) => Number(row.issuedLiters.toFixed(2)),
+            width: 18,
+          },
+          {
+            header: "إجمالي المرتجع (لتر)",
+            accessor: (row) => Number(row.reversedLiters.toFixed(2)),
+            width: 18,
+          },
+          {
+            header: "عدد العمليات",
+            accessor: (row) => row.issueCount,
+            width: 12,
+          },
+          {
+            header: "تاريخ آخر استخدام",
+            accessor: (row) => (row.lastUsedAtUtc ? formatDateTime(row.lastUsedAtUtc) : "—"),
+            width: 22,
+          },
+        ],
+      });
+
+      toast.success("تم التصدير بنجاح", `تم تنزيل سجل استهلاك البرميل ${barrel.barrelNumber}`);
+    } catch (err: unknown) {
+      console.error("Export barrel usage error:", err);
+      toast.error("فشل التصدير", err instanceof Error ? err.message : "حدث خطأ أثناء تصدير سجل الاستهلاك.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const loadUsage = async (targetPage = page, targetPageSize = pageSize) => {
     if (!barrel) return;
@@ -155,6 +286,17 @@ export function OilBarrelUsageModal({
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={handleExportExcel}
+              disabled={loading || exporting || !data || data.vehicles.length === 0}
+              loading={exporting}
+              className="h-9 text-xs gap-1.5 font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
+            >
+              <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
+              تصدير Excel
+            </Button>
+
             <Button
               variant="secondary"
               onClick={() => loadUsage(page, pageSize)}
@@ -419,7 +561,18 @@ export function OilBarrelUsageModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end pt-2 border-t border-[var(--border)]">
+        <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
+          <Button
+            variant="secondary"
+            onClick={handleExportExcel}
+            disabled={loading || exporting || !data || data.vehicles.length === 0}
+            loading={exporting}
+            className="text-xs gap-1.5 font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
+            تصدير Excel
+          </Button>
+
           <Button variant="secondary" onClick={onClose} className="text-xs">
             إغلاق
           </Button>
