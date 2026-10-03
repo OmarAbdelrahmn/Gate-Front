@@ -652,9 +652,26 @@ export default function AssignmentsPage() {
               width: 16,
             },
             {
-              header: "انتهاء التفويض",
-              accessor: (item) => (item.permissionEndsOn ? item.permissionEndsOn.split("T")[0] : "—"),
-              width: 16,
+              header: "رقم التصريح / التفويض",
+              accessor: (item) =>
+                item.permissionReference ||
+                (item as any).permitNumber ||
+                (item as any).PermitNumber ||
+                (item as any).permissionNumber ||
+                "—",
+              width: 20,
+              isText: true,
+            },
+            {
+              header: "تاريخ انتهاء التصريح / التفويض",
+              accessor: (item) => {
+                const date =
+                  item.permissionEndsOn ||
+                  item.permitEndDate ||
+                  vehiclesMap.get(item.vehicleId)?.permitEndDate;
+                return date ? date.split("T")[0] : "—";
+              },
+              width: 20,
             },
             {
               header: "عداد البداية (كم)",
@@ -694,6 +711,11 @@ export default function AssignmentsPage() {
             { header: "المركبة والموديل", accessor: (item) => [item.manufacturer, item.model].filter(Boolean).join(" ") || "—", width: 22 },
             { header: "الرقم التسلسلي", accessor: (item) => item.serialNumber || "—", width: 18, isText: true },
             { header: "المدينة التشغيلية", accessor: (item) => item.operatingCity || "—", width: 16 },
+            {
+              header: "تاريخ انتهاء التصريح / التفويض",
+              accessor: (item) => (item.permitEndDate ? item.permitEndDate.split("T")[0] : "—"),
+              width: 20,
+            },
             { header: "العداد الحالي", accessor: (item) => item.currentOdometer ?? "—", width: 14 },
             { header: "حالة المركبة", accessor: () => "متاح للتسليم", width: 16 },
           ],
