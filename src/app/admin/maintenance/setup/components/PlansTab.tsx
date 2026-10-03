@@ -16,7 +16,8 @@ interface PlansTabProps {
 
 export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
   const { can } = useAuth();
-  const canManage = can("maintenance.work_orders.manage");
+  const canCreate = can("maintenance.work_orders.create");
+  const canEdit = can("maintenance.work_orders.update");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<MaintenancePlan | null>(null);
@@ -42,7 +43,7 @@ export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
             قواعد تذكيرات الزيوت للسيارات (تذكير عند 4,000 كم / استحقاق عند 5,000 كم) والدراجات (تذكير عند 800 كم / استحقاق عند 1,000 كم).
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <Button variant="primary" onClick={handleCreate} className="text-xs">
             <PlusCircle size={15} />
             إضافة خطة دورية جديدة
@@ -60,7 +61,7 @@ export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
               <th className="p-3">بدء التذكير</th>
               <th className="p-3">الحد الأقصى للاستحقاق</th>
               <th className="p-3 text-center">كمية الزيت</th>
-              {canManage && <th className="p-3 text-center">الإجراءات</th>}
+              {canEdit && <th className="p-3 text-center">الإجراءات</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -110,7 +111,7 @@ export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
                   <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
                     {plan.defaultOilQuantityLiters ? `${plan.defaultOilQuantityLiters} لتر` : "-"}
                   </td>
-                  {canManage && (
+                  {canEdit && (
                     <td className="p-3 text-center">
                       <Button
                         variant="secondary"

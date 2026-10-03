@@ -127,10 +127,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     };
+    const handleForbidden = () => {
+      void loadAuthorization();
+    };
     window.addEventListener("future-gateway:auth-cleared", handleExpired);
+    window.addEventListener("future-gateway:auth-forbidden", handleForbidden);
     window.addEventListener("focus", handleFocus);
     return () => {
       window.removeEventListener("future-gateway:auth-cleared", handleExpired);
+      window.removeEventListener("future-gateway:auth-forbidden", handleForbidden);
       window.removeEventListener("focus", handleFocus);
     };
   }, []);

@@ -737,8 +737,8 @@ export interface CreateExternalWorkOrderRequest {
 
 export interface WorkOrderStateActionRequest {
   occurredAtUtc: string;
-  workPerformed?: string;
-  qualityCheckNotes?: string;
+  workPerformed?: string | null;
+  qualityCheckNotes?: string | null;
   notes?: string | null;
   rowVersion: string;
 }

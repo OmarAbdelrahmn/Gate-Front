@@ -2,6 +2,7 @@
 
 import React, { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -26,6 +27,7 @@ import {
   ShieldCheck,
   X,
   CalendarDays,
+  Trash2,
 } from "lucide-react";
 import { RiderAssignmentReportModal } from "@/components/fleet/RiderAssignmentReportModal";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -34,6 +36,7 @@ import { getEmployee } from "@/lib/workforce/api";
 import {
   getExternalRider,
   updateExternalRider,
+  deleteExternalRider,
   getOperatingCities,
   getOperationalWorkTypes,
   type ExternalRider,
@@ -116,9 +119,56 @@ export default function ExternalRiderProfilePage({
     operationalWorkTypeId?: string;
   }>({});
 
-  const canManage = can("external_riders.manage");
-  const canRead = can("external_riders.read") || canManage || can("riders.read");
-  const canUpdate = canManage || can("employees.update");
+  const router = useRouter();
+  const canRead = can("external_riders.read");
+  const canUpdate = can("external_riders.update");
+  const canDelete = can("external_riders.delete");
+
+  // Deletion state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!rider) return;
+    if (!deleteReason.trim()) {
+      setDeleteError(
+        isEn
+          ? "A reason is required to delete an external rider record."
+          : "سبب الحذف مطلوب لتأكيد أرشفة وحذف سجل المندوب الخارجي."
+      );
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteExternalRider(rider.employeeId, {
+        reason: deleteReason.trim(),
+        rowVersion: rider.rowVersion,
+      });
+      toast.success(
+        isEn ? "Deleted" : "تم الحذف",
+        isEn
+          ? "External rider archived and deleted successfully."
+          : "تم حذف وأرشفة سجل المندوب الخارجي بنجاح."
+      );
+      router.push("/admin/hr/external-riders");
+    } catch (err: any) {
+      console.error("Delete rider error:", err);
+      const problemDetail =
+        err?.details?.detail || err?.details?.message || err?.message;
+      setDeleteError(
+        problemDetail ||
+          (isEn ? "Failed to delete external rider." : "فشل حذف المندوب الخارجي.")
+      );
+      if (err?.status === 409) {
+        void loadRiderData();
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadRiderData = async () => {
     setLoading(true);
@@ -480,6 +530,20 @@ export default function ExternalRiderProfilePage({
               {isEn ? "Full Documents Hub" : "مركز الوثائق الكامل"}
             </Button>
           </Link>
+          {canDelete && rider.engagementType !== "SponsoredInternal" && (
+            <Button
+              variant="danger"
+              onClick={() => {
+                setShowDeleteModal(true);
+                setDeleteReason("");
+                setDeleteError(null);
+              }}
+              className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900"
+            >
+              <Trash2 size={15} />
+              {isEn ? "Delete Rider" : "حذف المندوب"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1073,6 +1137,120 @@ export default function ExternalRiderProfilePage({
           riderName={rider.fullNameAr}
           employeeId={rider.employeeId}
         />
+      )}
+
+      {/* Delete Rider Modal */}
+      {showDeleteModal && rider && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!deleting) {
+              setShowDeleteModal(false);
+              setDeleteReason("");
+              setDeleteError(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 shadow-2xl space-y-4 border border-red-200 dark:border-red-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+              <div className="flex items-center gap-2.5 text-red-600">
+                <Trash2 size={20} />
+                <h2 className="text-lg font-black">
+                  {isEn ? "Delete External Rider" : "حذف المندوب الخارجي"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!deleting) {
+                    setShowDeleteModal(false);
+                    setDeleteReason("");
+                    setDeleteError(null);
+                  }
+                }}
+                disabled={deleting}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">{isEn ? "Rider Name:" : "اسم المندوب:"}</span>
+                  <span className="font-bold">{rider.fullNameAr}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">{isEn ? "Iqama / National ID:" : "رقم الهوية / الإقامة:"}</span>
+                  <span className="font-mono font-bold">{rider.iqamaNo}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">{isEn ? "Employee ID:" : "معرف الموظف:"}</span>
+                  <span className="font-mono text-[11px]">{rider.employeeId}</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 flex gap-2">
+                <AlertTriangle size={16} className="shrink-0 text-amber-600 mt-0.5" />
+                <span>
+                  {isEn
+                    ? "Deleting archives the external rider record while preserving history. It cannot be deleted if there is an active vehicle or client assignment."
+                    : "سيؤدي الحذف إلى أرشفة سجل الموظف للمندوب الخارجي مع الاحتفاظ بالسجلات التاريخية. سيتم منع الحذف في حال وجود إسناد نشط لمركبة أو عميل."}
+                </span>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 font-bold">
+                  {deleteError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  {isEn ? "Deletion Reason" : "سبب الحذف"} <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  placeholder={
+                    isEn
+                      ? "Enter reason for deleting this external rider record..."
+                      : "يرجى كتابة سبب حذف وأرشفة هذا المندوب الخارجي..."
+                  }
+                  rows={3}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-xs focus:outline-hidden focus:ring-2 focus:ring-red-500/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteReason("");
+                  setDeleteError(null);
+                }}
+                disabled={deleting}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleConfirmDelete}
+                loading={deleting}
+              >
+                {isEn ? "Confirm Delete" : "تأكيد الحذف"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

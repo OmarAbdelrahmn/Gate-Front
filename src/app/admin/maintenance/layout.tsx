@@ -14,7 +14,6 @@ export default function MaintenanceLayout({
   const canAccessAny =
     can("maintenance.locations.read") ||
     can("maintenance.work_orders.read") ||
-    can("maintenance.work_orders.manage") ||
     can("maintenance.oil.read") ||
     can("maintenance.external_jobs.read") ||
     can("maintenance.profit_reports.read") ||

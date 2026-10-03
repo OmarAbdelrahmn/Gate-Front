@@ -27,7 +27,8 @@ interface ExternalOrdersListViewProps {
 
 export function ExternalOrdersListView({ locations, items }: ExternalOrdersListViewProps) {
   const { can } = useAuth();
-  const canManage = can("maintenance.external_jobs.manage");
+  const canRead = can("maintenance.work_orders.read") && can("maintenance.external_jobs.read");
+  const canCreate = can("maintenance.work_orders.create") && can("maintenance.external_jobs.manage");
 
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -38,6 +39,11 @@ export function ExternalOrdersListView({ locations, items }: ExternalOrdersListV
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
 
   const loadOrders = async () => {
+    if (!canRead) {
+      setLoading(false);
+      setOrders([]);
+      return;
+    }
     setLoading(true);
     try {
       const data = await getExternalWorkOrders();
@@ -51,7 +57,42 @@ export function ExternalOrdersListView({ locations, items }: ExternalOrdersListV
 
   useEffect(() => {
     loadOrders();
-  }, []);
+  }, [canRead]);
+
+  if (!canRead) {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              أوامر عمل العملاء الخارجيين (ورشة الرياض)
+            </h2>
+            <p className="text-xs text-slate-500">
+              إدارة الإصلاحات المدفوعة، مبيعات قطع الغيار، أجور الفنيين، وتحصيل الدفعات للعملاء الخارجيين.
+            </p>
+          </div>
+          {canCreate && (
+            <Button
+              variant="primary"
+              onClick={() => setCreateModalOpen(true)}
+              className="text-xs h-9 shrink-0"
+            >
+              <PlusCircle size={15} />
+              أمر صيانة خارجي جديد
+            </Button>
+          )}
+        </div>
+        <div className="p-8 text-center" dir="rtl">
+          <div className="max-w-md mx-auto p-6 rounded-2xl border border-red-200 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 space-y-3">
+            <h2 className="text-lg font-bold">عفواً، لا تملك صلاحية عرض أوامر الورشة الخارجية</h2>
+            <p className="text-xs">
+              تتطلب هذه الوحدة صلاحيتي عرض أوامر الصيانة وأعمال الورشة الخارجية معاً (maintenance.work_orders.read + maintenance.external_jobs.read).
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -70,7 +111,7 @@ export function ExternalOrdersListView({ locations, items }: ExternalOrdersListV
             <RefreshCw size={14} />
             تحديث
           </Button>
-          {canManage && (
+          {canCreate && (
             <Button
               variant="primary"
               onClick={() => setCreateModalOpen(true)}

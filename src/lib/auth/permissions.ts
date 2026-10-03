@@ -28,7 +28,9 @@ export const PERMISSIONS = [
   "riders.read",
   "riders.manage",
   "external_riders.read",
-  "external_riders.manage",
+  "external_riders.create",
+  "external_riders.update",
+  "external_riders.delete",
   "sponsors.read",
   "sponsors.manage",
 
@@ -105,7 +107,9 @@ export const PERMISSIONS = [
   "maintenance.locations.read",
   "maintenance.locations.manage",
   "maintenance.work_orders.read",
-  "maintenance.work_orders.manage",
+  "maintenance.work_orders.create",
+  "maintenance.work_orders.update",
+  "maintenance.work_orders.delete",
   "maintenance.oil.read",
   "maintenance.oil.complete",
   "maintenance.external_jobs.read",
@@ -150,4 +154,4 @@ export const PERMISSIONS = [
 ] as const;
 export type Permission=typeof PERMISSIONS[number]; export type UserStatus="PendingTemporaryPassword"|"Active"|"Locked"|"Suspended"|"Archived";
 export type AuthorizationSnapshot={userId?:string;status?:UserStatus;requiresPasswordChange?:boolean;authorizationVersion:number;permissions?:string[];effectivePermissions?:string[];effectivePermissionKeys?:string[];roles?:string[];directGrants?:string[];directPermissions?:string[];directDenies?:string[];deniedPermissionKeys?:string[]};
-export function hasPermission(snapshot:AuthorizationSnapshot|null,permission:string){if(!snapshot)return false;if(snapshot.status&&snapshot.status!=="Active")return false;if(snapshot.requiresPasswordChange)return false;const denied=new Set(snapshot.deniedPermissionKeys??snapshot.directDenies??[]);if(denied.has(permission))return false;const perms=snapshot.effectivePermissionKeys??snapshot.effectivePermissions??snapshot.permissions??[];if(perms.includes(permission))return true;const userRoles=(snapshot.roles||[]).map((r:any)=>typeof r==="string"?r.toLowerCase():String(r?.code||r?.roleCode||r?.name||"").toLowerCase());return userRoles.includes("admin")||userRoles.includes("system_admin");}
+export function hasPermission(snapshot:AuthorizationSnapshot|null,permission:string){if(!snapshot)return false;if(snapshot.status&&snapshot.status!=="Active")return false;if(snapshot.requiresPasswordChange)return false;const denied=new Set(snapshot.deniedPermissionKeys??snapshot.directDenies??[]);if(denied.has(permission))return false;const perms=snapshot.effectivePermissionKeys??snapshot.effectivePermissions??snapshot.permissions??[];return perms.includes(permission);}

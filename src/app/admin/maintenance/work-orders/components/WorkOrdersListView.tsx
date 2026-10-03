@@ -37,7 +37,8 @@ interface WorkOrdersListViewProps {
 
 export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps) {
   const { can } = useAuth();
-  const canManage = can("maintenance.work_orders.manage");
+  const canRead = can("maintenance.work_orders.read");
+  const canCreate = can("maintenance.work_orders.create");
   const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
@@ -64,6 +65,11 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
   }, [searchParams]);
 
   const loadOrders = async () => {
+    if (!canRead) {
+      setLoading(false);
+      setWorkOrders([]);
+      return;
+    }
     setLoading(true);
     try {
       const isCustomStatus =
@@ -272,6 +278,56 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
     }
   };
 
+  if (!canRead) {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Wrench className="h-6 w-6 text-[#1167c9]" />
+              أوامر الصيانة والعمل
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              متابعة وإدارة أوامر صيانة مركبات الأسطول والتكاليف واستحقاقات الورش
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {canCreate && (
+              <Button
+                variant="primary"
+                onClick={() => setCreateModalOpen(true)}
+                className="text-xs shrink-0 h-9"
+              >
+                <PlusCircle size={15} />
+                أمر صيانة شركة جديد
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="p-8 text-center" dir="rtl">
+          <div className="max-w-md mx-auto p-6 rounded-2xl border border-red-200 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 space-y-3">
+            <h2 className="text-lg font-bold">عفواً، لا تملك صلاحية عرض أوامر الصيانة</h2>
+            <p className="text-xs">
+              تتطلب هذه الصفحة صلاحية عرض أوامر الصيانة (maintenance.work_orders.read). يرجى مراجعة مسؤول النظام.
+            </p>
+          </div>
+        </div>
+
+        {canCreate && (
+          <CreateCompanyWorkOrderModal
+            isOpen={createModalOpen}
+            onClose={() => setCreateModalOpen(false)}
+            onSaved={loadOrders}
+            locations={locations}
+            items={items}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Page Header */}
@@ -297,7 +353,7 @@ export function WorkOrdersListView({ locations, items }: WorkOrdersListViewProps
             <FileSpreadsheet size={15} />
             تصدير إكسل
           </Button>
-          {canManage && (
+          {canCreate && (
             <Button
               variant="primary"
               onClick={() => setCreateModalOpen(true)}

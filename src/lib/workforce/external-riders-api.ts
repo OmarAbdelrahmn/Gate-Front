@@ -87,3 +87,64 @@ export function updateExternalRider(
     body: JSON.stringify(payload),
   });
 }
+
+export type DeleteExternalRiderRequest = {
+  reason: string;
+  rowVersion: string;
+};
+
+export type ExternalRiderImportPreview = {
+  totalRows?: number;
+  newRowsCount?: number;
+  updatedRowsCount?: number;
+  invalidRowsCount?: number;
+  errors?: string[];
+  warnings?: string[];
+  rows?: any[];
+  [key: string]: unknown;
+};
+
+export type ExternalRiderImportResult = {
+  success?: boolean;
+  insertedCount?: number;
+  updatedCount?: number;
+  failedCount?: number;
+  errors?: string[];
+  message?: string;
+  [key: string]: unknown;
+};
+
+export function deleteExternalRider(
+  employeeId: string,
+  payload: DeleteExternalRiderRequest
+): Promise<void> {
+  return authFetch<void>(`/api/external-riders/${encodeURIComponent(employeeId)}`, {
+    method: "DELETE",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم حذف المندوب الخارجي بنجاح",
+  });
+}
+
+export function validateExternalRidersImport(
+  file: File
+): Promise<ExternalRiderImportPreview> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return authFetch<ExternalRiderImportPreview>("/api/import/external-riders/validate", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function executeExternalRidersImport(
+  file: File
+): Promise<ExternalRiderImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return authFetch<ExternalRiderImportResult>("/api/import/external-riders", {
+    method: "POST",
+    body: formData,
+    notifySuccess: "تم استيراد المناديب الخارجيين بنجاح",
+  });
+}
+

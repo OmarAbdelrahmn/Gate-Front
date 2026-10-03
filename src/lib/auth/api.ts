@@ -401,6 +401,10 @@ async function parseResponse<T>(
       });
     }
 
+    if (response.status === 403 && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("future-gateway:auth-forbidden"));
+    }
+
     throw error;
   }
 

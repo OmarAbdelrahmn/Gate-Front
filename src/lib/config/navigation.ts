@@ -177,7 +177,7 @@ export const navigation: NavItem[] = [
         href: "/admin/hr/external-riders",
         icon: Users,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["external_riders.read", "external_riders.manage"],
+        permission: "external_riders.read",
       },
       {
         label: "القضايا القانونية",

@@ -17,6 +17,10 @@ import {
   CreditCard,
   FileText,
   FileSpreadsheet,
+  Trash2,
+  Upload,
+  AlertTriangle,
+  CheckCircle2,
   X,
 } from "lucide-react";
 import { TableHeaderColumnFilter, TableHeaderDualFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
@@ -29,9 +33,14 @@ import {
   getExternalRider,
   createExternalRider,
   updateExternalRider,
+  deleteExternalRider,
+  validateExternalRidersImport,
+  executeExternalRidersImport,
   getOperatingCities,
   getOperationalWorkTypes,
   type ExternalRider,
+  type ExternalRiderImportPreview,
+  type ExternalRiderImportResult,
   type OperatingCityCatalogItem,
   type OperationalWorkTypeCatalogItem,
 } from "../../../../lib/workforce/external-riders-api";
@@ -126,12 +135,112 @@ export default function ExternalRidersPage() {
   }>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const canManage = can("external_riders.manage");
-  const canRead = can("external_riders.read") || canManage || can("riders.read");
-  const canCreate = canManage || can("employees.create");
-  const canUpdate = canManage || can("employees.update");
+  const canRead = can("external_riders.read");
+  const canCreate = can("external_riders.create");
+  const canUpdate = can("external_riders.update");
+  const canDelete = can("external_riders.delete");
+  const canImport = canCreate && canUpdate;
   const canReadCities = can("operating_cities.read");
   const canReadWorkTypes = can("employees.read");
+
+  // Deletion modal state
+  const [deletingRider, setDeletingRider] = useState<ExternalRider | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Import modal state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ExternalRiderImportPreview | null>(null);
+  const [validatingImport, setValidatingImport] = useState(false);
+  const [executingImport, setExecutingImport] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const handleOpenDelete = (rider: ExternalRider) => {
+    setDeletingRider(rider);
+    setDeleteReason("");
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingRider) return;
+    if (!deleteReason.trim()) {
+      setDeleteError(
+        locale === "en"
+          ? "A reason is required to delete an external rider record."
+          : "سبب الحذف مطلوب لتأكيد أرشفة وحذف سجل المندوب الخارجي."
+      );
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteExternalRider(deletingRider.employeeId, {
+        reason: deleteReason.trim(),
+        rowVersion: deletingRider.rowVersion,
+      });
+      setRiders((prev) => prev.filter((r) => r.employeeId !== deletingRider.employeeId));
+      setDeletingRider(null);
+      setDeleteReason("");
+      toast.success(
+        locale === "en" ? "Deleted" : "تم الحذف",
+        locale === "en"
+          ? "External rider archived and deleted successfully."
+          : "تم حذف وأرشفة سجل المندوب الخارجي بنجاح."
+      );
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      const problemDetail =
+        err?.details?.detail || err?.details?.message || err?.message;
+      setDeleteError(
+        problemDetail ||
+          (locale === "en" ? "Failed to delete external rider." : "فشل حذف المندوب الخارجي.")
+      );
+      if (err?.status === 409) {
+        void loadData();
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleValidateImport = async () => {
+    if (!importFile) return;
+    setValidatingImport(true);
+    setImportError(null);
+    try {
+      const preview = await validateExternalRidersImport(importFile);
+      setImportPreview(preview);
+    } catch (err: any) {
+      console.error("Validate import error:", err);
+      setImportError(
+        err?.details?.detail || err?.message || (locale === "en" ? "Validation failed." : "فشل التحقق من الملف.")
+      );
+    } finally {
+      setValidatingImport(false);
+    }
+  };
+
+  const handleExecuteImport = async () => {
+    if (!importFile) return;
+    setExecutingImport(true);
+    setImportError(null);
+    try {
+      await executeExternalRidersImport(importFile);
+      setShowImportModal(false);
+      setImportFile(null);
+      setImportPreview(null);
+      await loadData();
+    } catch (err: any) {
+      console.error("Execute import error:", err);
+      setImportError(
+        err?.details?.detail || err?.message || (locale === "en" ? "Import execution failed." : "فشل تنفيذ الاستيراد.")
+      );
+    } finally {
+      setExecutingImport(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -728,6 +837,21 @@ export default function ExternalRidersPage() {
             <FileSpreadsheet size={16} />
             {locale === "en" ? "Export Excel" : "تصدير إكسل"}
           </Button>
+          {canImport && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowImportModal(true);
+                setImportFile(null);
+                setImportPreview(null);
+                setImportError(null);
+              }}
+              className="inline-flex items-center gap-2 font-bold"
+            >
+              <Upload size={16} />
+              {locale === "en" ? "Import" : "استيراد المناديب"}
+            </Button>
+          )}
           {canCreate && (
             <Button onClick={handleOpenCreate}>
               <Plus size={17} />
@@ -1081,6 +1205,17 @@ export default function ExternalRidersPage() {
                               {locale === "en" ? "Documents" : "الوثائق"}
                             </Button>
                           </Link>
+                          {canDelete && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleOpenDelete(rider)}
+                              className="h-8 px-2.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900"
+                              title={locale === "en" ? "Delete rider" : "حذف المندوب"}
+                            >
+                              <Trash2 size={14} />
+                              {locale === "en" ? "Delete" : "حذف"}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1531,6 +1666,270 @@ export default function ExternalRidersPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Deleting External Rider */}
+      {deletingRider && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!deleting) {
+              setDeletingRider(null);
+              setDeleteReason("");
+              setDeleteError(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 shadow-2xl space-y-4 border border-red-200 dark:border-red-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+              <div className="flex items-center gap-2.5 text-red-600">
+                <Trash2 size={20} />
+                <h2 className="text-lg font-black">
+                  {locale === "en" ? "Delete External Rider" : "حذف المندوب الخارجي"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!deleting) {
+                    setDeletingRider(null);
+                    setDeleteReason("");
+                    setDeleteError(null);
+                  }
+                }}
+                disabled={deleting}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">{locale === "en" ? "Rider Name:" : "اسم المندوب:"}</span>
+                  <span className="font-bold">{deletingRider.fullNameAr}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">{locale === "en" ? "Iqama / National ID:" : "رقم الهوية / الإقامة:"}</span>
+                  <span className="font-mono font-bold">{deletingRider.iqamaNo}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">{locale === "en" ? "Employee ID:" : "معرف الموظف:"}</span>
+                  <span className="font-mono text-[11px]">{deletingRider.employeeId}</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 flex gap-2">
+                <AlertTriangle size={16} className="shrink-0 text-amber-600 mt-0.5" />
+                <span>
+                  {locale === "en"
+                    ? "Deleting will archive the external rider employee record while preserving historical logs. Deletion will be blocked if there is an active vehicle or client assignment."
+                    : "سيؤدي الحذف إلى أرشفة سجل الموظف للمندوب الخارجي مع الاحتفاظ بالسجلات التاريخية. سيتم منع الحذف في حال وجود إسناد نشط لمركبة أو عميل."}
+                </span>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 font-bold">
+                  {deleteError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  {locale === "en" ? "Deletion Reason" : "سبب الحذف"} <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  placeholder={
+                    locale === "en"
+                      ? "Enter reason for deleting this external rider record..."
+                      : "يرجى كتابة سبب حذف وأرشفة هذا المندوب الخارجي..."
+                  }
+                  rows={3}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-xs focus:outline-hidden focus:ring-2 focus:ring-red-500/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setDeletingRider(null);
+                  setDeleteReason("");
+                  setDeleteError(null);
+                }}
+                disabled={deleting}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleConfirmDelete}
+                loading={deleting}
+              >
+                {locale === "en" ? "Confirm Delete" : "تأكيد الحذف"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Importing External Riders */}
+      {showImportModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!validatingImport && !executingImport) {
+              setShowImportModal(false);
+              setImportFile(null);
+              setImportPreview(null);
+              setImportError(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-xl rounded-2xl bg-[var(--surface)] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+              <div className="flex items-center gap-2.5 text-[#1167c9]">
+                <Upload size={20} />
+                <h2 className="text-lg font-black">
+                  {locale === "en" ? "Import External Riders" : "استيراد المناديب الخارجيين"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!validatingImport && !executingImport) {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setImportPreview(null);
+                    setImportError(null);
+                  }
+                }}
+                disabled={validatingImport || executingImport}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-[var(--muted)]">
+                {locale === "en"
+                  ? "Upload an Excel or CSV file containing external rider records. Both create and update permissions are required for importing."
+                  : "ارفع ملف إكسل أو CSV يحتوي على سجلات المناديب الخارجيين. يتطلب الاستيراد صلاحيتي الإنشاء والتعديل معاً."}
+              </p>
+
+              <div className="rounded-xl border-2 border-dashed border-[var(--border)] p-6 text-center hover:border-blue-400 transition-colors">
+                <input
+                  type="file"
+                  id="externalRiderImportInput"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      setImportFile(f);
+                      setImportPreview(null);
+                      setImportError(null);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="externalRiderImportInput"
+                  className="cursor-pointer flex flex-col items-center gap-2"
+                >
+                  <Upload size={28} className="text-[#1167c9]" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {importFile ? importFile.name : (locale === "en" ? "Click to choose file (.xlsx, .csv)" : "انقر لاختيار الملف (.xlsx, .csv)")}
+                  </span>
+                  {importFile && (
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {(importFile.size / 1024).toFixed(1)} KB
+                    </span>
+                  )}
+                </label>
+              </div>
+
+              {importError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 font-bold">
+                  {importError}
+                </div>
+              )}
+
+              {importPreview && (
+                <div className="p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-800 dark:text-blue-300">
+                    <CheckCircle2 size={16} />
+                    <span>{locale === "en" ? "Validation Preview" : "معاينة نتائج التحقق من الملف"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-[11px]">
+                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-[var(--border)]">
+                      <span className="text-slate-400 block text-[10px]">{locale === "en" ? "Total" : "الإجمالي"}</span>
+                      <strong className="text-slate-800 dark:text-slate-200">{Number(importPreview.totalRows ?? importPreview.totalCount ?? 0)}</strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                      <span className="text-emerald-600 block text-[10px]">{locale === "en" ? "New" : "جديد"}</span>
+                      <strong className="text-emerald-700 dark:text-emerald-300">{Number(importPreview.newRowsCount ?? importPreview.createdCount ?? 0)}</strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800">
+                      <span className="text-blue-600 block text-[10px]">{locale === "en" ? "Update" : "تعديل"}</span>
+                      <strong className="text-blue-700 dark:text-blue-300">{Number(importPreview.updatedRowsCount ?? importPreview.updatedCount ?? 0)}</strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                      <span className="text-amber-600 block text-[10px]">{locale === "en" ? "Invalid" : "غير صالح"}</span>
+                      <strong className="text-amber-700 dark:text-amber-300">{Number(importPreview.invalidRowsCount ?? importPreview.failedCount ?? 0)}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportPreview(null);
+                  setImportError(null);
+                }}
+                disabled={validatingImport || executingImport}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleValidateImport}
+                disabled={!importFile || validatingImport || executingImport}
+                loading={validatingImport}
+              >
+                {locale === "en" ? "Validate File" : "التحقق من الملف"}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleExecuteImport}
+                disabled={!importFile || validatingImport || executingImport}
+                loading={executingImport}
+              >
+                {locale === "en" ? "Execute Import" : "تنفيذ الاستيراد"}
+              </Button>
+            </div>
           </div>
         </div>
       )}

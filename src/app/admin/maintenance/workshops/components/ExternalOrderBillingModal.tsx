@@ -67,9 +67,11 @@ export function ExternalOrderBillingModal({
   onUpdated,
 }: ExternalOrderBillingModalProps) {
   const { can } = useAuth();
-  const canPartSale = can("maintenance.part_sales.manage");
-  const canLabor = can("maintenance.customer_labor_charges.manage");
-  const canMechanic = can("maintenance.mechanic_labor_payments.manage");
+  const canWorkOrderUpdate = can("maintenance.work_orders.update");
+  const canPartSale = canWorkOrderUpdate && can("maintenance.part_sales.manage") && can("inventory.stock.move");
+  const canLabor = canWorkOrderUpdate && can("maintenance.customer_labor_charges.manage");
+  const canMechanic = canWorkOrderUpdate && can("maintenance.mechanic_labor_payments.manage");
+  const canExternalJobs = canWorkOrderUpdate && can("maintenance.external_jobs.manage");
 
   const [activeTab, setActiveTab] = useState<BillingTab>("parts");
   const [order, setOrder] = useState<WorkOrder | null>(null);
@@ -640,7 +642,8 @@ export function ExternalOrderBillingModal({
         {/* Tab 4: Other Financial Entries */}
         {activeTab === "other" && (
           <div className="space-y-4">
-            <form onSubmit={handleOtherSubmit} className="p-4 rounded-xl border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30 space-y-3">
+            {canExternalJobs && (
+              <form onSubmit={handleOtherSubmit} className="p-4 rounded-xl border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30 space-y-3">
               <span className="font-bold text-slate-800 dark:text-slate-200 block">
                 تسجيل حركة مالية إضافية (إيراد أو مصروف)
               </span>
@@ -708,13 +711,15 @@ export function ExternalOrderBillingModal({
                 </Button>
               </div>
             </form>
+            )}
           </div>
         )}
 
         {/* Tab 5: Customer Payments */}
         {activeTab === "payment" && (
           <div className="space-y-4">
-            <form onSubmit={handlePaymentSubmit} className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-3">
+            {canExternalJobs && (
+              <form onSubmit={handlePaymentSubmit} className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-3">
               <span className="font-bold text-emerald-900 dark:text-emerald-300 block">
                 تحصيل دفعة نقدية / بنكية من العميل
               </span>
@@ -773,6 +778,7 @@ export function ExternalOrderBillingModal({
                 </Button>
               </div>
             </form>
+            )}
 
             {/* Payments List */}
             {payments.length > 0 && (

@@ -84,7 +84,12 @@ export function WorkOrderDetailModal({
   vehiclesByAssetMap,
 }: WorkOrderDetailModalProps) {
   const { can } = useAuth();
-  const canManage = can("maintenance.work_orders.manage");
+  const canRead = can("maintenance.work_orders.read");
+  const canUpdate = can("maintenance.work_orders.update");
+  const canCancel = can("maintenance.work_orders.delete");
+  const canMoveStock = can("inventory.stock.move");
+  const canAdjustStock = can("inventory.stock.adjust");
+  const canCompleteOil = can("maintenance.oil.complete");
 
   const [order, setOrder] = useState<WorkOrder | null>(null);
   const [materials, setMaterials] = useState<MaterialUsage[]>([]);
@@ -156,6 +161,10 @@ export function WorkOrderDetailModal({
     if (!isOpen || !workOrderId) {
       return;
     }
+    if (!canRead) {
+      setLoading(false);
+      return;
+    }
 
     let active = true;
     Promise.all([
@@ -200,24 +209,35 @@ export function WorkOrderDetailModal({
   // Handle Transitions
   const handleTransition = async (action: "start" | "complete" | "close" | "cancel") => {
     if (!order) return;
-    const confirmMsg =
-      action === "start"
-        ? "بدء العمل على أمر الصيانة الآن؟"
-        : action === "complete"
-          ? "تأكيد اكتمال جميع أعمال الصيانة؟"
-          : action === "close"
-            ? "إقفال أمر الصيانة نهائياً؟ لن يمكن تعديله بعد ذلك."
-            : "هل أنت متأكد من إلغاء أمر الصيانة؟";
+    let notes: string | null = null;
+    if (action === "cancel") {
+      const inputNotes = prompt(
+        "يرجى إدخال سبب إلغاء أمر الصيانة:",
+        "Order cancelled by the administrator"
+      );
+      if (inputNotes === null) return;
+      notes = inputNotes.trim() || "Order cancelled by the administrator";
+    } else {
+      const confirmMsg =
+        action === "start"
+          ? "بدء العمل على أمر الصيانة الآن؟"
+          : action === "complete"
+            ? "تأكيد اكتمال جميع أعمال الصيانة؟"
+            : "إقفال أمر الصيانة نهائياً؟ لن يمكن تعديله بعد ذلك.";
 
-    if (!confirm(confirmMsg)) return;
+      if (!confirm(confirmMsg)) return;
+    }
 
     setTransitionLoading(true);
     try {
-      await transitionWorkOrder(order.id, action, {
+      const updated = await transitionWorkOrder(order.id, action, {
         occurredAtUtc: new Date().toISOString(),
+        workPerformed: null,
+        qualityCheckNotes: null,
+        notes,
         rowVersion: order.rowVersion,
       });
-      loadOrderDetails();
+      setOrder(updated);
       onUpdated();
     } catch (err: unknown) {
       console.error(err);
@@ -372,7 +392,23 @@ export function WorkOrderDetailModal({
 
   const hasSupplyBlock = isSupplyPending || isSupplyRejected || isSupplyCancelled;
   const canStart = order.status === WorkOrderStatus.Open && !hasSupplyBlock;
-  const canCancelSupply = isSupplyPending && !ownershipError && (can("inventory.supply_requests.submit") || canManage);
+  const canCancelSupply = isSupplyPending && !ownershipError && (can("inventory.supply_requests.submit") || canUpdate);
+  const hasPostedMaterials = materials.some(
+    (m) => m.direction !== 2 && (m.quantity > 0 || m.totalCost > 0)
+  );
+  const canCancelWorkOrder =
+    canCancel && order.status === WorkOrderStatus.Open && !hasPostedMaterials;
+
+  if (isOpen && !canRead) {
+    return (
+      <Modal isOpen={isOpen} onClose={handleModalClose} title="تفاصيل أمر الصيانة" maxWidth="max-w-md">
+        <div className="p-8 text-center text-xs text-red-600 dark:text-red-400 space-y-2" dir="rtl">
+          <p className="font-bold">عفواً، لا تملك صلاحية عرض أمر الصيانة.</p>
+          <p className="text-slate-500">يتطلب هذا الإجراء صلاحية (maintenance.work_orders.read).</p>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -426,58 +462,55 @@ export function WorkOrderDetailModal({
           </div>
 
           {/* Workflow Action Buttons */}
-          {canManage && (
-            <div className="flex items-center gap-2">
-              {canStart && (
-                <Button
-                  variant="primary"
-                  onClick={() => handleTransition("start")}
-                  loading={transitionLoading}
-                  className="text-xs h-9"
-                >
-                  <Play size={14} />
-                  بدء العمل (Start)
-                </Button>
-              )}
+          <div className="flex items-center gap-2">
+            {canUpdate && canStart && (
+              <Button
+                variant="primary"
+                onClick={() => handleTransition("start")}
+                loading={transitionLoading}
+                className="text-xs h-9"
+              >
+                <Play size={14} />
+                بدء العمل (Start)
+              </Button>
+            )}
 
-              {order.status === WorkOrderStatus.InProgress && (
-                <Button
-                  variant="primary"
-                  onClick={() => handleTransition("complete")}
-                  loading={transitionLoading}
-                  className="text-xs h-9 bg-emerald-600 hover:bg-emerald-700"
-                >
-                  <CheckCircle size={14} />
-                  اكتمال الصيانة (Complete)
-                </Button>
-              )}
+            {canUpdate && order.status === WorkOrderStatus.InProgress && (
+              <Button
+                variant="primary"
+                onClick={() => handleTransition("complete")}
+                loading={transitionLoading}
+                className="text-xs h-9 bg-emerald-600 hover:bg-emerald-700"
+              >
+                <CheckCircle size={14} />
+                اكتمال الصيانة (Complete)
+              </Button>
+            )}
 
-              {order.status === WorkOrderStatus.Completed && (
-                <Button
-                  variant="primary"
-                  onClick={() => handleTransition("close")}
-                  loading={transitionLoading}
-                  className="text-xs h-9 bg-slate-800 hover:bg-slate-900"
-                >
-                  <Lock size={14} />
-                  إقفال نهائي (Close)
-                </Button>
-              )}
+            {canUpdate && order.status === WorkOrderStatus.Completed && (
+              <Button
+                variant="primary"
+                onClick={() => handleTransition("close")}
+                loading={transitionLoading}
+                className="text-xs h-9 bg-slate-800 hover:bg-slate-900"
+              >
+                <Lock size={14} />
+                إقفال نهائي (Close)
+              </Button>
+            )}
 
-              {(order.status === WorkOrderStatus.Open ||
-                order.status === WorkOrderStatus.InProgress) && (
-                <Button
-                  variant="danger"
-                  onClick={() => handleTransition("cancel")}
-                  loading={transitionLoading}
-                  className="text-xs h-9"
-                >
-                  <XCircle size={14} />
-                  إلغاء
-                </Button>
-              )}
-            </div>
-          )}
+            {canCancelWorkOrder && (
+              <Button
+                variant="danger"
+                onClick={() => handleTransition("cancel")}
+                loading={transitionLoading}
+                className="text-xs h-9"
+              >
+                <XCircle size={14} />
+                إلغاء
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Status Banners for Supply Request */}
@@ -522,7 +555,7 @@ export function WorkOrderDetailModal({
                 </span>
               </div>
             </div>
-            {canManage && (order.status === WorkOrderStatus.Open || order.status === WorkOrderStatus.InProgress) && (
+            {canCancelWorkOrder && (
               <Button
                 variant="danger"
                 onClick={() => handleTransition("cancel")}
@@ -695,7 +728,7 @@ export function WorkOrderDetailModal({
                 </span>
               </div>
             </div>
-            {canManage && (
+            {canUpdate && canCompleteOil && canMoveStock && (
               <Button
                 variant="primary"
                 onClick={() => setOilModalOpen(true)}
@@ -817,7 +850,7 @@ export function WorkOrderDetailModal({
                   سجل استهلاك المركبة التاريخي
                 </Button>
               )}
-              {isEditable && canManage && !order.supplyRequest && (
+              {isEditable && canUpdate && canMoveStock && !order.supplyRequest && (
                 <Button
                   variant="primary"
                   onClick={() => setIssueModalOpen(true)}
@@ -892,7 +925,7 @@ export function WorkOrderDetailModal({
                             <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-bold text-[10px]">
                               معكوس / ملغي
                             </span>
-                          ) : isEditable && canManage ? (
+                          ) : isEditable && canUpdate && canAdjustStock ? (
                             <Button
                               variant="secondary"
                               onClick={() => handleReverseMaterial(mat)}
