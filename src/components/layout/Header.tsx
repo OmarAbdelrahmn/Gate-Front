@@ -144,10 +144,13 @@ export function Header({ onMenu }: { onMenu: () => void }) {
                 {initials}
               </span>
             )}
-            <span className="hidden text-right text-xs sm:block">
-              <b className="block">{name}</b>
-              <small className="text-blue-100">
-                {user?.roles?.join("، ") ?? "Admin Manager"}
+            <span className="hidden max-w-[180px] text-right text-xs sm:block">
+              <b className="block truncate">{name}</b>
+              <small
+                className="block truncate text-blue-100"
+                title={user?.roles?.[0] || "Admin Manager"}
+              >
+                {user?.roles?.[0] || "Admin Manager"}
               </small>
             </span>
             <ChevronDown size={15} />
