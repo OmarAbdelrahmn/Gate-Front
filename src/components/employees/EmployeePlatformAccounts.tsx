@@ -28,6 +28,7 @@ interface PlatformAccountDisplayItem {
   effectiveFrom?: string | null;
   effectiveTo?: string | null;
   operatingCity?: string | null;
+  sponsorName?: string | null;
   ownerName?: string | null;
 }
 
@@ -89,6 +90,10 @@ export function EmployeePlatformAccounts({
               locale === "en"
                 ? acc.operatingCityNameEn || acc.operatingCityNameAr
                 : acc.operatingCityNameAr || acc.operatingCityNameEn,
+            sponsorName:
+              locale === "en"
+                ? acc.sponsorNameEn || acc.sponsorNameAr
+                : acc.sponsorNameAr || acc.sponsorNameEn,
             ownerName:
               locale === "en"
                 ? acc.ownerRiderNameEn || acc.ownerRiderNameAr
@@ -121,6 +126,10 @@ export function EmployeePlatformAccounts({
                 locale === "en"
                   ? acc.operatingCityNameEn || acc.operatingCityNameAr
                   : acc.operatingCityNameAr || acc.operatingCityNameEn,
+              sponsorName:
+                locale === "en"
+                  ? acc.sponsorNameEn || acc.sponsorNameAr
+                  : acc.sponsorNameAr || acc.sponsorNameEn,
               ownerName:
                 locale === "en"
                   ? acc.ownerRiderNameEn || acc.ownerRiderNameAr
@@ -342,6 +351,13 @@ export function EmployeePlatformAccounts({
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">{locale === "en" ? "City:" : "المدينة:"}</span>
                       <span className="font-medium">{item.operatingCity}</span>
+                    </div>
+                  )}
+
+                  {item.sponsorName && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">{locale === "en" ? "Sponsor:" : "الكفيل:"}</span>
+                      <span className="font-medium truncate max-w-[120px]">{item.sponsorName}</span>
                     </div>
                   )}
 

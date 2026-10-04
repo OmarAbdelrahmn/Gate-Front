@@ -67,6 +67,19 @@ export default function AccountDetailPage() {
     fetchDetails();
   }, [id]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("dashboardSponsorId");
+        localStorage.removeItem("platform_account_filter_dashboard_sponsor");
+        sessionStorage.removeItem("dashboardSponsorId");
+        sessionStorage.removeItem("platform_account_filter_dashboard_sponsor");
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
   if (!can("platform_accounts.read")) {
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-3 text-center">
@@ -165,6 +178,19 @@ export default function AccountDetailPage() {
               <span className="text-xs font-bold text-[var(--muted)] block">مدينة التشغيل:</span>
               <span className="font-bold text-[var(--foreground)]">
                 {account.operatingCityNameAr || "—"}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-xs font-bold text-[var(--muted)] block">
+                {locale === "en" ? "Account Sponsor:" : "كفيل الحساب:"}
+              </span>
+              <span className="font-bold text-[var(--foreground)]">
+                {(locale === "en" ? account.sponsorNameEn : account.sponsorNameAr) ||
+                  account.sponsorNameAr ||
+                  account.sponsorNameEn ||
+                  account.sponsorId ||
+                  "—"}
               </span>
             </div>
 

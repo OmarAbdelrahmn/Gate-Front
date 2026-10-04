@@ -98,6 +98,20 @@ export default function PlatformAccountsPage() {
   const [credentialHistoryList, setCredentialHistoryList] = useState<CredentialHistoryResponse[]>([]);
   const [credentialLoading, setCredentialLoading] = useState(false);
   const [activeCredTab, setActiveCredTab] = useState<"history" | "rotate">("history");
+  const [formErrors, setFormErrors] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("dashboardSponsorId");
+        localStorage.removeItem("platform_account_filter_dashboard_sponsor");
+        sessionStorage.removeItem("dashboardSponsorId");
+        sessionStorage.removeItem("platform_account_filter_dashboard_sponsor");
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   // Form States
   const [accountFormData, setAccountFormData] = useState<AccountUpsertRequest>({
@@ -218,10 +232,30 @@ export default function PlatformAccountsPage() {
     label: c.globalCityAr || c.code,
   }));
 
-  const sponsorOptions = sponsors.map((s) => ({
-    value: s.id,
-    label: locale === "en" ? (s.registryNameEn || s.registryNameAr) : s.registryNameAr,
-  }));
+  const activeSponsors = useMemo(() => {
+    return sponsors.filter((s) => s.status === "Active");
+  }, [sponsors]);
+
+  const sponsorOptions = useMemo(() => {
+    const options = activeSponsors.map((s) => ({
+      value: s.id,
+      label: s.registryNameAr,
+    }));
+    if (editingAccount?.sponsorId && !options.some((o) => o.value === editingAccount.sponsorId)) {
+      options.unshift({
+        value: editingAccount.sponsorId,
+        label: editingAccount.sponsorNameAr || editingAccount.sponsorNameEn || editingAccount.sponsorId,
+      });
+    }
+    return options;
+  }, [activeSponsors, editingAccount]);
+
+  const filterSponsorOptions = useMemo(() => {
+    return activeSponsors.map((s) => ({
+      value: s.id,
+      label: s.registryNameAr,
+    }));
+  }, [activeSponsors]);
 
   const EMPTY_GUID = "00000000-0000-0000-0000-000000000000";
   const isValidGuid = (id?: string | null): id is string => {
@@ -375,20 +409,22 @@ export default function PlatformAccountsPage() {
       acc.userName?.toLowerCase().includes(term) ||
       acc.ownerRiderNameAr?.toLowerCase().includes(term) ||
       acc.platformNameAr?.toLowerCase().includes(term) ||
-      acc.sponsorNameAr?.toLowerCase().includes(term)
+      acc.sponsorNameAr?.toLowerCase().includes(term) ||
+      acc.sponsorNameEn?.toLowerCase().includes(term)
     );
   });
 
   // Modal Open Handlers
   const handleOpenAdd = () => {
     setEditingAccount(null);
+    setFormErrors({});
     const initialPlatId = platforms[0]?.id || "";
     const selectedPlat = platforms.find((p) => p.id === initialPlatId);
     const defaultPaymentModel = selectedPlat?.supportedPaymentModels?.[0] || "PayPerOrder";
     setAccountFormData({
       platformId: initialPlatId,
       operatingCityId: cities[0]?.id || "",
-      sponsorId: sponsors[0]?.id || "",
+      sponsorId: activeSponsors[0]?.id || "",
       ownerRiderProfileId: "",
       code: "",
       externalAccountId: "",
@@ -406,6 +442,7 @@ export default function PlatformAccountsPage() {
 
   const handleOpenEdit = (acc: AccountResponse) => {
     setEditingAccount(acc);
+    setFormErrors({});
     setAccountFormData({
       platformId: acc.platformId,
       operatingCityId: acc.operatingCityId,
@@ -534,8 +571,19 @@ export default function PlatformAccountsPage() {
   // Submit Handlers
   const handleSubmitAccount = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormErrors({});
     if (!accountFormData.platformId || !accountFormData.operatingCityId || !accountFormData.sponsorId || !accountFormData.ownerRiderProfileId || !accountFormData.code || !accountFormData.paymentModel) {
       toast.error("خطأ في المدخلات", "يرجى تعبئة المنصة، المدينة، الكفيل، صاحب الحساب، نموذج الدفع، ورمز الحساب.");
+      return;
+    }
+
+    if (editingAccount && editingAccount.status === "Assigned" && editingAccount.sponsorId !== accountFormData.sponsorId) {
+      toast.error(
+        "تنبيه القيود",
+        isEn
+          ? "Accounts with an active assignment cannot change sponsor until released."
+          : "لا يمكن تغيير كفيل الحساب أثناء وجود تعيين نشط. يرجى إنهاء تعيين المندوب أولاً."
+      );
       return;
     }
 
@@ -553,7 +601,21 @@ export default function PlatformAccountsPage() {
         loadData();
       } catch (err: any) {
         console.error("Account upsert error:", err);
-        toast.error("فشل الحفظ", err?.message || "تعذر حفظ حساب المنصة.");
+        const details = err?.details;
+        const fieldErrors: Record<string, string[]> = {};
+        if (details?.errors && typeof details.errors === "object") {
+          Object.entries(details.errors).forEach(([k, v]) => {
+            fieldErrors[k] = Array.isArray(v) ? v.map(String) : [String(v)];
+          });
+        }
+        if (details?.field && details?.detail) {
+          if (!fieldErrors[details.field]) {
+            fieldErrors[details.field] = [details.detail];
+          }
+        }
+        setFormErrors(fieldErrors);
+        const errorDetail = details?.detail || err?.message || "تعذر حفظ حساب المنصة.";
+        toast.error("فشل الحفظ", errorDetail);
       }
     });
   };
@@ -686,7 +748,7 @@ export default function PlatformAccountsPage() {
           { header: isEn ? "Account Code" : "رمز الحساب", accessor: (acc) => acc.code, width: 18, isText: true },
           { header: isEn ? "Platform" : "المنصة", accessor: (acc) => (isEn ? acc.platformNameEn : acc.platformNameAr) || acc.platformNameAr || acc.platformNameEn || acc.platformCode || acc.platformId, width: 18 },
           { header: isEn ? "Operating City" : "المدينة", accessor: (acc) => (isEn ? acc.operatingCityNameEn : acc.operatingCityNameAr) || acc.operatingCityNameAr || acc.operatingCityNameEn || acc.operatingCityId, width: 16 },
-          { header: isEn ? "Sponsor" : "الكفيل", accessor: (acc) => (isEn ? acc.sponsorNameEn : acc.sponsorNameAr) || acc.sponsorNameAr || acc.sponsorNameEn || acc.sponsorId, width: 22 },
+          { header: isEn ? "Account Sponsor" : "كفيل الحساب", accessor: (acc) => (isEn ? acc.sponsorNameEn : acc.sponsorNameAr) || acc.sponsorNameAr || acc.sponsorNameEn || acc.sponsorId, width: 22 },
           { header: isEn ? "Payment Model" : "نموذج الدفع", accessor: (acc) => acc.paymentModel, width: 16 },
           { header: isEn ? "Owner Rider" : "صاحب الحساب الأساسي", accessor: (acc) => (isEn ? acc.ownerRiderNameEn : acc.ownerRiderNameAr) || acc.ownerRiderNameAr || acc.ownerRiderNameEn || "—", width: 24 },
           { header: isEn ? "Current Assignee" : "المندوب الفعلي (الحالي)", accessor: (acc) => (isEn ? acc.currentAssignment?.actualRiderNameEn : acc.currentAssignment?.actualRiderNameAr) || acc.currentAssignment?.actualRiderNameAr || acc.currentAssignment?.actualRiderNameEn || "—", width: 24 },
@@ -828,12 +890,14 @@ export default function PlatformAccountsPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">الكفيل</label>
+            <label className="mb-1 block text-xs font-bold text-[var(--muted)]">
+              {isEn ? "Account Sponsor" : "كفيل الحساب"}
+            </label>
             <SearchableSelect
-              options={[{ value: "", label: "جميع الكفلاء" }, ...sponsorOptions]}
+              options={[{ value: "", label: isEn ? "All Sponsors" : "جميع الكفلاء" }, ...filterSponsorOptions]}
               value={filterSponsorId}
               onChange={setFilterSponsorId}
-              placeholder="تصفية حسب الكفيل..."
+              placeholder={isEn ? "Filter by sponsor..." : "تصفية حسب الكفيل..."}
             />
           </div>
 
@@ -970,7 +1034,9 @@ export default function PlatformAccountsPage() {
                       </div>
                       <div className="text-xs text-[var(--muted)]">
                         {acc.operatingCityNameAr || "—"}
-                        {acc.sponsorNameAr ? ` · ${acc.sponsorNameAr}` : ""}
+                        {((isEn ? acc.sponsorNameEn : acc.sponsorNameAr) || acc.sponsorNameAr || acc.sponsorNameEn)
+                          ? ` · ${(isEn ? acc.sponsorNameEn : acc.sponsorNameAr) || acc.sponsorNameAr || acc.sponsorNameEn}`
+                          : ""}
                       </div>
                     </td>
 
@@ -1132,14 +1198,37 @@ export default function PlatformAccountsPage() {
 
             <div>
               <label className="mb-1 block text-xs font-bold text-slate-700">
-                الكفيل <span className="text-red-500">*</span>
+                {isEn ? "Account Sponsor" : "كفيل الحساب"} <span className="text-red-500">*</span>
               </label>
               <SearchableSelect
                 options={sponsorOptions}
                 value={accountFormData.sponsorId}
-                onChange={(val) => setAccountFormData({ ...accountFormData, sponsorId: val })}
-                placeholder="اختر الكفيل..."
+                onChange={(val) => {
+                  setAccountFormData({ ...accountFormData, sponsorId: val });
+                  if (formErrors.sponsorId) {
+                    setFormErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.sponsorId;
+                      return next;
+                    });
+                  }
+                }}
+                placeholder={isEn ? "Select account sponsor..." : "اختر كفيل الحساب..."}
+                disabled={Boolean(editingAccount && editingAccount.status === "Assigned")}
+                className={formErrors.sponsorId ? "border-red-500 ring-1 ring-red-500" : ""}
               />
+              {formErrors.sponsorId && (
+                <p className="mt-1 text-xs text-red-500 font-medium">
+                  {formErrors.sponsorId.join(", ")}
+                </p>
+              )}
+              {editingAccount && editingAccount.status === "Assigned" && (
+                <p className="mt-1 text-[11px] text-amber-600">
+                  {isEn
+                    ? "Cannot change account sponsor while an assignment is active. Release the account first."
+                    : "لا يمكن تغيير كفيل الحساب أثناء وجود تعيين نشط. يرجى إنهاء تعيين المندوب أولاً."}
+                </p>
+              )}
             </div>
           </div>
 

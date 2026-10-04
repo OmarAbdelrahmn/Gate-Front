@@ -110,6 +110,8 @@ export function getFriendlyErrorMessage(
         return "لم يتم العثور على ملف المندوب. يرجى التأكد من اختيار مندوب يملك ملف سائق صالح (Rider Profile ID).";
       case "platform.rider_profile_unavailable":
         return "ملف المندوب غير متاح حالياً أو غير مؤهل لتعيين حساب منصة.";
+      case "platform.account_required_field":
+        return rawMessage || "حقل مطلوب في حساب المنصة.";
       case "hr.concurrency_conflict":
         return "حدث تعارض في التحديث بالتزامن. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
       case "hr.conflict":
