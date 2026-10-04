@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -109,10 +109,32 @@ function RiderPlatformHistoryContent() {
     );
   }
 
-  const riderOptions = employees.map((e) => ({
-    value: e.riderProfileId || e.id,
-    label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
-  }));
+  const EMPTY_GUID = "00000000-0000-0000-0000-000000000000";
+  const isValidGuid = (id?: string | null): id is string => {
+    return Boolean(id && id !== EMPTY_GUID && id.trim() !== "");
+  };
+
+  const riderOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    const usedIds = new Set<string>();
+
+    employees.forEach((e) => {
+      const targetId =
+        (isValidGuid(e.riderProfileId) ? e.riderProfileId : null) ||
+        (isValidGuid(e.rider?.id) ? e.rider.id : null) ||
+        (isValidGuid(e.id) ? e.id : null);
+
+      if (!targetId || usedIds.has(targetId)) return;
+      usedIds.add(targetId);
+
+      options.push({
+        value: targetId,
+        label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
+      });
+    });
+
+    return options;
+  }, [employees]);
 
   const renderAssignmentStatusBadge = (status: string) => {
     switch (status) {

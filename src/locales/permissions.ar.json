@@ -120,5 +120,18 @@
   "inventory.returns.manage": "إدارة مرتجعات الموردين وصرف المناديب",
   "inventory.supply_requests.read": "عرض طلبات صرف المستودع",
   "inventory.supply_requests.submit": "تقديم طلبات صرف المستلزمات وقطع الغيار",
-  "inventory.supply_requests.approve": "اعتماد وصرف طلبات المستودع"
+  "inventory.supply_requests.approve": "اعتماد وصرف طلبات المستودع",
+  "jahez.read": "عرض حسابات وعمليات جاهز",
+  "jahez.handovers.manage": "إدارة تسليم وإنهاء حسابات جاهز",
+  "jahez.collections.manage": "إدارة تحصيلات وتسويات مناديب جاهز",
+  "jahez.requests.create": "إنشاء وإلغاء طلبات اعتمادات جاهز",
+  "jahez.requests.approve": "اعتماد طلبات جاهز (الإعفاءات، التبديل، النسبة)",
+  "jahez.resets.approve": "اعتماد طلبات تصفير ونقل مديونية جاهز",
+  "jahez.earnings.manage": "إدارة بيانات أرباح جاهز واحتساب العمولة",
+  "jahez.imports.manage": "إدارة ورفع وترحيل استيرادات جاهز",
+  "jahez.adjustments.manage": "إدارة قيود التسوية والسجلات المالية لجاهز",
+  "jahez.cashbox.read": "عرض أرصدة وحركات صندوق جاهز",
+  "jahez.cashbox.submit": "بدء تسليم صندوق جاهز للمحاسب",
+  "jahez.cashbox.confirm": "تأكيد ومطابقة استلام صندوق جاهز كمحاسب",
+  "jahez.cashbox.approve": "الاعتماد النهائي لتسليم صندوق جاهز"
 }

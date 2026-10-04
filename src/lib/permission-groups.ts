@@ -36,7 +36,7 @@ export function permissionGroup(key: string): PermissionGroup {
   if (/^(employees|riders|external_riders|sponsors)\./.test(key)) return "Workforce";
   if (/^(residency|licenses|rider_cards|health_cards|insurance|promissory_notes)\./.test(key)) return "Compliance";
   if (key.startsWith("documents.")) return "Documents";
-  if (/^(platform_accounts|platform_credentials|platform_assignments|housing|phone_sims)\./.test(key)) return "Operations";
+  if (/^(platform_accounts|platform_credentials|platform_assignments|housing|phone_sims|jahez)\./.test(key)) return "Operations";
   if (/^(reports|exports|notifications)\./.test(key)) return "Reporting";
   if (key.startsWith("fleet.")) return "Fleet";
   if (key.startsWith("fuel.")) return "Fuel";

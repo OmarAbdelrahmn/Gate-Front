@@ -77,12 +77,14 @@ export interface AccountResponse {
   notes?: string | null;
   currentAssignment?: AssignmentResponse | null;
   rowVersion: string;
+  dashboardSponsorId?: string | null;
 }
 
 export interface AccountUpsertRequest {
   platformId: string;
   operatingCityId: string;
   sponsorId: string;
+  dashboardSponsorId?: string | null;
   ownerRiderProfileId: string;
   code: string;
   externalAccountId?: string | null;
@@ -162,6 +164,7 @@ export interface AccountFilterParams {
   platformId?: string;
   operatingCityId?: string;
   sponsorId?: string;
+  dashboardSponsorId?: string;
   ownerRiderProfileId?: string;
   actualRiderProfileId?: string;
   paymentModel?: PaymentModel | string;
@@ -206,6 +209,7 @@ export const getPlatformAccounts = async (filters?: AccountFilterParams) => {
   if (filters?.platformId) query.set("platformId", filters.platformId);
   if (filters?.operatingCityId) query.set("operatingCityId", filters.operatingCityId);
   if (filters?.sponsorId) query.set("sponsorId", filters.sponsorId);
+  if (filters?.dashboardSponsorId) query.set("dashboardSponsorId", filters.dashboardSponsorId);
   if (filters?.ownerRiderProfileId) query.set("ownerRiderProfileId", filters.ownerRiderProfileId);
   if (filters?.actualRiderProfileId) query.set("actualRiderProfileId", filters.actualRiderProfileId);
   if (filters?.paymentModel) query.set("paymentModel", filters.paymentModel);

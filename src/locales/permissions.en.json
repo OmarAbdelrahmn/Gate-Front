@@ -120,5 +120,18 @@
   "inventory.returns.manage": "Manage supplier returns & rider issues",
   "inventory.supply_requests.read": "View warehouse supply requests",
   "inventory.supply_requests.submit": "Submit supply requests",
-  "inventory.supply_requests.approve": "Approve and issue warehouse supply requests"
+  "inventory.supply_requests.approve": "Approve and issue warehouse supply requests",
+  "jahez.read": "View Jahez accounts and operations",
+  "jahez.handovers.manage": "Manage Jahez account handovers and closures",
+  "jahez.collections.manage": "Manage Jahez rider collections and settlements",
+  "jahez.requests.create": "Create and cancel Jahez approval requests",
+  "jahez.requests.approve": "Approve Jahez requests (Fee waivers, switches, percentages)",
+  "jahez.resets.approve": "Approve Jahez reset and debt transfer requests",
+  "jahez.earnings.manage": "Manage Jahez manual earnings statements",
+  "jahez.imports.manage": "Manage, upload, and commit Jahez file imports",
+  "jahez.adjustments.manage": "Manage Jahez ledger adjustments and financial entries",
+  "jahez.cashbox.read": "View Jahez cashbox balances and entries",
+  "jahez.cashbox.submit": "Submit Jahez cashbox handoff to accountant",
+  "jahez.cashbox.confirm": "Confirm Jahez cashbox receipt as accountant",
+  "jahez.cashbox.approve": "Final approval on Jahez cashbox handoffs"
 }

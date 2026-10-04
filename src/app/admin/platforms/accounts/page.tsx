@@ -223,10 +223,50 @@ export default function PlatformAccountsPage() {
     label: locale === "en" ? (s.registryNameEn || s.registryNameAr) : s.registryNameAr,
   }));
 
-  const employeeOptions = employees.map((e) => ({
-    value: e.riderProfileId || e.id,
-    label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
-  }));
+  const EMPTY_GUID = "00000000-0000-0000-0000-000000000000";
+  const isValidGuid = (id?: string | null): id is string => {
+    return Boolean(id && id !== EMPTY_GUID && id.trim() !== "");
+  };
+
+  const employeeOptions = useMemo(() => {
+    const empToRiderProfileMap = new Map<string, string>();
+    riders.forEach((r) => {
+      if (r.employeeId && isValidGuid(r.id)) {
+        empToRiderProfileMap.set(r.employeeId, r.id);
+      }
+    });
+
+    const options: { value: string; label: string }[] = [];
+    const usedIds = new Set<string>();
+
+    employees.forEach((e) => {
+      const validRId =
+        (isValidGuid(e.riderProfileId) ? e.riderProfileId : null) ||
+        (isValidGuid(e.rider?.id) ? e.rider.id : null) ||
+        empToRiderProfileMap.get(e.id);
+
+      const targetId = validRId || (isValidGuid(e.id) ? e.id : null);
+      if (!targetId || usedIds.has(targetId)) return;
+
+      usedIds.add(targetId);
+      options.push({
+        value: targetId,
+        label: `${e.fullNameAr} - ${e.iqamaNo || e.primaryPhone || e.employeeNumber || ""}`,
+      });
+    });
+
+    // Include riders from listRiders() who are not yet in options (e.g. outside riders)
+    riders.forEach((r) => {
+      if (!isValidGuid(r.id) || usedIds.has(r.id)) return;
+      usedIds.add(r.id);
+      options.push({
+        value: r.id,
+        label: `${r.fullNameAr} - ${r.iqamaNo || ""}`,
+      });
+    });
+
+    return options;
+  }, [employees, riders]);
 
   // Filter employees / riders for assignment: MUST send riderProfileId (not employeeId)
   const assignableEmployeeOptions = useMemo(() => {
@@ -239,7 +279,7 @@ export default function PlatformAccountsPage() {
         const isSalary = acc.paymentModel === "Salary" || acc.currentAssignment.paymentModel === "Salary";
 
         const trackRider = (id: string | null | undefined) => {
-          if (!id) return;
+          if (!isValidGuid(id)) return;
           const curr = riderActiveMap.get(id) || { total: 0, salary: 0 };
           riderActiveMap.set(id, {
             total: curr.total + 1,
@@ -259,7 +299,7 @@ export default function PlatformAccountsPage() {
     // Map employeeId -> riderProfileId from listRiders()
     const empToRiderProfileMap = new Map<string, string>();
     riders.forEach((r) => {
-      if (r.employeeId && r.id) {
+      if (r.employeeId && isValidGuid(r.id)) {
         empToRiderProfileMap.set(r.employeeId, r.id);
       }
     });
@@ -269,13 +309,16 @@ export default function PlatformAccountsPage() {
 
     // 1. Process Employees with valid riderProfileId
     employees.forEach((e) => {
-      const rId = e.riderProfileId || e.rider?.id || empToRiderProfileMap.get(e.id);
-      if (!rId) return; // Skip employees without a rider profile ID
+      const rId =
+        (isValidGuid(e.riderProfileId) ? e.riderProfileId : null) ||
+        (isValidGuid(e.rider?.id) ? e.rider.id : null) ||
+        empToRiderProfileMap.get(e.id);
+      if (!isValidGuid(rId) || usedRiderProfileIds.has(rId)) return; // Skip invalid or duplicate rider profile IDs
 
       usedRiderProfileIds.add(rId);
 
       const infoR = riderActiveMap.get(rId);
-      const infoE = e.id ? riderActiveMap.get(e.id) : undefined;
+      const infoE = isValidGuid(e.id) ? riderActiveMap.get(e.id) : undefined;
       const totalActive = Math.max(infoR?.total || 0, infoE?.total || 0);
       const salaryActive = Math.max(infoR?.salary || 0, infoE?.salary || 0);
 
@@ -297,7 +340,8 @@ export default function PlatformAccountsPage() {
 
     // 2. Process Riders from listRiders() not in employees list
     riders.forEach((r) => {
-      if (!r.id || usedRiderProfileIds.has(r.id)) return;
+      if (!isValidGuid(r.id) || usedRiderProfileIds.has(r.id)) return;
+      usedRiderProfileIds.add(r.id);
 
       const info = riderActiveMap.get(r.id);
       const totalActive = info?.total || 0;
@@ -366,7 +410,11 @@ export default function PlatformAccountsPage() {
       platformId: acc.platformId,
       operatingCityId: acc.operatingCityId,
       sponsorId: acc.sponsorId || "",
-      ownerRiderProfileId: acc.ownerRiderProfileId,
+      ownerRiderProfileId: isValidGuid(acc.ownerRiderProfileId)
+        ? acc.ownerRiderProfileId
+        : isValidGuid(acc.ownerEmployeeId)
+        ? acc.ownerEmployeeId
+        : "",
       code: acc.code,
       externalAccountId: acc.externalAccountId || "",
       userName: acc.userName || "",

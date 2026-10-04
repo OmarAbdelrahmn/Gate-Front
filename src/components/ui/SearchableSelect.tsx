@@ -166,11 +166,11 @@ export function SearchableSelect({
             {noOptionsText}
           </div>
         ) : (
-          filteredOptions.map((opt) => {
+          filteredOptions.map((opt, idx) => {
             const isSelected = opt.value === value;
             return (
               <button
-                key={opt.value}
+                key={`${opt.value || "option"}-${idx}`}
                 type="button"
                 onClick={() => handleSelect(opt.value)}
                 className={`w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-start text-xs font-bold transition-all ${
