@@ -24,6 +24,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import {
+  markAllNotificationsRead,
   queryNotifications,
   updateNotificationState,
 } from "../../lib/notifications/api";
@@ -42,7 +43,11 @@ import { toast } from "../ui/Toast";
 import { NotificationDetailModal } from "./NotificationDetailModal";
 import { useVehiclePlates } from "../../lib/fleet/vehicle-plate-cache";
 
-export function NotificationBell() {
+export interface NotificationBellProps {
+  permissions?: string[] | null;
+}
+
+export function NotificationBell({ permissions }: NotificationBellProps = {}) {
   const { can, locale } = useAuth();
   const isAr = locale === "ar";
   const router = useRouter();
@@ -152,7 +157,7 @@ export function NotificationBell() {
       try {
         const res: NotificationFeed = await queryNotifications(
           {
-            permissions: null, // null fetches all authorized audiences + personal
+            permissions: permissions !== undefined ? permissions : null, // null fetches all authorized audiences + personal
             unreadOnly: tab === "unread",
             pageSize: 50,
             cursor: isInitialOrReset ? null : cursor,
@@ -182,7 +187,7 @@ export function NotificationBell() {
         setLoadingMore(false);
       }
     },
-    [activeTab, canReadNotifications]
+    [activeTab, canReadNotifications, permissions]
   );
 
   // Initial load
@@ -282,133 +287,71 @@ export function NotificationBell() {
     }
   };
 
-  // Mark all unread notifications as read across the entire account
+  // Mark all unread notifications as read across the active scope in a single call (POST /api/notifications/read-all)
   const handleMarkAllAsRead = async () => {
     if (isMarkingAllRead) return;
 
     setIsMarkingAllRead(true);
 
-    // Optimistically mark currently loaded items as read and clear unread count badge
-    setItems((prev) =>
-      prev.map((item) =>
-        item.readAtUtc
-          ? item
-          : { ...item, readAtUtc: new Date().toISOString() }
-      )
-    );
+    // Optimistically update current view:
+    // Keep read notifications in the normal feed; remove them from an unread-only feed.
+    if (activeTab === "unread") {
+      setItems([]);
+    } else {
+      setItems((prev) =>
+        prev.map((item) =>
+          item.readAtUtc
+            ? item
+            : { ...item, readAtUtc: new Date().toISOString() }
+        )
+      );
+    }
     setUnreadCount(0);
 
+    const filterPayload =
+      permissions !== undefined && permissions !== null
+        ? { permissions }
+        : {};
+
     try {
-      // 1. Gather all unread items from component state
-      const unreadMap = new Map<string, NotificationItem>();
-      for (const item of items) {
-        if (!item.readAtUtc) {
-          unreadMap.set(item.id, item);
-        }
-      }
-
-      // 2. Fetch all unread notifications from backend via pagination to ensure 100% coverage
-      let cursor: string | null = null;
-      let hasMore = true;
-      let iterations = 0;
-
-      while (hasMore && iterations < 15) {
-        iterations++;
-        try {
-          const res = await queryNotifications(
-            {
-              permissions: null,
-              unreadOnly: true,
-              pageSize: 100,
-              cursor,
-            },
-            { suppressErrorToast: true }
-          );
-
-          const fetched = res.items || [];
-          for (const it of fetched) {
-            if (!it.readAtUtc) {
-              // Always use the latest server item & rowVersion
-              unreadMap.set(it.id, it);
-            }
-          }
-
-          if (res.nextCursor && fetched.length > 0) {
-            cursor = res.nextCursor;
-          } else {
-            hasMore = false;
-          }
-        } catch {
-          hasMore = false;
-        }
-      }
-
-      const allUnreadToUpdate = Array.from(unreadMap.values());
-
-      if (allUnreadToUpdate.length > 0) {
-        // 3. Process in controlled chunks (concurrency limit 6) to avoid database lock contention & 409s
-        const BATCH_SIZE = 6;
-        const failedItems: NotificationItem[] = [];
-
-        for (let i = 0; i < allUnreadToUpdate.length; i += BATCH_SIZE) {
-          const batch = allUnreadToUpdate.slice(i, i + BATCH_SIZE);
-          await Promise.all(
-            batch.map(async (item) => {
-              try {
-                await updateNotificationState(item.id, "read", item.rowVersion, {
-                  suppressErrorToast: true,
-                });
-              } catch {
-                failedItems.push(item);
-              }
-            })
-          );
-        }
-
-        // 4. Retry any items that encountered concurrency conflicts
-        if (failedItems.length > 0) {
-          try {
-            const refreshRes = await queryNotifications(
-              {
-                permissions: null,
-                unreadOnly: true,
-                pageSize: 100,
-              },
-              { suppressErrorToast: true }
-            );
-            const freshItems = refreshRes.items || [];
-            for (const failed of failedItems) {
-              const fresh = freshItems.find((x) => x.id === failed.id);
-              if (fresh && !fresh.readAtUtc) {
-                try {
-                  await updateNotificationState(
-                    fresh.id,
-                    "read",
-                    fresh.rowVersion,
-                    { suppressErrorToast: true }
-                  );
-                } catch {
-                  // Silently ignore if already marked as read
-                }
-              }
-            }
-          } catch {
-            // Ignore retry fetch failure
-          }
+      let res;
+      try {
+        res = await markAllNotificationsRead(filterPayload, {
+          suppressErrorToast: true,
+        });
+      } catch (err: unknown) {
+        const e = err as { status?: number };
+        // 409 concurrency conflict: refresh and retry once
+        if (e?.status === 409) {
+          res = await markAllNotificationsRead(filterPayload, {
+            suppressErrorToast: true,
+          });
+        } else {
+          throw err;
         }
       }
 
       toast.success(
         isAr ? "تم بنجاح" : "Success",
         isAr
-          ? "تم تحديد كافة الإشعارات كمقروءة بنجاح"
+          ? res && res.markedCount > 0
+            ? `تم تحديد ${res.markedCount} إشعار كمقروء بنجاح`
+            : "تم تحديد كافة الإشعارات كمقروءة بنجاح"
+          : res && res.markedCount > 0
+          ? `Marked ${res.markedCount} notification${res.markedCount > 1 ? "s" : ""} as read`
           : "All notifications marked as read successfully"
       );
 
-      // Re-fetch feed to sync completely with backend
+      // On success, reload the first feed page and badge count
       await fetchFeed(activeTab, true);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to mark all as read:", err);
+      const e = err as { message?: string };
+      toast.error(
+        isAr ? "خطأ" : "Error",
+        e?.message || (isAr ? "تعذر تحديد كافة الإشعارات كمقروءة" : "Failed to mark all notifications as read")
+      );
+      // Reload feed to sync state back
       await fetchFeed(activeTab, true);
     } finally {
       setIsMarkingAllRead(false);

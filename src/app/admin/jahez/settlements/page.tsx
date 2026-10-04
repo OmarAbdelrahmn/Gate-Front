@@ -56,7 +56,7 @@ export default function JahezSettlementsPage() {
   const [debtPayment, setDebtPayment] = useState<number | "">("");
   const [commissionPayment, setCommissionPayment] = useState<number | "">("");
   const [countsAsSettlement, setCountsAsSettlement] = useState(true);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState("تحصيل وتسوية نقدية للمندوب");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Live balance preview for selected handover in modal
@@ -138,7 +138,7 @@ export default function JahezSettlementsPage() {
     setDebtPayment("");
     setCommissionPayment("");
     setCountsAsSettlement(true);
-    setReason("");
+    setReason(isEn ? "Rider cash collection and settlement" : "تحصيل وتسوية نقدية للمندوب");
     setIsModalOpen(true);
   };
 
@@ -186,13 +186,41 @@ export default function JahezSettlementsPage() {
     }
   };
 
+  const getHandoverInfo = (s: JahezSettlement) => {
+    const h = handovers.find((item) => item.id === s.handoverId);
+    const extId = s.account?.externalAccountId || s.externalAccountId || h?.account?.externalAccountId || h?.externalAccountId;
+    const code = s.account?.code || h?.account?.code;
+    const ownerName = isEn
+      ? (s.ownerRiderNameEn || s.ownerRiderNameAr || h?.ownerRiderNameEn || h?.ownerRiderNameAr)
+      : (s.ownerRiderNameAr || s.ownerRiderNameEn || h?.ownerRiderNameAr || h?.ownerRiderNameEn);
+    const riderName = isEn
+      ? (s.actualRiderNameEn || s.actualRiderNameAr || h?.actualRiderNameEn || h?.actualRiderNameAr)
+      : (s.actualRiderNameAr || s.actualRiderNameEn || h?.actualRiderNameAr || h?.actualRiderNameEn);
+    return { h, extId, code, ownerName, riderName };
+  };
+
   const handleExportExcel = () => {
     exportToExcel({
       filename: `jahez_settlements_${new Date().toISOString().slice(0, 10)}.xlsx`,
       data: settlements,
       columns: [
-        { header: isEn ? "Settlement ID" : "معرف التسوية", accessor: "id" },
-        { header: isEn ? "Handover ID" : "معرف التسليم", accessor: "handoverId" },
+        { header: isEn ? "Recorded At" : "تاريخ التسجيل", accessor: "recordedAtUtc" },
+        {
+          header: isEn ? "Driver ID" : "رقم الحساب الخارجي",
+          accessor: (s) => getHandoverInfo(s).extId || "-",
+        },
+        {
+          header: isEn ? "Account Code" : "رمز الحساب",
+          accessor: (s) => getHandoverInfo(s).code || "-",
+        },
+        {
+          header: isEn ? "Owner Name" : "صاحب الحساب",
+          accessor: (s) => getHandoverInfo(s).ownerName || "-",
+        },
+        {
+          header: isEn ? "Actual Rider" : "المندوب الفعلي",
+          accessor: (s) => getHandoverInfo(s).riderName || "-",
+        },
         { header: isEn ? "Cutoff Date" : "تاريخ الاستحقاق", accessor: "throughDate" },
         { header: isEn ? "Fee Payment" : "رسوم الحساب", accessor: "feePayment" },
         { header: isEn ? "Debt Payment" : "مديونية جاهز", accessor: "debtPayment" },
@@ -205,9 +233,16 @@ export default function JahezSettlementsPage() {
   const filteredSettlements = settlements.filter((s) => {
     if (!search) return true;
     const term = search.toLowerCase();
+    const info = getHandoverInfo(s);
+    const extId = (info.extId || "").toLowerCase();
+    const code = (info.code || "").toLowerCase();
+    const owner = (info.ownerName || "").toLowerCase();
+    const rider = (info.riderName || "").toLowerCase();
     return (
-      s.id.toLowerCase().includes(term) ||
-      s.handoverId.toLowerCase().includes(term) ||
+      extId.includes(term) ||
+      code.includes(term) ||
+      owner.includes(term) ||
+      rider.includes(term) ||
       s.reason.toLowerCase().includes(term) ||
       s.throughDate.includes(term)
     );
@@ -332,11 +367,17 @@ export default function JahezSettlementsPage() {
               setPage(1);
             }}
             options={[
-              { value: "", label: isEn ? "All Handovers" : "جميع حسابات التسليم" },
-              ...handovers.map((h) => ({
-                value: h.id,
-                label: `${h.externalAccountId ? `[${h.externalAccountId}]` : ""} ${h.id.slice(0, 8)}... (${h.commissionStartsOn})`,
-              })),
+              { value: "", label: isEn ? "All Accounts" : "جميع حسابات التسليم" },
+              ...handovers.map((h) => {
+                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
+                const rider = isEn
+                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
+                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
+                return {
+                  value: h.id,
+                  label: `[${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                };
+              }),
             ]}
           />
         </div>
@@ -365,7 +406,7 @@ export default function JahezSettlementsPage() {
             <thead className="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/60 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800">
               <tr>
                 <th className="px-4 py-3">{isEn ? "Recorded At" : "تاريخ التسجيل"}</th>
-                <th className="px-4 py-3">{isEn ? "Handover ID" : "معرف التسليم"}</th>
+                <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
                 <th className="px-4 py-3">{isEn ? "Cutoff Date" : "تاريخ الاستحقاق"}</th>
                 <th className="px-4 py-3">{isEn ? "Fee Payment" : "رسوم الحساب"}</th>
                 <th className="px-4 py-3">{isEn ? "Platform Debt" : "مديونية جاهز"}</th>
@@ -395,6 +436,7 @@ export default function JahezSettlementsPage() {
               ) : (
                 filteredSettlements.map((s) => {
                   const itemTotal = s.feePayment + s.debtPayment + s.commissionPayment;
+                  const info = getHandoverInfo(s);
                   return (
                     <tr key={s.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
                       <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
@@ -405,8 +447,20 @@ export default function JahezSettlementsPage() {
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {s.handoverId.slice(0, 8)}...
+                      <td className="px-4 py-3">
+                        <span className="font-bold text-gray-900 dark:text-white block font-mono">
+                          {info.extId ? `[${info.extId}]` : info.code || "-"}
+                        </span>
+                        {info.code && info.code !== info.extId && (
+                          <span className="text-xs text-emerald-600 block">
+                            {info.code}
+                          </span>
+                        )}
+                        {info.ownerName && (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
+                            {info.ownerName}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">
                         {s.throughDate}
@@ -463,10 +517,16 @@ export default function JahezSettlementsPage() {
             <SearchableSelect
               value={modalHandoverId}
               onChange={(val) => setModalHandoverId(val)}
-              options={handovers.map((h) => ({
-                value: h.id,
-                label: `حساب [${h.externalAccountId || h.id.slice(0, 8)}] - مندوب: ${h.riderProfileId.slice(0, 8)}`,
-              }))}
+              options={handovers.map((h) => {
+                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
+                const rider = isEn
+                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
+                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
+                return {
+                  value: h.id,
+                  label: `${isEn ? "Account" : "حساب"} [${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                };
+              })}
             />
           </div>
 

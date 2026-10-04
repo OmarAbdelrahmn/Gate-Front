@@ -46,25 +46,51 @@ export enum JahezImportKind {
   DailyDispatches = 2,
 }
 
+// --- Display companions & Identity shapes ---
+export interface JahezAccountReference {
+  id: string;
+  code: string;
+  externalAccountId?: string | null;
+}
+
+export interface JahezDisplayIdentity {
+  externalAccountId?: string | null;
+  account?: JahezAccountReference | null;
+  ownerRiderProfileId?: string | null;
+  ownerEmployeeId?: string | null;
+  ownerRiderNameAr?: string | null;
+  ownerRiderNameEn?: string | null;
+  actualRiderProfileId?: string | null;
+  actualEmployeeId?: string | null;
+  actualRiderNameAr?: string | null;
+  actualRiderNameEn?: string | null;
+}
+
 // --- Base metadata shapes ---
 export interface JahezHistoryMetadata {
   id: string;
   createdAtUtc: string;
   createdByUserId: string;
+  createdByUserNameAr?: string | null;
+  createdByUserNameEn?: string | null;
 }
 
 export interface JahezAuditableMetadata extends JahezHistoryMetadata {
   updatedAtUtc?: string | null;
   updatedByUserId?: string | null;
+  updatedByUserNameAr?: string | null;
+  updatedByUserNameEn?: string | null;
   rowVersion: string;
   isDeleted: boolean;
   deletedAtUtc?: string | null;
   deletedByUserId?: string | null;
+  deletedByUserNameAr?: string | null;
+  deletedByUserNameEn?: string | null;
   deletionReason?: string | null;
 }
 
 // --- Domain Models ---
-export interface JahezHandover {
+export interface JahezHandover extends JahezDisplayIdentity {
   id: string;
   accountId: string;
   externalAccountId: string | null;
@@ -79,7 +105,7 @@ export interface JahezHandover {
   debtTransferred: boolean;
 }
 
-export interface JahezBalance {
+export interface JahezBalance extends JahezDisplayIdentity {
   handoverId: string;
   accountId: string;
   externalAccountId: string | null;
@@ -99,19 +125,22 @@ export interface JahezBalance {
   latestTransactionAtUtc: string | null;
 }
 
-export interface JahezFee extends JahezAuditableMetadata {
+export interface JahezFee extends JahezAuditableMetadata, JahezDisplayIdentity {
   handoverId: string;
   amount: number;
   waivedAmount: number;
   approvalRequestId: string | null;
 }
 
-export interface JahezApprovalRequest extends JahezAuditableMetadata {
+export interface JahezApprovalRequest extends JahezAuditableMetadata, JahezDisplayIdentity {
   handoverId: string;
   kind: JahezApprovalKind;
   status: JahezApprovalStatus;
   requestedByUserId: string;
+  requestedByUserNameAr?: string | null;
+  requestedByUserNameEn?: string | null;
   targetAccountId: string | null;
+  targetAccount?: JahezAccountReference | null;
   waiverAmount: number | null;
   fromDate: string | null;
   toDate: string | null;
@@ -123,6 +152,8 @@ export interface JahezApprovalRequest extends JahezAuditableMetadata {
 export interface JahezDecision extends JahezHistoryMetadata {
   requestId: string;
   actorUserId: string;
+  actorUserNameAr?: string | null;
+  actorUserNameEn?: string | null;
   status: JahezApprovalStatus;
   decidedAtUtc: string;
   reason: string;
@@ -133,7 +164,7 @@ export interface JahezApprovalResponse {
   decisions: JahezDecision[];
 }
 
-export interface JahezCommissionPolicy extends JahezHistoryMetadata {
+export interface JahezCommissionPolicy extends JahezHistoryMetadata, JahezDisplayIdentity {
   handoverId: string;
   approvalRequestId: string;
   fromDate: string;
@@ -141,7 +172,7 @@ export interface JahezCommissionPolicy extends JahezHistoryMetadata {
   rate: number; // 0.15
 }
 
-export interface JahezEarnings extends JahezHistoryMetadata {
+export interface JahezEarnings extends JahezHistoryMetadata, JahezDisplayIdentity {
   handoverId: string;
   fromDate: string;
   toDate: string;
@@ -158,11 +189,13 @@ export interface JahezEarnings extends JahezHistoryMetadata {
   reason: string;
 }
 
-export interface JahezSettlement extends JahezHistoryMetadata {
+export interface JahezSettlement extends JahezHistoryMetadata, JahezDisplayIdentity {
   handoverId: string;
   throughDate: string;
   recordedAtUtc: string;
   collectedByUserId: string;
+  collectedByUserNameAr?: string | null;
+  collectedByUserNameEn?: string | null;
   feePayment: number;
   debtPayment: number;
   commissionPayment: number;
@@ -170,7 +203,7 @@ export interface JahezSettlement extends JahezHistoryMetadata {
   reason: string;
 }
 
-export interface JahezLedgerEntry extends JahezHistoryMetadata {
+export interface JahezLedgerEntry extends JahezHistoryMetadata, JahezDisplayIdentity {
   handoverId: string;
   bucket: JahezLedgerBucket;
   kind: JahezLedgerKind;
@@ -188,6 +221,8 @@ export interface JahezImportBatch extends JahezAuditableMetadata {
   kind: JahezImportKind;
   contentHash: string;
   uploadedByUserId: string;
+  uploadedByUserNameAr?: string | null;
+  uploadedByUserNameEn?: string | null;
   committedAtUtc: string | null;
   replacesBatchId: string | null;
   correctionReason: string | null;
@@ -198,7 +233,7 @@ export interface JahezImportFile {
   fileName: string;
 }
 
-export interface JahezImportRow {
+export interface JahezImportRow extends JahezDisplayIdentity {
   rowId: string;
   fileName: string;
   rowNumber: number;
@@ -219,7 +254,7 @@ export interface JahezImportIssue {
   description: string;
 }
 
-export interface JahezImportAccountSummary {
+export interface JahezImportAccountSummary extends JahezDisplayIdentity {
   accountId: string | null;
   driverId: string;
   fromDate: string;
@@ -241,7 +276,7 @@ export interface JahezImportPreview {
   accounts: JahezImportAccountSummary[];
 }
 
-export interface JahezDispatch {
+export interface JahezDispatch extends JahezDisplayIdentity {
   accountId: string;
   externalAccountId: string | null;
   riderProfileId: string;
@@ -259,12 +294,14 @@ export interface JahezCashboxBalance {
   availableSettlements: number;
 }
 
-export interface JahezCashboxEntry extends JahezAuditableMetadata {
+export interface JahezCashboxEntry extends JahezAuditableMetadata, JahezDisplayIdentity {
   settlementId: string;
   handoverId: string;
   section: JahezCashboxSection;
   amount: number;
   collectedByUserId: string;
+  collectedByUserNameAr?: string | null;
+  collectedByUserNameEn?: string | null;
   receivedAtUtc: string;
   cashboxHandoverId: string | null;
 }
@@ -277,8 +314,14 @@ export interface JahezCashboxHandover extends JahezAuditableMetadata {
   accountantFeeAmount: number | null;
   accountantSettlementAmount: number | null;
   requestedByUserId: string;
+  requestedByUserNameAr?: string | null;
+  requestedByUserNameEn?: string | null;
   accountantUserId: string | null;
+  accountantUserNameAr?: string | null;
+  accountantUserNameEn?: string | null;
   approvedByUserId: string | null;
+  approvedByUserNameAr?: string | null;
+  approvedByUserNameEn?: string | null;
   confirmedAtUtc: string | null;
   decidedAtUtc: string | null;
   reason: string;

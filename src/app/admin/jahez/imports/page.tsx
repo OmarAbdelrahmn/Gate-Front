@@ -51,7 +51,9 @@ export default function JahezImportsReportPage() {
   const [uploadKind, setUploadKind] = useState<JahezImportKind>(JahezImportKind.Transactions);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [replacesBatchId, setReplacesBatchId] = useState("");
-  const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionReason, setCorrectionReason] = useState(
+    isEn ? "Correction and replacement of previous batch files" : "تصحيح واستبدال ملفات الدفعة السابقة"
+  );
   const [uploading, setUploading] = useState(false);
 
   // Preview Drawer / Modal State
@@ -125,7 +127,9 @@ export default function JahezImportsReportPage() {
       setIsUploadOpen(false);
       setSelectedFiles([]);
       setReplacesBatchId("");
-      setCorrectionReason("");
+      setCorrectionReason(
+        isEn ? "Correction and replacement of previous batch files" : "تصحيح واستبدال ملفات الدفعة السابقة"
+      );
       loadBatches();
 
       setPreview(previewRes);
@@ -266,7 +270,6 @@ export default function JahezImportsReportPage() {
               <tr>
                 <th className="px-4 py-3">{isEn ? "Uploaded Date" : "تاريخ الرفع"}</th>
                 <th className="px-4 py-3">{isEn ? "Import Kind" : "نوع الملفات"}</th>
-                <th className="px-4 py-3">{isEn ? "Batch ID" : "معرف الدفعة"}</th>
                 <th className="px-4 py-3">{isEn ? "Uploaded By" : "المستخدم الرافِع"}</th>
                 <th className="px-4 py-3">{isEn ? "Commit Status" : "حالة الترحيل"}</th>
                 <th className="px-4 py-3">{isEn ? "Batch Replacement" : "تصحيح لدفعة سابقة"}</th>
@@ -276,14 +279,14 @@ export default function JahezImportsReportPage() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-gray-500">
+                  <td colSpan={6} className="text-center py-10 text-gray-500">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto text-emerald-600 mb-2" />
                     {isEn ? "Loading import batches..." : "جارٍ استعلام دفعات الاستيراد..."}
                   </td>
                 </tr>
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={6} className="text-center py-12 text-gray-400">
                     <FileSpreadsheet className="h-10 w-10 mx-auto text-gray-300 mb-2" />
                     <p className="font-medium text-gray-600 dark:text-gray-300">
                       {isEn ? "No import batches recorded" : "لا توجد ملفات أو دفعات مرفوعة"}
@@ -314,12 +317,10 @@ export default function JahezImportsReportPage() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                      {b.id.slice(0, 8)}...
-                    </td>
-
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                      {b.uploadedByUserId.slice(0, 8)}...
+                    <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                      {(isEn
+                        ? b.uploadedByUserNameEn || b.uploadedByUserNameAr
+                        : b.uploadedByUserNameAr || b.uploadedByUserNameEn) || (isEn ? "User" : "المستخدم")}
                     </td>
 
                     <td className="px-4 py-3">
@@ -338,8 +339,8 @@ export default function JahezImportsReportPage() {
 
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {b.replacesBatchId ? (
-                        <span className="font-mono text-indigo-600">
-                          بديل: {b.replacesBatchId.slice(0, 8)}
+                        <span className="text-indigo-600 font-medium">
+                          {isEn ? "Correction replacement" : "دفعة تصحيحية بديلة"}
                         </span>
                       ) : (
                         "-"
@@ -431,7 +432,14 @@ export default function JahezImportsReportPage() {
                 type="text"
                 placeholder="UUID..."
                 value={replacesBatchId}
-                onChange={(e) => setReplacesBatchId(e.target.value)}
+                onChange={(e) => {
+                  setReplacesBatchId(e.target.value);
+                  if (e.target.value && !correctionReason) {
+                    setCorrectionReason(
+                      isEn ? "Correction and replacement of previous batch files" : "تصحيح واستبدال ملفات الدفعة السابقة"
+                    );
+                  }
+                }}
               />
             </div>
 
@@ -558,7 +566,7 @@ export default function JahezImportsReportPage() {
                 <table className="w-full text-xs text-right">
                   <thead className="bg-gray-50 dark:bg-gray-800">
                     <tr>
-                      <th className="p-2">Driver ID</th>
+                      <th className="p-2">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
                       <th className="p-2">الفترة</th>
                       <th className="p-2">الأسطر الصالحة</th>
                       <th className="p-2">صافي المبلغ (Net)</th>
@@ -570,7 +578,14 @@ export default function JahezImportsReportPage() {
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {preview.accounts.map((acc, idx) => (
                       <tr key={idx}>
-                        <td className="p-2 font-mono font-bold">{acc.driverId}</td>
+                        <td className="p-2">
+                          <span className="font-mono font-bold block">{acc.driverId}</span>
+                          {(isEn ? (acc.ownerRiderNameEn || acc.ownerRiderNameAr) : (acc.ownerRiderNameAr || acc.ownerRiderNameEn)) && (
+                            <span className="block text-[11px] text-gray-500 dark:text-gray-400 font-normal">
+                              {isEn ? (acc.ownerRiderNameEn || acc.ownerRiderNameAr) : (acc.ownerRiderNameAr || acc.ownerRiderNameEn)}
+                            </span>
+                          )}
+                        </td>
                         <td className="p-2">{acc.fromDate} → {acc.toDate}</td>
                         <td className="p-2">{acc.validRowCount}</td>
                         <td className="p-2 font-mono font-semibold">

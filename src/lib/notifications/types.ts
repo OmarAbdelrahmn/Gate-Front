@@ -71,3 +71,13 @@ export interface CreateNotificationRequest {
 export interface NotificationUnreadCountResponse {
   count: number;
 }
+
+export interface NotificationReadAllRequest {
+  permissions?: string[] | null;
+}
+
+export interface NotificationReadAllResponse {
+  markedCount: number;
+  readAtUtc: string; // ISO 8601 UTC timestamp assigned to newly read items
+  effectivePermissions: string[];
+}

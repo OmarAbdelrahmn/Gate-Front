@@ -61,19 +61,19 @@ export default function JahezCashboxPage() {
   const [submitBusinessDate, setSubmitBusinessDate] = useState(
     new Date().toISOString().split("T")[0],
   );
-  const [submitReason, setSubmitReason] = useState("");
+  const [submitReason, setSubmitReason] = useState("تصفية");
   const [submitting, setSubmitting] = useState(false);
 
   // 2. Accountant Confirmation
   const [confirmingHandover, setConfirmingHandover] = useState<JahezCashboxHandover | null>(null);
   const [confirmFeeAmount, setConfirmFeeAmount] = useState<number | "">("");
   const [confirmSettlementAmount, setConfirmSettlementAmount] = useState<number | "">("");
-  const [confirmReason, setConfirmReason] = useState("");
+  const [confirmReason, setConfirmReason] = useState("مطابقة وعد واستلام مبالغ الصندوق");
   const [isConfirming, setIsConfirming] = useState(false);
 
   // 3. Final Decision
   const [decidingHandover, setDecidingHandover] = useState<JahezCashboxHandover | null>(null);
-  const [decisionReason, setDecisionReason] = useState("");
+  const [decisionReason, setDecisionReason] = useState("اعتماد تسليم الصندوق وإخلاء العهدة");
   const [isDeciding, setIsDeciding] = useState(false);
 
   const loadData = async () => {
@@ -116,7 +116,7 @@ export default function JahezCashboxPage() {
       };
       await createCashboxHandover(payload);
       setIsSubmitOpen(false);
-      setSubmitReason("");
+      setSubmitReason("تصفية");
       loadData();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "فشل بدء تسليم الصندوق";
@@ -274,7 +274,7 @@ export default function JahezCashboxPage() {
               variant="primary"
               onClick={() => {
                 setSubmitBusinessDate(new Date().toISOString().split("T")[0]);
-                setSubmitReason("");
+                setSubmitReason("تصفية");
                 setIsSubmitOpen(true);
               }}
               className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm"
@@ -505,14 +505,24 @@ export default function JahezCashboxPage() {
                         <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">
                           {totalHandoff.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-500">
-                          {h.requestedByUserId.slice(0, 8)}...
+                        <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                          {(isEn
+                            ? h.requestedByUserNameEn || h.requestedByUserNameAr
+                            : h.requestedByUserNameAr || h.requestedByUserNameEn) || (isEn ? "User" : "المستخدم")}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-500">
-                          {h.accountantUserId ? `${h.accountantUserId.slice(0, 8)}...` : "-"}
+                        <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                          {h.accountantUserId
+                            ? (isEn
+                                ? h.accountantUserNameEn || h.accountantUserNameAr
+                                : h.accountantUserNameAr || h.accountantUserNameEn) || (isEn ? "Accountant" : "المحاسب")
+                            : "-"}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-500">
-                          {h.approvedByUserId ? `${h.approvedByUserId.slice(0, 8)}...` : "-"}
+                        <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                          {h.approvedByUserId
+                            ? (isEn
+                                ? h.approvedByUserNameEn || h.approvedByUserNameAr
+                                : h.approvedByUserNameAr || h.approvedByUserNameEn) || (isEn ? "Approver" : "المعتمد")
+                            : "-"}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
@@ -523,7 +533,7 @@ export default function JahezCashboxPage() {
                                   setConfirmingHandover(h);
                                   setConfirmFeeAmount(h.feeAmount);
                                   setConfirmSettlementAmount(h.settlementAmount);
-                                  setConfirmReason("");
+                                  setConfirmReason(isEn ? "Reconciled and received cashbox amounts" : "مطابقة وعد واستلام مبالغ الصندوق");
                                 }}
                                 className="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-2.5 h-9"
                               >
@@ -537,7 +547,7 @@ export default function JahezCashboxPage() {
                                 variant="primary"
                                 onClick={() => {
                                   setDecidingHandover(h);
-                                  setDecisionReason("");
+                                  setDecisionReason(isEn ? "Approved handoff and custody cleared" : "اعتماد تسليم الصندوق وإخلاء العهدة");
                                 }}
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-1 px-2.5 h-9"
                               >
@@ -567,8 +577,8 @@ export default function JahezCashboxPage() {
                   <th className="px-4 py-3">{isEn ? "Received At" : "وقت الاستلام"}</th>
                   <th className="px-4 py-3">{isEn ? "Cashbox Section" : "قسم الصندوق"}</th>
                   <th className="px-4 py-3">{isEn ? "Amount" : "المبلغ المحصل"}</th>
-                  <th className="px-4 py-3">{isEn ? "Settlement ID" : "معرف التسوية"}</th>
-                  <th className="px-4 py-3">{isEn ? "Handover ID" : "معرف التسليم"}</th>
+                  <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
+                  <th className="px-4 py-3">{isEn ? "Actual Rider" : "المندوب الفعلي"}</th>
                   <th className="px-4 py-3">{isEn ? "Collector" : "المحصل"}</th>
                   <th className="px-4 py-3">{isEn ? "Handoff Status" : "حالة التسليم للمحاسب"}</th>
                 </tr>
@@ -600,14 +610,32 @@ export default function JahezCashboxPage() {
                       <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">
                         {e.amount.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {e.settlementId.slice(0, 8)}...
+                      <td className="px-4 py-3">
+                        <span className="font-bold text-gray-900 dark:text-white block font-mono">
+                          {e.account?.externalAccountId || e.externalAccountId
+                            ? `[${e.account?.externalAccountId || e.externalAccountId}]`
+                            : e.account?.code || "-"}
+                        </span>
+                        {e.account?.code && e.account.code !== (e.account.externalAccountId || e.externalAccountId) && (
+                          <span className="text-xs text-emerald-600 block">
+                            {e.account.code}
+                          </span>
+                        )}
+                        {(isEn ? (e.ownerRiderNameEn || e.ownerRiderNameAr) : (e.ownerRiderNameAr || e.ownerRiderNameEn)) && (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
+                            {isEn ? (e.ownerRiderNameEn || e.ownerRiderNameAr) : (e.ownerRiderNameAr || e.ownerRiderNameEn)}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {e.handoverId.slice(0, 8)}...
+                      <td className="px-4 py-3 text-xs text-gray-800 dark:text-gray-200 font-medium">
+                        {(isEn
+                          ? e.actualRiderNameEn || e.actualRiderNameAr
+                          : e.actualRiderNameAr || e.actualRiderNameEn) || "-"}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {e.collectedByUserId.slice(0, 8)}...
+                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                        {(isEn
+                          ? e.collectedByUserNameEn || e.collectedByUserNameAr
+                          : e.collectedByUserNameAr || e.collectedByUserNameEn) || (isEn ? "Collector" : "المحصل")}
                       </td>
                       <td className="px-4 py-3">
                         {e.cashboxHandoverId ? (

@@ -55,7 +55,7 @@ export default function JahezLedgerPage() {
   const [adjHandoverId, setAdjHandoverId] = useState("");
   const [adjBucket, setAdjBucket] = useState<JahezLedgerBucket>(JahezLedgerBucket.PlatformDebt);
   const [adjAmount, setAdjAmount] = useState<number | "">("");
-  const [adjReason, setAdjReason] = useState("");
+  const [adjReason, setAdjReason] = useState("تسوية قيد مالي يدوي");
   const [reversesEntryId, setReversesEntryId] = useState<string | null>(null);
   const [isSubmittingAdj, setIsSubmittingAdj] = useState(false);
 
@@ -103,9 +103,22 @@ export default function JahezLedgerPage() {
     setAdjHandoverId(selectedHandoverId || handovers[0]?.id || "");
     setAdjBucket(JahezLedgerBucket.PlatformDebt);
     setAdjAmount("");
-    setAdjReason("");
+    setAdjReason(isEn ? "Manual financial ledger adjustment" : "تسوية قيد مالي يدوي");
     setReversesEntryId(null);
     setIsAdjustmentModalOpen(true);
+  };
+
+  const getHandoverInfo = (e: JahezLedgerEntry) => {
+    const h = handovers.find((item) => item.id === e.handoverId);
+    const extId = e.account?.externalAccountId || e.externalAccountId || h?.account?.externalAccountId || h?.externalAccountId;
+    const code = e.account?.code || h?.account?.code;
+    const ownerName = isEn
+      ? (e.ownerRiderNameEn || e.ownerRiderNameAr || h?.ownerRiderNameEn || h?.ownerRiderNameAr)
+      : (e.ownerRiderNameAr || e.ownerRiderNameEn || h?.ownerRiderNameAr || h?.ownerRiderNameEn);
+    const riderName = isEn
+      ? (e.actualRiderNameEn || e.actualRiderNameAr || h?.actualRiderNameEn || h?.actualRiderNameAr)
+      : (e.actualRiderNameAr || e.actualRiderNameEn || h?.actualRiderNameAr || h?.actualRiderNameEn);
+    return { h, extId, code, ownerName, riderName };
   };
 
   const handleReverseEntry = (entry: JahezLedgerEntry) => {
@@ -116,7 +129,7 @@ export default function JahezLedgerPage() {
     setAdjHandoverId(entry.handoverId);
     setAdjBucket(entry.bucket);
     setAdjAmount(-entry.amount);
-    setAdjReason(`قيد تسوية عكسي للقيد رقم: ${entry.id.slice(0, 8)}`);
+    setAdjReason(isEn ? "Reversal adjustment for original entry" : "قيد تسوية عكسي للقيد الأصلي");
     setReversesEntryId(entry.id);
     setIsAdjustmentModalOpen(true);
   };
@@ -227,9 +240,17 @@ export default function JahezLedgerPage() {
     if (kindFilter !== "" && e.kind !== Number(kindFilter)) return false;
     if (!search) return true;
     const term = search.toLowerCase();
+    const info = getHandoverInfo(e);
+    const extId = (info.extId || "").toLowerCase();
+    const code = (info.code || "").toLowerCase();
+    const owner = (info.ownerName || "").toLowerCase();
+    const rider = (info.riderName || "").toLowerCase();
     return (
+      extId.includes(term) ||
+      code.includes(term) ||
+      owner.includes(term) ||
+      rider.includes(term) ||
       e.id.toLowerCase().includes(term) ||
-      e.handoverId.toLowerCase().includes(term) ||
       e.reason.toLowerCase().includes(term)
     );
   });
@@ -239,9 +260,23 @@ export default function JahezLedgerPage() {
       filename: `jahez_ledger_${new Date().toISOString().slice(0, 10)}.xlsx`,
       data: entries,
       columns: [
-        { header: isEn ? "Entry ID" : "معرف القيد", accessor: "id" },
         { header: isEn ? "Date & Time" : "التاريخ والوقت", accessor: "occurredAtUtc" },
-        { header: isEn ? "Handover ID" : "معرف التسليم", accessor: "handoverId" },
+        {
+          header: isEn ? "Driver ID" : "رقم الحساب الخارجي",
+          accessor: (e) => getHandoverInfo(e).extId || "-",
+        },
+        {
+          header: isEn ? "Account Code" : "رمز الحساب",
+          accessor: (e) => getHandoverInfo(e).code || "-",
+        },
+        {
+          header: isEn ? "Owner Name" : "صاحب الحساب",
+          accessor: (e) => getHandoverInfo(e).ownerName || "-",
+        },
+        {
+          header: isEn ? "Actual Rider" : "المندوب الفعلي",
+          accessor: (e) => getHandoverInfo(e).riderName || "-",
+        },
         { header: isEn ? "Bucket" : "السلة المالية", accessor: "bucket" },
         { header: isEn ? "Kind" : "نوع القيد", accessor: "kind" },
         { header: isEn ? "Amount (SAR)" : "المبلغ (ر.س)", accessor: "amount" },
@@ -313,11 +348,17 @@ export default function JahezLedgerPage() {
               setPage(1);
             }}
             options={[
-              { value: "", label: isEn ? "All Handovers" : "جميع الحسابات" },
-              ...handovers.map((h) => ({
-                value: h.id,
-                label: `[${h.externalAccountId || h.id.slice(0, 8)}] (${h.commissionStartsOn})`,
-              })),
+              { value: "", label: isEn ? "All Accounts" : "جميع الحسابات" },
+              ...handovers.map((h) => {
+                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
+                const rider = isEn
+                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
+                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
+                return {
+                  value: h.id,
+                  label: `[${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                };
+              }),
             ]}
           />
         </div>
@@ -380,7 +421,7 @@ export default function JahezLedgerPage() {
             <thead className="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/60 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800">
               <tr>
                 <th className="px-4 py-3">{isEn ? "Occurred At" : "وقت العملية"}</th>
-                <th className="px-4 py-3">{isEn ? "Handover ID" : "معرف التسليم"}</th>
+                <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
                 <th className="px-4 py-3">{isEn ? "Bucket" : "السلة"}</th>
                 <th className="px-4 py-3">{isEn ? "Kind" : "نوع القيد"}</th>
                 <th className="px-4 py-3">{isEn ? "Signed Amount" : "المبلغ (ر.س)"}</th>
@@ -409,6 +450,7 @@ export default function JahezLedgerPage() {
               ) : (
                 filteredEntries.map((e) => {
                   const isPositive = e.amount > 0;
+                  const info = getHandoverInfo(e);
                   return (
                     <tr key={e.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
                       <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
@@ -420,8 +462,20 @@ export default function JahezLedgerPage() {
                         })}
                       </td>
 
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {e.handoverId.slice(0, 8)}...
+                      <td className="px-4 py-3">
+                        <span className="font-bold text-gray-900 dark:text-white block font-mono">
+                          {info.extId ? `[${info.extId}]` : info.code || "-"}
+                        </span>
+                        {info.code && info.code !== info.extId && (
+                          <span className="text-xs text-emerald-600 block">
+                            {info.code}
+                          </span>
+                        )}
+                        {info.ownerName && (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
+                            {info.ownerName}
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3">{bucketLabel(e.bucket)}</td>
@@ -446,18 +500,26 @@ export default function JahezLedgerPage() {
                           <span>
                             {e.fromDate} → {e.throughDate}
                           </span>
-                        ) : e.sourceId ? (
-                          <span className="font-mono">{e.sourceId.slice(0, 8)}...</span>
                         ) : (
-                          "-"
+                          <span>
+                            {e.kind === JahezLedgerKind.Payment
+                              ? (isEn ? "Settlement Payment" : "سداد تسوية")
+                              : e.bucket === JahezLedgerBucket.AccountFee
+                              ? (isEn ? "Handover Fee" : "رسوم التسليم")
+                              : e.kind === JahezLedgerKind.Adjustment
+                              ? (isEn ? "Manual Adjustment" : "تسوية يدوية")
+                              : e.kind === JahezLedgerKind.OpeningBalance
+                              ? (isEn ? "Opening Balance" : "رصيد افتتاحي")
+                              : "-"}
+                          </span>
                         )}
                       </td>
 
                       <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 max-w-xs truncate" title={e.reason}>
                         {e.reason}
                         {e.reversesEntryId && (
-                          <span className="block text-[10px] text-indigo-500 font-mono">
-                            عكس قيد: {e.reversesEntryId.slice(0, 8)}
+                          <span className="block text-[10px] text-indigo-500 font-medium">
+                            {isEn ? "Reversal entry" : "قيد تسوية عكسي"}
                           </span>
                         )}
                       </td>
@@ -511,10 +573,16 @@ export default function JahezLedgerPage() {
             <SearchableSelect
               value={adjHandoverId}
               onChange={(val) => setAdjHandoverId(val)}
-              options={handovers.map((h) => ({
-                value: h.id,
-                label: `حساب [${h.externalAccountId || h.id.slice(0, 8)}] (${h.commissionStartsOn})`,
-              }))}
+              options={handovers.map((h) => {
+                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
+                const rider = isEn
+                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
+                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
+                return {
+                  value: h.id,
+                  label: `${isEn ? "Account" : "حساب"} [${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                };
+              })}
             />
           </div>
 

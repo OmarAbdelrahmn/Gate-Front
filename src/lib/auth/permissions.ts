@@ -67,6 +67,21 @@ export const PERMISSIONS = [
   "phone_sims.read",
   "phone_sims.manage",
 
+  // Jahez Platform
+  "jahez.read",
+  "jahez.handovers.manage",
+  "jahez.collections.manage",
+  "jahez.requests.create",
+  "jahez.requests.approve",
+  "jahez.resets.approve",
+  "jahez.earnings.manage",
+  "jahez.imports.manage",
+  "jahez.adjustments.manage",
+  "jahez.cashbox.read",
+  "jahez.cashbox.submit",
+  "jahez.cashbox.confirm",
+  "jahez.cashbox.approve",
+
   // Reporting
   "reports.read",
   "exports.create",

@@ -53,11 +53,26 @@ export default function JahezApprovalsPage() {
   const [page, setPage] = useState(1);
   const [isPending, startTransition] = useTransition();
 
+  const getDefaultReasonForKind = (kind: JahezApprovalKind) => {
+    switch (kind) {
+      case JahezApprovalKind.FeeException:
+        return isEn ? "Exceptional fee waiver request" : "طلب إعفاء استثنائي من رسوم الحساب";
+      case JahezApprovalKind.FreeSwitch:
+        return isEn ? "Free account switch due to technical issues" : "تبديل حساب بديل لتعطل الحساب الأصلي";
+      case JahezApprovalKind.PercentageCommission:
+        return isEn ? "15% percentage commission policy application" : "تطبيق سياسة العمولة بالنسبة المعتمدة (15%)";
+      case JahezApprovalKind.AccountResetDebtTransfer:
+        return isEn ? "Platform account reset and debt transfer to rider" : "تصفير حساب المنصة وترحيل المديونية للمندوب";
+      default:
+        return isEn ? "Official approval request" : "طلب اعتماد رسمي";
+    }
+  };
+
   // Create Request Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [reqHandoverId, setReqHandoverId] = useState("");
   const [reqKind, setReqKind] = useState<JahezApprovalKind>(JahezApprovalKind.FeeException);
-  const [reqReason, setReqReason] = useState("");
+  const [reqReason, setReqReason] = useState("طلب إعفاء استثنائي من رسوم الحساب");
   const [waiverAmount, setWaiverAmount] = useState<number | "">("");
   const [targetAccountId, setTargetAccountId] = useState("");
   const [policyFromDate, setPolicyFromDate] = useState("");
@@ -68,7 +83,7 @@ export default function JahezApprovalsPage() {
 
   // Decision Modal State
   const [decidingRequest, setDecidingRequest] = useState<JahezApprovalRequest | null>(null);
-  const [decisionReason, setDecisionReason] = useState("");
+  const [decisionReason, setDecisionReason] = useState("اعتماد الطلب وفق الضوابط والسياسات المالية");
   const [isDeciding, setIsDeciding] = useState(false);
 
   // Manual Earnings Statement Modal State
@@ -85,7 +100,7 @@ export default function JahezApprovalsPage() {
   const [totalBonuses, setTotalBonuses] = useState<number>(0);
   const [totalTips, setTotalTips] = useState<number>(0);
   const [totalFreeOrders, setTotalFreeOrders] = useState<number>(0);
-  const [earnReason, setEarnReason] = useState("");
+  const [earnReason, setEarnReason] = useState("احتساب بيان أرباح وعمولة بنسبة 15%");
   const [submittingEarn, setSubmittingEarn] = useState(false);
 
   const commissionBase =
@@ -187,9 +202,36 @@ export default function JahezApprovalsPage() {
     }
   };
 
-  const handleDecide = async (approve: boolean) => {
+  const handleDecide = async (approve: boolean, overrideReason?: string) => {
     if (!decidingRequest) return;
-    if (!decisionReason.trim()) {
+
+    if (user?.id === decidingRequest.requestedByUserId) {
+      toast.error(
+        isEn ? "Action Not Allowed" : "إجراء غير مسموح",
+        isEn
+          ? "You cannot approve or decide your own request."
+          : "لا يمكنك اعتماد أو اتخاذ قرار بشأن طلب قمت بإنشائه بنفسك."
+      );
+      return;
+    }
+
+    const canDecideKind =
+      decidingRequest.kind === JahezApprovalKind.AccountResetDebtTransfer
+        ? can("jahez.resets.approve")
+        : can("jahez.requests.approve");
+
+    if (!can("jahez.read") || !canDecideKind) {
+      toast.error(
+        isEn ? "Permission Denied" : "صلاحية غير كافية",
+        isEn
+          ? "You need jahez.read and the approval permission for this request type."
+          : "تحتاج إلى صلاحية jahez.read بالإضافة إلى صلاحية الاعتماد المخصصة لهذا النوع من الطلبات."
+      );
+      return;
+    }
+
+    const finalReason = (overrideReason ?? decisionReason).trim();
+    if (!finalReason) {
       toast.error("تنبيه", "يرجى كتابة سبب القرار");
       return;
     }
@@ -198,11 +240,11 @@ export default function JahezApprovalsPage() {
     try {
       const payload: ApprovalDecisionRequest = {
         approve,
-        reason: decisionReason.trim(),
+        reason: finalReason,
       };
       await decideApprovalRequest(decidingRequest.id, payload);
       setDecidingRequest(null);
-      setDecisionReason("");
+      setDecisionReason(isEn ? "Approved per financial policies and controls" : "اعتماد الطلب وفق الضوابط والسياسات المالية");
       loadRequests();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "فشلت عملية اتخاذ القرار";
@@ -213,7 +255,10 @@ export default function JahezApprovalsPage() {
   };
 
   const handleCancel = async (req: JahezApprovalRequest) => {
-    const reasonPrompt = window.prompt("يرجى إدخال سبب إلغاء الطلب:", "لم يعد مطلوباً");
+    const reasonPrompt = window.prompt(
+      isEn ? "Please enter reason for cancelling request:" : "يرجى إدخال سبب إلغاء الطلب:",
+      isEn ? "Cancelled per administration decision" : "إلغاء الطلب بناءً على رغبة الإدارة"
+    );
     if (!reasonPrompt) return;
 
     try {
@@ -264,6 +309,19 @@ export default function JahezApprovalsPage() {
     } finally {
       setSubmittingEarn(false);
     }
+  };
+
+  const getHandoverInfo = (r: JahezApprovalRequest) => {
+    const h = handovers.find((item) => item.id === r.handoverId);
+    const extId = r.account?.externalAccountId || r.externalAccountId || h?.account?.externalAccountId || h?.externalAccountId;
+    const code = r.account?.code || h?.account?.code;
+    const ownerName = isEn
+      ? (r.ownerRiderNameEn || r.ownerRiderNameAr || h?.ownerRiderNameEn || h?.ownerRiderNameAr)
+      : (r.ownerRiderNameAr || r.ownerRiderNameEn || h?.ownerRiderNameAr || h?.ownerRiderNameEn);
+    const riderName = isEn
+      ? (r.actualRiderNameEn || r.actualRiderNameAr || h?.actualRiderNameEn || h?.actualRiderNameAr)
+      : (r.actualRiderNameAr || r.actualRiderNameEn || h?.actualRiderNameAr || h?.actualRiderNameEn);
+    return { h, extId, code, ownerName, riderName };
   };
 
   const kindBadge = (k: JahezApprovalKind) => {
@@ -362,7 +420,10 @@ export default function JahezApprovalsPage() {
           {can("jahez.earnings.manage") && (
             <Button
               variant="secondary"
-              onClick={() => setIsEarningsOpen(true)}
+              onClick={() => {
+                setEarnReason(isEn ? "Earnings statement and 15% commission calculation" : "احتساب بيان أرباح وعمولة بنسبة 15%");
+                setIsEarningsOpen(true);
+              }}
               className="text-purple-700 border-purple-300 hover:bg-purple-50 flex items-center gap-1.5"
             >
               <Calculator className="h-4 w-4" />
@@ -373,7 +434,11 @@ export default function JahezApprovalsPage() {
           {can("jahez.requests.create") && (
             <Button
               variant="primary"
-              onClick={() => setIsCreateOpen(true)}
+              onClick={() => {
+                setReqKind(JahezApprovalKind.FeeException);
+                setReqReason(getDefaultReasonForKind(JahezApprovalKind.FeeException));
+                setIsCreateOpen(true);
+              }}
               className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="h-4 w-4" />
@@ -415,7 +480,7 @@ export default function JahezApprovalsPage() {
               <tr>
                 <th className="px-4 py-3">{isEn ? "Created At" : "تاريخ الطلب"}</th>
                 <th className="px-4 py-3">{isEn ? "Kind" : "نوع الاعتماد"}</th>
-                <th className="px-4 py-3">{isEn ? "Handover ID" : "معرف التسليم"}</th>
+                <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
                 <th className="px-4 py-3">{isEn ? "Status" : "الحالة"}</th>
                 <th className="px-4 py-3">{isEn ? "Requested By" : "مقدم الطلب"}</th>
                 <th className="px-4 py-3">{isEn ? "Details" : "تفاصيل القرار"}</th>
@@ -449,8 +514,9 @@ export default function JahezApprovalsPage() {
                       ? can("jahez.resets.approve")
                       : can("jahez.requests.approve");
 
-                  const canDecide = isPendingStatus && canDecideKind && !isCreator;
+                  const canDecide = isPendingStatus && can("jahez.read") && canDecideKind && !isCreator;
                   const canCancel = isPendingStatus && isCreator && can("jahez.requests.create");
+                  const info = getHandoverInfo(r);
 
                   return (
                     <tr key={r.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
@@ -460,15 +526,29 @@ export default function JahezApprovalsPage() {
 
                       <td className="px-4 py-3">{kindBadge(r.kind)}</td>
 
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {r.handoverId.slice(0, 8)}...
+                      <td className="px-4 py-3">
+                        <span className="font-bold text-gray-900 dark:text-white block font-mono">
+                          {info.extId ? `[${info.extId}]` : info.code || "-"}
+                        </span>
+                        {info.code && info.code !== info.extId && (
+                          <span className="text-xs text-emerald-600 block">
+                            {info.code}
+                          </span>
+                        )}
+                        {info.ownerName && (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
+                            {info.ownerName}
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3">{statusBadge(r.status)}</td>
 
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                        {r.requestedByUserId.slice(0, 8)}...
-                        {isCreator && <span className="text-[10px] text-purple-600 block">(أنت)</span>}
+                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 font-medium">
+                        {(isEn
+                          ? r.requestedByUserNameEn || r.requestedByUserNameAr
+                          : r.requestedByUserNameAr || r.requestedByUserNameEn) || (isCreator ? (isEn ? "You" : "أنت") : (isEn ? "User" : "المستخدم"))}
+                        {isCreator && <span className="text-[10px] text-purple-600 block font-normal">(أنت)</span>}
                       </td>
 
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
@@ -476,7 +556,14 @@ export default function JahezApprovalsPage() {
                           <span>إعفاء: <strong>{r.waiverAmount} ر.س</strong></span>
                         )}
                         {r.kind === JahezApprovalKind.FreeSwitch && (
-                          <span>حساب بديل: <strong className="font-mono">{r.targetAccountId?.slice(0, 8)}...</strong></span>
+                          <span>
+                            {isEn ? "Target Account: " : "حساب بديل: "}
+                            <strong>
+                              {r.targetAccount?.externalAccountId
+                                ? `[${r.targetAccount.externalAccountId}]`
+                                : r.targetAccount?.code || (availableAccounts.find((a) => a.id === r.targetAccountId)?.code) || "-"}
+                            </strong>
+                          </span>
                         )}
                         {r.kind === JahezApprovalKind.PercentageCommission && (
                           <span>فترة: {r.fromDate} → {r.toDate}</span>
@@ -497,7 +584,7 @@ export default function JahezApprovalsPage() {
                               variant="primary"
                               onClick={() => {
                                 setDecidingRequest(r);
-                                setDecisionReason("");
+                                setDecisionReason(isEn ? "Approved per financial policies and controls" : "اعتماد الطلب وفق الضوابط والسياسات المالية");
                               }}
                               className="bg-purple-600 hover:bg-purple-700 text-white text-xs py-1 px-2.5 h-8 flex items-center gap-1"
                             >
@@ -540,10 +627,16 @@ export default function JahezApprovalsPage() {
             <SearchableSelect
               value={reqHandoverId}
               onChange={(val) => setReqHandoverId(val)}
-              options={handovers.map((h) => ({
-                value: h.id,
-                label: `حساب [${h.externalAccountId || h.id.slice(0, 8)}] (${h.commissionStartsOn})`,
-              }))}
+              options={handovers.map((h) => {
+                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
+                const rider = isEn
+                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
+                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
+                return {
+                  value: h.id,
+                  label: `${isEn ? "Account" : "حساب"} [${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                };
+              })}
             />
           </div>
 
@@ -553,7 +646,11 @@ export default function JahezApprovalsPage() {
             </label>
             <select
               value={reqKind}
-              onChange={(e) => setReqKind(Number(e.target.value) as JahezApprovalKind)}
+              onChange={(e) => {
+                const newKind = Number(e.target.value) as JahezApprovalKind;
+                setReqKind(newKind);
+                setReqReason(getDefaultReasonForKind(newKind));
+              }}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             >
               <option value={JahezApprovalKind.FeeException}>1 - إعفاء من رسوم الحساب</option>
@@ -766,7 +863,15 @@ export default function JahezApprovalsPage() {
             <Button
               type="button"
               variant="danger"
-              onClick={() => handleDecide(false)}
+              onClick={() => {
+                const isApprovedDefault =
+                  decisionReason === "اعتماد الطلب وفق الضوابط والسياسات المالية" ||
+                  decisionReason === "Approved per financial policies and controls";
+                const rejectReason = isApprovedDefault
+                  ? (isEn ? "Rejected per administration decision" : "رفض الطلب لعدم استيفاء الشروط")
+                  : decisionReason;
+                handleDecide(false, rejectReason);
+              }}
               disabled={isDeciding}
             >
               {isDeciding ? "جارٍ الحفظ..." : "رفض الطلب"}
@@ -810,10 +915,16 @@ export default function JahezApprovalsPage() {
             <SearchableSelect
               value={earnHandoverId}
               onChange={(val) => setEarnHandoverId(val)}
-              options={handovers.map((h) => ({
-                value: h.id,
-                label: `حساب [${h.externalAccountId || h.id.slice(0, 8)}] (${h.commissionStartsOn})`,
-              }))}
+              options={handovers.map((h) => {
+                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
+                const rider = isEn
+                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
+                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
+                return {
+                  value: h.id,
+                  label: `${isEn ? "Account" : "حساب"} [${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                };
+              })}
             />
           </div>
 

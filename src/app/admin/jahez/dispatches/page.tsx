@@ -83,10 +83,29 @@ export default function JahezDailyDispatchesPage() {
       data: dispatches,
       columns: [
         { header: isEn ? "Date" : "تاريخ التشغيل", accessor: "date" },
-        { header: isEn ? "Driver ID" : "رقم الحساب الخارجي", accessor: (d) => d.externalAccountId ?? "-" },
-        { header: isEn ? "Rider ID" : "معرف المندوب", accessor: "riderProfileId" },
+        {
+          header: isEn ? "Driver ID" : "رقم الحساب الخارجي",
+          accessor: (d) => d.account?.externalAccountId || d.externalAccountId || d.account?.code || "-",
+        },
+        {
+          header: isEn ? "Account Code" : "رمز الحساب",
+          accessor: (d) => d.account?.code || "-",
+        },
+        {
+          header: isEn ? "Owner Name" : "صاحب الحساب",
+          accessor: (d) =>
+            (isEn
+              ? d.ownerRiderNameEn || d.ownerRiderNameAr
+              : d.ownerRiderNameAr || d.ownerRiderNameEn) || "-",
+        },
+        {
+          header: isEn ? "Actual Rider" : "المندوب الفعلي",
+          accessor: (d) =>
+            (isEn
+              ? d.actualRiderNameEn || d.actualRiderNameAr
+              : d.actualRiderNameAr || d.actualRiderNameEn) || "-",
+        },
         { header: isEn ? "Orders Count" : "عدد الطلبات", accessor: "count" },
-        { header: isEn ? "Handover ID" : "معرف التسليم", accessor: "handoverId" },
       ],
     });
   };
@@ -94,14 +113,24 @@ export default function JahezDailyDispatchesPage() {
   const filteredDispatches = useMemo(() => {
     if (!search) return dispatches;
     const term = search.toLowerCase();
-    return dispatches.filter(
-      (d) =>
-        (d.externalAccountId && d.externalAccountId.toLowerCase().includes(term)) ||
+    return dispatches.filter((d) => {
+      const riderName = (
+        isEn
+          ? d.actualRiderNameEn || d.actualRiderNameAr || d.ownerRiderNameEn || d.ownerRiderNameAr
+          : d.actualRiderNameAr || d.actualRiderNameEn || d.ownerRiderNameAr || d.ownerRiderNameEn
+      )?.toLowerCase() || "";
+      const accCode = (d.account?.code || "").toLowerCase();
+      const extId = (d.account?.externalAccountId || d.externalAccountId || "").toLowerCase();
+      return (
+        extId.includes(term) ||
+        accCode.includes(term) ||
         d.riderProfileId.toLowerCase().includes(term) ||
         d.handoverId.toLowerCase().includes(term) ||
-        d.date.includes(term),
-    );
-  }, [dispatches, search]);
+        d.date.includes(term) ||
+        riderName.includes(term)
+      );
+    });
+  }, [dispatches, search, isEn]);
 
   const totalOrders = dispatches.reduce((sum, d) => sum + d.count, 0);
   const uniqueRiders = new Set(dispatches.map((d) => d.riderProfileId)).size;
@@ -272,24 +301,22 @@ export default function JahezDailyDispatchesPage() {
             <thead className="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/60 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800">
               <tr>
                 <th className="px-4 py-3">{isEn ? "Date" : "تاريخ التشغيل"}</th>
-                <th className="px-4 py-3">{isEn ? "Driver ID" : "رقم الحساب الخارجي"}</th>
+                <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
                 <th className="px-4 py-3">{isEn ? "Actual Rider Profile" : "المندوب الفعلي"}</th>
                 <th className="px-4 py-3">{isEn ? "Dispatches Count" : "عدد الطلبات"}</th>
-                <th className="px-4 py-3">{isEn ? "Handover ID" : "معرف التسليم"}</th>
-                <th className="px-4 py-3">{isEn ? "Account ID" : "معرف الحساب"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-10 text-gray-500">
+                  <td colSpan={4} className="text-center py-10 text-gray-500">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto text-emerald-600 mb-2" />
                     {isEn ? "Loading dispatches report..." : "جارٍ استعلام تقرير الطلبات اليومية..."}
                   </td>
                 </tr>
               ) : filteredDispatches.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400">
+                  <td colSpan={4} className="text-center py-12 text-gray-400">
                     <Truck className="h-10 w-10 mx-auto text-gray-300 mb-2" />
                     <p className="font-medium text-gray-600 dark:text-gray-300">
                       {isEn ? "No dispatches recorded in this date range" : "لا توجد طلبات مسجلة في هذا النطاق الزمني"}
@@ -303,12 +330,28 @@ export default function JahezDailyDispatchesPage() {
                       {d.date}
                     </td>
 
-                    <td className="px-4 py-3 font-mono font-bold text-gray-900 dark:text-white">
-                      {d.externalAccountId ? `[${d.externalAccountId}]` : "-"}
+                    <td className="px-4 py-3">
+                      <span className="font-mono font-bold text-gray-900 dark:text-white block">
+                        {d.account?.externalAccountId || d.externalAccountId
+                          ? `[${d.account?.externalAccountId || d.externalAccountId}]`
+                          : d.account?.code || "-"}
+                      </span>
+                      {d.account?.code && d.account.code !== (d.account.externalAccountId || d.externalAccountId) && (
+                        <span className="block text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                          {d.account.code}
+                        </span>
+                      )}
+                      {(isEn ? (d.ownerRiderNameEn || d.ownerRiderNameAr) : (d.ownerRiderNameAr || d.ownerRiderNameEn)) && (
+                        <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
+                          {isEn ? (d.ownerRiderNameEn || d.ownerRiderNameAr) : (d.ownerRiderNameAr || d.ownerRiderNameEn)}
+                        </span>
+                      )}
                     </td>
 
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
-                      {d.riderProfileId.slice(0, 8)}...
+                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
+                      {(isEn
+                        ? d.actualRiderNameEn || d.actualRiderNameAr
+                        : d.actualRiderNameAr || d.actualRiderNameEn) || "-"}
                     </td>
 
                     <td className="px-4 py-3">
@@ -316,14 +359,6 @@ export default function JahezDailyDispatchesPage() {
                         <PackageCheck className="h-3.5 w-3.5 text-emerald-600" />
                         {d.count} {isEn ? "orders" : "طلب"}
                       </span>
-                    </td>
-
-                    <td className="px-4 py-3 font-mono text-xs text-gray-400">
-                      {d.handoverId.slice(0, 8)}...
-                    </td>
-
-                    <td className="px-4 py-3 font-mono text-xs text-gray-400">
-                      {d.accountId.slice(0, 8)}...
                     </td>
                   </tr>
                 ))

@@ -63,7 +63,7 @@ export default function JahezHandoversPage() {
     new Date().toISOString().slice(0, 16),
   );
   const [initialFeePayment, setInitialFeePayment] = useState<number>(0);
-  const [handoverReason, setHandoverReason] = useState("");
+  const [handoverReason, setHandoverReason] = useState("للعمل");
   const [isSubmittingNew, setIsSubmittingNew] = useState(false);
 
   // 2. Legacy Adoption Modal
@@ -73,7 +73,7 @@ export default function JahezHandoversPage() {
   const [legacyDebt, setLegacyDebt] = useState<number>(0);
   const [legacyFees, setLegacyFees] = useState<number>(0);
   const [legacyCommission, setLegacyCommission] = useState<number>(0);
-  const [legacyReason, setLegacyReason] = useState("");
+  const [legacyReason, setLegacyReason] = useState("ترحيل واعتماد حساب قائم قبل تطبيق النظام المالي الجديد");
   const [isSubmittingLegacy, setIsSubmittingLegacy] = useState(false);
   const [legacyAssignmentOptions, setLegacyAssignmentOptions] = useState<
     { value: string; label: string; startDate?: string }[]
@@ -85,7 +85,7 @@ export default function JahezHandoversPage() {
   const [closeEffectiveAt, setCloseEffectiveAt] = useState(
     new Date().toISOString().slice(0, 16),
   );
-  const [closeReason, setCloseReason] = useState("");
+  const [closeReason, setCloseReason] = useState("إنهاء تشغيل الحساب واستلام العهدة");
   const [isSubmittingClose, setIsSubmittingClose] = useState(false);
 
   // 4. Balance Drawer / Modal
@@ -202,6 +202,7 @@ export default function JahezHandoversPage() {
 
       await createJahezHandover(payload);
       setIsNewHandoverOpen(false);
+      setHandoverReason("للعمل");
       loadHandoversList();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "فشل إنشاء تسليم الحساب";
@@ -269,13 +270,37 @@ export default function JahezHandoversPage() {
     }
   };
 
+  const getRiderDisplayName = (item?: JahezHandover | JahezBalance | null) => {
+    if (!item) return "";
+    const name = isEn
+      ? (item.actualRiderNameEn || item.actualRiderNameAr)
+      : (item.actualRiderNameAr || item.actualRiderNameEn);
+    return name || "";
+  };
+
+  const getOwnerDisplayName = (item?: JahezHandover | JahezBalance | null) => {
+    if (!item) return "";
+    const name = isEn
+      ? (item.ownerRiderNameEn || item.ownerRiderNameAr)
+      : (item.ownerRiderNameAr || item.ownerRiderNameEn);
+    return name || "";
+  };
+
   const filteredHandovers = handovers.filter((h) => {
     if (!search) return true;
     const term = search.toLowerCase();
+    const rName = getRiderDisplayName(h).toLowerCase();
+    const oName = getOwnerDisplayName(h).toLowerCase();
+    const accCode = (h.account?.code || "").toLowerCase();
+    const extId = (h.account?.externalAccountId || h.externalAccountId || "").toLowerCase();
     return (
       h.id.toLowerCase().includes(term) ||
-      (h.externalAccountId && h.externalAccountId.toLowerCase().includes(term)) ||
-      h.riderProfileId.toLowerCase().includes(term)
+      h.accountId.toLowerCase().includes(term) ||
+      h.riderProfileId.toLowerCase().includes(term) ||
+      extId.includes(term) ||
+      accCode.includes(term) ||
+      rName.includes(term) ||
+      oName.includes(term)
     );
   });
 
@@ -285,8 +310,22 @@ export default function JahezHandoversPage() {
       data: handovers,
       columns: [
         { header: isEn ? "Handover ID" : "معرف التسليم", accessor: "id" },
-        { header: isEn ? "Driver ID" : "رقم الحساب الخارجي", accessor: (h) => h.externalAccountId ?? "-" },
-        { header: isEn ? "Rider ID" : "معرف المندوب", accessor: "riderProfileId" },
+        {
+          header: isEn ? "Driver ID" : "رقم الحساب الخارجي",
+          accessor: (h) => h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-",
+        },
+        {
+          header: isEn ? "Account Code" : "رمز الحساب",
+          accessor: (h) => h.account?.code || "-",
+        },
+        {
+          header: isEn ? "Owner Name" : "صاحب الحساب",
+          accessor: (h) => getOwnerDisplayName(h) || "-",
+        },
+        {
+          header: isEn ? "Actual Rider" : "المندوب الفعلي",
+          accessor: (h) => getRiderDisplayName(h) || h.riderProfileId,
+        },
         { header: isEn ? "Started At" : "تاريخ البدء", accessor: "startedAtUtc" },
         { header: isEn ? "Commission Starts" : "بدء العمولة", accessor: "commissionStartsOn" },
       ],
@@ -352,7 +391,14 @@ export default function JahezHandoversPage() {
           {can("jahez.handovers.manage") && (
             <Button
               variant="primary"
-              onClick={() => setIsNewHandoverOpen(true)}
+              onClick={() => {
+                setHandoverAccountId("");
+                setHandoverRiderId("");
+                setHandoverEffectiveAt(new Date().toISOString().slice(0, 16));
+                setInitialFeePayment(0);
+                setHandoverReason("للعمل");
+                setIsNewHandoverOpen(true);
+              }}
               className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="h-4 w-4" />
@@ -393,7 +439,7 @@ export default function JahezHandoversPage() {
           <table className="w-full text-sm text-right">
             <thead className="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/60 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800">
               <tr>
-                <th className="px-4 py-3">{isEn ? "Driver ID" : "رقم الحساب الخارجي"}</th>
+                <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
                 <th className="px-4 py-3">{isEn ? "Actual Rider Profile" : "المندوب الفعلي"}</th>
                 <th className="px-4 py-3">{isEn ? "Usage Status" : "حالة الاستخدام"}</th>
                 <th className="px-4 py-3">{isEn ? "Started At" : "تاريخ البدء"}</th>
@@ -425,15 +471,26 @@ export default function JahezHandoversPage() {
                   const isActive = !h.endedAtUtc;
                   return (
                     <tr key={h.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
-                      <td className="px-4 py-3 font-mono font-bold text-gray-900 dark:text-white">
-                        {h.externalAccountId ? `[${h.externalAccountId}]` : h.accountId.slice(0, 8)}
-                        <span className="block text-[11px] font-normal text-gray-400">
-                          {h.id.slice(0, 8)}...
+                      <td className="px-4 py-3">
+                        <span className="font-mono font-bold text-gray-900 dark:text-white block">
+                          {h.account?.externalAccountId || h.externalAccountId
+                            ? `[${h.account?.externalAccountId || h.externalAccountId}]`
+                            : h.account?.code || "-"}
                         </span>
+                        {h.account?.code && h.account.code !== (h.account.externalAccountId || h.externalAccountId) && (
+                          <span className="block text-xs font-medium text-emerald-600 dark:text-emerald-400 font-sans">
+                            {h.account.code}
+                          </span>
+                        )}
+                        {getOwnerDisplayName(h) && (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
+                            {getOwnerDisplayName(h)}
+                          </span>
+                        )}
                       </td>
 
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
-                        {h.riderProfileId.slice(0, 8)}...
+                      <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
+                        {getRiderDisplayName(h) || "-"}
                       </td>
 
                       <td className="px-4 py-3">
@@ -490,7 +547,7 @@ export default function JahezHandoversPage() {
                               onClick={() => {
                                 setClosingHandover(h);
                                 setCloseEffectiveAt(new Date().toISOString().slice(0, 16));
-                                setCloseReason("");
+                                setCloseReason(isEn ? "Handover termination and account clearance" : "إنهاء تشغيل الحساب واستلام العهدة");
                               }}
                               className="text-xs py-1 px-2.5 h-8 text-red-700 border-red-200 hover:bg-red-50 flex items-center gap-1"
                             >
@@ -867,7 +924,20 @@ export default function JahezHandoversPage() {
                 <div>
                   <span className="text-gray-400 block">رقم الحساب:</span>
                   <span className="font-bold text-gray-900 dark:text-white">
-                    {inspectBalance.externalAccountId ? `[${inspectBalance.externalAccountId}]` : inspectBalance.accountId.slice(0, 8)}
+                    {inspectBalance.account?.externalAccountId || inspectBalance.externalAccountId
+                      ? `[${inspectBalance.account?.externalAccountId || inspectBalance.externalAccountId}]`
+                      : inspectBalance.account?.code || "-"}
+                  </span>
+                  {inspectBalance.account?.code && inspectBalance.account.code !== (inspectBalance.account.externalAccountId || inspectBalance.externalAccountId) && (
+                    <span className="text-xs text-emerald-600 block">
+                      {inspectBalance.account.code}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-gray-400 block">المندوب:</span>
+                  <span className="font-bold text-gray-900 dark:text-white">
+                    {getRiderDisplayName(inspectBalance) || "-"}
                   </span>
                 </div>
                 <div>

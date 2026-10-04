@@ -589,13 +589,20 @@ export default function PlatformAccountsPage() {
 
     startTransition(async () => {
       try {
+        const payload: AccountUpsertRequest = {
+          ...accountFormData,
+          externalAccountId: !editingAccount
+            ? accountFormData.code
+            : (accountFormData.externalAccountId || accountFormData.code),
+        };
+
         if (editingAccount) {
           await updatePlatformAccount(editingAccount.id, {
-            ...accountFormData,
+            ...payload,
             rowVersion: editingAccount.rowVersion,
           });
         } else {
-          await createPlatformAccount(accountFormData);
+          await createPlatformAccount(payload);
         }
         setIsUpsertOpen(false);
         loadData();
@@ -1271,27 +1278,23 @@ export default function PlatformAccountsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-bold text-slate-700">
                 {t("platforms.accountCode")} <span className="text-red-500">*</span>
               </label>
               <Input
                 value={accountFormData.code}
-                onChange={(e) => setAccountFormData({ ...accountFormData, code: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAccountFormData((prev) => ({
+                    ...prev,
+                    code: val,
+                    ...(!editingAccount ? { externalAccountId: val } : {}),
+                  }));
+                }}
                 placeholder="KEETA-1001"
                 required
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">
-                {t("platforms.externalAccountId")}
-              </label>
-              <Input
-                value={accountFormData.externalAccountId || ""}
-                onChange={(e) => setAccountFormData({ ...accountFormData, externalAccountId: e.target.value })}
-                placeholder="KT-98421"
               />
             </div>
 
@@ -1301,7 +1304,7 @@ export default function PlatformAccountsPage() {
               </label>
               <Input
                 value={accountFormData.userName || ""}
-                onChange={(e) => setAccountFormData({ ...accountFormData, userName: e.target.value })}
+                onChange={(e) => setAccountFormData((prev) => ({ ...prev, userName: e.target.value }))}
                 placeholder="rider.account"
               />
             </div>

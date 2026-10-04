@@ -4,6 +4,8 @@ import type {
   NotificationFeed,
   NotificationItem,
   NotificationQueryRequest,
+  NotificationReadAllRequest,
+  NotificationReadAllResponse,
   NotificationStateAction,
   NotificationUnreadCountResponse,
 } from "./types";
@@ -106,5 +108,26 @@ export async function createNotification(
     method: "POST",
     body: JSON.stringify(payload),
     notifySuccess: "تم إنشاء الإشعار بنجاح",
+  });
+}
+
+/**
+ * Mark all accessible notifications as read in a single call.
+ * Uses POST /api/notifications/read-all.
+ * A JSON body is required; sends `{}` for default or `{ permissions }` if filtered.
+ */
+export async function markAllNotificationsRead(
+  request?: NotificationReadAllRequest | null,
+  options?: { suppressErrorToast?: boolean }
+): Promise<NotificationReadAllResponse> {
+  const body =
+    !request || request.permissions === undefined || request.permissions === null
+      ? {}
+      : { permissions: request.permissions };
+
+  return authFetch<NotificationReadAllResponse>("/api/notifications/read-all", {
+    method: "POST",
+    body: JSON.stringify(body),
+    suppressErrorToast: options?.suppressErrorToast,
   });
 }

@@ -42,7 +42,7 @@ export default function JahezDebtsPage() {
   const [debtPayment, setDebtPayment] = useState<number | "">("");
   const [commissionPayment, setCommissionPayment] = useState<number | "">("");
   const [countsAsSettlement, setCountsAsSettlement] = useState(true);
-  const [paymentReason, setPaymentReason] = useState("");
+  const [paymentReason, setPaymentReason] = useState("سداد مديونية مستحقة لمندوب جاهز");
   const [isPaying, setIsPaying] = useState(false);
 
   const loadDebts = async () => {
@@ -118,9 +118,28 @@ export default function JahezDebtsPage() {
       filename: `jahez_debts_${new Date().toISOString().slice(0, 10)}.xlsx`,
       data: balances,
       columns: [
-        { header: isEn ? "Handover ID" : "معرف التسليم", accessor: "handoverId" },
-        { header: isEn ? "External ID" : "رقم الحساب الخارجي", accessor: (b) => b.externalAccountId ?? "-" },
-        { header: isEn ? "Rider ID" : "معرف المندوب", accessor: "riderProfileId" },
+        {
+          header: isEn ? "Driver ID" : "رقم الحساب الخارجي",
+          accessor: (b) => b.account?.externalAccountId || b.externalAccountId || "-",
+        },
+        {
+          header: isEn ? "Account Code" : "رمز الحساب",
+          accessor: (b) => b.account?.code || "-",
+        },
+        {
+          header: isEn ? "Owner Name" : "صاحب الحساب",
+          accessor: (b) =>
+            (isEn
+              ? b.ownerRiderNameEn || b.ownerRiderNameAr
+              : b.ownerRiderNameAr || b.ownerRiderNameEn) || "-",
+        },
+        {
+          header: isEn ? "Actual Rider" : "المندوب الفعلي",
+          accessor: (b) =>
+            (isEn
+              ? b.actualRiderNameEn || b.actualRiderNameAr
+              : b.actualRiderNameAr || b.actualRiderNameEn) || "-",
+        },
         { header: isEn ? "Fees (SAR)" : "الرسوم", accessor: "fees" },
         { header: isEn ? "Platform Debt (SAR)" : "مديونية جاهز", accessor: "platformDebt" },
         { header: isEn ? "Total Receivable (SAR)" : "إجمالي الذمة", accessor: "totalReceivable" },
@@ -133,10 +152,20 @@ export default function JahezDebtsPage() {
   const filteredBalances = balances.filter((b) => {
     if (!search) return true;
     const term = search.toLowerCase();
+    const riderName = (
+      isEn
+        ? b.actualRiderNameEn || b.actualRiderNameAr || b.ownerRiderNameEn || b.ownerRiderNameAr
+        : b.actualRiderNameAr || b.actualRiderNameEn || b.ownerRiderNameAr || b.ownerRiderNameEn
+    )?.toLowerCase() || "";
+    const accCode = (b.account?.code || "").toLowerCase();
+    const extId = (b.account?.externalAccountId || b.externalAccountId || "").toLowerCase();
     return (
       b.handoverId.toLowerCase().includes(term) ||
-      (b.externalAccountId && b.externalAccountId.toLowerCase().includes(term)) ||
-      b.riderProfileId.toLowerCase().includes(term)
+      b.accountId.toLowerCase().includes(term) ||
+      b.riderProfileId.toLowerCase().includes(term) ||
+      extId.includes(term) ||
+      accCode.includes(term) ||
+      riderName.includes(term)
     );
   });
 
@@ -326,15 +355,26 @@ export default function JahezDebtsPage() {
                     <tr key={b.handoverId} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
                       <td className="px-4 py-3">
                         <span className="font-bold text-gray-900 dark:text-white block">
-                          {b.externalAccountId ? `[${b.externalAccountId}]` : b.accountId.slice(0, 8)}
+                          {b.account?.externalAccountId || b.externalAccountId
+                            ? `[${b.account?.externalAccountId || b.externalAccountId}]`
+                            : b.account?.code || "-"}
                         </span>
-                        <span className="text-[11px] font-mono text-gray-400">
-                          تسليم: {b.handoverId.slice(0, 8)}
-                        </span>
+                        {b.account?.code && b.account.code !== (b.account.externalAccountId || b.externalAccountId) && (
+                          <span className="text-xs text-emerald-600 block">
+                            {b.account.code}
+                          </span>
+                        )}
+                        {(isEn ? (b.ownerRiderNameEn || b.ownerRiderNameAr) : (b.ownerRiderNameAr || b.ownerRiderNameEn)) && (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
+                            {isEn ? (b.ownerRiderNameEn || b.ownerRiderNameAr) : (b.ownerRiderNameAr || b.ownerRiderNameEn)}
+                          </span>
+                        )}
                       </td>
 
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
-                        {b.riderProfileId.slice(0, 8)}...
+                      <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
+                        {(isEn
+                          ? b.actualRiderNameEn || b.actualRiderNameAr
+                          : b.actualRiderNameAr || b.actualRiderNameEn) || "-"}
                       </td>
 
                       <td className="px-4 py-3 font-semibold text-blue-600">
@@ -423,7 +463,12 @@ export default function JahezDebtsPage() {
           <form onSubmit={handleSubmitPayment} className="space-y-4">
             <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-xs">
               <div className="font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                حساب: [{selectedBalance.externalAccountId || selectedBalance.accountId.slice(0, 8)}]
+                حساب: [{selectedBalance.account?.externalAccountId || selectedBalance.externalAccountId || selectedBalance.account?.code || "-"}]
+                {(selectedBalance.actualRiderNameAr || selectedBalance.ownerRiderNameAr) && (
+                  <span className="text-gray-500 font-normal mr-2">
+                    - {selectedBalance.actualRiderNameAr || selectedBalance.ownerRiderNameAr}
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-white p-2 rounded border dark:bg-gray-900">
