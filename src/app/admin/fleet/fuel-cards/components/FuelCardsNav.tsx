@@ -8,12 +8,13 @@ import {
   RefreshCw,
   Upload,
   CreditCard,
+  CalendarRange,
   BarChart3,
   History,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
-export type FuelCardsTab = "cards" | "monthly" | "import" | "history";
+export type FuelCardsTab = "cards" | "period-usage" | "monthly" | "import" | "history";
 
 interface FuelCardsNavProps {
   activeTab: FuelCardsTab;
@@ -36,6 +37,7 @@ export function FuelCardsNav({
 }: FuelCardsNavProps) {
   const tabs: { id: FuelCardsTab; label: string; icon: React.ElementType }[] = [
     { id: "cards", label: "بطاقات الوقود", icon: CreditCard },
+    { id: "period-usage", label: "استهلاك الفترة", icon: CalendarRange },
     { id: "monthly", label: "الاستهلاك الشهري", icon: BarChart3 },
     { id: "import", label: "استيراد الملفات", icon: Upload },
     { id: "history", label: "سجل الاستيراد", icon: History },

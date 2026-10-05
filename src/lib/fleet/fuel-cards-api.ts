@@ -118,6 +118,55 @@ export interface FuelMonthlyUsagePage {
   totalAmount: number;
 }
 
+export interface FuelCardPeriodMonth {
+  reportMonth: string;
+  totalLiters: number;
+  totalAmount: number;
+}
+
+export interface FuelCardPeriodAssignment {
+  assignmentId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  from: string;
+  to: string;
+}
+
+export interface FuelCardPeriodRider {
+  riderProfileId: string;
+  employeeId: string;
+  riderNameAr: string | null;
+  riderNameEn: string | null;
+  totalLiters: number;
+  totalAmount: number;
+  assignments: FuelCardPeriodAssignment[];
+  usageMonths: FuelCardPeriodMonth[];
+}
+
+export interface FuelCardPeriodUsage {
+  fuelCardId: string;
+  provider: FuelProvider;
+  providerNameAr: string;
+  cardNumber: string;
+  plateNumberText: string | null;
+  totalLiters: number;
+  totalAmount: number;
+  riders: FuelCardPeriodRider[];
+}
+
+export interface FuelCardPeriodUsagePage {
+  items: FuelCardPeriodUsage[];
+  from: string;
+  to: string;
+  usageMonthFrom: string;
+  usageMonthTo: string;
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalLiters: number;
+  totalAmount: number;
+}
+
 export interface FuelImportRowError {
   rowNumber: number;
   cardNumber: string | null;
@@ -340,6 +389,58 @@ export async function getAllFuelMonthlyUsage(params: {
       pagePromises.push(
         getFuelMonthlyUsage({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
           console.warn(`Failed to fetch fuel monthly usage page ${p}:`, err);
+          return null;
+        })
+      );
+    }
+    const remainingResults = await Promise.all(pagePromises);
+    for (const res of remainingResults) {
+      if (res?.items) {
+        allItems = allItems.concat(res.items);
+      }
+    }
+  }
+
+  return allItems;
+}
+
+export async function getFuelCardPeriodUsage(params: {
+  from: string;
+  to: string;
+  provider?: FuelProvider;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<FuelCardPeriodUsagePage> {
+  const query = new URLSearchParams();
+  query.set("from", params.from);
+  query.set("to", params.to);
+  if (params.provider) query.set("provider", params.provider);
+  if (params.search) query.set("search", params.search);
+  if (params.page) query.set("page", params.page.toString());
+  if (params.pageSize) query.set("pageSize", params.pageSize.toString());
+  return authFetch<FuelCardPeriodUsagePage>(`/api/fuel-cards/period-usage?${query.toString()}`);
+}
+
+export async function getAllFuelCardPeriodUsage(params: {
+  from: string;
+  to: string;
+  provider?: FuelProvider;
+  search?: string;
+}): Promise<FuelCardPeriodUsage[]> {
+  const pageSize = 100;
+  const firstRes = await getFuelCardPeriodUsage({ ...params, page: 1, pageSize });
+  let allItems = firstRes?.items || [];
+  const totalCount = firstRes?.totalCount ?? allItems.length;
+
+  if (totalCount > allItems.length) {
+    const actualPageSize = firstRes?.pageSize || pageSize;
+    const totalPages = Math.ceil(totalCount / actualPageSize);
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getFuelCardPeriodUsage({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
+          console.warn(`Failed to fetch fuel card period usage page ${p}:`, err);
           return null;
         })
       );

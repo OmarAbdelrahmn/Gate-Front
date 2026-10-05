@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { FuelCard } from "@/lib/fleet/fuel-cards-api";
 import { FuelCardsNav, FuelCardsTab } from "./components/FuelCardsNav";
 import { FuelCardsListView } from "./components/FuelCardsListView";
+import { FuelCardPeriodUsageView } from "./components/FuelCardPeriodUsageView";
 import { FuelMonthlyUsageView } from "./components/FuelMonthlyUsageView";
 import { FuelImportView } from "./components/FuelImportView";
 import { FuelImportHistoryView } from "./components/FuelImportHistoryView";
@@ -97,6 +98,13 @@ export default function FuelCardsPage() {
           onOpenDetail={(cardId) => setDetailModalCardId(cardId)}
           onOpenChangeSponsor={(card) => setChangeSponsorCard(card)}
           onOpenChangeCity={(card) => setChangeCityCard(card)}
+        />
+      )}
+
+      {activeTab === "period-usage" && (
+        <FuelCardPeriodUsageView
+          key={refreshKey}
+          onOpenDetail={(cardId) => setDetailModalCardId(cardId)}
         />
       )}
 
