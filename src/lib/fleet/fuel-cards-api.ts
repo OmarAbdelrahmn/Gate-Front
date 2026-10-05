@@ -90,10 +90,11 @@ export interface FuelMonthlyUsage {
   cardNumber: string;
   plateNumberText: string | null;
   reportMonth: string;
-  riderProfileId: string;
-  employeeId: string;
-  riderNameAr: string;
+  riderProfileId: string | null;
+  employeeId: string | null;
+  riderNameAr: string | null;
   riderNameEn: string | null;
+  needsReview: boolean;
   totalLiters: number;
   totalAmount: number;
   amountBeforeTax: number | null;
@@ -111,6 +112,39 @@ export interface FuelMonthlyUsage {
 export interface FuelMonthlyUsagePage {
   items: FuelMonthlyUsage[];
   month: string;
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalLiters: number;
+  totalAmount: number;
+  unassignedCount?: number;
+  unassignedTotalLiters?: number;
+  unassignedTotalAmount?: number;
+}
+
+export interface FuelUnassignedUsage {
+  usageId: string;
+  fuelCardId: string;
+  provider: FuelProvider;
+  cardNumber: string;
+  plateNumberText: string | null;
+  cardNotes: string | null;
+  reportMonth: string;
+  totalLiters: number;
+  totalAmount: number;
+  transactionCount: number | null;
+  firstTransactionAtUtc: string | null;
+  lastTransactionAtUtc: string | null;
+  lastImportId: string;
+  originalFileName: string;
+  importedAtUtc: string;
+  reviewReason: "card_not_assigned";
+}
+
+export interface FuelUnassignedUsagePage {
+  items: FuelUnassignedUsage[];
+  from: string;
+  to: string;
   page: number;
   pageSize: number;
   totalCount: number;
@@ -389,6 +423,58 @@ export async function getAllFuelMonthlyUsage(params: {
       pagePromises.push(
         getFuelMonthlyUsage({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
           console.warn(`Failed to fetch fuel monthly usage page ${p}:`, err);
+          return null;
+        })
+      );
+    }
+    const remainingResults = await Promise.all(pagePromises);
+    for (const res of remainingResults) {
+      if (res?.items) {
+        allItems = allItems.concat(res.items);
+      }
+    }
+  }
+
+  return allItems;
+}
+
+export async function getFuelUnassignedUsage(params: {
+  from: string;
+  to: string;
+  provider?: FuelProvider;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<FuelUnassignedUsagePage> {
+  const query = new URLSearchParams();
+  query.set("from", params.from);
+  query.set("to", params.to);
+  if (params.provider) query.set("provider", params.provider);
+  if (params.search) query.set("search", params.search);
+  if (params.page) query.set("page", params.page.toString());
+  if (params.pageSize) query.set("pageSize", params.pageSize.toString());
+  return authFetch<FuelUnassignedUsagePage>(`/api/fuel-cards/unassigned-usage?${query.toString()}`);
+}
+
+export async function getAllFuelUnassignedUsage(params: {
+  from: string;
+  to: string;
+  provider?: FuelProvider;
+  search?: string;
+}): Promise<FuelUnassignedUsage[]> {
+  const pageSize = 100;
+  const firstRes = await getFuelUnassignedUsage({ ...params, page: 1, pageSize });
+  let allItems = firstRes?.items || [];
+  const totalCount = firstRes?.totalCount ?? allItems.length;
+
+  if (totalCount > allItems.length) {
+    const actualPageSize = firstRes?.pageSize || pageSize;
+    const totalPages = Math.ceil(totalCount / actualPageSize);
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getFuelUnassignedUsage({ ...params, page: p, pageSize: actualPageSize }).catch((err) => {
+          console.warn(`Failed to fetch unassigned fuel usage page ${p}:`, err);
           return null;
         })
       );

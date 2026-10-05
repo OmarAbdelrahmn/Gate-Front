@@ -67,7 +67,12 @@ export function FuelCardDetailsModal({
         })
         .catch((err) => {
           console.error("Failed to load fuel card details:", err);
-          setError(err?.message || "بطاقة الوقود غير موجودة");
+          const code = err?.errorCode || err?.title || err?.code;
+          if (err?.status === 404 && code === "fuel.card_not_found") {
+            setError(err?.detail || "بطاقة الوقود غير موجودة أو ربما تم حذفها.");
+          } else {
+            setError(err?.detail || err?.message || "تعذر تحميل تفاصيل بطاقة الوقود");
+          }
         })
         .finally(() => setLoading(false));
     }

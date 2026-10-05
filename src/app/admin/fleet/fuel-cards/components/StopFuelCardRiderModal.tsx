@@ -70,7 +70,14 @@ export function StopFuelCardRiderModal({
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err?.message || "تعذر إنهاء تعيين البطاقة للمندوب");
+      const code = err?.errorCode || err?.title || err?.code;
+      if (err?.status === 409 || code === "fuel.concurrency_conflict") {
+        setError(err?.detail || "تعارض في التحديث: تم تعديل بيانات التعيين من قبل مستخدم آخر، يرجى إغلاق هذه النافذة وتحديث البيانات والمحاولة مجدداً.");
+      } else if (err?.status === 404 && code === "fuel.assignment_not_found") {
+        setError(err?.detail || "لا يوجد تعيين نشط لهذه البطاقة حالياً.");
+      } else {
+        setError(err?.detail || err?.message || "تعذر إنهاء تعيين البطاقة للمندوب");
+      }
     } finally {
       setLoading(false);
     }

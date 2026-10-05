@@ -95,7 +95,16 @@ export function AssignFuelCardRiderModal({
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err?.message || "تعذر إسناد البطاقة للمندوب");
+      const code = err?.errorCode || err?.title || err?.code;
+      if (code === "fuel.active_assignment_conflict") {
+        setError(err?.detail || "لا يمكن إسناد البطاقة لأنها مسندة بالفعل لمندوب آخر حالياً.");
+      } else if (code === "fuel.monthly_rider_conflict") {
+        setError(err?.detail || "لا يمكن إسناد بطاقة الوقود إلى رايدرين مختلفين في الشهر نفسه.");
+      } else if (code === "fuel.rider_unavailable") {
+        setError(err?.detail || "المندوب المحدد غير متاح أو ليس مندوباً نشطاً.");
+      } else {
+        setError(err?.detail || err?.message || "تعذر إسناد البطاقة للمندوب");
+      }
     } finally {
       setLoading(false);
     }

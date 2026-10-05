@@ -25,16 +25,22 @@ export default function FuelCardsPage() {
   const canRead =
     can("fuel.read") ||
     user?.roles?.includes("admin") ||
+    user?.roles?.includes("SYSTEM_ADMIN") ||
+    user?.roles?.includes("MANAGER") ||
     user?.userName === "omar";
 
   const canManage =
     can("fuel.manage") ||
     user?.roles?.includes("admin") ||
+    user?.roles?.includes("SYSTEM_ADMIN") ||
+    user?.roles?.includes("MANAGER") ||
     user?.userName === "omar";
 
   const canImport =
     can("fuel.import") ||
     user?.roles?.includes("admin") ||
+    user?.roles?.includes("SYSTEM_ADMIN") ||
+    user?.roles?.includes("MANAGER") ||
     user?.userName === "omar";
 
   const [activeTab, setActiveTab] = useState<FuelCardsTab>("cards");
@@ -108,7 +114,14 @@ export default function FuelCardsPage() {
         />
       )}
 
-      {activeTab === "monthly" && <FuelMonthlyUsageView key={refreshKey} />}
+      {activeTab === "monthly" && (
+        <FuelMonthlyUsageView
+          key={refreshKey}
+          canManage={canManage}
+          onOpenAssign={(card) => setAssignModalCard(card)}
+          onOpenDetail={(cardId) => setDetailModalCardId(cardId)}
+        />
+      )}
 
       {activeTab === "import" && (
         <FuelImportView onNavigateToCard={handleNavigateToCardFromImport} />

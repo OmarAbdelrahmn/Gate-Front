@@ -92,7 +92,8 @@ export function CreateFuelCardModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!cardNumber.trim()) {
+    const cleanedCardNumber = cardNumber.replace(/\s+/g, "");
+    if (!cleanedCardNumber) {
       setError("يرجى إدخال رقم البطاقة");
       return;
     }
@@ -111,7 +112,7 @@ export function CreateFuelCardModal({
     try {
       const created = await createFuelCard({
         provider,
-        cardNumber: cardNumber.trim(),
+        cardNumber: cleanedCardNumber,
         plateNumberText: plateNumberText.trim() || null,
         notes: notes.trim() || null,
         sponsorId,
@@ -128,7 +129,11 @@ export function CreateFuelCardModal({
       onClose();
     } catch (err: any) {
       const code = err?.errorCode || err?.title || err?.code;
-      if (err?.status === 404 && code === "fuel.operating_city_not_found") {
+      if (err?.status === 409 || code === "fuel.duplicate_card") {
+        setError(err?.detail || "رقم البطاقة هذا مسجل مسبقاً لدى نفس مزود الخدمة.");
+      } else if (err?.status === 404 && code === "fuel.sponsor_not_found") {
+        setError(err?.detail || "الكفيل المحدد غير موجود، يرجى إعادة اختيار الكفيل.");
+      } else if (err?.status === 404 && code === "fuel.operating_city_not_found") {
         setError(err?.detail || "مدينة التشغيل المحددة غير موجودة، يرجى إعادة اختيار المدينة.");
         fetchCities();
       } else {
