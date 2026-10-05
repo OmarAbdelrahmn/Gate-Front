@@ -225,26 +225,37 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
             cardTotalLiters: card.totalLiters,
             cardTotalAmount: card.totalAmount,
             riderName: "— (بدون مناديب)",
-            employeeId: "—",
             riderLiters: 0,
             riderAmount: 0,
-            assignments: "—",
+            assignmentFrom: "—",
+            assignmentTo: "—",
+            effectiveFrom: "—",
+            effectiveTo: "—",
             usageMonths: "—",
           });
         } else {
           card.riders.forEach((rider) => {
-            const assignText = (rider.assignments || [])
-              .map(
-                (a) =>
-                  `[في الفترة: ${a.from} إلى ${a.to} | الأصل: ${a.effectiveFrom} إلى ${
-                    a.effectiveTo || "مستمر"
-                  }]`
-              )
-              .join(" ; ");
+            const assignments = rider.assignments || [];
+            const assignmentFrom =
+              assignments.length > 0
+                ? assignments.map((a) => a.from).join(" ، ")
+                : "—";
+            const assignmentTo =
+              assignments.length > 0
+                ? assignments.map((a) => a.to).join(" ، ")
+                : "—";
+            const effectiveFrom =
+              assignments.length > 0
+                ? assignments.map((a) => a.effectiveFrom).join(" ، ")
+                : "—";
+            const effectiveTo =
+              assignments.length > 0
+                ? assignments.map((a) => a.effectiveTo || "مستمر").join(" ، ")
+                : "—";
 
             const monthsText = (rider.usageMonths || [])
-              .map((m) => `${m.reportMonth}: (${m.totalLiters}L / ${m.totalAmount} SAR)`)
-              .join(" ; ");
+              .map((m) => m.reportMonth)
+              .join(" ، ");
 
             exportRows.push({
               cardIdx: cardIdx + 1,
@@ -254,10 +265,12 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
               cardTotalLiters: card.totalLiters,
               cardTotalAmount: card.totalAmount,
               riderName: rider.riderNameAr || rider.riderNameEn || rider.riderProfileId,
-              employeeId: rider.employeeId || "—",
               riderLiters: rider.totalLiters,
               riderAmount: rider.totalAmount,
-              assignments: assignText || "بدون إسناد مباشر",
+              assignmentFrom,
+              assignmentTo,
+              effectiveFrom,
+              effectiveTo,
               usageMonths: monthsText || "—",
             });
           });
@@ -276,11 +289,13 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
           { header: "إجمالي لترات البطاقة", accessor: (row) => row.cardTotalLiters, width: 20 },
           { header: "إجمالي مبلغ البطاقة (ر.س)", accessor: (row) => row.cardTotalAmount, width: 22 },
           { header: "اسم المندوب", accessor: (row) => row.riderName, width: 24 },
-          { header: "الرقم الوظيفي", accessor: (row) => row.employeeId, width: 16, isText: true },
           { header: "لترات المندوب", accessor: (row) => row.riderLiters, width: 16 },
           { header: "مبلغ المندوب (ر.س)", accessor: (row) => row.riderAmount, width: 18 },
-          { header: "فترات الإسناد", accessor: (row) => row.assignments, width: 36 },
-          { header: "أشهر الاستهلاك المسجلة", accessor: (row) => row.usageMonths, width: 36 },
+          { header: "بداية الإسناد في الفترة", accessor: (row) => row.assignmentFrom, width: 20, isText: true },
+          { header: "نهاية الإسناد في الفترة", accessor: (row) => row.assignmentTo, width: 20, isText: true },
+          { header: "تاريخ بداية الإسناد الأصلي", accessor: (row) => row.effectiveFrom, width: 22, isText: true },
+          { header: "تاريخ نهاية الإسناد الأصلي", accessor: (row) => row.effectiveTo, width: 22, isText: true },
+          { header: "أشهر الاستهلاك المسجلة", accessor: (row) => row.usageMonths, width: 22, isText: true },
         ],
       });
     } catch (err) {
@@ -367,33 +382,6 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
           <p className="mt-1 text-[11px] text-[var(--muted)]">
             الصفحة {page} من {totalPages}
           </p>
-        </div>
-      </div>
-
-      {/* Cost Meaning Notice Banner */}
-      <div className="p-3.5 rounded-2xl border border-blue-200 dark:border-blue-900 bg-gradient-to-r from-blue-50/70 to-indigo-50/50 dark:from-blue-950/30 dark:to-indigo-950/20 text-blue-900 dark:text-blue-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-        <div className="flex items-start sm:items-center gap-2.5">
-          <Info size={18} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5 sm:mt-0" />
-          <div>
-            <div className="font-bold flex items-center gap-2 flex-wrap">
-              <span>
-                {isPartialRange
-                  ? "إجمالي الاستهلاك الشهري لكامل الأشهر المشمولة في نطاق هذا التاريخ"
-                  : "استهلاك الوقود محسوب وفق الأشهر التقويمية المشمولة"}
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-200/60 dark:bg-blue-800/60 font-mono font-normal">
-                {usageMonthFrom || from.slice(0, 7)} ➔ {usageMonthTo || to.slice(0, 7)}
-              </span>
-            </div>
-            <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 mt-0.5">
-              يتم حفظ استهلاك الوقود كإجمالي شهري واحد لكل بطاقة ومندوب، وتشمل المبالغ واللترات
-              كامل الأشهر التي يتقاطع معها هذا النطاق الزمني حتى وإن بدأ أو انتهى النطاق في منتصف الشهر.
-            </p>
-          </div>
-        </div>
-
-        <div className="text-[10px] text-blue-700/70 dark:text-blue-300/70 font-mono whitespace-nowrap self-end sm:self-auto">
-          Full monthly fuel totals for touched months
         </div>
       </div>
 
