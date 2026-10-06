@@ -161,12 +161,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       theme,
       density,
       can: (...permissions: (string | string[])[]) => {
-        const flat = permissions.flat();
+        const flat = permissions
+          .flat()
+          .filter((p): p is string => typeof p === "string" && Boolean(p.trim()));
         if (flat.length === 0) return true;
         return flat.every((p) => hasPermission(authorization, p));
       },
       canAny: (...permissions: (string | string[])[]) => {
-        const flat = permissions.flat();
+        const flat = permissions
+          .flat()
+          .filter((p): p is string => typeof p === "string" && Boolean(p.trim()));
         if (flat.length === 0) return true;
         return flat.some((p) => hasPermission(authorization, p));
       },

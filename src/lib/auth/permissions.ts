@@ -305,7 +305,7 @@ export function hasPermission(
   snapshot: AuthorizationSnapshot | null,
   permission: string,
 ): boolean {
-  if (!snapshot) return false;
+  if (!snapshot || typeof permission !== "string" || !permission.trim()) return false;
   if (snapshot.status && snapshot.status !== "Active") return false;
   if (snapshot.requiresPasswordChange) return false;
   const denied = new Set(

@@ -16,12 +16,13 @@ import { translate } from "@/lib/i18n";
 const permitted = (
   item: NavItem,
   role: Role,
-  can: (permission: string) => boolean,
+  can: (...permissions: (string | string[])[]) => boolean,
+  canAny: (...permissions: (string | string[])[]) => boolean,
 ) =>
   (!item.roles || item.roles.includes(role)) &&
   (!item.permission || can(item.permission)) &&
-  (!item.permissionsAny || item.permissionsAny.some(can)) &&
-  (!item.permissionsAll || item.permissionsAll.every(can));
+  (!item.permissionsAny || canAny(item.permissionsAny)) &&
+  (!item.permissionsAll || can(item.permissionsAll));
 
 export function Sidebar({
   role = "admin",
@@ -34,7 +35,7 @@ export function Sidebar({
 }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { user, can, isLoading, authorization, locale } = useAuth();
+  const { user, can, canAny, isLoading, authorization, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
 
   const defaultRoute = getDefaultRouteForUser(user);
@@ -73,9 +74,9 @@ export function Sidebar({
   const findActiveParentKey = () => {
     const parent = navigation.find(
       (item) =>
-        permitted(item, role, can) &&
+        permitted(item, role, can, canAny) &&
         item.children?.some(
-          (child) => permitted(child, role, can) && isChildActive(resolveItemHref(child)),
+          (child) => permitted(child, role, can, canAny) && isChildActive(resolveItemHref(child)),
         ),
     );
     return parent ? (parent.labelKey || parent.label) : null;
@@ -132,9 +133,9 @@ export function Sidebar({
       ? []
       : navigation.filter(
           (item) =>
-            permitted(item, role, can) &&
+            permitted(item, role, can, canAny) &&
             (!item.children ||
-              item.children.some((child) => permitted(child, role, can))),
+              item.children.some((child) => permitted(child, role, can, canAny))),
         );
 
   return (
@@ -178,7 +179,7 @@ export function Sidebar({
               const Icon = item.icon;
               const children =
                 item.children?.filter(
-                  (child) => Boolean(child.href) && permitted(child, role, can),
+                  (child) => Boolean(child.href) && permitted(child, role, can, canAny),
                 ) ?? [];
               const itemHref = resolveItemHref(item);
               const itemKey = item.labelKey || item.label;
