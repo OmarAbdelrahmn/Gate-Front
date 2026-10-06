@@ -88,7 +88,7 @@ export type ManagedRoleAssignmentRequest = {
 };
 export type ManagedDirectPermissionAssignmentRequest = {
   permissionKey: string;
-  effect: "Allow" | "Deny" | "Grant";
+  effect: "Grant" | "Deny";
   startsAtUtc: string | null;
   expiresAtUtc: string | null;
   reason: string | null;

@@ -1,8 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, Search, ShieldCheck, X, House, Layers, CheckCircle2, Sparkles } from "lucide-react";
+import { Plus, Save, Search, ShieldCheck, X, House, Layers, CheckCircle2, Sparkles, AlertTriangle } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
-import { getFamilyForPermissionKey, PermissionFamily } from "../../lib/auth/management-permissions";
+import {
+  getFamilyForPermissionKey,
+  MANAGEMENT_PERMISSION_FAMILIES,
+  PermissionFamily,
+} from "../../lib/auth/management-permissions";
 import { getUserAuthorization } from "../../lib/auth/authorization-api";
 import { permissionLabel } from "../../lib/permission-labels";
 import {
@@ -19,6 +23,7 @@ import {
   getRolePermissionKeys,
 } from "../../lib/users/api";
 import type {
+  AuthorizationScopeRequest,
   ManagedDirectPermissionAssignmentRequest,
   ManagedRoleAssignmentRequest,
   PermissionCatalogItem,
@@ -31,6 +36,308 @@ import { toast } from "../ui/Toast";
 type ExistingRole = ManagedRoleAssignmentRequest & { roleId: string; roleCode?: string };
 type ExistingPermission = ManagedDirectPermissionAssignmentRequest;
 
+export interface PermissionConflict {
+  permissionKey: string;
+  reason: string;
+}
+
+export interface PermissionValidationError {
+  permissionKey: string;
+  field: "permissionKey" | "effect" | "reason" | "startsAtUtc" | "expiresAtUtc" | "scopes";
+  message: string;
+}
+
+const legacyFamilyByPreviousKey = new Map<string, PermissionFamily>();
+for (const fam of MANAGEMENT_PERMISSION_FAMILIES) {
+  if (fam.previousKey) {
+    legacyFamilyByPreviousKey.set(fam.previousKey.toLowerCase(), fam);
+  }
+  legacyFamilyByPreviousKey.set(`${fam.family.toLowerCase()}.manage`, fam);
+}
+
+function areScopesEqual(
+  s1: AuthorizationScopeRequest[] | null | undefined,
+  s2: AuthorizationScopeRequest[] | null | undefined,
+): boolean {
+  const arr1 = s1 ?? [];
+  const arr2 = s2 ?? [];
+  if (arr1.length !== arr2.length) return false;
+  const sig1 = arr1.map((x) => `${x.type}:${x.targetId}`).sort().join("|");
+  const sig2 = arr2.map((x) => `${x.type}:${x.targetId}`).sort().join("|");
+  return sig1 === sig2;
+}
+
+export function normalizeDirectPermissions(
+  rawList: (ExistingPermission | any)[],
+  catalog: PermissionCatalogItem[],
+  fallbackScopes: {
+    isAllHousingScope: boolean;
+    isAllClientScope: boolean;
+    includesFuturePlatformContracts: boolean;
+  },
+): {
+  normalized: ManagedDirectPermissionAssignmentRequest[];
+  conflicts: PermissionConflict[];
+  unknownKeys: string[];
+} {
+  const expanded: ManagedDirectPermissionAssignmentRequest[] = [];
+  const unknownKeySet = new Set<string>();
+  const catalogKeys = new Set(catalog.map((c) => c.key));
+
+  for (const raw of rawList) {
+    const rawKey = String(raw?.permissionKey ?? "").trim();
+    if (!rawKey) continue;
+
+    // Convert "Allow" -> "Grant", "Grant" -> "Grant", "Deny" -> "Deny", reject others
+    let effect: "Grant" | "Deny";
+    const rawEff = String(raw.effect ?? "Grant").trim();
+    if (rawEff.toLowerCase() === "allow" || rawEff.toLowerCase() === "grant") {
+      effect = "Grant";
+    } else if (rawEff.toLowerCase() === "deny") {
+      effect = "Deny";
+    } else {
+      throw {
+        permissionKey: rawKey,
+        field: "effect",
+        message: `Invalid effect "${rawEff}". Expected "Grant" or "Deny".`,
+      } as PermissionValidationError;
+    }
+
+    const baseItem: ManagedDirectPermissionAssignmentRequest = {
+      permissionKey: rawKey,
+      effect,
+      startsAtUtc: raw.startsAtUtc ?? null,
+      expiresAtUtc: raw.expiresAtUtc ?? null,
+      reason: raw.reason ?? null,
+      isAllHousingScope: raw.isAllHousingScope ?? fallbackScopes.isAllHousingScope,
+      isAllClientScope: raw.isAllClientScope ?? fallbackScopes.isAllClientScope,
+      includesFuturePlatformContracts:
+        raw.includesFuturePlatformContracts ?? fallbackScopes.includesFuturePlatformContracts,
+      scopes: Array.isArray(raw.scopes) ? [...raw.scopes] : [],
+    };
+
+    // Check if known legacy .manage key
+    const legacyFam = legacyFamilyByPreviousKey.get(rawKey.toLowerCase());
+    if (legacyFam) {
+      // Replace with read, create, update, delete
+      const actionKeys = [legacyFam.read, legacyFam.create, legacyFam.update, legacyFam.delete];
+      for (const aKey of actionKeys) {
+        expanded.push({
+          ...baseItem,
+          permissionKey: aKey,
+          scopes: [...baseItem.scopes],
+        });
+      }
+    } else {
+      if (catalog.length > 0 && !catalogKeys.has(rawKey)) {
+        unknownKeySet.add(rawKey);
+      }
+      expanded.push(baseItem);
+    }
+  }
+
+  // Deduplicate and collapse equivalent assignments
+  const grouped = new Map<string, ManagedDirectPermissionAssignmentRequest[]>();
+  for (const item of expanded) {
+    const list = grouped.get(item.permissionKey);
+    if (list) {
+      list.push(item);
+    } else {
+      grouped.set(item.permissionKey, [item]);
+    }
+  }
+
+  const collapsed: ManagedDirectPermissionAssignmentRequest[] = [];
+  const conflicts: PermissionConflict[] = [];
+
+  for (const [key, items] of grouped.entries()) {
+    if (items.length === 1) {
+      collapsed.push(items[0]);
+      continue;
+    }
+
+    const first = items[0];
+    let hasConflict = false;
+    let conflictReason = "";
+
+    for (let i = 1; i < items.length; i++) {
+      const curr = items[i];
+      if (curr.effect !== first.effect) {
+        hasConflict = true;
+        conflictReason = `Conflicting effects (${first.effect} vs ${curr.effect})`;
+        break;
+      }
+      const sameHousing = Boolean(curr.isAllHousingScope) === Boolean(first.isAllHousingScope);
+      const sameClient = Boolean(curr.isAllClientScope) === Boolean(first.isAllClientScope);
+      const sameFuture =
+        Boolean(curr.includesFuturePlatformContracts) === Boolean(first.includesFuturePlatformContracts);
+      const sameScopes = areScopesEqual(curr.scopes, first.scopes);
+
+      if (!sameHousing || !sameClient || !sameFuture || !sameScopes) {
+        hasConflict = true;
+        conflictReason = `Conflicting access scopes or boundaries`;
+        break;
+      }
+    }
+
+    if (hasConflict) {
+      conflicts.push({
+        permissionKey: key,
+        reason: conflictReason,
+      });
+      collapsed.push(first);
+    } else {
+      // Equivalent assignments collapsed into one single entry, preferring non-empty dates/reason
+      const itemWithDates = items.find((x) => x.startsAtUtc || x.expiresAtUtc) || first;
+      collapsed.push({
+        ...first,
+        startsAtUtc: itemWithDates.startsAtUtc,
+        expiresAtUtc: itemWithDates.expiresAtUtc,
+        reason: itemWithDates.reason || first.reason,
+      });
+    }
+  }
+
+  return {
+    normalized: collapsed,
+    conflicts,
+    unknownKeys: Array.from(unknownKeySet),
+  };
+}
+
+export function preparePermissionAssignments(
+  assignPermissions: ExistingPermission[],
+  catalog: PermissionCatalogItem[],
+): ManagedDirectPermissionAssignmentRequest[] {
+  // 1. Expand legacy keys, convert "Allow" to "Grant", collapse equivalents, check conflicts
+  const { normalized, conflicts, unknownKeys } = normalizeDirectPermissions(
+    assignPermissions,
+    catalog,
+    { isAllHousingScope: true, isAllClientScope: true, includesFuturePlatformContracts: true },
+  );
+
+  // 2. Block unknown keys with a clear message instead of silently dropping them
+  if (unknownKeys.length > 0) {
+    const firstUnknown = unknownKeys[0];
+    throw {
+      permissionKey: firstUnknown,
+      field: "permissionKey",
+      message: `Unknown permission key "${firstUnknown}". It is not supported by the permission catalog.`,
+    } as PermissionValidationError;
+  }
+
+  // 3. Block conflicting assignments
+  if (conflicts.length > 0) {
+    const firstConf = conflicts[0];
+    throw {
+      permissionKey: firstConf.permissionKey,
+      field: "permissionKey",
+      message: `Conflict detected for "${firstConf.permissionKey}": ${firstConf.reason}. Please resolve this conflict before saving.`,
+    } as PermissionValidationError;
+  }
+
+  const catalogKeys = new Set(catalog.map((c) => c.key));
+  const seenKeys = new Set<string>();
+  const sanitizedOutput: ManagedDirectPermissionAssignmentRequest[] = [];
+
+  for (const item of normalized) {
+    // Validate supported key
+    if (catalog.length > 0 && !catalogKeys.has(item.permissionKey)) {
+      throw {
+        permissionKey: item.permissionKey,
+        field: "permissionKey",
+        message: `Permission "${item.permissionKey}" is not supported by the permission catalog.`,
+      } as PermissionValidationError;
+    }
+
+    // Validate unique key
+    if (seenKeys.has(item.permissionKey)) {
+      throw {
+        permissionKey: item.permissionKey,
+        field: "permissionKey",
+        message: `Duplicate permission key "${item.permissionKey}".`,
+      } as PermissionValidationError;
+    }
+    seenKeys.add(item.permissionKey);
+
+    // Validate effect
+    if (item.effect !== "Grant" && item.effect !== "Deny") {
+      throw {
+        permissionKey: item.permissionKey,
+        field: "effect",
+        message: `Invalid effect "${item.effect}". Must be "Grant" or "Deny".`,
+      } as PermissionValidationError;
+    }
+
+    // Validate reason <= 1000 characters
+    if (item.reason && item.reason.length > 1000) {
+      throw {
+        permissionKey: item.permissionKey,
+        field: "reason",
+        message: `Reason length (${item.reason.length}) exceeds 1,000 characters.`,
+      } as PermissionValidationError;
+    }
+
+    // Validate expiry later than supplied start
+    if (item.expiresAtUtc) {
+      if (!item.startsAtUtc) {
+        throw {
+          permissionKey: item.permissionKey,
+          field: "startsAtUtc",
+          message: `Expiry date is specified without a start date.`,
+        } as PermissionValidationError;
+      }
+      const startTime = new Date(item.startsAtUtc).getTime();
+      const expiryTime = new Date(item.expiresAtUtc).getTime();
+      if (isNaN(startTime) || isNaN(expiryTime)) {
+        throw {
+          permissionKey: item.permissionKey,
+          field: "expiresAtUtc",
+          message: `Invalid date format for start or expiry timestamp.`,
+        } as PermissionValidationError;
+      }
+      if (expiryTime <= startTime) {
+        throw {
+          permissionKey: item.permissionKey,
+          field: "expiresAtUtc",
+          message: `Expiry date must be later than the start date.`,
+        } as PermissionValidationError;
+      }
+    }
+
+    // Scope sanitization: preserve scope flags, remove individual scopes only when All is selected
+    let cleanScopes = Array.isArray(item.scopes) ? [...item.scopes] : [];
+    if (item.isAllHousingScope) {
+      cleanScopes = cleanScopes.filter((s) => s.type !== "Housing");
+    }
+    if (item.isAllClientScope) {
+      cleanScopes = cleanScopes.filter(
+        (s) => s.type !== "ClientPlatform" && s.type !== "ClientContract",
+      );
+    }
+    const seenScopeSigs = new Set<string>();
+    cleanScopes = cleanScopes.filter((s) => {
+      const sig = `${s.type}:${s.targetId}`;
+      if (seenScopeSigs.has(sig)) return false;
+      seenScopeSigs.add(sig);
+      return true;
+    });
+
+    sanitizedOutput.push({
+      permissionKey: item.permissionKey,
+      effect: item.effect,
+      startsAtUtc: item.startsAtUtc ?? null,
+      expiresAtUtc: item.expiresAtUtc ?? null,
+      reason: item.reason ?? null,
+      isAllHousingScope: item.isAllHousingScope,
+      isAllClientScope: item.isAllClientScope,
+      includesFuturePlatformContracts: item.includesFuturePlatformContracts,
+      scopes: cleanScopes,
+    });
+  }
+
+  return sanitizedOutput;
+}
 
 const roleRequest = (
   roleId: string,
@@ -74,6 +381,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
   const [assignPermissions, setAssignPermissions] = useState<
     ExistingPermission[]
   >([]);
+  const [detectedConflicts, setDetectedConflicts] = useState<PermissionConflict[]>([]);
   const [permissionSearch, setPermissionSearch] = useState("");
   const [selectedPermissionGroup, setSelectedPermissionGroup] =
     useState<string>("all");
@@ -93,6 +401,76 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
   const canSaveRoles = can("roles.create", "roles.update", "roles.delete");
   const canSavePermissions = can("permissions.create", "permissions.update", "permissions.delete");
 
+  // Handlers for explicit scope changes by the user
+  const handleClientScopeChange = (checked: boolean) => {
+    setIsAllClientScope(checked);
+    // Explicitly update each assignment's scope flags
+    setAssignPermissions((prev) =>
+      prev.map((p) => {
+        let updatedScopes = Array.isArray(p.scopes) ? [...p.scopes] : [];
+        if (checked) {
+          // Remove corresponding individual scopes only when user deliberately selects "All"
+          updatedScopes = updatedScopes.filter(
+            (s) => s.type !== "ClientPlatform" && s.type !== "ClientContract",
+          );
+        }
+        return {
+          ...p,
+          isAllClientScope: checked,
+          scopes: updatedScopes,
+        };
+      }),
+    );
+    setAssignRoles((prev) =>
+      prev.map((r) => {
+        let updatedScopes = Array.isArray(r.scopes) ? [...r.scopes] : [];
+        if (checked) {
+          updatedScopes = updatedScopes.filter(
+            (s) => s.type !== "ClientPlatform" && s.type !== "ClientContract",
+          );
+        }
+        return {
+          ...r,
+          isAllClientScope: checked,
+          scopes: updatedScopes,
+        };
+      }),
+    );
+  };
+
+  const handleFutureContractsChange = (checked: boolean) => {
+    setIncludesFuturePlatformContracts(checked);
+    setAssignPermissions((prev) =>
+      prev.map((p) => ({
+        ...p,
+        includesFuturePlatformContracts: checked,
+      })),
+    );
+    setAssignRoles((prev) =>
+      prev.map((r) => ({
+        ...r,
+        includesFuturePlatformContracts: checked,
+      })),
+    );
+  };
+
+  const resolveConflict = (key: string, chosenEffect: "Grant" | "Deny") => {
+    setAssignPermissions((prev) =>
+      prev.map((item) =>
+        item.permissionKey === key
+          ? {
+              ...item,
+              effect: chosenEffect,
+              isAllClientScope,
+              isAllHousingScope,
+              scopes: (isAllClientScope && isAllHousingScope) ? [] : item.scopes,
+            }
+          : item,
+      ),
+    );
+    setDetectedConflicts((prev) => prev.filter((c) => c.permissionKey !== key));
+  };
+
   useEffect(() => {
     if (!canReadRoles && !canReadPermissions && !canSaveRoles && !canSavePermissions) {
       setLoading(false);
@@ -107,15 +485,65 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         ]);
         const raw = auth as {
           roles?: (ExistingRole & { roleCode?: string })[];
-          directPermissions?: ExistingPermission[];
+          directPermissions?: (ExistingPermission | any)[];
         };
         const loadedRoles = raw.roles ?? [];
         const loadedPermissions = raw.directPermissions ?? [];
 
+        // Detect initial scope state from existing assignments if present
+        const firstRole = loadedRoles[0];
+        const firstPerm = loadedPermissions[0];
+        let initialHousing = true;
+        let initialClient = true;
+        let initialFuture = true;
+        if (firstRole) {
+          initialHousing = firstRole.isAllHousingScope ?? true;
+          initialClient = firstRole.isAllClientScope ?? true;
+          initialFuture = firstRole.includesFuturePlatformContracts ?? true;
+        } else if (firstPerm) {
+          initialHousing = firstPerm.isAllHousingScope ?? true;
+          initialClient = firstPerm.isAllClientScope ?? true;
+          initialFuture = firstPerm.includesFuturePlatformContracts ?? true;
+        }
+        setIsAllHousingScope(initialHousing);
+        setIsAllClientScope(initialClient);
+        setIncludesFuturePlatformContracts(initialFuture);
+
+        // Normalize and expand legacy keys on load so duplicates/legacy keys don't appear in the editor
+        const { normalized, conflicts, unknownKeys } = normalizeDirectPermissions(
+          loadedPermissions,
+          allPermissions,
+          {
+            isAllHousingScope: initialHousing,
+            isAllClientScope: initialClient,
+            includesFuturePlatformContracts: initialFuture,
+          },
+        );
+
         setAssignRoles(loadedRoles);
-        setAssignPermissions(loadedPermissions);
+        setAssignPermissions(normalized);
         setRoles(allRoles);
         setCatalog(allPermissions);
+        setDetectedConflicts(conflicts);
+
+        if (conflicts.length > 0) {
+          const conflictNames = conflicts.map((c) => c.permissionKey).join(", ");
+          const warningMsg =
+            locale === "en"
+              ? `Warning: Conflicting assignments detected for: ${conflictNames}. Please resolve before saving.`
+              : `تنبيه: تم رصد تعارض في صلاحيات: ${conflictNames}. يرجى حل التعارض قبل الحفظ.`;
+          setMessage(warningMsg);
+          toast.warning(locale === "en" ? "Permission Conflict" : "تعارض في الصلاحيات", warningMsg);
+        }
+
+        if (unknownKeys.length > 0) {
+          const unknownMsg =
+            locale === "en"
+              ? `Unknown or unmapped permission keys found: ${unknownKeys.join(", ")}. These must be resolved or removed.`
+              : `تم العثور على صلاحيات غير معروفة أو غير مدعومة: ${unknownKeys.join(", ")}. يجب معالجتها أو إزالتها.`;
+          setMessage(unknownMsg);
+          toast.error(locale === "en" ? "Unknown Permissions" : "صلاحيات غير معروفة", unknownMsg);
+        }
 
         // Pre-fetch permission keys for assigned roles in background so badges and unassign know their permissions
         if (loadedRoles.length > 0) {
@@ -143,19 +571,6 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
               // ignore
             }
           })();
-        }
-
-        // Detect initial scope state from existing assignments if present
-        const firstRole = loadedRoles[0];
-        const firstPerm = loadedPermissions[0];
-        if (firstRole) {
-          setIsAllHousingScope(firstRole.isAllHousingScope ?? true);
-          setIsAllClientScope(firstRole.isAllClientScope ?? true);
-          setIncludesFuturePlatformContracts(firstRole.includesFuturePlatformContracts ?? true);
-        } else if (firstPerm) {
-          setIsAllHousingScope(firstPerm.isAllHousingScope ?? true);
-          setIsAllClientScope(firstPerm.isAllClientScope ?? true);
-          setIncludesFuturePlatformContracts(firstPerm.includesFuturePlatformContracts ?? true);
         }
       } catch {
         setMessage(
@@ -203,6 +618,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         ];
       }
     });
+    setDetectedConflicts((prev) => prev.filter((c) => c.permissionKey !== key));
   };
 
   const togglePermissionGroupKeys = (groupItems: PermissionCatalogItem[]) => {
@@ -234,6 +650,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
 
   const clearAllPermissions = () => {
     setAssignPermissions([]);
+    setDetectedConflicts([]);
   };
 
   const toggleEffect = (key: string) => {
@@ -244,6 +661,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
           : item,
       ),
     );
+    setDetectedConflicts((prev) => prev.filter((c) => c.permissionKey !== key));
   };
 
   // Role toggle with automatic permission population
@@ -445,30 +863,26 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
           startsAtUtc: r.startsAtUtc ?? null,
           expiresAtUtc: r.expiresAtUtc ?? null,
           reason: r.reason ?? null,
-          isAllHousingScope,
-          isAllClientScope,
-          includesFuturePlatformContracts,
-          scopes: r.scopes ?? [],
+          isAllHousingScope: r.isAllHousingScope ?? isAllHousingScope,
+          isAllClientScope: r.isAllClientScope ?? isAllClientScope,
+          includesFuturePlatformContracts:
+            r.includesFuturePlatformContracts ?? includesFuturePlatformContracts,
+          scopes: (r.isAllHousingScope && r.isAllClientScope) ? [] : (r.scopes ?? []),
         }));
         promises.push(replaceUserRoles(userId, rolePayload));
       }
 
+      let preparedAssignments: ManagedDirectPermissionAssignmentRequest[] | null = null;
       if (canSavePermissions) {
-        const permPayload = assignPermissions.map((p) => ({
-          permissionKey: p.permissionKey,
-          effect: p.effect || "Grant",
-          startsAtUtc: p.startsAtUtc ?? null,
-          expiresAtUtc: p.expiresAtUtc ?? null,
-          reason: p.reason ?? null,
-          isAllHousingScope,
-          isAllClientScope,
-          includesFuturePlatformContracts,
-          scopes: p.scopes ?? [],
-        }));
-        promises.push(replaceUserPermissions(userId, permPayload));
+        preparedAssignments = preparePermissionAssignments(assignPermissions, catalog);
+        promises.push(replaceUserPermissions(userId, preparedAssignments));
       }
 
       await Promise.all(promises);
+      if (preparedAssignments) {
+        setAssignPermissions(preparedAssignments);
+        setDetectedConflicts([]);
+      }
 
       const msg =
         locale === "en"
@@ -480,13 +894,22 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         msg,
       );
     } catch (err: any) {
-      const msg =
-        err?.message ||
-        (locale === "en"
-          ? "Failed to save authorization changes."
-          : "تعذر حفظ تغييرات الأدوار والصلاحيات.");
-      setMessage(msg);
-      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
+      if (err && err.permissionKey && err.field) {
+        const errorDetails = `[${err.permissionKey}] (${err.field}): ${err.message}`;
+        setMessage(errorDetails);
+        toast.error(
+          locale === "en" ? "Validation Failed" : "فشل التحقق من الصلاحيات",
+          errorDetails,
+        );
+      } else {
+        const msg =
+          err?.message ||
+          (locale === "en"
+            ? "Failed to save authorization changes."
+            : "تعذر حفظ تغييرات الأدوار والصلاحيات.");
+        setMessage(msg);
+        toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -501,10 +924,11 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         startsAtUtc: r.startsAtUtc ?? null,
         expiresAtUtc: r.expiresAtUtc ?? null,
         reason: r.reason ?? null,
-        isAllHousingScope,
-        isAllClientScope,
-        includesFuturePlatformContracts,
-        scopes: r.scopes ?? [],
+        isAllHousingScope: r.isAllHousingScope ?? isAllHousingScope,
+        isAllClientScope: r.isAllClientScope ?? isAllClientScope,
+        includesFuturePlatformContracts:
+          r.includesFuturePlatformContracts ?? includesFuturePlatformContracts,
+        scopes: (r.isAllHousingScope && r.isAllClientScope) ? [] : (r.scopes ?? []),
       }));
       await replaceUserRoles(userId, rolePayload);
       const msg =
@@ -530,18 +954,10 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     setSaving(true);
     setMessage("");
     try {
-      const permPayload = assignPermissions.map((p) => ({
-        permissionKey: p.permissionKey,
-        effect: p.effect || "Grant",
-        startsAtUtc: p.startsAtUtc ?? null,
-        expiresAtUtc: p.expiresAtUtc ?? null,
-        reason: p.reason ?? null,
-        isAllHousingScope,
-        isAllClientScope,
-        includesFuturePlatformContracts,
-        scopes: p.scopes ?? [],
-      }));
-      await replaceUserPermissions(userId, permPayload);
+      const assignments = preparePermissionAssignments(assignPermissions, catalog);
+      await replaceUserPermissions(userId, assignments);
+      setAssignPermissions(assignments);
+      setDetectedConflicts([]);
       const msg =
         locale === "en"
           ? "Direct permissions saved successfully."
@@ -549,13 +965,22 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
       setMessage(msg);
       toast.success(locale === "en" ? "Permissions Saved" : "تم حفظ الصلاحيات", msg);
     } catch (err: any) {
-      const msg =
-        err?.message ||
-        (locale === "en"
-          ? "Failed to save permissions."
-          : "تعذر حفظ الصلاحيات.");
-      setMessage(msg);
-      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
+      if (err && err.permissionKey && err.field) {
+        const errorDetails = `[${err.permissionKey}] (${err.field}): ${err.message}`;
+        setMessage(errorDetails);
+        toast.error(
+          locale === "en" ? "Validation Failed" : "فشل التحقق من الصلاحيات",
+          errorDetails,
+        );
+      } else {
+        const msg =
+          err?.message ||
+          (locale === "en"
+            ? "Failed to save permissions."
+            : "تعذر حفظ الصلاحيات.");
+        setMessage(msg);
+        toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -626,7 +1051,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                 <input
                   type="checkbox"
                   checked={isAllClientScope}
-                  onChange={(e) => setIsAllClientScope(e.target.checked)}
+                  onChange={(e) => handleClientScopeChange(e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
                 />
                 <div className="flex-1 min-w-0">
@@ -648,7 +1073,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                 <input
                   type="checkbox"
                   checked={includesFuturePlatformContracts}
-                  onChange={(e) => setIncludesFuturePlatformContracts(e.target.checked)}
+                  onChange={(e) => handleFutureContractsChange(e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
                 />
                 <div className="flex-1 min-w-0">
@@ -663,6 +1088,66 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
               </label>
             </div>
           </section>
+
+          {/* Conflict Resolution Banner */}
+          {detectedConflicts.length > 0 && (
+            <section className="rounded-xl border border-red-300 bg-red-50/90 p-4 dark:border-red-900 dark:bg-red-950/40 space-y-3 shadow-xs">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-300 font-bold text-sm">
+                <AlertTriangle size={18} className="shrink-0 text-red-600" />
+                <span>
+                  {locale === "en"
+                    ? "Conflicting Permissions Detected"
+                    : "تم رصد تعارض في تعيينات الصلاحيات"}
+                </span>
+              </div>
+              <p className="text-xs text-red-600 dark:text-red-300 leading-relaxed">
+                {locale === "en"
+                  ? "Multiple duplicate assignments for the following permissions have conflicting effects or scopes. Please resolve each conflict before saving:"
+                  : "توجد تعيينات مكررة للصلاحيات التالية بقواعد أو نطاقات متعارضة. يرجى اختيار القاعدة المناسبة لكل صلاحية قبل الحفظ:"}
+              </p>
+              <div className="space-y-2">
+                {detectedConflicts.map((c) => (
+                  <div
+                    key={c.permissionKey}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-white p-3 dark:border-red-800/60 dark:bg-slate-900 text-xs"
+                  >
+                    <div>
+                      <span className="font-mono font-bold text-red-700 dark:text-red-300">
+                        {c.permissionKey}
+                      </span>
+                      <span className="text-[var(--muted)] ml-2">
+                        — {c.reason}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="secondary"
+                        onClick={() => resolveConflict(c.permissionKey, "Grant")}
+                        className="text-[11px] min-h-7 h-7 px-2.5 font-bold"
+                      >
+                        {locale === "en" ? "Set Grant" : "تعيين مسموح"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => resolveConflict(c.permissionKey, "Deny")}
+                        className="text-[11px] min-h-7 h-7 px-2.5 font-bold text-red-600 hover:text-red-700"
+                      >
+                        {locale === "en" ? "Set Deny" : "تعيين منع"}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => togglePermissionKey(c.permissionKey)}
+                        className="rounded p-1 text-slate-400 hover:text-red-600"
+                        title={locale === "en" ? "Remove" : "إزالة"}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {(canReadRoles || canSaveRoles) && (
             <section className="rounded-xl border border-[var(--border)] p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
