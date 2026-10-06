@@ -33,7 +33,6 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
   const [isPending, startTransition] = useTransition();
   const [assignmentId, setAssignmentId] = useState<string | null>(null);
   const [rowVersion, setRowVersion] = useState<string | null>(null);
-  const [minOdometer, setMinOdometer] = useState<number>(0);
   const [startedAtUtc, setStartedAtUtc] = useState<string | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
@@ -70,7 +69,6 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
         return;
       }
 
-      setMinOdometer(res.summary.currentOdometer || 0);
       setFormData((prev) => ({
         ...prev,
         endOdometer: res.summary.currentOdometer || 0,
@@ -86,9 +84,6 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
             foundRowVersion = assignment.rowVersion;
           }
           foundStartedAt = assignment.startedAtUtc;
-          if (assignment.startOdometer) {
-            setMinOdometer(assignment.startOdometer);
-          }
           if (assignment.isRealRider !== undefined) {
             setActiveAssignmentRealRider({
               isRealRider: assignment.isRealRider,
@@ -168,10 +163,10 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
       return null;
     }
 
-    if (formData.endOdometer < minOdometer) {
+    if (!Number.isSafeInteger(formData.endOdometer) || formData.endOdometer < 0) {
       toast.error(
         "قراءة عداد غير صحيحة",
-        `لا يمكن أن تكون قراءة العداد عند الإرجاع (${formData.endOdometer}) أقل من العداد عند الاستلام (${minOdometer}).`
+        "أدخل قراءة عداد صحيحة تساوي صفرًا أو أكثر."
       );
       return null;
     }
@@ -364,12 +359,17 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
               </label>
               <Input
                 type="number"
-                min={minOdometer}
+                min={0}
+                step={1}
                 value={formData.endOdometer}
-                onChange={(e) => setFormData({ ...formData, endOdometer: parseInt(e.target.value) || 0 })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    endOdometer: e.target.value === "" ? ("" as unknown as number) : Number(e.target.value),
+                  })
+                }
                 required
               />
-              <span className="text-[11px] text-slate-400 mt-1 block">الحد الأدنى: {minOdometer} كم</span>
             </div>
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">

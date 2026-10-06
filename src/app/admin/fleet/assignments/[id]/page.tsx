@@ -392,7 +392,9 @@ export default function AssignmentDetailPage() {
                     <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 space-y-1">
                       <span className="text-xs text-purple-600 font-medium block">إجمالي المسافة المقطوعة</span>
                       <span className="font-mono font-bold text-purple-900 dark:text-purple-200 text-sm">
-                        {(assignment.endOdometer - assignment.startOdometer).toLocaleString()} كم
+                        {assignment.endOdometer >= assignment.startOdometer
+                          ? `${(assignment.endOdometer - assignment.startOdometer).toLocaleString()} كم`
+                          : "—"}
                       </span>
                     </div>
                   )}

@@ -735,8 +735,8 @@ export interface SwitchVehicleRequest {
 }
 
 export interface RenewPermissionRequest {
-  permissionStartsOn?: string | null;
-  permissionReference?: string | null;
+  permissionStartsOn: string;
+  permissionReference: string;
   reason: string;
   rowVersion: string;
 }

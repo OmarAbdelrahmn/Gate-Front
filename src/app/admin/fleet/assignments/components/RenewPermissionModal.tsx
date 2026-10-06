@@ -30,8 +30,8 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
   useEffect(() => {
     if (isOpen && preselectedVehicle && preselectedVehicle.currentAssignmentId) {
       setLoadingDetails(true);
-      const activeAssignmentId = preselectedVehicle.currentAssignmentId;
-      setAssignmentId(activeAssignmentId);
+      setAssignmentId(null);
+      setRowVersion(null);
 
       getVehicleDetail(preselectedVehicle.id)
         .then(async (res) => {
@@ -40,6 +40,9 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
             onClose();
             return;
           }
+
+          const activeAssignmentId = res.summary.currentAssignmentId;
+          setAssignmentId(activeAssignmentId);
 
           let foundRowVersion: string | null = null;
           try {
@@ -55,7 +58,7 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
             try {
               const timeline = await getRiderVehicleTimeline(res.summary.currentRiderProfileId);
               const activeItem = timeline?.find(
-                (t) => t.assignment.id === activeAssignmentId || t.assignment.status === 1
+                (t) => t.assignment.id === activeAssignmentId
               );
               if (activeItem?.assignment?.rowVersion) {
                 foundRowVersion = activeItem.assignment.rowVersion;
@@ -63,7 +66,10 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
             } catch (e) {}
           }
 
-          setRowVersion(foundRowVersion || res.summary.rowVersion);
+          setRowVersion(foundRowVersion);
+          if (!foundRowVersion) {
+            toast.error("خطأ", "تعذر تحميل بيانات العهدة. أعد فتح النموذج ثم حاول مرة أخرى.");
+          }
         })
         .finally(() => setLoadingDetails(false));
     }
@@ -76,12 +82,17 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
       return;
     }
 
+    if (!formData.permissionStartsOn || !formData.permissionReference.trim() || !formData.reason.trim()) {
+      toast.error("بيانات غير مكتملة", "أدخل تاريخ بداية التفويض ورقم التفويض وسبب التجديد.");
+      return;
+    }
+
     startTransition(async () => {
       try {
         await renewVehiclePermission(assignmentId, {
           permissionStartsOn: formData.permissionStartsOn,
-          permissionReference: formData.permissionReference,
-          reason: formData.reason,
+          permissionReference: formData.permissionReference.trim(),
+          reason: formData.reason.trim(),
           rowVersion,
         });
         onSuccess();
@@ -130,7 +141,7 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">تاريخ بداية التفويض</label>
-            <Input type="date" value={formData.permissionStartsOn} onChange={(e) => setFormData({ ...formData, permissionStartsOn: e.target.value })} />
+            <Input type="date" value={formData.permissionStartsOn} onChange={(e) => setFormData({ ...formData, permissionStartsOn: e.target.value })} required />
           </div>
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">رقم التفويض الجديد <span className="text-red-500">*</span></label>
@@ -139,13 +150,13 @@ export function RenewPermissionModal({ isOpen, onClose, onSuccess, preselectedVe
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-semibold text-slate-700">السبب</label>
-          <Input value={formData.reason} onChange={(e) => setFormData({ ...formData, reason: e.target.value })} placeholder="مثال: انتهاء التفويض السابق، طلب المندوب..." />
+          <label className="mb-1 block text-sm font-semibold text-slate-700">السبب <span className="text-red-500">*</span></label>
+          <Input value={formData.reason} onChange={(e) => setFormData({ ...formData, reason: e.target.value })} placeholder="مثال: تجديد مبكر، طلب المندوب..." required />
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
           <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
-          <Button type="submit" disabled={isPending} className="bg-orange-600 hover:bg-orange-700">
+          <Button type="submit" disabled={isPending || !assignmentId || !rowVersion} className="bg-orange-600 hover:bg-orange-700">
             {isPending ? "جارٍ الحفظ..." : "تأكيد تجديد التفويض"}
           </Button>
         </div>
