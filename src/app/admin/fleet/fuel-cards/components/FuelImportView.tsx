@@ -147,10 +147,6 @@ export function FuelImportView({ onNavigateToCard }: FuelImportViewProps) {
       setError("يرجى اختيار ملف اكسل (.xls أو .xlsx)");
       return;
     }
-    if (!sponsorId) {
-      setError("يرجى تحديد الكفيل المخصص للبطاقات الجديدة التي قد يتم إنشاؤها عبر هذا الاستيراد");
-      return;
-    }
 
     setLoading(true);
     setError(null);
@@ -159,7 +155,6 @@ export function FuelImportView({ onNavigateToCard }: FuelImportViewProps) {
     try {
       const res = await importFuelSpreadsheet(
         file,
-        sponsorId,
         expectedMonth || undefined,
         operatingCityId || undefined
       );
@@ -403,32 +398,12 @@ export function FuelImportView({ onNavigateToCard }: FuelImportViewProps) {
               </p>
             </div>
 
-            {/* Sponsor Selector (Required for new cards created by upload) */}
-            <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20">
-              <label className="block text-xs font-bold text-[var(--foreground)] mb-1.5">
-                الكفيل المخصص للبطاقات الجديدة التي تُنشأ بواسطة هذا الملف <span className="text-red-500">*</span>
-              </label>
-              <SearchableSelect
-                value={sponsorId}
-                onChange={(val) => {
-                  setSponsorId(val);
-                  setError(null);
-                }}
-                options={sponsorsOptions}
-                placeholder={loadingSponsors ? "جاري تحميل قائمة الكفلاء..." : "اختر الكفيل للبطاقات الجديدة..."}
-                searchPlaceholder="بحث في أسماء أو أرقام الكفلاء..."
-                disabled={loadingSponsors || loading}
-              />
-              <p className="mt-1.5 text-[11px] text-[var(--muted)]">
-                سيتم تعيين هذا الكفيل فقط للبطاقات <strong>الجديدة</strong> التي ينشئها الاستيراد. البطاقات الموجودة مسبقاً ستحتفظ بكفيلها الحالي دون تعديل.
-              </p>
-            </div>
 
             <div className="flex items-center justify-end pt-3 border-t border-[var(--border)]">
               <Button
                 type="submit"
                 variant="primary"
-                disabled={loading || !file || !sponsorId}
+                disabled={loading || !file}
                 className="flex items-center gap-2 h-11 px-8 rounded-xl font-bold text-xs shadow-md shadow-blue-500/20"
               >
                 {loading ? (

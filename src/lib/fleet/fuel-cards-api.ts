@@ -117,9 +117,9 @@ export interface FuelMonthlyUsagePage {
   totalCount: number;
   totalLiters: number;
   totalAmount: number;
-  unassignedCount?: number;
-  unassignedTotalLiters?: number;
-  unassignedTotalAmount?: number;
+  unassignedCount: number;
+  unassignedTotalLiters: number;
+  unassignedTotalAmount: number;
 }
 
 export interface FuelUnassignedUsage {
@@ -544,18 +544,16 @@ export async function getAllFuelCardPeriodUsage(params: {
 
 export async function importFuelSpreadsheet(
   file: File,
-  sponsorId: string,
   expectedMonth?: string,
   operatingCityId?: string
 ): Promise<FuelImportResult> {
   const data = new FormData();
   data.append("File", file);
-  data.append("SponsorId", sponsorId);
   if (expectedMonth) {
     data.append("ExpectedMonth", expectedMonth);
   }
   if (operatingCityId) {
-    data.append("operatingCityId", operatingCityId);
+    data.append("OperatingCityId", operatingCityId);
   }
   return authFetch<FuelImportResult>("/api/fuel-cards/imports", {
     method: "POST",
@@ -580,10 +578,10 @@ export async function validateFuelCardNumberImport(
   operatingCityId?: string
 ): Promise<FuelCardNumberImportResult> {
   const data = new FormData();
-  data.append("file", file);
-  data.append("sponsorId", sponsorId);
+  data.append("File", file);
+  data.append("SponsorId", sponsorId);
   if (operatingCityId) {
-    data.append("operatingCityId", operatingCityId);
+    data.append("OperatingCityId", operatingCityId);
   }
   return authFetch<FuelCardNumberImportResult>("/api/fuel-cards/card-number-imports/validate", {
     method: "POST",
@@ -597,10 +595,10 @@ export async function importFuelCardNumbers(
   operatingCityId?: string
 ): Promise<FuelCardNumberImportResult> {
   const data = new FormData();
-  data.append("file", file);
-  data.append("sponsorId", sponsorId);
+  data.append("File", file);
+  data.append("SponsorId", sponsorId);
   if (operatingCityId) {
-    data.append("operatingCityId", operatingCityId);
+    data.append("OperatingCityId", operatingCityId);
   }
   return authFetch<FuelCardNumberImportResult>("/api/fuel-cards/card-number-imports", {
     method: "POST",
@@ -633,9 +631,9 @@ export async function validateBatchFuelCardsImport(
   operatingCityId?: string
 ): Promise<BatchFuelCardImportResult> {
   const data = new FormData();
-  data.append("file", file);
+  data.append("File", file);
   if (operatingCityId) {
-    data.append("operatingCityId", operatingCityId);
+    data.append("OperatingCityId", operatingCityId);
   }
   return authFetch<BatchFuelCardImportResult>("/api/import/fuel-cards/validate", {
     method: "POST",
@@ -648,9 +646,9 @@ export async function executeBatchFuelCardsImport(
   operatingCityId?: string
 ): Promise<BatchFuelCardImportResult> {
   const data = new FormData();
-  data.append("file", file);
+  data.append("File", file);
   if (operatingCityId) {
-    data.append("operatingCityId", operatingCityId);
+    data.append("OperatingCityId", operatingCityId);
   }
   return authFetch<BatchFuelCardImportResult>("/api/import/fuel-cards", {
     method: "POST",
