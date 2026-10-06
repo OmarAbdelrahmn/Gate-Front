@@ -140,7 +140,10 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
   const [activeTopTab, setActiveTopTab] = useState<"requests" | "types">("requests");
 
   // Permissions
-  const canManage = can("leave_requests.manage");
+  const canRead = can("leave_requests.read");
+  const canCreate = can("leave_requests.create");
+  const canUpdate = can("leave_requests.update");
+  const canDelete = can("leave_requests.delete");
   const canApprove = can("leave_requests.approve");
   const canUploadDoc = can("documents.upload");
   const canDownloadDoc = can("documents.download_sensitive");
@@ -1144,13 +1147,13 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
             <RefreshCw size={17} />
             {isEn ? "Refresh" : "تحديث"}
           </Button>
-          {canManage && activeTopTab === "requests" && (
+          {canCreate && activeTopTab === "requests" && (
             <Button onClick={openCreateModal}>
               <Plus size={18} />
               {isEn ? "New Leave Request" : "طلب إجازة جديد"}
             </Button>
           )}
-          {canManage && activeTopTab === "types" && (
+          {canCreate && activeTopTab === "types" && (
             <Button onClick={openCreateLeaveTypeModal}>
               <Plus size={18} />
               {isEn ? "New Leave Type" : "إضافة نوع إجازة"}
@@ -1405,7 +1408,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                                 <Info size={14} />
                                 {isEn ? "Details" : "التفاصيل"}
                               </button>
-                              {canManage && (row.status === "Draft" || row.status === "ReturnedForChanges") && (
+                              {canUpdate && (row.status === "Draft" || row.status === "ReturnedForChanges") && (
                                 <button
                                   type="button"
                                   onClick={() => openEditModal(row)}
@@ -1469,7 +1472,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                     : "التحكم في أنواع الإجازات المتاحة للموظفين، شروط الرصيد والوثائق، والحد الأقصى للأيام."}
                 </p>
               </div>
-              {canManage && (
+              {canCreate && (
                 <Button onClick={openCreateLeaveTypeModal}>
                   <Plus size={16} />
                   {isEn ? "Add Leave Type" : "إضافة نوع جديد"}
@@ -1541,7 +1544,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {canManage && (
+                          {canUpdate && (
                             <button
                               type="button"
                               onClick={() => openEditLeaveTypeModal(lt)}
@@ -1810,7 +1813,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold">{isEn ? "Leave Type (Active only) *" : "نوع الإجازة (النشطة فقط) *"}</label>
-                  {canManage && (
+                  {canCreate && (
                     <button
                       type="button"
                       onClick={() => openCreateLeaveTypeModal()}
@@ -2026,19 +2029,19 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
             {/* Action Bar */}
             <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-slate-50/70 p-3 dark:bg-slate-900/40">
               {/* Transitions */}
-              {canManage && (selectedRequest.status === "Draft" || selectedRequest.status === "ReturnedForChanges") && (
+              {canUpdate && (selectedRequest.status === "Draft" || selectedRequest.status === "ReturnedForChanges") && (
                 <Button className="min-h-9 px-3 text-xs" onClick={() => handleTransition("submit")} loading={busy}>
                   <Send size={14} />
                   {isEn ? "Submit Request" : "إرسال الطلب للاعتماد"}
                 </Button>
               )}
-              {canManage && selectedRequest.status === "Approved" && (
+              {canUpdate && selectedRequest.status === "Approved" && (
                 <Button className="min-h-9 px-3 text-xs" onClick={() => handleTransition("activate")} loading={busy}>
                   <CheckCircle2 size={14} />
                   {isEn ? "Activate Leave" : "بدء سريان الإجازة"}
                 </Button>
               )}
-              {canManage && selectedRequest.status === "Active" && (
+              {canUpdate && selectedRequest.status === "Active" && (
                 <Button className="min-h-9 px-3 text-xs" onClick={() => handleTransition("complete")} loading={busy}>
                   <CheckCircle2 size={14} />
                   {isEn ? "Complete Leave" : "إكمال وإنهاء الإجازة"}
@@ -2072,7 +2075,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
               )}
 
               {/* Date Change trigger */}
-              {canManage && (selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
+              {canUpdate && (selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
                 <Button className="min-h-9 px-3 text-xs" variant="secondary" onClick={() => setDateChangeModalOpen(true)}>
                   <Calendar size={14} />
                   {isEn ? "Request Date Change" : "طلب تغيير الموعد"}
@@ -2080,7 +2083,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
               )}
 
               {/* Cancellation trigger */}
-              {canManage && (selectedRequest.status === "PendingApproval" || selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
+              {canDelete && (selectedRequest.status === "PendingApproval" || selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
                 <Button className="min-h-9 px-3 text-xs" variant="secondary" onClick={() => setCancellationModalOpen(true)}>
                   <Ban size={14} />
                   {isEn ? "Request Cancellation" : "طلب إلغاء"}
@@ -2263,7 +2266,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-black">{isEn ? "Date Change Requests" : "سجل طلبات تغيير المواعيد"}</h4>
-                    {canManage && (selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
+                    {canUpdate && (selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
                       <Button className="min-h-9 px-3 text-xs" onClick={() => setDateChangeModalOpen(true)}>
                         <Plus size={14} />
                         {isEn ? "Request Date Change" : "طلب تغيير موعد"}
@@ -2335,7 +2338,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-black">{isEn ? "Cancellation Requests" : "طلبات إلغاء الإجازة"}</h4>
-                    {canManage && (selectedRequest.status === "PendingApproval" || selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
+                    {canDelete && (selectedRequest.status === "PendingApproval" || selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
                       <Button className="min-h-9 px-3 text-xs" variant="secondary" onClick={() => setCancellationModalOpen(true)}>
                         <Plus size={14} />
                         {isEn ? "Request Cancellation" : "طلب إلغاء"}
@@ -2471,7 +2474,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                                     <Upload size={14} />
                                   </button>
                                 )}
-                                {canManage && (
+                                {canUpdate && (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -2484,7 +2487,7 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                                     <Edit3 size={14} />
                                   </button>
                                 )}
-                                {canManage && (
+                                {canDelete && (
                                   <button
                                     type="button"
                                     onClick={() => handleArchiveDoc(doc)}

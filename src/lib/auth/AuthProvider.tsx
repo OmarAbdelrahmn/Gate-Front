@@ -23,7 +23,8 @@ type AuthContextValue = {
   locale: Locale;
   theme: Theme;
   density: Density;
-  can: (permission: string) => boolean;
+  can: (...permissions: (string | string[])[]) => boolean;
+  canAny: (...permissions: (string | string[])[]) => boolean;
   login: (payload: LoginRequest) => Promise<AuthUser>;
   changePassword: (
     currentPassword: string,
@@ -127,8 +128,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     };
-    const handleForbidden = () => {
-      void loadAuthorization();
+    const handleForbidden = async () => {
+      try {
+        await loadAuthorization();
+      } catch {
+        try {
+          const refreshed = await refreshAccessToken();
+          await loadSession(refreshed.user);
+        } catch {
+          clearAuth();
+          setUser(null);
+          setAuthorization(null);
+        }
+      }
     };
     window.addEventListener("future-gateway:auth-cleared", handleExpired);
     window.addEventListener("future-gateway:auth-forbidden", handleForbidden);
@@ -148,7 +160,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       locale,
       theme,
       density,
-      can: (permission: string) => hasPermission(authorization, permission),
+      can: (...permissions: (string | string[])[]) => {
+        const flat = permissions.flat();
+        if (flat.length === 0) return true;
+        return flat.every((p) => hasPermission(authorization, p));
+      },
+      canAny: (...permissions: (string | string[])[]) => {
+        const flat = permissions.flat();
+        if (flat.length === 0) return true;
+        return flat.some((p) => hasPermission(authorization, p));
+      },
       login: async (payload) => {
         const auth = await loginRequest(payload);
         await loadSession(auth.user);

@@ -52,7 +52,9 @@ export default function LegalCaseDetailPage() {
 
   const { can } = useAuth();
   const canRead = can("legal_cases.read");
-  const canManage = can("legal_cases.manage");
+  const canCreate = can("legal_cases.create");
+  const canUpdate = can("legal_cases.update");
+  const canDelete = can("legal_cases.delete");
 
   const [legalCase, setLegalCase] = useState<LegalCaseDetail | null>(null);
   const [history, setHistory] = useState<LegalCaseHistoryItem[]>([]);
@@ -214,26 +216,26 @@ export default function LegalCaseDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {canManage && (
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => setIsEditCaseOpen(true)}
-                className="flex items-center gap-1.5 h-8 px-2.5 text-xs"
-              >
-                <Pencil className="size-3.5" />
-                تعديل القضية
-              </Button>
+          {canUpdate && (
+            <Button
+              variant="ghost"
+              onClick={() => setIsEditCaseOpen(true)}
+              className="flex items-center gap-1.5 h-8 px-2.5 text-xs"
+            >
+              <Pencil className="size-3.5" />
+              تعديل القضية
+            </Button>
+          )}
 
-              <Button
-                variant="ghost"
-                onClick={() => setIsArchiveCaseOpen(true)}
-                className="flex items-center gap-1.5 h-8 px-2.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-              >
-                <Trash2 className="size-3.5" />
-                أرشفة القضية
-              </Button>
-            </>
+          {canDelete && (
+            <Button
+              variant="ghost"
+              onClick={() => setIsArchiveCaseOpen(true)}
+              className="flex items-center gap-1.5 h-8 px-2.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+            >
+              <Trash2 className="size-3.5" />
+              أرشفة القضية
+            </Button>
           )}
         </div>
       </div>
@@ -390,7 +392,7 @@ export default function LegalCaseDetailPage() {
               </span>
             </div>
 
-            {canManage && (
+            {canCreate && (
               <Button
                 variant="primary"
                 onClick={() => setIsAddHearingOpen(true)}
@@ -451,24 +453,28 @@ export default function LegalCaseDetailPage() {
                         <span>{hearing.hearingTime}</span>
                       </div>
 
-                      {canManage && (
+                      {(canUpdate || canDelete) && (
                         <div className="flex items-center gap-1 border-r border-[var(--border)] pr-3 mr-1">
-                          <button
-                            type="button"
-                            onClick={() => setEditingHearing(hearing)}
-                            className="p-1 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors"
-                            title="تعديل الجلسة"
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setArchivingHearing(hearing)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                            title="أرشفة الجلسة"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
+                          {canUpdate && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingHearing(hearing)}
+                              className="p-1 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors"
+                              title="تعديل الجلسة"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => setArchivingHearing(hearing)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                              title="أرشفة الجلسة"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

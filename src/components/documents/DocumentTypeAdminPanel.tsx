@@ -41,7 +41,8 @@ const SUPPORTED_MIME_TYPES = [
 export function DocumentTypeAdminPanel() {
   const { can, locale } = useAuth();
   const isEn = locale === "en";
-  const canManage = can("documents.catalog.manage");
+  const canCreate = can("documents.catalog.create");
+  const canUpdate = can("documents.catalog.update");
 
   const [types, setTypes] = useState<DocumentType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,7 +222,7 @@ export function DocumentTypeAdminPanel() {
               : "إعداد وتحديد شروط وأنواع الملفات وحجم كل وثيقة في النظام."}
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <Button onClick={handleOpenCreate} className="gap-2">
             <Plus size={17} />
             {isEn ? "Add Document Definition" : "إضافة نوع وثيقة جديد"}
@@ -267,7 +268,7 @@ export function DocumentTypeAdminPanel() {
                   <th className="px-5 py-4">{isEn ? "Required Rules" : "الشروط المطلوبة"}</th>
                   <th className="px-5 py-4">{isEn ? "File Formats & Size" : "صيغ الملفات والحجم"}</th>
                   <th className="px-5 py-4">{isEn ? "Status" : "الحالة"}</th>
-                  {canManage && <th className="px-5 py-4 text-center">{isEn ? "Action" : "الإجراء"}</th>}
+                  {canUpdate && <th className="px-5 py-4 text-center">{isEn ? "Action" : "الإجراء"}</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)] text-sm">
@@ -341,7 +342,7 @@ export function DocumentTypeAdminPanel() {
                         {t.status}
                       </span>
                     </td>
-                    {canManage && (
+                    {canUpdate && (
                       <td className="px-5 py-4 text-center">
                         <Button
                           variant="secondary"

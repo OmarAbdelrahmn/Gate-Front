@@ -457,9 +457,10 @@ export default function EmployeeDetailsPage({
   params: Promise<{ employeeId: string }>;
 }) {
   const { can, locale } = useAuth();
-  const t = (key: string) => translate(locale, key);
+  const t = (k: string) => translate(locale, k);
   const isEn = locale === "en";
-  const canManageHousing = can("housing.manage");
+  const canCreateHousing = can("housing.create");
+  const canUpdateHousing = can("housing.update");
 
   const [employeeId, setEmployeeId] = useState<string>();
   const [details, setDetails] = useState<EmployeeDetails>();
@@ -1010,6 +1011,7 @@ export default function EmployeeDetailsPage({
   const housingName = housing
     ? (locale === "en" ? housing.nameEn || housing.nameAr : housing.nameAr || housing.nameEn)
     : (locale === "en" ? "Not Housed" : "غير مسكن");
+  const canManageHousing = housing ? canUpdateHousing : canCreateHousing;
 
   return (
     <div className="space-y-6">

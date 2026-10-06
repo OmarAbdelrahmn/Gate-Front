@@ -32,7 +32,8 @@ import {
 export default function PhoneSimTransfersPage() {
   const { can } = useAuth();
   const canRead = can("phone_sims.read");
-  const canManage = can("phone_sims.manage");
+  const canCreate = can("phone_sims.create");
+  const canUpdate = can("phone_sims.update");
 
   // States
   const [search, setSearch] = useState("");
@@ -108,7 +109,7 @@ export default function PhoneSimTransfersPage() {
         onOpenCreate={() => setIsCreateOpen(true)}
         onOpenPlaces={() => setIsPlacesOpen(true)}
         loading={loading}
-        canManage={canManage}
+        canManage={canCreate}
       />
 
       {/* Info Banner */}
@@ -270,7 +271,7 @@ export default function PhoneSimTransfersPage() {
                             <Eye size={15} />
                           </button>
 
-                          {canManage && (
+                          {canUpdate && (
                             <button
                               onClick={() => setActiveSimForResp(sim)}
                               className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 font-bold flex items-center gap-1 text-xs"

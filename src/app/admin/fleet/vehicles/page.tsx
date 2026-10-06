@@ -660,7 +660,7 @@ export default function VehiclesPage() {
             <FileSpreadsheet size={16} />
             تصدير إكسل
           </Button>
-          {can("fleet.vehicles.manage") && (
+          {can("fleet.vehicles.create") && (
             <Button onClick={() => setIsUpsertOpen(true)} className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]">
               <Plus className="h-4 w-4" /> إضافة مركبة جديدة
             </Button>

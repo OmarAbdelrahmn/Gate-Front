@@ -141,8 +141,8 @@ export function CreateNotificationModal({
               </h2>
               <p className="text-xs text-[var(--muted)]">
                 {isAr
-                  ? "إرسال إشعار فوري لمستخدم عبر النظام (صلاحية notifications.manage)"
-                  : "Send direct notification to a user (requires notifications.manage)"}
+                  ? "إرسال إشعار فوري لمستخدم عبر النظام (صلاحية notifications.create)"
+                  : "Send direct notification to a user (requires notifications.create)"}
               </p>
             </div>
           </div>

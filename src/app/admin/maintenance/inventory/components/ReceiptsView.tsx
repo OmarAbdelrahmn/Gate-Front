@@ -47,7 +47,7 @@ const STORAGE_KEY = "maintenance_recent_receipts";
 
 export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps) {
   const { can } = useAuth();
-  const canManage = can("inventory.receipts.manage");
+  const canCreate = can("inventory.receipts.create");
 
   // Receipts data
   const [receipts, setReceipts] = useState<PurchaseReceipt[]>([]);
@@ -374,7 +374,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
             تحديث
           </Button>
 
-          {canManage && (
+          {canCreate && (
             <Button
               variant="primary"
               onClick={() => setCreateModalOpen(true)}
@@ -586,7 +586,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                         <p className="text-xs text-slate-500 leading-relaxed">
                           يمكنك البدء بتسجيل أول إيصال استلام مشتريات وإرفاق الفاتورة ليتم تحديث تكلفة ومخزون الأصناف تلقائياً.
                         </p>
-                        {canManage && (
+                        {canCreate && (
                           <Button
                             variant="primary"
                             onClick={() => setCreateModalOpen(true)}

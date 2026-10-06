@@ -27,8 +27,8 @@ interface ExternalOrdersListViewProps {
 
 export function ExternalOrdersListView({ locations, items }: ExternalOrdersListViewProps) {
   const { can } = useAuth();
-  const canRead = can("maintenance.work_orders.read") && can("maintenance.external_jobs.read");
-  const canCreate = can("maintenance.work_orders.create") && can("maintenance.external_jobs.manage");
+  const canRead = can("maintenance.work_orders.read", "maintenance.external_jobs.read");
+  const canCreate = can("maintenance.work_orders.create", "maintenance.external_jobs.create");
 
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<WorkOrder[]>([]);

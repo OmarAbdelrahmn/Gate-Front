@@ -31,6 +31,10 @@ import type {
   Role,
   RoleRequest,
 } from "../../../../lib/users/types";
+import {
+  getFamilyForPermissionKey,
+  type PermissionFamily,
+} from "../../../../lib/auth/management-permissions";
 import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
 import { Input } from "../../../../components/ui/Input";
@@ -74,7 +78,14 @@ export default function RolesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const canManage = can("roles.manage");
+  const canCreateRole = can("roles.create");
+  const canUpdateRole = can("roles.update");
+  const canDeleteRole = can("roles.delete");
+  const canSaveRolePermissions = can(
+    "roles.create",
+    "roles.update",
+    "roles.delete",
+  );
 
   async function load() {
     setLoading(true);
@@ -106,7 +117,24 @@ export default function RolesPage() {
     [permissions],
   );
   const toggleRoleGroupPermissions = (groupItems: PermissionCatalogItem[]) => {
-    const groupKeys = groupItems.map((item) => item.key);
+    const groupKeys: string[] = [];
+    const seenFamilies = new Set<string>();
+    for (const item of groupItems) {
+      const famMatch = getFamilyForPermissionKey(item.key);
+      if (famMatch) {
+        if (!seenFamilies.has(famMatch.family.family)) {
+          seenFamilies.add(famMatch.family.family);
+          groupKeys.push(
+            famMatch.family.read,
+            famMatch.family.create,
+            famMatch.family.update,
+            famMatch.family.delete,
+          );
+        }
+      } else {
+        groupKeys.push(item.key);
+      }
+    }
     const allSelected = groupKeys.every((key) => selectedKeys.includes(key));
     if (allSelected) {
       setSelectedKeys((prev) => prev.filter((key) => !groupKeys.includes(key)));
@@ -220,7 +248,7 @@ export default function RolesPage() {
             {locale === "en" ? "Create custom roles and assign associated permissions." : "أنشئ الأدوار المخصصة وحدد الصلاحيات التي تمنحها."}
           </p>
         </div>
-        {canManage && (
+        {canCreateRole && (
           <Button onClick={startCreate}>
             <Plus size={17} />
             {t("roles.addRole")}
@@ -295,6 +323,20 @@ export default function RolesPage() {
                 <p className="mt-4 rounded-xl bg-orange-50 p-3 text-sm text-orange-900">
                   {locale === "en" ? "Protected roles cannot be modified or archived. You may inspect permissions below." : "لا يمكن تعديل أو أرشفة الأدوار المحمية. يمكنك مراجعة صلاحياتها أدناه."}
                 </p>
+              ) : !(selected ? canUpdateRole : canCreateRole) ? (
+                <div className="mt-4 space-y-4">
+                  <p className="rounded-xl bg-slate-500/10 p-3 text-sm text-[var(--muted)]">
+                    {locale === "en"
+                      ? "You do not have permission to modify role details."
+                      : "لا تملك صلاحية تعديل بيانات الدور."}
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2 opacity-75">
+                    <Input label={t("roles.code")} disabled value={form.code} dir="ltr" />
+                    <Input label={locale === "en" ? "Arabic Role Name" : "اسم الدور بالعربية"} disabled value={form.nameAr} />
+                    <Input label={locale === "en" ? "English Role Name" : "اسم الدور بالإنجليزية"} disabled value={form.nameEn} dir="ltr" />
+                    <Input label={t("common.status")} disabled value={form.status === "Active" ? t("common.active") : t("common.inactive")} />
+                  </div>
+                </div>
               ) : (
                 <form
                   onSubmit={saveRole}
@@ -385,7 +427,7 @@ export default function RolesPage() {
                         : `الحفظ يستبدل جميع صلاحيات هذا الدور (${selectedKeys.length} محددة).`}
                     </p>
                   </div>
-                  {canManage && !protectedRole && (
+                  {canSaveRolePermissions && !protectedRole && (
                     <Button
                       loading={saving}
                       onClick={() => void savePermissions()}
@@ -420,20 +462,40 @@ export default function RolesPage() {
                     </label>
                     <div className="mt-4 max-h-[520px] space-y-5 overflow-y-auto pr-1">
                       {groupedPermissions.map(([group, items]) => {
+                        const familyMap = new Map<string, PermissionFamily>();
+                        const standaloneItems: PermissionCatalogItem[] = [];
+
+                        for (const item of items) {
+                          const famMatch = getFamilyForPermissionKey(item.key);
+                          if (famMatch) {
+                            if (!familyMap.has(famMatch.family.family)) {
+                              familyMap.set(famMatch.family.family, famMatch.family);
+                            }
+                          } else {
+                            standaloneItems.push(item);
+                          }
+                        }
+                        const families = Array.from(familyMap.values());
+
+                        const groupAllKeys: string[] = [
+                          ...families.flatMap((f) => [f.read, f.create, f.update, f.delete]),
+                          ...standaloneItems.map((s) => s.key),
+                        ];
                         const isAllGroupSelected =
-                          items.length > 0 &&
-                          items.every((item) => selectedKeys.includes(item.key));
+                          groupAllKeys.length > 0 &&
+                          groupAllKeys.every((k) => selectedKeys.includes(k));
+
                         return (
-                          <section key={group}>
-                            <div className="mb-2 flex items-center justify-between border-b border-[var(--border)] pb-1.5">
+                          <section key={group} className="space-y-3">
+                            <div className="flex items-center justify-between border-b border-[var(--border)] pb-1.5">
                               <h3 className={`text-sm font-black text-[#1167c9] ${locale === "en" ? "border-l-2 pl-2" : "border-r-2 pr-2"}`}>
                                 {permissionGroupLabel(group, locale)} ({items.length})
                               </h3>
-                              {canManage && !protectedRole && (
+                              {canSaveRolePermissions && !protectedRole && (
                                 <label className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-50/80 px-2.5 py-1 text-xs font-bold text-[#1167c9] hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 transition-colors">
                                   <input
                                     type="checkbox"
-                                    disabled={!canManage || protectedRole}
+                                    disabled={!canSaveRolePermissions || protectedRole}
                                     checked={isAllGroupSelected}
                                     onChange={() => toggleRoleGroupPermissions(items)}
                                     className="h-3.5 w-3.5 rounded border-blue-400 text-[#1167c9] focus:ring-[#1167c9]"
@@ -446,50 +508,146 @@ export default function RolesPage() {
                                 </label>
                               )}
                             </div>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {items.map((item) => {
-                              const checked = selectedKeys.includes(item.key);
-                              return (
-                                <label
-                                  key={item.key}
-                                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${checked ? "border-blue-200 bg-blue-50/70" : "border-[var(--border)]"}`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    disabled={!canManage || protectedRole}
-                                    checked={checked}
-                                    onChange={() =>
-                                      setSelectedKeys((current) =>
+
+                            {/* Render Families with 4 separate controls: Read, Create, Edit, Delete */}
+                            {families.length > 0 && (
+                              <div className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+                                {families.map((fam) => {
+                                  const actionControls: { action: "read" | "create" | "update" | "delete"; key: string; labelEn: string; labelAr: string }[] = [
+                                    { action: "read", key: fam.read, labelEn: "Read (.read)", labelAr: "قراءة (.read)" },
+                                    { action: "create", key: fam.create, labelEn: "Create (.create)", labelAr: "إنشاء (.create)" },
+                                    { action: "update", key: fam.update, labelEn: "Edit (.update)", labelAr: "تعديل (.update)" },
+                                    { action: "delete", key: fam.delete, labelEn: "Delete (.delete)", labelAr: "حذف (.delete)" },
+                                  ];
+
+                                  return (
+                                    <div
+                                      key={fam.family}
+                                      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2.5 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                                    >
+                                      <div className="flex items-center justify-between gap-2 border-b border-[var(--border)]/60 pb-2">
+                                        <div className="min-w-0">
+                                          <span className="font-bold text-xs text-[var(--foreground)] block truncate">
+                                            {locale === "en" ? fam.nameEn : fam.nameAr}
+                                          </span>
+                                          <span className="font-mono text-[10px] text-[var(--muted)] block truncate" dir="ltr">
+                                            {fam.family}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {fam.highTrust && (
+                                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                                              {locale === "en" ? "High Trust" : "ثقة عالية"}
+                                            </span>
+                                          )}
+                                          {fam.clientScope && (
+                                            <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
+                                              {locale === "en" ? "Client Scope" : "نطاق عميل"}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* 4 Separate Permission Controls */}
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {actionControls.map((ctrl) => {
+                                          const isSelected = selectedKeys.includes(ctrl.key);
+
+                                          return (
+                                            <label
+                                              key={ctrl.key}
+                                              className={`flex flex-col justify-between p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                                isSelected
+                                                  ? "border-[#1167c9] bg-blue-50/70 dark:bg-blue-950/40"
+                                                  : "border-[var(--border)] hover:bg-slate-500/5"
+                                              } ${!canSaveRolePermissions || protectedRole ? "opacity-60 cursor-not-allowed" : ""}`}
+                                            >
+                                              <div className="flex items-center gap-1.5">
+                                                <input
+                                                  type="checkbox"
+                                                  disabled={!canSaveRolePermissions || protectedRole}
+                                                  checked={isSelected}
+                                                  onChange={() =>
+                                                    setSelectedKeys((current) =>
+                                                      isSelected
+                                                        ? current.filter((k) => k !== ctrl.key)
+                                                        : [...current, ctrl.key],
+                                                    )
+                                                  }
+                                                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#1167c9]"
+                                                />
+                                                <span className="font-semibold text-[11px] truncate">
+                                                  {locale === "en" ? ctrl.labelEn : ctrl.labelAr}
+                                                </span>
+                                              </div>
+                                              <div className="mt-1.5 pt-1 border-t border-[var(--border)]/40">
+                                                <span className="font-mono text-[9px] text-[var(--muted)]">
+                                                  .{ctrl.action === "update" ? "update" : ctrl.action}
+                                                </span>
+                                              </div>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Standalone Permissions in this group */}
+                            {standaloneItems.length > 0 && (
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {standaloneItems.map((item) => {
+                                  const checked = selectedKeys.includes(item.key);
+                                  return (
+                                    <label
+                                      key={item.key}
+                                      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
                                         checked
-                                          ? current.filter(
-                                              (key) => key !== item.key,
-                                            )
-                                          : [...current, item.key],
-                                      )
-                                    }
-                                    className="mt-1"
-                                  />
-                                  <span>
-                                    <b className="text-sm">
-                                      {locale === "en" ? item.nameEn || permissionLabel(item.key, locale) : item.nameAr || permissionLabel(item.key, locale)}
-                                    </b>
-                                    <small className="mt-1 block text-xs text-[var(--muted)]">
-                                      {locale === "en" ? item.descriptionEn || item.descriptionAr : item.descriptionAr}
-                                    </small>
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      );
-                    })}
+                                          ? "border-blue-200 bg-blue-50/70"
+                                          : "border-[var(--border)]"
+                                      } ${!canSaveRolePermissions || protectedRole ? "opacity-60 cursor-not-allowed" : ""}`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        disabled={!canSaveRolePermissions || protectedRole}
+                                        checked={checked}
+                                        onChange={() =>
+                                          setSelectedKeys((current) =>
+                                            checked
+                                              ? current.filter((key) => key !== item.key)
+                                              : [...current, item.key],
+                                          )
+                                        }
+                                        className="mt-1"
+                                      />
+                                      <span>
+                                        <b className="text-sm">
+                                          {locale === "en"
+                                            ? item.nameEn || permissionLabel(item.key, locale)
+                                            : item.nameAr || permissionLabel(item.key, locale)}
+                                        </b>
+                                        <small className="mt-1 block text-xs text-[var(--muted)]">
+                                          {locale === "en"
+                                            ? item.descriptionEn || item.descriptionAr
+                                            : item.descriptionAr}
+                                        </small>
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </section>
+                        );
+                      })}
                     </div>
                   </>
                 )}
               </Card>
             )}
-            {selected && canManage && !protectedRole && (
+            {selected && canDeleteRole && !protectedRole && (
               <Card className="border-red-200 p-5">
                 <h2 className="flex items-center gap-2 font-black text-red-700">
                   <Archive size={18} />

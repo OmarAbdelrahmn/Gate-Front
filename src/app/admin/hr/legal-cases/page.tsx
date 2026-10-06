@@ -42,7 +42,9 @@ import {
 export default function LegalCasesPage() {
   const { can } = useAuth();
   const canRead = can("legal_cases.read");
-  const canManage = can("legal_cases.manage");
+  const canCreate = can("legal_cases.create");
+  const canUpdate = can("legal_cases.update");
+  const canDelete = can("legal_cases.delete");
 
   // State
   const [cases, setCases] = useState<LegalCaseSummary[]>([]);
@@ -180,7 +182,7 @@ export default function LegalCasesPage() {
             تحديث
           </Button>
 
-          {canManage && (
+          {canCreate && (
             <Button
               variant="primary"
               onClick={() => setIsCreateOpen(true)}
@@ -375,7 +377,7 @@ export default function LegalCasesPage() {
             <p className="text-xs text-[var(--muted)] mt-1">
               لم يتم العثور على أي قضايا تطابق خيارات البحث والتصفية المحددة.
             </p>
-            {canManage && (
+            {canCreate && (
               <Button
                 variant="primary"
                 onClick={() => setIsCreateOpen(true)}
@@ -491,26 +493,26 @@ export default function LegalCasesPage() {
                             <Eye className="size-4" />
                           </Link>
 
-                          {canManage && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => setEditingCase(c)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors"
-                                title="تعديل القضية"
-                              >
-                                <Pencil className="size-4" />
-                              </button>
+                          {canUpdate && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingCase(c)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors"
+                              title="تعديل القضية"
+                            >
+                              <Pencil className="size-4" />
+                            </button>
+                          )}
 
-                              <button
-                                type="button"
-                                onClick={() => setArchivingCase(c)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                                title="أرشفة القضية"
-                              >
-                                <Trash2 className="size-4" />
-                              </button>
-                            </>
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => setArchivingCase(c)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                              title="أرشفة القضية"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
                           )}
                         </div>
                       </td>

@@ -52,7 +52,9 @@ export function WarehouseTab({
 }) {
   const { can, locale } = useAuth();
   const isEn = locale === "en";
-  const manage = can("housing.manage");
+  const canCreate = can("housing.create");
+  const canUpdate = can("housing.update");
+  const canDelete = can("housing.delete");
 
   // Data
   const [warehouse, setWarehouse] = useState<HousingWarehouse | null>(null);
@@ -238,7 +240,7 @@ export function WarehouseTab({
         </div>
 
         {/* Add item button */}
-        {manage && !isArchived && (
+        {canCreate && !isArchived && (
           <Button onClick={openAdd} className="h-10 px-3 text-xs">
             <Plus size={15} />
             {isEn ? "Add Item" : "إضافة صنف"}
@@ -260,7 +262,7 @@ export function WarehouseTab({
               ? (isEn ? "Try adjusting your search or filter." : "جرب تغيير البحث أو المرشح.")
               : (isEn ? "Add the first item to track inventory." : "أضف الصنف الأول لبدء تتبع المخزون.")}
           </p>
-          {!search && statusFilter === "ALL" && manage && !isArchived && (
+          {!search && statusFilter === "ALL" && canCreate && !isArchived && (
             <Button onClick={openAdd} className="mt-4 text-xs">
               <Plus size={14} />
               {isEn ? "Add First Item" : "إضافة الصنف الأول"}
@@ -289,7 +291,7 @@ export function WarehouseTab({
                   <th className="px-4 py-3 text-xs font-extrabold text-[var(--muted)] text-center">
                     {isEn ? "Total" : "الإجمالي"}
                   </th>
-                  {manage && !isArchived && (
+                  {(canUpdate || canDelete) && !isArchived && (
                     <th className="px-4 py-3 text-xs font-extrabold text-[var(--muted)] text-center">
                       {isEn ? "Actions" : "الإجراءات"}
                     </th>
@@ -339,53 +341,59 @@ export function WarehouseTab({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center font-black text-xs">{fmtQty(item.totalQuantity)}</td>
-                    {manage && !isArchived && (
+                    {(canUpdate || canDelete) && !isArchived && (
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => setTransferItem(item)}
-                            title={isEn ? "Transfer status" : "نقل حالة"}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-blue-50 hover:text-[#1167c9] dark:hover:bg-blue-950/40 transition-all"
-                          >
-                            <ArrowRightLeft size={14} />
-                          </button>
-                          <button
-                            onClick={() => setTransferHousingItem(item)}
-                            title={
-                              item.unusedQuantity > 0
-                                ? (isEn ? "Transfer to another housing" : "نقل إلى سكن آخر")
-                                : (isEn ? "No unused quantity to transfer" : "لا توجد كمية غير مستخدمة للنقل")
-                            }
-                            disabled={item.unusedQuantity <= 0}
-                            className={`grid h-8 w-8 place-items-center rounded-lg transition-all ${
-                              item.unusedQuantity > 0
-                                ? "text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
-                                : "text-[var(--muted)] opacity-35 cursor-not-allowed"
-                            }`}
-                          >
-                            <Truck size={14} />
-                          </button>
-                          <button
-                            onClick={() => setCorrectItem(item)}
-                            title={isEn ? "Correct quantity" : "تصحيح كمية"}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/40 transition-all"
-                          >
-                            <SlidersHorizontal size={14} />
-                          </button>
-                          <button
-                            onClick={() => openEdit(item)}
-                            title={isEn ? "Edit" : "تعديل"}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800 transition-all"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => setDeletingItem(item)}
-                            title={isEn ? "Delete" : "حذف"}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition-all"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {canUpdate && (
+                            <>
+                              <button
+                                onClick={() => setTransferItem(item)}
+                                title={isEn ? "Transfer status" : "نقل حالة"}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-blue-50 hover:text-[#1167c9] dark:hover:bg-blue-950/40 transition-all"
+                              >
+                                <ArrowRightLeft size={14} />
+                              </button>
+                              <button
+                                onClick={() => setTransferHousingItem(item)}
+                                title={
+                                  item.unusedQuantity > 0
+                                    ? (isEn ? "Transfer to another housing" : "نقل إلى سكن آخر")
+                                    : (isEn ? "No unused quantity to transfer" : "لا توجد كمية غير مستخدمة للنقل")
+                                }
+                                disabled={item.unusedQuantity <= 0}
+                                className={`grid h-8 w-8 place-items-center rounded-lg transition-all ${
+                                  item.unusedQuantity > 0
+                                    ? "text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                                    : "text-[var(--muted)] opacity-35 cursor-not-allowed"
+                                }`}
+                              >
+                                <Truck size={14} />
+                              </button>
+                              <button
+                                onClick={() => setCorrectItem(item)}
+                                title={isEn ? "Correct quantity" : "تصحيح كمية"}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/40 transition-all"
+                              >
+                                <SlidersHorizontal size={14} />
+                              </button>
+                              <button
+                                onClick={() => openEdit(item)}
+                                title={isEn ? "Edit" : "تعديل"}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800 transition-all"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            </>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => setDeletingItem(item)}
+                              title={isEn ? "Delete" : "حذف"}
+                              className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition-all"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -427,7 +435,7 @@ export function WarehouseTab({
                     </p>
                   </div>
 
-                  {manage && !isArchived && (
+                  {(canUpdate || canDelete) && !isArchived && (
                     <div className="flex flex-col gap-1 shrink-0">
                       <button
                         onClick={() => setTransferItem(item)}

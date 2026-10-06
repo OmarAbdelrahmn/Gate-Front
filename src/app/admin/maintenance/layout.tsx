@@ -20,7 +20,7 @@ export default function MaintenanceLayout({
     can("inventory.items.read") ||
     can("inventory.stock.read") ||
     can("inventory.cost_layers.read") ||
-    can("inventory.receipts.manage") ||
+    can("inventory.receipts.read") ||
     can("inventory.supply_requests.read") ||
     can("inventory.supply_requests.submit") ||
     can("inventory.supply_requests.approve") ||

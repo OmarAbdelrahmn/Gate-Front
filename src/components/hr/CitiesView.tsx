@@ -23,7 +23,8 @@ export function CitiesView({ embedded = false }: { embedded?: boolean }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const manage = can("operating_cities.manage");
+  const canCreate = can("operating_cities.create");
+  const canUpdate = can("operating_cities.update");
 
   async function load() {
     setError("");
@@ -129,7 +130,7 @@ export function CitiesView({ embedded = false }: { embedded?: boolean }) {
                 : "إدارة المدن العالمية ثم تفعيل المدن المستخدمة في التشغيل."}
             </p>
           </div>
-          {manage && (
+          {canCreate && (
             <Button onClick={() => open(null)}>
               <Plus size={18} />
               {t("common.add")}{" "}
@@ -167,7 +168,7 @@ export function CitiesView({ embedded = false }: { embedded?: boolean }) {
           ))}
         </div>
 
-        {embedded && manage && (
+        {embedded && canCreate && (
           <Button onClick={() => open(null)}>
             <Plus size={18} />
             {t("common.add")}{" "}
@@ -355,7 +356,7 @@ export function CitiesView({ embedded = false }: { embedded?: boolean }) {
                       : city.nameAr || city.code,
                   )}
                 </span>
-                {manage && (
+                {canUpdate && (
                   <button
                     onClick={() => open(city)}
                     className="inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 font-bold text-[#1167c9]"

@@ -16,7 +16,8 @@ interface LocationsTabProps {
 
 export function LocationsTab({ locations, loading, onRefresh }: LocationsTabProps) {
   const { can } = useAuth();
-  const canManage = can("maintenance.locations.manage");
+  const canCreate = can("maintenance.locations.create");
+  const canUpdate = can("maintenance.locations.update");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<MaintenanceLocation | null>(null);
@@ -42,7 +43,7 @@ export function LocationsTab({ locations, loading, onRefresh }: LocationsTabProp
             تحديد المستودعات والورش، وتحديد إمكانية خدمة أسطول الشركة أو العملاء الخارجيين ومبيعات القطع.
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <Button variant="primary" onClick={handleCreate} className="text-xs">
             <PlusCircle size={15} />
             إضافة موقع صيانة جديد
@@ -63,7 +64,7 @@ export function LocationsTab({ locations, loading, onRefresh }: LocationsTabProp
               <th className="p-3 text-center">مركبات خارجية</th>
               <th className="p-3 text-center">إصلاح مدفوع</th>
               <th className="p-3 text-center">بيع قطع</th>
-              {canManage && <th className="p-3 text-center">الإجراءات</th>}
+              {canUpdate && <th className="p-3 text-center">الإجراءات</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -152,7 +153,7 @@ export function LocationsTab({ locations, loading, onRefresh }: LocationsTabProp
                       </span>
                     )}
                   </td>
-                  {canManage && (
+                  {canUpdate && (
                     <td className="p-3 text-center">
                       <Button
                         variant="secondary"

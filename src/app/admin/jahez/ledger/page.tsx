@@ -322,7 +322,7 @@ export default function JahezLedgerPage() {
             {isEn ? "Export" : "تصدير"}
           </Button>
 
-          {can("jahez.adjustments.manage") && (
+          {can("jahez.adjustments.create") && (
             <Button
               variant="primary"
               onClick={handleOpenNewAdjustment}
@@ -537,7 +537,7 @@ export default function JahezLedgerPage() {
                             </Button>
                           )}
 
-                          {can("jahez.adjustments.manage") &&
+                          {can("jahez.adjustments.create") &&
                             e.kind !== JahezLedgerKind.Payment && (
                               <Button
                                 variant="secondary"

@@ -407,7 +407,7 @@ export default function VehicleDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {can("fleet.vehicles.manage") &&
+          {can("fleet.vehicles.update") &&
             vehicle.registeredOwnerSupplierId &&
             vehicle.registeredOwnerSupplierId !== summary.sponsorId && (
               <Button
@@ -443,13 +443,13 @@ export default function VehicleDetailPage() {
             <span>تقرير فترات التعيين</span>
           </Button>
 
-          {can("fleet.vehicles.manage") && (
+          {can("fleet.vehicles.update") && (
             <Button onClick={() => setIsUpsertOpen(true)} variant="secondary" className="gap-2">
               <Edit2 className="h-4 w-4" /> تعديل البيانات
             </Button>
           )}
 
-          {can("fleet.vehicles.manage") && (
+          {can("fleet.corrections.create") && (
             <Button
               onClick={() => setIsIdentityCorrectionOpen(true)}
               variant="secondary"
@@ -461,7 +461,7 @@ export default function VehicleDetailPage() {
             </Button>
           )}
 
-          {(can("fleet.registration_transitions.manage") || can("fleet.vehicles.manage")) && (
+          {can("fleet.registration_transitions.create") && (
             <Button
               onClick={() => setIsTransitionOpen(true)}
               variant="secondary"
@@ -497,7 +497,7 @@ export default function VehicleDetailPage() {
                       </div>
                     </div>
                   </div>
-                  {can("fleet.vehicles.manage") && (
+                  {can("fleet.vehicles.update") && (
                     <Button
                       onClick={() => setIsFinancingTransferOpen(true)}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 text-xs gap-1.5 shadow-sm px-3 py-1.5 h-auto"
@@ -522,7 +522,7 @@ export default function VehicleDetailPage() {
                       </div>
                     </div>
                   </div>
-                  {can("fleet.vehicles.manage") && (
+                  {can("fleet.vehicles.update") && (
                     <Button
                       onClick={() => setIsFinancingTransferOpen(true)}
                       className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 text-xs gap-1.5 shadow-sm px-3 py-1.5 h-auto"
@@ -796,7 +796,7 @@ export default function VehicleDetailPage() {
                 <div className="text-center py-6 text-slate-500 space-y-3">
                   <Key className="h-10 w-10 mx-auto mb-1 opacity-20" />
                   <p>المركبة غير مسلمة لأي مندوب حالياً.</p>
-                  {can("fleet.assignments.manage") && (
+                  {can("fleet.assignments.create") && (
                     <Link href={`/admin/fleet/assignments?search=${encodeURIComponent(summary.plateNumberAr || summary.assetNumber || "")}`}>
                       <Button variant="secondary" className="text-xs gap-1.5 h-8">
                         <Plus className="h-3.5 w-3.5" />
@@ -864,7 +864,7 @@ export default function VehicleDetailPage() {
                         {formatVehicleComplianceDueStatus(item.status)}
                       </Badge>
                     )}
-                    {can("fleet.vehicles.manage") && (
+                    {can("fleet.compliance.create") && (
                       <Button
                         variant="ghost"
                         className="text-xs text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40 gap-1 px-2 py-1 h-auto"

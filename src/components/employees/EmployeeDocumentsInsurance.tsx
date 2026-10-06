@@ -98,7 +98,8 @@ export function EmployeeDocumentsInsurance({
   const { can, locale } = useAuth();
   const canManageDocs =
     can("documents.upload") ||
-    can("documents.catalog.manage") ||
+    can("documents.catalog.update") ||
+    can("documents.catalog.create") ||
     can("employees.update") ||
     can("documents.read");
   const [docs, setDocs] = useState<EmployeeDocument[]>([]);
@@ -883,7 +884,7 @@ export function EmployeeDocumentsInsurance({
               <ShieldCheck size={20} />
               {locale === "en" ? "Medical Insurance" : "التأمين الطبي"}
             </h2>
-            {can("insurance.manage") && (
+            {can("insurance.create") && (
               <button
                 type="button"
                 onClick={() => {
@@ -905,7 +906,7 @@ export function EmployeeDocumentsInsurance({
               </button>
             )}
           </div>
-          {can("insurance.manage") && showPolicyForm && (
+          {(editingPolicy ? can("insurance.update") : can("insurance.create")) && showPolicyForm && (
             <form
               key={editingPolicy?.id ?? "new"}
               onSubmit={savePolicy}
@@ -1050,7 +1051,7 @@ export function EmployeeDocumentsInsurance({
                           {p.memberNumberMasked ?? (pRec.memberNumber as string | undefined) ?? "—"}
                         </div>
                       </div>
-                      {can("insurance.manage") && (
+                      {can("insurance.update") && (
                         <div className="flex gap-2 pt-1">
                           <Button
                             variant="secondary"

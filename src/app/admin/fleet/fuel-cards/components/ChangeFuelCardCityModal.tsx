@@ -103,7 +103,7 @@ export function ChangeFuelCardCityModal({
       } else if (err?.status === 404 && code === "fuel.card_not_found") {
         setError(err?.detail || "بطاقة الوقود لم تعد موجودة في النظام.");
       } else if (err?.status === 403 || code === "fuel.forbidden") {
-        setError(err?.detail || "عفواً، لا تملك صلاحية تعديل بطاقة الوقود (fuel.manage).");
+        setError(err?.detail || "عفواً، لا تملك صلاحية تعديل بطاقة الوقود (fuel.update).");
       } else {
         setError(err?.detail || err?.message || "تعذر تغيير مدينة تشغيل بطاقة الوقود");
       }

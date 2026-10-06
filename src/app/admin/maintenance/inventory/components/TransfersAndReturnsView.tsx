@@ -45,7 +45,7 @@ export function TransfersAndReturnsView({
 }: TransfersAndReturnsViewProps) {
   const { can } = useAuth();
   const canMove = can("inventory.stock.move");
-  const canReturn = can("inventory.returns.manage");
+  const canReturn = can("inventory.returns.create");
 
   // Sub-tabs
   const [activeSubTab, setActiveSubTab] = useState<"transfer" | "return" | "rider">("transfer");

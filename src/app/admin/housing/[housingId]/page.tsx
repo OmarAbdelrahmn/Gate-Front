@@ -88,7 +88,9 @@ export default function HousingDetails({
   const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
-  const manage = can("housing.manage");
+  const canCreate = can("housing.create");
+  const canUpdate = can("housing.update");
+  const canDelete = can("housing.delete");
 
   const [activeTab, setActiveTab] = useState<TabType>("rooms");
 
@@ -449,7 +451,7 @@ export default function HousingDetails({
               )}
             </span>
 
-            {manage && !isArchived && (
+            {canDelete && !isArchived && (
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -656,7 +658,7 @@ export default function HousingDetails({
             </div>
 
             {/* Management Actions */}
-            {manage && !isArchived && (
+            {canCreate && !isArchived && (
               <div className="flex items-center gap-2">
                 <Button
                   onClick={() => {
@@ -744,30 +746,34 @@ export default function HousingDetails({
                       </div>
 
                       {/* Floor Action Buttons */}
-                      {manage && !isArchived && (
+                      {(canCreate || canUpdate || canDelete) && !isArchived && (
                         <div className="flex items-center gap-1.5">
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setSelectedFloorId(floor.id);
-                              setOpenCreateRoom(true);
-                            }}
-                            className="text-xs h-8 px-2.5"
-                          >
-                            <Plus size={13} />
-                            {isEn ? "Add Room to Floor" : "إضافة غرفة للدور"}
-                          </Button>
-                          <button
-                            onClick={() => {
-                              setEditingFloor(floor);
-                              setFloorModalOpen(true);
-                            }}
-                            title={isEn ? "Rename Floor" : "تعديل اسم الدور"}
-                            className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          {floorCanArchive && (
+                          {canCreate && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setSelectedFloorId(floor.id);
+                                setOpenCreateRoom(true);
+                              }}
+                              className="text-xs h-8 px-2.5"
+                            >
+                              <Plus size={13} />
+                              {isEn ? "Add Room to Floor" : "إضافة غرفة للدور"}
+                            </Button>
+                          )}
+                          {canUpdate && (
+                            <button
+                              onClick={() => {
+                                setEditingFloor(floor);
+                                setFloorModalOpen(true);
+                              }}
+                              title={isEn ? "Rename Floor" : "تعديل اسم الدور"}
+                              className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                          )}
+                          {floorCanArchive && canDelete && (
                             <button
                               onClick={() => setArchiveFloorTarget(floor)}
                               title={isEn ? "Archive Floor" : "أرشفة الدور"}
@@ -800,30 +806,34 @@ export default function HousingDetails({
                                   <span className="px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-700 text-[10px] font-black">
                                     ×{eq.quantity}
                                   </span>
-                                  {manage && !isArchived && (
+                                  {(canUpdate || canDelete) && !isArchived && (
                                     <div className="flex items-center gap-1 ml-1">
-                                      <button
-                                        onClick={() => {
-                                          setEquipmentTarget({
-                                            type: "floor",
-                                            floorId: floor.id,
-                                            floorName: floor.name,
-                                          });
-                                          setEditingEquipment(eq);
-                                          setEquipmentModalOpen(true);
-                                        }}
-                                        title={isEn ? "Edit" : "تعديل"}
-                                        className="text-slate-400 hover:text-[#1167c9]"
-                                      >
-                                        <Edit3 size={11} />
-                                      </button>
-                                      <button
-                                        onClick={() => setDeletingEquipment(eq)}
-                                        title={isEn ? "Delete" : "حذف"}
-                                        className="text-slate-400 hover:text-rose-600"
-                                      >
-                                        <Trash2 size={11} />
-                                      </button>
+                                      {canUpdate && (
+                                        <button
+                                          onClick={() => {
+                                            setEquipmentTarget({
+                                              type: "floor",
+                                              floorId: floor.id,
+                                              floorName: floor.name,
+                                            });
+                                            setEditingEquipment(eq);
+                                            setEquipmentModalOpen(true);
+                                          }}
+                                          title={isEn ? "Edit" : "تعديل"}
+                                          className="text-slate-400 hover:text-[#1167c9]"
+                                        >
+                                          <Edit3 size={11} />
+                                        </button>
+                                      )}
+                                      {canDelete && (
+                                        <button
+                                          onClick={() => setDeletingEquipment(eq)}
+                                          title={isEn ? "Delete" : "حذف"}
+                                          className="text-slate-400 hover:text-rose-600"
+                                        >
+                                          <Trash2 size={11} />
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                 </span>
@@ -861,7 +871,7 @@ export default function HousingDetails({
                         )}
                       </div>
 
-                      {manage && !isArchived && (
+                      {canCreate && !isArchived && (
                         <Button
                           variant="secondary"
                           onClick={() => {
@@ -890,7 +900,7 @@ export default function HousingDetails({
                             ? isEn ? "No rooms on this floor yet" : "لا توجد غرف في هذا الدور حالياً"
                             : isEn ? "No matching rooms on this floor" : "لا توجد غرف مطابقة في هذا الدور"}
                         </p>
-                        {floorRooms.length === 0 && manage && !isArchived && (
+                        {floorRooms.length === 0 && canCreate && !isArchived && (
                           <Button
                             variant="secondary"
                             onClick={() => {
@@ -911,7 +921,7 @@ export default function HousingDetails({
                             key={r.id}
                             room={r}
                             isEn={isEn}
-                            canManage={Boolean(manage && !isArchived)}
+                            canManage={Boolean((canCreate || canUpdate || canDelete) && !isArchived)}
                             onAssignToRoom={(targetRoom) => {
                               setAssignRoomId(targetRoom.id);
                               setOpenAssignModal(true);
@@ -972,7 +982,7 @@ export default function HousingDetails({
                   ? isEn ? "No floors or rooms created yet" : "لا توجد أدوار أو غرف مسجلة في هذا السكن"
                   : isEn ? "Rooms" : "الغرف"}
               </h3>
-              {manage && !isArchived && (
+              {canCreate && !isArchived && (
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <Button
                     onClick={() => {
@@ -1139,7 +1149,7 @@ export default function HousingDetails({
                 {supervisorsCurrentOnly ? (isEn ? "Current Only" : "الحاليون فقط") : (isEn ? "All History" : "السجل الكامل")}
               </button>
 
-              {manage && !isArchived && (
+              {canCreate && !isArchived && (
                 <Button
                   onClick={() => {
                     setSupEmpId("");
@@ -1202,7 +1212,7 @@ export default function HousingDetails({
                     )}
                   </div>
 
-                  {isActive && manage && (
+                  {isActive && canDelete && (
                     <Button
                       variant="secondary"
                       onClick={() => {

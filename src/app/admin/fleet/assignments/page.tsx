@@ -771,16 +771,18 @@ export default function AssignmentsPage() {
             <FileSpreadsheet size={16} />
             تصدير إكسل
           </Button>
-          {can("fleet.assignments.manage") && (
-            <div className="flex gap-2">
+          <div className="flex gap-2">
+            {can("fleet.assignments.create") && (
               <Button onClick={() => openModalForVehicle("take")} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
                 <Key className="h-4 w-4" /> تسليم مركبة
               </Button>
+            )}
+            {can("fleet.assignments.delete") && (
               <Button onClick={() => openModalForVehicle("return")} variant="secondary" className="gap-2">
                 <ArrowLeftRight className="h-4 w-4" /> استلام مركبة
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -1128,37 +1130,45 @@ export default function AssignmentsPage() {
                                 <Eye className="h-4 w-4" />
                               </Link>
 
-                              {isActive && can("fleet.assignments.manage") && (
+                              {isActive && (
                                 <>
-                                  <button
-                                    onClick={() => openModalForAssignment("return", item)}
-                                    className="rounded-lg p-2 text-red-600 hover:bg-red-50 bg-red-50/50 dark:bg-red-950/30 dark:hover:bg-red-900/50 transition-colors"
-                                    title="استلام (إرجاع) المركبة"
-                                  >
-                                    <ArrowLeftRight className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => openModalForAssignment("switch", item)}
-                                    className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 bg-blue-50/50 dark:bg-blue-950/30 dark:hover:bg-blue-900/50 transition-colors"
-                                    title="تبديل المركبة"
-                                  >
-                                    <Car className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => openModalForAssignment("renew", item)}
-                                    className="rounded-lg p-2 text-orange-600 hover:bg-orange-50 bg-orange-50/50 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 transition-colors"
-                                    title="تجديد التفويض"
-                                  >
-                                    <CalendarClock className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => openModalForAssignment("promissory", item)}
-                                    className="rounded-lg p-2 text-violet-600 hover:bg-violet-50 bg-violet-50/50 dark:bg-violet-950/30 dark:hover:bg-violet-900/50 transition-colors"
-                                    title="إرفاق سندات الأمر بالعهدة الحالية"
-                                    aria-label="إرفاق سندات الأمر بالعهدة الحالية"
-                                  >
-                                    <FileUp className="h-4 w-4" />
-                                  </button>
+                                  {can("fleet.assignments.delete") && (
+                                    <button
+                                      onClick={() => openModalForAssignment("return", item)}
+                                      className="rounded-lg p-2 text-red-600 hover:bg-red-50 bg-red-50/50 dark:bg-red-950/30 dark:hover:bg-red-900/50 transition-colors"
+                                      title="استلام (إرجاع) المركبة"
+                                    >
+                                      <ArrowLeftRight className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                  {can("fleet.assignments.update", "fleet.assignments.create", "fleet.assignments.delete") && (
+                                    <button
+                                      onClick={() => openModalForAssignment("switch", item)}
+                                      className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 bg-blue-50/50 dark:bg-blue-950/30 dark:hover:bg-blue-900/50 transition-colors"
+                                      title="تبديل المركبة"
+                                    >
+                                      <Car className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                  {can("fleet.assignments.update") && (
+                                    <button
+                                      onClick={() => openModalForAssignment("renew", item)}
+                                      className="rounded-lg p-2 text-orange-600 hover:bg-orange-50 bg-orange-50/50 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 transition-colors"
+                                      title="تجديد التفويض"
+                                    >
+                                      <CalendarClock className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                  {can("fleet.assignments.update") && (
+                                    <button
+                                      onClick={() => openModalForAssignment("promissory", item)}
+                                      className="rounded-lg p-2 text-violet-600 hover:bg-violet-50 bg-violet-50/50 dark:bg-violet-950/30 dark:hover:bg-violet-900/50 transition-colors"
+                                      title="إرفاق سندات الأمر بالعهدة الحالية"
+                                      aria-label="إرفاق سندات الأمر بالعهدة الحالية"
+                                    >
+                                      <FileUp className="h-4 w-4" />
+                                    </button>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -1233,7 +1243,7 @@ export default function AssignmentsPage() {
                     </th>
                     <th className="px-6 py-4">العداد الحالي (كم)</th>
                     <th className="px-6 py-4 text-center">حالة الجاهزية</th>
-                    {can("fleet.assignments.manage") && <th className="px-6 py-4 text-center">الإجراءات</th>}
+                    {can("fleet.assignments.create") && <th className="px-6 py-4 text-center">الإجراءات</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
@@ -1272,7 +1282,7 @@ export default function AssignmentsPage() {
                           جاهزة للتسليم
                         </Badge>
                       </td>
-                      {can("fleet.assignments.manage") && (
+                      {can("fleet.assignments.create") && (
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => openModalForVehicle("take", item)}

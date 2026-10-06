@@ -256,7 +256,7 @@ export default function PlatformsPage() {
           </p>
         </div>
 
-        {can("platform_accounts.manage") && (
+        {can("platform_accounts.create") && (
           <Button
             onClick={handleOpenAddModal}
             className="flex items-center gap-2"
@@ -385,7 +385,7 @@ export default function PlatformsPage() {
                   <th className="px-6 py-4">{t("platforms.supportedPaymentModels")}</th>
                   <th className="px-6 py-4">{t("platforms.status")}</th>
                   <th className="px-6 py-4">{t("platforms.notes")}</th>
-                  {can("platform_accounts.manage") && (
+                  {(can("platform_accounts.update") || can("platform_accounts.delete")) && (
                     <th className="px-6 py-4 text-center">{t("common.actions")}</th>
                   )}
                 </tr>
@@ -427,18 +427,20 @@ export default function PlatformsPage() {
                     <td className="px-6 py-4 text-xs text-[var(--muted)] max-w-xs truncate">
                       {platform.notes || "—"}
                     </td>
-                    {can("platform_accounts.manage") && (
+                    {(can("platform_accounts.update") || can("platform_accounts.delete")) && (
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleOpenEditModal(platform)}
-                            title={t("common.edit")}
-                            className="rounded-lg p-2 text-[var(--muted)] hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-[#1167c9] dark:hover:text-blue-400"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
+                          {can("platform_accounts.update") && (
+                            <button
+                              onClick={() => handleOpenEditModal(platform)}
+                              title={t("common.edit")}
+                              className="rounded-lg p-2 text-[var(--muted)] hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-[#1167c9] dark:hover:text-blue-400"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                          )}
 
-                          {platform.status !== "Archived" && (
+                          {platform.status !== "Archived" && can("platform_accounts.delete") && (
                             <button
                               onClick={() => handleOpenArchiveModal(platform)}
                               title={t("platforms.archivePlatform")}

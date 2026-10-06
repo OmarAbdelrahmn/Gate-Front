@@ -254,40 +254,48 @@ export default function AssignmentDetailPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {isActive && can("fleet.assignments.manage") && (
+          {isActive && (
             <>
-              <Button
-                variant="secondary"
-                onClick={() => setActiveModal("return")}
-                className="gap-1.5 text-xs text-red-700 border-red-200 bg-red-50 hover:bg-red-100"
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5" />
-                <span>استلام (إرجاع)</span>
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setActiveModal("switch")}
-                className="gap-1.5 text-xs text-blue-700 border-blue-200 bg-blue-50 hover:bg-blue-100"
-              >
-                <Car className="h-3.5 w-3.5" />
-                <span>تبديل المركبة</span>
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setActiveModal("renew")}
-                className="gap-1.5 text-xs text-orange-700 border-orange-200 bg-orange-50 hover:bg-orange-100"
-              >
-                <CalendarClock className="h-3.5 w-3.5" />
-                <span>تجديد التفويض</span>
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setActiveModal("promissory")}
-                className="gap-1.5 text-xs text-purple-700 border-purple-200 bg-purple-50 hover:bg-purple-100"
-              >
-                <FileUp className="h-3.5 w-3.5" />
-                <span>إرفاق سندات</span>
-              </Button>
+              {can("fleet.assignments.delete") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setActiveModal("return")}
+                  className="gap-1.5 text-xs text-red-700 border-red-200 bg-red-50 hover:bg-red-100"
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                  <span>استلام (إرجاع)</span>
+                </Button>
+              )}
+              {can("fleet.assignments.update", "fleet.assignments.create", "fleet.assignments.delete") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setActiveModal("switch")}
+                  className="gap-1.5 text-xs text-blue-700 border-blue-200 bg-blue-50 hover:bg-blue-100"
+                >
+                  <Car className="h-3.5 w-3.5" />
+                  <span>تبديل المركبة</span>
+                </Button>
+              )}
+              {can("fleet.assignments.update") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setActiveModal("renew")}
+                  className="gap-1.5 text-xs text-orange-700 border-orange-200 bg-orange-50 hover:bg-orange-100"
+                >
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  <span>تجديد التفويض</span>
+                </Button>
+              )}
+              {can("fleet.assignments.update") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setActiveModal("promissory")}
+                  className="gap-1.5 text-xs text-purple-700 border-purple-200 bg-purple-50 hover:bg-purple-100"
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  <span>إرفاق سندات</span>
+                </Button>
+              )}
             </>
           )}
 

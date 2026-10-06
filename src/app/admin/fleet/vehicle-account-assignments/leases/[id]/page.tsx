@@ -201,7 +201,7 @@ export default function SponsorVehicleLeaseDetailPage() {
             <ArrowRight className="h-4 w-4 rtl:rotate-180" />
             العودة إلى قائمة العقود
           </Button>
-          {agreement && agreement.status !== "Ended" && can("fleet.assignments.manage") && (
+          {agreement && agreement.status !== "Ended" && can("fleet.assignments.delete") && (
             <Button variant="danger" onClick={() => setIsCloseOpen(true)} className="gap-2">
               <XCircle className="h-4 w-4" />
               إنهاء العقد

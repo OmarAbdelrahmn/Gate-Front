@@ -36,7 +36,9 @@ import {
 export default function PhoneSimArchivedPage() {
   const { can } = useAuth();
   const canRead = can("phone_sims.read");
-  const canManage = can("phone_sims.manage");
+  const canCreate = can("phone_sims.create");
+  const canUpdate = can("phone_sims.update");
+  const canDelete = can("phone_sims.delete");
 
   // States
   const [search, setSearch] = useState("");
@@ -158,7 +160,7 @@ export default function PhoneSimArchivedPage() {
         onOpenCreate={() => setIsCreateOpen(true)}
         onOpenPlaces={() => setIsPlacesOpen(true)}
         loading={loading}
-        canManage={canManage}
+        canManage={canCreate}
       />
 
       {/* Info Banner */}
@@ -373,26 +375,26 @@ export default function PhoneSimArchivedPage() {
                             <Eye size={15} />
                           </button>
 
-                          {canManage && (
-                            <>
-                              <button
-                                onClick={() => setActiveSimForStatus(sim)}
-                                className="px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300 font-bold flex items-center gap-1 text-xs"
-                                title="تغيير حالة الشريحة أو استعادتها كمتاحة"
-                              >
-                                <Sliders size={14} />
-                                تغيير الحالة / استعادة
-                              </button>
+                              {canUpdate && (
+                                <button
+                                  onClick={() => setActiveSimForStatus(sim)}
+                                  className="px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300 font-bold flex items-center gap-1 text-xs"
+                                  title="تغيير حالة الشريحة أو استعادتها كمتاحة"
+                                >
+                                  <Sliders size={14} />
+                                  تغيير الحالة / استعادة
+                                </button>
+                              )}
 
-                              <button
-                                onClick={() => setActiveSimForArchive(sim)}
-                                className="p-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
-                                title="أرشفة نهائية"
-                              >
-                                <Archive size={15} />
-                              </button>
-                            </>
-                          )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => setActiveSimForArchive(sim)}
+                                  className="p-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+                                  title="أرشفة نهائية"
+                                >
+                                  <Archive size={15} />
+                                </button>
+                              )}
                         </div>
                       </td>
                     </tr>

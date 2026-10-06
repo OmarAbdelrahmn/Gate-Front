@@ -68,10 +68,10 @@ export function ExternalOrderBillingModal({
 }: ExternalOrderBillingModalProps) {
   const { can } = useAuth();
   const canWorkOrderUpdate = can("maintenance.work_orders.update");
-  const canPartSale = canWorkOrderUpdate && can("maintenance.part_sales.manage") && can("inventory.stock.move");
-  const canLabor = canWorkOrderUpdate && can("maintenance.customer_labor_charges.manage");
-  const canMechanic = canWorkOrderUpdate && can("maintenance.mechanic_labor_payments.manage");
-  const canExternalJobs = canWorkOrderUpdate && can("maintenance.external_jobs.manage");
+  const canPartSale = can("maintenance.work_orders.update", "maintenance.part_sales.create", "inventory.stock.move");
+  const canLabor = can("maintenance.work_orders.update", "maintenance.customer_labor_charges.create");
+  const canMechanic = can("maintenance.work_orders.update", "maintenance.mechanic_labor_payments.create");
+  const canExternalJobs = can("maintenance.work_orders.update", "maintenance.external_jobs.create");
 
   const [activeTab, setActiveTab] = useState<BillingTab>("parts");
   const [order, setOrder] = useState<WorkOrder | null>(null);

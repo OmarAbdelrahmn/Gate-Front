@@ -226,8 +226,8 @@ export default function UsersPage() {
     setCatalogsLoading(true);
     try {
       const [rolesData, permsData] = await Promise.allSettled([
-        can("roles.read") || can("roles.manage") ? listRoles() : Promise.resolve([] as Role[]),
-        can("permissions.read") || can("permissions.manage")
+        can("roles.read") ? listRoles() : Promise.resolve([] as Role[]),
+        can("permissions.read")
           ? getPermissionCatalogue()
           : Promise.resolve([] as PermissionCatalogItem[]),
       ]);
@@ -674,7 +674,7 @@ export default function UsersPage() {
               : "إنشاء الحسابات وتعيين الأدوار والصلاحيات الأولية وإدارة حالة الوصول."}
           </p>
         </div>
-        {can("users.create") && (
+        {can("users.create", "roles.create", "permissions.create") && (
           <Button onClick={handleOpenCreateForm}>
             <Plus size={17} />
             {t("users.newUser")}

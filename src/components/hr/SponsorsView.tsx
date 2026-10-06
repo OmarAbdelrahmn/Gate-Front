@@ -128,7 +128,7 @@ export function SponsorsView({ embedded = false }: { embedded?: boolean }) {
             </p>
           </div>
 
-          {can("sponsors.manage") && (
+          {can("sponsors.create") && (
             <Button onClick={handleCreate} className="inline-flex items-center gap-2">
               <Plus size={18} />
               {locale === "en" ? "Add New Sponsor" : "إضافة كفيل جديد"}
@@ -136,7 +136,7 @@ export function SponsorsView({ embedded = false }: { embedded?: boolean }) {
           )}
         </div>
       ) : (
-        can("sponsors.manage") && (
+        can("sponsors.create") && (
           <div className="flex justify-end">
             <Button onClick={handleCreate} className="inline-flex items-center gap-2">
               <Plus size={18} />
@@ -305,23 +305,23 @@ export function SponsorsView({ embedded = false }: { embedded?: boolean }) {
                         >
                           <Eye size={15} />
                         </button>
-                        {can("sponsors.manage") && (
-                          <>
-                            <button
-                              onClick={() => handleEdit(item)}
-                              className="flex size-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-slate-100 hover:text-[#1167c9]"
-                              title={t("common.edit")}
-                            >
-                              <Edit size={15} />
-                            </button>
-                            <button
-                              onClick={() => void handleArchive(item)}
-                              className="flex size-8 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 hover:bg-red-100"
-                              title={t("users.archived")}
-                            >
-                              <Archive size={15} />
-                            </button>
-                          </>
+                        {can("sponsors.update") && (
+                          <button
+                            onClick={() => handleEdit(item)}
+                            className="flex size-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-slate-100 hover:text-[#1167c9]"
+                            title={t("common.edit")}
+                          >
+                            <Edit size={15} />
+                          </button>
+                        )}
+                        {can("sponsors.delete") && (
+                          <button
+                            onClick={() => void handleArchive(item)}
+                            className="flex size-8 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 hover:bg-red-100"
+                            title={t("users.archived")}
+                          >
+                            <Archive size={15} />
+                          </button>
                         )}
                       </div>
                     </td>

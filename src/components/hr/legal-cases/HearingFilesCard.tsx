@@ -51,7 +51,8 @@ export function HearingFilesCard({
   onFilesChanged,
 }: HearingFilesCardProps) {
   const { can } = useAuth();
-  const canManage = can("legal_cases.manage");
+  const canCreate = can("legal_cases.create");
+  const canDelete = can("legal_cases.delete");
   const canDownload = can("legal_cases.files.download");
 
   const [uploading, setUploading] = useState(false);
@@ -189,7 +190,7 @@ export function HearingFilesCard({
           </span>
         </div>
 
-        {canManage && !isLimitReached && (
+        {canCreate && !isLimitReached && (
           <Button
             type="button"
             variant="ghost"
@@ -203,7 +204,7 @@ export function HearingFilesCard({
       </div>
 
       {/* Upload Form Box */}
-      {showUploadForm && canManage && (
+      {showUploadForm && canCreate && (
         <form
           onSubmit={handleUploadSubmit}
           className="p-3.5 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/20 dark:border-indigo-800/60 space-y-3 animate-in fade-in duration-150"
@@ -297,7 +298,7 @@ export function HearingFilesCard({
                     <Download className="size-4" />
                   </button>
                 )}
-                {canManage && (
+                {canDelete && (
                   <button
                     type="button"
                     onClick={() => setFileToArchive(file)}

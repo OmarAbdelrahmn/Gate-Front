@@ -38,7 +38,8 @@ export function ItemsTab({
   onVehicleTypeFilterChange,
 }: ItemsTabProps) {
   const { can } = useAuth();
-  const canManage = can("inventory.items.manage");
+  const canCreate = can("inventory.items.create");
+  const canUpdate = can("inventory.items.update");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -265,7 +266,7 @@ export function ItemsTab({
             <FileSpreadsheet size={15} />
             تصدير إكسل
           </Button>
-          {canManage && (
+          {canCreate && (
             <Button variant="primary" onClick={handleCreate} className="text-xs shrink-0">
               <PlusCircle size={15} />
               إضافة صنف جديد
@@ -357,19 +358,19 @@ export function ItemsTab({
               <th className="p-3 text-center">سعة العبوة</th>
               <th className="p-3 text-center">الحد الأدنى</th>
               <th className="p-3 text-center">إعادة الطلب</th>
-              {canManage && <th className="p-3 text-center">الإجراءات</th>}
+              {canUpdate && <th className="p-3 text-center">الإجراءات</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {loading ? (
               <tr>
-                <td colSpan={canManage ? 9 : 8} className="p-8 text-center text-slate-400">
+                <td colSpan={canUpdate ? 9 : 8} className="p-8 text-center text-slate-400">
                   جارٍ تحميل الأصناف...
                 </td>
               </tr>
             ) : displayedItems.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 9 : 8} className="p-8 text-center text-slate-400">
+                <td colSpan={canUpdate ? 9 : 8} className="p-8 text-center text-slate-400">
                   لا توجد أصناف مطابقة للفلتر المحدد أو البحث.
                 </td>
               </tr>
@@ -442,7 +443,7 @@ export function ItemsTab({
                   <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                     {item.reorderQuantity}
                   </td>
-                  {canManage && (
+                  {canUpdate && (
                     <td className="p-3 text-center">
                       <Button
                         variant="secondary"

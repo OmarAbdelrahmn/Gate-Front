@@ -15,7 +15,8 @@ interface SuppliersTabProps {
 
 export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProps) {
   const { can } = useAuth();
-  const canManage = can("inventory.receipts.manage");
+  const canCreate = can("inventory.receipts.create");
+  const canUpdate = can("inventory.receipts.update");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -41,7 +42,7 @@ export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProp
             سجل الموردين المعتمدين لتوريد الزيوت، الفلاتر، وقطع الغيار لورش ومستودعات الشركة.
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <Button variant="primary" onClick={handleCreate} className="text-xs">
             <PlusCircle size={15} />
             إضافة مورد جديد
@@ -60,7 +61,7 @@ export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProp
               <th className="p-3">مسؤول الاتصال</th>
               <th className="p-3">الهاتف</th>
               <th className="p-3 text-center">أجل السداد</th>
-              {canManage && <th className="p-3 text-center">الإجراءات</th>}
+              {canUpdate && <th className="p-3 text-center">الإجراءات</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -101,7 +102,7 @@ export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProp
                   <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                     {sup.paymentTermsDays ? `${sup.paymentTermsDays} يوم` : "-"}
                   </td>
-                  {canManage && (
+                  {canUpdate && (
                     <td className="p-3 text-center">
                       <Button
                         variant="secondary"

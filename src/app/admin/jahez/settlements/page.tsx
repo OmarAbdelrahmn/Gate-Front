@@ -290,7 +290,7 @@ export default function JahezSettlementsPage() {
             {isEn ? "Export Excel" : "تصدير إكسل"}
           </Button>
 
-          {can("jahez.collections.manage") && (
+          {can("jahez.collections.create") && (
             <Button
               variant="primary"
               onClick={() => handleOpenModal()}

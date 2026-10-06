@@ -417,7 +417,7 @@ export default function JahezApprovalsPage() {
             {isEn ? "Refresh" : "تحديث"}
           </Button>
 
-          {can("jahez.earnings.manage") && (
+          {can("jahez.earnings.create") && (
             <Button
               variant="secondary"
               onClick={() => {

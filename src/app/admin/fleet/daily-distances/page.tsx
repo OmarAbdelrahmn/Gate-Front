@@ -1590,7 +1590,7 @@ export default function VehicleDailyDistancesPage() {
                             </Link>
                           )}
 
-                          {(can("fleet.daily_distances.manage") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
+                          {(item.manualOdometerReading != null ? can("fleet.daily_distances.update") : can("fleet.daily_distances.create")) && (
                             <Button
                               variant="secondary"
                               onClick={() => handleOpenManualModal(item)}

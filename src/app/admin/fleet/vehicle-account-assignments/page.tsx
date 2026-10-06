@@ -795,7 +795,7 @@ export default function VehicleAccountAssignmentsPage() {
           </p>
         </div>
 
-        {can("fleet.assignments.manage") && (
+        {can("fleet.assignments.create") && (
           <Button onClick={handleOpenCreate} className="gap-2 shadow-lg shadow-blue-500/20">
             <Plus className="h-4 w-4" />
             ربط مركبة بحساب منصة
@@ -1011,7 +1011,7 @@ export default function VehicleAccountAssignmentsPage() {
 
                       {/* Actions */}
                       <td className="px-6 py-4 text-center">
-                        {can("fleet.assignments.manage") && (
+                        {can("fleet.assignments.update", "fleet.assignments.create", "fleet.assignments.delete") && (
                           <Button
                             onClick={() => handleOpenAccept(sw)}
                             className="text-xs py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white gap-1 shadow-sm"
@@ -1187,23 +1187,27 @@ export default function VehicleAccountAssignmentsPage() {
 
                     {/* Actions */}
                     <td className="px-6 py-4 text-center">
-                      {can("fleet.assignments.manage") && item.status === "Active" && (
+                      {item.status === "Active" && (
                         <div className="flex items-center justify-center gap-2">
-                          <Button
-                            variant="secondary"
-                            onClick={() => handleOpenSwitch(item)}
-                            className="text-xs py-1 px-2.5 gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200"
-                          >
-                            <Repeat className="h-3.5 w-3.5" />
-                            تبديل المركبة
-                          </Button>
-                          <Button
-                            variant="danger"
-                            onClick={() => handleOpenClose(item)}
-                            className="text-xs py-1 px-2.5"
-                          >
-                            إغلاق الربط
-                          </Button>
+                          {can("fleet.assignments.update", "fleet.assignments.create", "fleet.assignments.delete") && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleOpenSwitch(item)}
+                              className="text-xs py-1.5 px-2.5 gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200"
+                            >
+                              <Repeat className="h-3.5 w-3.5" />
+                              تبديل المركبة
+                            </Button>
+                          )}
+                          {can("fleet.assignments.delete") && (
+                            <Button
+                              variant="danger"
+                              onClick={() => handleOpenClose(item)}
+                              className="text-xs py-1 px-2.5"
+                            >
+                              إغلاق الربط
+                            </Button>
+                          )}
                         </div>
                       )}
                     </td>

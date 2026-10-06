@@ -241,7 +241,7 @@ export function DriverLicenseCategoriesTab() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          {can("licenses.manage") && (
+          {can("licenses.create") && (
             <Button
               onClick={handleOpenAdd}
               className="gap-2 bg-[#1167c9] hover:bg-[#0e56a8]"
@@ -279,7 +279,7 @@ export function DriverLicenseCategoriesTab() {
                   <th className="px-6 py-4">{isEn ? "Description (Arabic)" : "الوصف (عربي)"}</th>
                   <th className="px-6 py-4">{isEn ? "Description (English)" : "الوصف (إنجليزي)"}</th>
                   <th className="px-6 py-4">{isEn ? "Status" : "الحالة"}</th>
-                  {can("licenses.manage") && (
+                  {can("licenses.update") && (
                     <th className="px-6 py-4 text-center">{isEn ? "Actions" : "الإجراءات"}</th>
                   )}
                 </tr>
@@ -303,7 +303,7 @@ export function DriverLicenseCategoriesTab() {
                     <td className="px-6 py-4">
                       {renderStatusBadge(item.status)}
                     </td>
-                    {can("licenses.manage") && (
+                    {can("licenses.update") && (
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => handleOpenEdit(item)}

@@ -29,7 +29,10 @@ export default function HRDocumentsPage() {
   const searchParams = useSearchParams();
 
   const canReadDocs = can("documents.read");
-  const canManageCatalog = can("documents.catalog.manage");
+  const canManageCatalog =
+    can("documents.catalog.read") ||
+    can("documents.catalog.create") ||
+    can("documents.catalog.update");
 
   // Tab state
   const initialTab = (searchParams.get("tab") as "checklist" | "types" | "requirements") || "checklist";

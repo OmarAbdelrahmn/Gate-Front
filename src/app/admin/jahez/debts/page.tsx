@@ -433,7 +433,7 @@ export default function JahezDebtsPage() {
                       </td>
 
                       <td className="px-4 py-3">
-                        {can("jahez.collections.manage") && (
+                        {can("jahez.collections.create") && (
                           <Button
                             variant="primary"
                             onClick={() => handleOpenSettlement(b)}

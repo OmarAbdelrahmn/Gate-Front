@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { Badge } from "@/components/ui/Badge";
 import { listRiders, listSponsors, Sponsor } from "@/lib/workforce/api";
@@ -74,6 +75,9 @@ export function FuelCardsListView({
   onOpenChangeSponsor,
   onOpenChangeCity,
 }: FuelCardsListViewProps) {
+  const { can } = useAuth();
+  const canUpdate = can("fuel.update");
+  const canDelete = can("fuel.delete");
   const [providerFilter, setProviderFilter] = useState<string[]>([]);
   const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
   const [riderFilterId, setRiderFilterId] = useState("");
@@ -896,44 +900,48 @@ export function FuelCardsListView({
                             <History size={15} />
                           </button>
 
-                          {canManage && (
-                            <>
-                              {/* Change Sponsor */}
-                              <button
-                                onClick={() => onOpenChangeSponsor(card)}
-                                className="p-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
-                                title="تغيير كفيل البطاقة"
-                              >
-                                <Building2 size={15} />
-                              </button>
+                          {/* Change Sponsor */}
+                          {canUpdate && (
+                            <button
+                              onClick={() => onOpenChangeSponsor(card)}
+                              className="p-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
+                              title="تغيير كفيل البطاقة"
+                            >
+                              <Building2 size={15} />
+                            </button>
+                          )}
 
-                              {/* Change City */}
-                              <button
-                                onClick={() => onOpenChangeCity(card)}
-                                className="p-1.5 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300"
-                                title="تغيير مدينة تشغيل البطاقة"
-                              >
-                                <MapPin size={15} />
-                              </button>
+                          {/* Change City */}
+                          {canUpdate && (
+                            <button
+                              onClick={() => onOpenChangeCity(card)}
+                              className="p-1.5 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300"
+                              title="تغيير مدينة تشغيل البطاقة"
+                            >
+                              <MapPin size={15} />
+                            </button>
+                          )}
 
-                              {!hasRider ? (
-                                <button
-                                  onClick={() => onOpenAssign(card)}
-                                  className="p-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                                  title="إسناد البطاقة لمندوب"
-                                >
-                                  <UserPlus size={15} />
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => onOpenStop(card)}
-                                  className="p-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                                  title="إنهاء إسناد البطاقة (إرجاع)"
-                                >
-                                  <UserMinus size={15} />
-                                </button>
-                              )}
-                            </>
+                          {!hasRider ? (
+                            canUpdate && (
+                              <button
+                                onClick={() => onOpenAssign(card)}
+                                className="p-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                title="إسناد البطاقة لمندوب"
+                              >
+                                <UserPlus size={15} />
+                              </button>
+                            )
+                          ) : (
+                            canDelete && (
+                              <button
+                                onClick={() => onOpenStop(card)}
+                                className="p-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                title="إنهاء إسناد البطاقة (إرجاع)"
+                              >
+                                <UserMinus size={15} />
+                              </button>
+                            )
                           )}
                         </div>
                       </td>

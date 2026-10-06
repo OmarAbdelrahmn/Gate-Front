@@ -98,7 +98,7 @@ export async function updateNotificationState(
 
 /**
  * Create a notification for a user (administrative UI).
- * Requires 'notifications.manage' permission.
+ * Requires 'notifications.create' permission.
  * Uses POST /api/notifications.
  */
 export async function createNotification(

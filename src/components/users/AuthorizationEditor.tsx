@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Search, ShieldCheck, X, House, Layers, CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
+import { getFamilyForPermissionKey, PermissionFamily } from "../../lib/auth/management-permissions";
 import { getUserAuthorization } from "../../lib/auth/authorization-api";
 import { permissionLabel } from "../../lib/permission-labels";
 import {
@@ -87,11 +88,13 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
   const [isAllClientScope, setIsAllClientScope] = useState(true);
   const [includesFuturePlatformContracts, setIncludesFuturePlatformContracts] = useState(true);
 
-  const canManageRoles = can("roles.manage");
-  const canManagePermissions = can("permissions.manage");
+  const canReadRoles = can("roles.read");
+  const canReadPermissions = can("permissions.read");
+  const canSaveRoles = can("roles.create", "roles.update", "roles.delete");
+  const canSavePermissions = can("permissions.create", "permissions.update", "permissions.delete");
 
   useEffect(() => {
-    if (!canManageRoles && !canManagePermissions) {
+    if (!canReadRoles && !canReadPermissions && !canSaveRoles && !canSavePermissions) {
       setLoading(false);
       return;
     }
@@ -165,7 +168,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
       }
     };
     void load();
-  }, [canManagePermissions, canManageRoles, userId, locale]);
+  }, [canReadPermissions, canReadRoles, canSavePermissions, canSaveRoles, userId, locale]);
 
   const groupedPermissionsCatalog = useMemo(() => {
     const searchLower = permissionSearch.toLowerCase().trim();
@@ -435,33 +438,37 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     setSaving(true);
     setMessage("");
     try {
-      const rolePayload = assignRoles.map((r) => ({
-        roleId: r.roleId,
-        startsAtUtc: r.startsAtUtc ?? null,
-        expiresAtUtc: r.expiresAtUtc ?? null,
-        reason: r.reason ?? null,
-        isAllHousingScope,
-        isAllClientScope,
-        includesFuturePlatformContracts,
-        scopes: r.scopes ?? [],
-      }));
+      const promises: Promise<any>[] = [];
+      if (canSaveRoles) {
+        const rolePayload = assignRoles.map((r) => ({
+          roleId: r.roleId,
+          startsAtUtc: r.startsAtUtc ?? null,
+          expiresAtUtc: r.expiresAtUtc ?? null,
+          reason: r.reason ?? null,
+          isAllHousingScope,
+          isAllClientScope,
+          includesFuturePlatformContracts,
+          scopes: r.scopes ?? [],
+        }));
+        promises.push(replaceUserRoles(userId, rolePayload));
+      }
 
-      const permPayload = assignPermissions.map((p) => ({
-        permissionKey: p.permissionKey,
-        effect: p.effect || "Grant",
-        startsAtUtc: p.startsAtUtc ?? null,
-        expiresAtUtc: p.expiresAtUtc ?? null,
-        reason: p.reason ?? null,
-        isAllHousingScope,
-        isAllClientScope,
-        includesFuturePlatformContracts,
-        scopes: p.scopes ?? [],
-      }));
+      if (canSavePermissions) {
+        const permPayload = assignPermissions.map((p) => ({
+          permissionKey: p.permissionKey,
+          effect: p.effect || "Grant",
+          startsAtUtc: p.startsAtUtc ?? null,
+          expiresAtUtc: p.expiresAtUtc ?? null,
+          reason: p.reason ?? null,
+          isAllHousingScope,
+          isAllClientScope,
+          includesFuturePlatformContracts,
+          scopes: p.scopes ?? [],
+        }));
+        promises.push(replaceUserPermissions(userId, permPayload));
+      }
 
-      await Promise.all([
-        replaceUserRoles(userId, rolePayload),
-        replaceUserPermissions(userId, permPayload),
-      ]);
+      await Promise.all(promises);
 
       const msg =
         locale === "en"
@@ -486,14 +493,75 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
   }
 
   async function saveRoles() {
-    return saveAll();
+    setSaving(true);
+    setMessage("");
+    try {
+      const rolePayload = assignRoles.map((r) => ({
+        roleId: r.roleId,
+        startsAtUtc: r.startsAtUtc ?? null,
+        expiresAtUtc: r.expiresAtUtc ?? null,
+        reason: r.reason ?? null,
+        isAllHousingScope,
+        isAllClientScope,
+        includesFuturePlatformContracts,
+        scopes: r.scopes ?? [],
+      }));
+      await replaceUserRoles(userId, rolePayload);
+      const msg =
+        locale === "en"
+          ? "User roles saved successfully."
+          : "تم حفظ أدوار المستخدم بنجاح.";
+      setMessage(msg);
+      toast.success(locale === "en" ? "Roles Saved" : "تم حفظ الأدوار", msg);
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        (locale === "en"
+          ? "Failed to save user roles."
+          : "تعذر حفظ أدوار المستخدم.");
+      setMessage(msg);
+      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function savePermissions() {
-    return saveAll();
+    setSaving(true);
+    setMessage("");
+    try {
+      const permPayload = assignPermissions.map((p) => ({
+        permissionKey: p.permissionKey,
+        effect: p.effect || "Grant",
+        startsAtUtc: p.startsAtUtc ?? null,
+        expiresAtUtc: p.expiresAtUtc ?? null,
+        reason: p.reason ?? null,
+        isAllHousingScope,
+        isAllClientScope,
+        includesFuturePlatformContracts,
+        scopes: p.scopes ?? [],
+      }));
+      await replaceUserPermissions(userId, permPayload);
+      const msg =
+        locale === "en"
+          ? "Direct permissions saved successfully."
+          : "تم حفظ الصلاحيات المباشرة بنجاح.";
+      setMessage(msg);
+      toast.success(locale === "en" ? "Permissions Saved" : "تم حفظ الصلاحيات", msg);
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        (locale === "en"
+          ? "Failed to save permissions."
+          : "تعذر حفظ الصلاحيات.");
+      setMessage(msg);
+      toast.error(locale === "en" ? "Save Failed" : "فشل الحفظ", msg);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  if (!canManageRoles && !canManagePermissions) return null;
+  if (!canReadRoles && !canReadPermissions && !canSaveRoles && !canSavePermissions) return null;
   return (
     <Card className="p-5 sm:p-7">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
@@ -512,10 +580,12 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
             </p>
           </div>
         </div>
-        <Button loading={saving} onClick={() => void saveAll()} className="shadow-sm">
-          <Save size={16} />
-          {locale === "en" ? "Save All Changes" : "حفظ جميع التغييرات"}
-        </Button>
+        {(canSaveRoles || canSavePermissions) && (
+          <Button loading={saving} onClick={() => void saveAll()} className="shadow-sm">
+            <Save size={16} />
+            {locale === "en" ? "Save All Changes" : "حفظ جميع التغييرات"}
+          </Button>
+        )}
       </div>
       {message && (
         <p
@@ -593,7 +663,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
               </label>
             </div>
           </section>
-          {canManageRoles && (
+          {(canReadRoles || canSaveRoles) && (
             <section className="rounded-xl border border-[var(--border)] p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <div>
@@ -699,7 +769,7 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
             </section>
           )}
 
-          {canManagePermissions && (
+          {(canReadPermissions || canSavePermissions) && (
             <section className="rounded-xl border border-[var(--border)] p-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
                 <div>
@@ -719,10 +789,12 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                     {assignPermissions.length}{" "}
                     {locale === "en" ? "selected" : "محددة"}
                   </span>
-                  <Button loading={saving} onClick={() => void savePermissions()}>
-                    <Save size={16} />
-                    {locale === "en" ? "Save Permissions" : "حفظ الصلاحيات"}
-                  </Button>
+                  {canSavePermissions && (
+                    <Button loading={saving} onClick={() => void savePermissions()}>
+                      <Save size={16} />
+                      {locale === "en" ? "Save Permissions" : "حفظ الصلاحيات"}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -865,8 +937,24 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                         (p) => p.permissionKey === item.key,
                       ),
                     );
+
+                  const familyMap = new Map<string, PermissionFamily>();
+                  const standaloneItems: PermissionCatalogItem[] = [];
+
+                  for (const item of items) {
+                    const famMatch = getFamilyForPermissionKey(item.key);
+                    if (famMatch) {
+                      if (!familyMap.has(famMatch.family.family)) {
+                        familyMap.set(famMatch.family.family, famMatch.family);
+                      }
+                    } else {
+                      standaloneItems.push(item);
+                    }
+                  }
+                  const families = Array.from(familyMap.values());
+
                   return (
-                    <div key={group} className="space-y-2">
+                    <div key={group} className="space-y-3">
                       <div className="flex items-center justify-between border-b border-[var(--border)] pb-1.5">
                         <h4 className="border-r-2 border-[#1167c9] pr-2 text-xs font-black text-[#1167c9]">
                           {permissionGroupLabel(group, locale)} ({items.length})
@@ -893,77 +981,173 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
                           </span>
                         </label>
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {items.map((item) => {
-                          const assigned = assignPermissions.find(
-                            (p) => p.permissionKey === item.key,
-                          );
-                          const isSelected = Boolean(assigned);
-                          const isDeny = assigned?.effect === "Deny";
-                          return (
-                            <div
-                              key={item.key}
-                              className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${
-                                isSelected
-                                  ? isDeny
-                                    ? "border-red-300 bg-red-50/60 dark:bg-red-950/30 font-bold"
-                                    : "border-[#1167c9] bg-blue-50/60 dark:bg-blue-950/30 font-bold"
-                                  : "border-[var(--border)] hover:bg-slate-500/5"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => togglePermissionKey(item.key)}
-                                className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-1">
+
+                      {/* Render Families with 4 separate controls: Read, Create, Edit, Delete */}
+                      {families.length > 0 && (
+                        <div className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+                          {families.map((fam) => {
+                            const actionControls: { action: "read" | "create" | "update" | "delete"; key: string; labelEn: string; labelAr: string }[] = [
+                              { action: "read", key: fam.read, labelEn: "Read (.read)", labelAr: "قراءة (.read)" },
+                              { action: "create", key: fam.create, labelEn: "Create (.create)", labelAr: "إنشاء (.create)" },
+                              { action: "update", key: fam.update, labelEn: "Edit (.update)", labelAr: "تعديل (.update)" },
+                              { action: "delete", key: fam.delete, labelEn: "Delete (.delete)", labelAr: "حذف (.delete)" },
+                            ];
+
+                            return (
+                              <div
+                                key={fam.family}
+                                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-2.5 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                              >
+                                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)]/60 pb-2">
+                                  <div className="min-w-0">
+                                    <span className="font-bold text-xs text-[var(--foreground)] block truncate">
+                                      {locale === "en" ? fam.nameEn : fam.nameAr}
+                                    </span>
+                                    <span className="font-mono text-[10px] text-[var(--muted)] block truncate" dir="ltr">
+                                      {fam.family}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {fam.highTrust && (
+                                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                                        {locale === "en" ? "High Trust" : "ثقة عالية"}
+                                      </span>
+                                    )}
+                                    {fam.clientScope && (
+                                      <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
+                                        {locale === "en" ? "Client Scope" : "نطاق عميل"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* 4 Separate Permission Controls */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  {actionControls.map((ctrl) => {
+                                    const assigned = assignPermissions.find((p) => p.permissionKey === ctrl.key);
+                                    const isSelected = Boolean(assigned);
+                                    const isDeny = assigned?.effect === "Deny";
+
+                                    return (
+                                      <div
+                                        key={ctrl.key}
+                                        className={`flex flex-col justify-between p-2 rounded-lg border text-xs transition-all ${
+                                          isSelected
+                                            ? isDeny
+                                              ? "border-red-300 bg-red-50/70 dark:bg-red-950/40"
+                                              : "border-[#1167c9] bg-blue-50/70 dark:bg-blue-950/40"
+                                            : "border-[var(--border)] hover:bg-slate-500/5"
+                                        }`}
+                                      >
+                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => togglePermissionKey(ctrl.key)}
+                                            className="h-3.5 w-3.5 rounded border-slate-300 text-[#1167c9]"
+                                          />
+                                          <span className="font-semibold text-[11px] truncate">
+                                            {locale === "en" ? ctrl.labelEn : ctrl.labelAr}
+                                          </span>
+                                        </label>
+                                        <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-[var(--border)]/40">
+                                          <span className="font-mono text-[9px] text-[var(--muted)]">
+                                            .{ctrl.action === "update" ? "update" : ctrl.action}
+                                          </span>
+                                          {isSelected && (
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleEffect(ctrl.key)}
+                                              title={locale === "en" ? "Toggle Effect" : "تبديل القاعدة"}
+                                              className={`rounded px-1 py-0.2 text-[9px] font-bold ${
+                                                isDeny
+                                                  ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                                                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                              }`}
+                                            >
+                                              {isDeny ? (locale === "en" ? "Deny" : "منع") : (locale === "en" ? "Grant" : "مسموح")}
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Render Standalone Permissions */}
+                      {standaloneItems.length > 0 && (
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {standaloneItems.map((item) => {
+                            const assigned = assignPermissions.find(
+                              (p) => p.permissionKey === item.key,
+                            );
+                            const isSelected = Boolean(assigned);
+                            const isDeny = assigned?.effect === "Deny";
+                            return (
+                              <div
+                                key={item.key}
+                                className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${
+                                  isSelected
+                                    ? isDeny
+                                      ? "border-red-300 bg-red-50/60 dark:bg-red-950/30 font-bold"
+                                      : "border-[#1167c9] bg-blue-50/60 dark:bg-blue-950/30 font-bold"
+                                    : "border-[var(--border)] hover:bg-slate-500/5"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => togglePermissionKey(item.key)}
+                                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#1167c9]"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span
+                                      onClick={() => togglePermissionKey(item.key)}
+                                      className="cursor-pointer text-xs leading-5"
+                                    >
+                                      {locale === "en"
+                                        ? item.nameEn || item.nameAr
+                                        : item.nameAr}
+                                    </span>
+                                    {isSelected && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleEffect(item.key)}
+                                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                          isDeny
+                                            ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                                            : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                        }`}
+                                      >
+                                        {isDeny
+                                          ? locale === "en"
+                                            ? "Deny"
+                                            : "منع"
+                                          : locale === "en"
+                                            ? "Grant"
+                                            : "مسموح"}
+                                      </button>
+                                    )}
+                                  </div>
                                   <span
                                     onClick={() => togglePermissionKey(item.key)}
-                                    className="cursor-pointer text-xs leading-5"
+                                    className="block cursor-pointer font-mono text-[10px] text-[var(--muted)] truncate"
+                                    dir="ltr"
                                   >
-                                    {locale === "en"
-                                      ? item.nameEn || item.nameAr
-                                      : item.nameAr}
+                                    {item.key}
                                   </span>
-                                  {isSelected && (
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleEffect(item.key)}
-                                      title={
-                                        locale === "en"
-                                          ? "Toggle Effect (Grant/Deny)"
-                                          : "تبديل القاعدة (مسموح/منع)"
-                                      }
-                                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                                        isDeny
-                                          ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
-                                          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                                      }`}
-                                    >
-                                      {isDeny
-                                        ? locale === "en"
-                                          ? "Deny"
-                                          : "منع"
-                                        : locale === "en"
-                                          ? "Grant"
-                                          : "مسموح"}
-                                    </button>
-                                  )}
                                 </div>
-                                <span
-                                  onClick={() => togglePermissionKey(item.key)}
-                                  className="block cursor-pointer font-mono text-[10px] text-[var(--muted)] truncate"
-                                  dir="ltr"
-                                >
-                                  {item.key}
-                                </span>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

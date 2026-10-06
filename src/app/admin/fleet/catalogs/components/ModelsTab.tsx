@@ -161,7 +161,7 @@ export function ModelsTab() {
           <Button variant="secondary" onClick={loadData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          {can("fleet.vehicles.manage") && (
+          {can("fleet.vehicles.create") && (
             <Button onClick={handleOpenAdd} className="gap-2 bg-[#1167c9] hover:bg-[#0e56a8]">
               <Plus className="h-4 w-4" /> إضافة موديل
             </Button>
@@ -183,7 +183,7 @@ export function ModelsTab() {
                   <th className="px-6 py-4">الصانع</th>
                   <th className="px-6 py-4">النوع / الوقود</th>
                   <th className="px-6 py-4">الحالة</th>
-                  {can("fleet.vehicles.manage") && <th className="px-6 py-4 text-center">الإجراءات</th>}
+                  {can("fleet.vehicles.update") && <th className="px-6 py-4 text-center">الإجراءات</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -198,7 +198,7 @@ export function ModelsTab() {
                       </div>
                     </td>
                     <td className="px-6 py-4">{renderStatusBadge(item.status)}</td>
-                    {can("fleet.vehicles.manage") && (
+                    {can("fleet.vehicles.update") && (
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => handleOpenEdit(item)}

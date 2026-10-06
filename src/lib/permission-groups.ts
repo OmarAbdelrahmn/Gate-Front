@@ -1,4 +1,5 @@
 import type { PermissionCatalogItem } from "./users/types";
+
 export const permissionGroups = [
   "Security",
   "Catalog",
@@ -14,7 +15,9 @@ export const permissionGroups = [
   "Workflows",
   "HR forms",
 ] as const;
+
 export type PermissionGroup = (typeof permissionGroups)[number];
+
 const labels: Record<PermissionGroup, { ar: string; en: string }> = {
   Security: { ar: "الأمن والنظام", en: "Security" },
   Catalog: { ar: "دليل وبيانات الشركة", en: "Catalog" },
@@ -30,10 +33,11 @@ const labels: Record<PermissionGroup, { ar: string; en: string }> = {
   Workflows: { ar: "مسارات العمل", en: "Workflows" },
   "HR forms": { ar: "نماذج الموارد البشرية", en: "HR Forms" },
 };
+
 export function permissionGroup(key: string): PermissionGroup {
   if (/^(users|roles|permissions|audit|support_access)\./.test(key)) return "Security";
   if (/^(company_profile|operating_cities|tags)\./.test(key)) return "Catalog";
-  if (/^(employees|riders|external_riders|sponsors)\./.test(key)) return "Workforce";
+  if (/^(employees|riders|external_riders|sponsors|legal_cases)\./.test(key)) return "Workforce";
   if (/^(residency|licenses|rider_cards|health_cards|insurance|promissory_notes)\./.test(key)) return "Compliance";
   if (key.startsWith("documents.")) return "Documents";
   if (/^(platform_accounts|platform_credentials|platform_assignments|housing|phone_sims|jahez)\./.test(key)) return "Operations";
@@ -46,9 +50,14 @@ export function permissionGroup(key: string): PermissionGroup {
   if (key.startsWith("hr_forms.")) return "HR forms";
   return "Operations";
 }
-export function permissionGroupLabel(group: PermissionGroup, locale: "ar" | "en" = "ar") {
+
+export function permissionGroupLabel(
+  group: PermissionGroup,
+  locale: "ar" | "en" = "ar",
+) {
   return labels[group]?.[locale] ?? group;
 }
+
 export function groupPermissions<T extends Pick<PermissionCatalogItem, "key">>(
   items: T[],
 ) {

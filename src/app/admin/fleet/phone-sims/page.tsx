@@ -54,7 +54,9 @@ import {
 export default function PhoneSimsPage() {
   const { can } = useAuth();
   const canRead = can("phone_sims.read");
-  const canManage = can("phone_sims.manage");
+  const canCreate = can("phone_sims.create");
+  const canUpdate = can("phone_sims.update");
+  const canDelete = can("phone_sims.delete");
 
   // Filter States
   const [search, setSearch] = useState("");
@@ -313,7 +315,7 @@ export default function PhoneSimsPage() {
         onExportExcel={handleExportExcel}
         exporting={exporting}
         loading={loading}
-        canManage={canManage}
+        canManage={canCreate}
       />
 
       {/* Summary KPI Cards */}
@@ -609,28 +611,30 @@ export default function PhoneSimsPage() {
                             <Printer size={15} />
                           </button>
 
-                          {canManage && (
-                            <>
                               {/* Edit SIM details */}
-                              <button
-                                onClick={() => setActiveSimForEdit(sim)}
-                                className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-[#1167c9] hover:bg-slate-100 dark:hover:bg-slate-800"
-                                title="تعديل الشريحة"
-                              >
-                                <Edit2 size={15} />
-                              </button>
+                              {canUpdate && (
+                                <button
+                                  onClick={() => setActiveSimForEdit(sim)}
+                                  className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-[#1167c9] hover:bg-slate-100 dark:hover:bg-slate-800"
+                                  title="تعديل الشريحة"
+                                >
+                                  <Edit2 size={15} />
+                                </button>
+                              )}
 
                               {/* Transfer Responsibility */}
-                              <button
-                                onClick={() => setActiveSimForResp(sim)}
-                                className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40"
-                                title="نقل مسؤولية العهدة"
-                              >
-                                <ArrowLeftRight size={15} />
-                              </button>
+                              {canUpdate && (
+                                <button
+                                  onClick={() => setActiveSimForResp(sim)}
+                                  className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                  title="نقل مسؤولية العهدة"
+                                >
+                                  <ArrowLeftRight size={15} />
+                                </button>
+                              )}
 
                               {/* Assign to Rider */}
-                              {isAvailable && (
+                              {canCreate && isAvailable && (
                                 <button
                                   onClick={() => setActiveSimForAssign(sim)}
                                   className="p-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
@@ -641,7 +645,7 @@ export default function PhoneSimsPage() {
                               )}
 
                               {/* Return from Rider */}
-                              {isAssigned && (
+                              {canDelete && isAssigned && (
                                 <button
                                   onClick={() => setActiveSimForReturn(sim)}
                                   className="p-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
@@ -652,42 +656,44 @@ export default function PhoneSimsPage() {
                               )}
 
                               {/* Change Status */}
-                              <button
-                                onClick={() => setActiveSimForStatus(sim)}
-                                disabled={isAssigned}
-                                className={`p-1.5 rounded-lg border border-[var(--border)] ${
-                                  isAssigned
-                                    ? "opacity-30 cursor-not-allowed text-slate-400"
-                                    : "text-[var(--muted)] hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
-                                }`}
-                                title={
-                                  isAssigned
-                                    ? "لا يمكن تغيير الحالة يدوي أثناء وجود تعيين نشط"
-                                    : "تغيير حالة الشريحة"
-                                }
-                              >
-                                <Sliders size={15} />
-                              </button>
+                              {canUpdate && (
+                                <button
+                                  onClick={() => setActiveSimForStatus(sim)}
+                                  disabled={isAssigned}
+                                  className={`p-1.5 rounded-lg border border-[var(--border)] ${
+                                    isAssigned
+                                      ? "opacity-30 cursor-not-allowed text-slate-400"
+                                      : "text-[var(--muted)] hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                                  }`}
+                                  title={
+                                    isAssigned
+                                      ? "لا يمكن تغيير الحالة يدوي أثناء وجود تعيين نشط"
+                                      : "تغيير حالة الشريحة"
+                                  }
+                                >
+                                  <Sliders size={15} />
+                                </button>
+                              )}
 
                               {/* Archive */}
-                              <button
-                                onClick={() => setActiveSimForArchive(sim)}
-                                disabled={isAssigned}
-                                className={`p-1.5 rounded-lg border border-[var(--border)] ${
-                                  isAssigned
-                                    ? "opacity-30 cursor-not-allowed text-slate-400"
-                                    : "text-[var(--muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                                }`}
-                                title={
-                                  isAssigned
-                                    ? "لا يمكن الأرشفة أثناء وجود تعيين نشط"
-                                    : "أرشفة الشريحة"
-                                }
-                              >
-                                <Archive size={15} />
-                              </button>
-                            </>
-                          )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => setActiveSimForArchive(sim)}
+                                  disabled={isAssigned}
+                                  className={`p-1.5 rounded-lg border border-[var(--border)] ${
+                                    isAssigned
+                                      ? "opacity-30 cursor-not-allowed text-slate-400"
+                                      : "text-[var(--muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                                  }`}
+                                  title={
+                                    isAssigned
+                                      ? "لا يمكن الأرشفة أثناء وجود تعيين نشط"
+                                      : "أرشفة الشريحة"
+                                  }
+                                >
+                                  <Archive size={15} />
+                                </button>
+                              )}
                         </div>
                       </td>
                     </tr>

@@ -421,7 +421,7 @@ export default function SponsorVehicleLeasesPage() {
           </p>
         </div>
 
-        {can("fleet.assignments.manage") && (
+        {can("fleet.assignments.create") && (
           <Button onClick={handleOpenCreate} className="gap-2 shadow-lg shadow-blue-500/20">
             <Plus className="h-4 w-4" />
             إنشاء عقد تأجير كفيل جديد
@@ -513,7 +513,7 @@ export default function SponsorVehicleLeasesPage() {
             <p className="text-xs text-[var(--muted)] mt-1 max-w-md mx-auto">
               لم يتم العثور على أي اتفاقيات تأجير مركبات بين الكفلاء لمنصة كيتا بحسب الفلاتر المحددة.
             </p>
-            {can("fleet.assignments.manage") && (
+            {can("fleet.assignments.create") && (
               <Button onClick={handleOpenCreate} variant="secondary" className="mt-4 gap-2">
                 <Plus className="h-4 w-4" />
                 إنشاء أول عقد تأجير
@@ -629,7 +629,7 @@ export default function SponsorVehicleLeasesPage() {
                           <EyeIcon className="h-3.5 w-3.5 text-[#1167c9]" />
                           التفاصيل
                         </Button>
-                        {can("fleet.assignments.manage") && item.status !== "Ended" && (
+                        {can("fleet.assignments.delete") && item.status !== "Ended" && (
                           <Button
                             variant="danger"
                             onClick={() => handleOpenClose(item)}

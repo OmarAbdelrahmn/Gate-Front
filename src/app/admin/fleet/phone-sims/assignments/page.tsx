@@ -38,7 +38,8 @@ import {
 export default function PhoneSimAssignmentsPage() {
   const { can } = useAuth();
   const canRead = can("phone_sims.read");
-  const canManage = can("phone_sims.manage");
+  const canCreate = can("phone_sims.create");
+  const canDelete = can("phone_sims.delete");
 
   // States
   const [search, setSearch] = useState("");
@@ -149,7 +150,7 @@ export default function PhoneSimAssignmentsPage() {
         onOpenCreate={() => setIsCreateOpen(true)}
         onOpenPlaces={() => setIsPlacesOpen(true)}
         loading={loading}
-        canManage={canManage}
+        canManage={canCreate}
       />
 
       {/* KPI Cards */}
@@ -408,9 +409,7 @@ export default function PhoneSimAssignmentsPage() {
                             <Eye size={15} />
                           </button>
 
-                          {canManage && (
-                            <>
-                              {isAvailable && (
+                              {canCreate && isAvailable && (
                                 <button
                                   onClick={() => setActiveSimForAssign(sim)}
                                   className="px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300 font-bold flex items-center gap-1 text-xs"
@@ -420,7 +419,7 @@ export default function PhoneSimAssignmentsPage() {
                                 </button>
                               )}
 
-                              {isAssigned && (
+                              {canDelete && isAssigned && (
                                 <button
                                   onClick={() => setActiveSimForReturn(sim)}
                                   className="px-2.5 py-1 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold flex items-center gap-1 text-xs"
@@ -429,8 +428,6 @@ export default function PhoneSimAssignmentsPage() {
                                   استلام (إرجاع)
                                 </button>
                               )}
-                            </>
-                          )}
                         </div>
                       </td>
                     </tr>

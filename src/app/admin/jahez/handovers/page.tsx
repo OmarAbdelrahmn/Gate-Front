@@ -369,7 +369,7 @@ export default function JahezHandoversPage() {
             {isEn ? "Export" : "تصدير"}
           </Button>
 
-          {can("jahez.adjustments.manage") && (
+          {can("jahez.adjustments.create") && (
             <Button
               variant="secondary"
               onClick={() => {
@@ -388,7 +388,7 @@ export default function JahezHandoversPage() {
             </Button>
           )}
 
-          {can("jahez.handovers.manage") && (
+          {can("jahez.handovers.create") && (
             <Button
               variant="primary"
               onClick={() => {
@@ -541,7 +541,7 @@ export default function JahezHandoversPage() {
                             {isEn ? "Balance" : "الرصيد"}
                           </Button>
 
-                          {isActive && can("jahez.handovers.manage") && (
+                          {isActive && can("jahez.handovers.delete") && (
                             <Button
                               variant="secondary"
                               onClick={() => {

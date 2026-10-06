@@ -802,7 +802,7 @@ export default function PlatformAccountsPage() {
             <FileSpreadsheet size={16} />
             {isEn ? "Export Excel" : "تصدير إكسل"}
           </Button>
-          {can("platform_accounts.manage") && (
+          {can("platform_accounts.create") && (
             <Button
               onClick={handleOpenAdd}
               className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]"
@@ -1090,7 +1090,7 @@ export default function PlatformAccountsPage() {
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {/* Assign Button */}
-                        {can("platform_assignments.manage") && acc.status === "Available" && (
+                        {can("platform_assignments.create") && acc.status === "Available" && (
                           <button
                             onClick={() => handleOpenAssign(acc)}
                             title={t("platforms.assignRider")}
@@ -1101,7 +1101,7 @@ export default function PlatformAccountsPage() {
                         )}
 
                         {/* Release Button */}
-                        {can("platform_assignments.manage") && acc.status === "Assigned" && (
+                        {can("platform_assignments.delete") && acc.status === "Assigned" && (
                           <button
                             onClick={() => handleOpenRelease(acc)}
                             title={t("platforms.releaseRider")}
@@ -1134,7 +1134,7 @@ export default function PlatformAccountsPage() {
                         )}
 
                         {/* Edit Button */}
-                        {can("platform_accounts.manage") && (
+                        {can("platform_accounts.update") && (
                           <button
                             onClick={() => handleOpenEdit(acc)}
                             title={t("common.edit")}

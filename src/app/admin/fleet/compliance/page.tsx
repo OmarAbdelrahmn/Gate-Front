@@ -1632,7 +1632,7 @@ export default function CompliancePage() {
                     {/* 8. Direct Actions */}
                     <td className="px-5 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        {can("fleet.compliance.manage") && (
+                        {can("fleet.compliance.create") && (
                           <Button
                             variant="secondary"
                             className="text-xs px-2.5 py-1 h-auto min-h-0 text-[#1167c9] border-[#1167c9]/30 hover:bg-blue-50 dark:hover:bg-blue-950/30 gap-1 font-semibold"

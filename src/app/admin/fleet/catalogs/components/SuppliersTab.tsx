@@ -209,7 +209,7 @@ export function SuppliersTab() {
           <Button variant="secondary" onClick={loadData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          {can("fleet.vehicles.manage") && (
+          {can("fleet.vehicles.create") && (
             <Button onClick={handleOpenAdd} className="gap-2 bg-[#1167c9] hover:bg-[#0e56a8]">
               <Plus className="h-4 w-4" /> إضافة مورد
             </Button>
@@ -231,7 +231,7 @@ export function SuppliersTab() {
                   <th className="px-6 py-4">السجل التجاري</th>
                   <th className="px-6 py-4">الهاتف</th>
                   <th className="px-6 py-4">الحالة</th>
-                  {can("fleet.vehicles.manage") && <th className="px-6 py-4 text-center">الإجراءات</th>}
+                  {(can("fleet.vehicles.update") || can("fleet.vehicles.delete")) && <th className="px-6 py-4 text-center">الإجراءات</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -246,16 +246,18 @@ export function SuppliersTab() {
                     </td>
                     <td className="px-6 py-4 text-xs font-mono">{item.phone || "—"}</td>
                     <td className="px-6 py-4">{renderStatusBadge(item.status)}</td>
-                    {can("fleet.vehicles.manage") && (
+                    {(can("fleet.vehicles.update") || can("fleet.vehicles.delete")) && (
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleOpenEdit(item)}
-                            className="rounded-lg p-2 text-[var(--muted)] hover:bg-blue-50 hover:text-[#1167c9] dark:hover:bg-blue-950/60 dark:hover:text-blue-400"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          {can("fleet.vehicles.archive") && item.status !== VehicleCatalogStatus.Archived && (
+                          {can("fleet.vehicles.update") && (
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="rounded-lg p-2 text-[var(--muted)] hover:bg-blue-50 hover:text-[#1167c9] dark:hover:bg-blue-950/60 dark:hover:text-blue-400"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                          )}
+                          {can("fleet.vehicles.delete") && item.status !== VehicleCatalogStatus.Archived && (
                             <button
                               onClick={() => handleOpenArchive(item)}
                               className="rounded-lg p-2 text-[var(--muted)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/60 dark:hover:text-red-400"

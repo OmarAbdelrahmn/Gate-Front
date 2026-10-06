@@ -215,7 +215,7 @@ function IssuesPageContent() {
           </h1>
           <p className="mt-1 text-sm text-slate-500">إدارة أعطال المركبات والصيانة وأدلة المشاكل</p>
         </div>
-        {can("fleet.issues.manage") && (
+        {can("fleet.issues.create") && (
           <Button
             onClick={() => setIsCreateOpen(true)}
             className="flex items-center gap-2 bg-[#1167c9] hover:bg-[#0e56a8]"

@@ -249,7 +249,7 @@ export default function JahezImportsReportPage() {
             {isEn ? "Export Log" : "تصدير السجل"}
           </Button>
 
-          {can("jahez.imports.manage") && (
+          {can("jahez.imports.create") && (
             <Button
               variant="primary"
               onClick={() => setIsUploadOpen(true)}
@@ -628,7 +628,7 @@ export default function JahezImportsReportPage() {
                 إغلاق
               </Button>
 
-              {!preview.committed && can("jahez.imports.manage") && (
+              {!preview.committed && can("jahez.imports.update") && (
                 <Button
                   variant="primary"
                   onClick={handleCommitBatch}

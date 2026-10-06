@@ -245,18 +245,18 @@ export const navigation: NavItem[] = [
     roles: ["admin", "manager", "member", "accountant"],
     permissionsAny: [
       "jahez.read",
-      "jahez.handovers.manage",
-      "jahez.collections.manage",
+      "jahez.handovers.read",
+      "jahez.collections.read",
       "jahez.cashbox.read",
       "jahez.cashbox.submit",
       "jahez.cashbox.confirm",
       "jahez.cashbox.approve",
-      "jahez.imports.manage",
-      "jahez.adjustments.manage",
+      "jahez.imports.read",
+      "jahez.adjustments.read",
       "jahez.requests.create",
       "jahez.requests.approve",
       "jahez.resets.approve",
-      "jahez.earnings.manage",
+      "jahez.earnings.read",
     ],
     children: [
       {
@@ -265,7 +265,7 @@ export const navigation: NavItem[] = [
         href: "/admin/jahez/handovers",
         icon: Server,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["jahez.read", "jahez.handovers.manage"],
+        permissionsAny: ["jahez.read", "jahez.handovers.read"],
       },
       {
         label: "مديونيات ومتأخرات المناديب",
@@ -281,7 +281,7 @@ export const navigation: NavItem[] = [
         href: "/admin/jahez/settlements",
         icon: CreditCard,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["jahez.read", "jahez.collections.manage"],
+        permissionsAny: ["jahez.read", "jahez.collections.read"],
       },
       {
         label: "صندوق النقد وتسليم المحاسب",
@@ -302,7 +302,7 @@ export const navigation: NavItem[] = [
         href: "/admin/jahez/ledger",
         icon: BookOpen,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["jahez.read", "jahez.adjustments.manage"],
+        permissionsAny: ["jahez.read", "jahez.adjustments.read"],
       },
       {
         label: "الطلبات والاعتمادات",
@@ -323,7 +323,7 @@ export const navigation: NavItem[] = [
         href: "/admin/jahez/imports",
         icon: FileSpreadsheet,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["jahez.read", "jahez.imports.manage"],
+        permissionsAny: ["jahez.read", "jahez.imports.read"],
       },
       {
         label: "تقرير طلبات المناديب اليومية",
@@ -348,7 +348,6 @@ export const navigation: NavItem[] = [
       "fleet.compliance.read",
       "fleet.daily_distances.read",
       "fuel.read",
-      "fuel.manage",
       "fuel.import",
     ],
     children: [
@@ -386,7 +385,7 @@ export const navigation: NavItem[] = [
         href: "/admin/fleet/fuel-cards",
         icon: Fuel,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["fuel.read", "fuel.manage", "fuel.import"],
+        permissionsAny: ["fuel.read", "fuel.import"],
       },
       {
         label: "التعيينات والاستلام",
@@ -567,7 +566,8 @@ export const navigation: NavItem[] = [
       "inventory.items.read",
       "inventory.stock.read",
       "inventory.cost_layers.read",
-      "inventory.receipts.manage",
+      "inventory.receipts.read",
+      "inventory.returns.read",
       "inventory.supply_requests.read",
       "inventory.supply_requests.approve",
       "inventory.supply_requests.submit",
@@ -620,7 +620,7 @@ export const navigation: NavItem[] = [
         icon: FileSpreadsheet,
         roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
-          "inventory.receipts.manage",
+          "inventory.receipts.read",
           "inventory.stock.read",
         ],
       },
@@ -650,7 +650,8 @@ export const navigation: NavItem[] = [
         icon: ArrowLeftRight,
         roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
-          "inventory.receipts.manage",
+          "inventory.returns.read",
+          "inventory.receipts.read",
           "inventory.stock.read",
         ],
       },

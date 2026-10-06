@@ -22,26 +22,12 @@ import { ShieldAlert } from "lucide-react";
 export default function FuelCardsPage() {
   const { user, can } = useAuth();
 
-  const canRead =
-    can("fuel.read") ||
-    user?.roles?.includes("admin") ||
-    user?.roles?.includes("SYSTEM_ADMIN") ||
-    user?.roles?.includes("MANAGER") ||
-    user?.userName === "omar";
-
-  const canManage =
-    can("fuel.manage") ||
-    user?.roles?.includes("admin") ||
-    user?.roles?.includes("SYSTEM_ADMIN") ||
-    user?.roles?.includes("MANAGER") ||
-    user?.userName === "omar";
-
-  const canImport =
-    can("fuel.import") ||
-    user?.roles?.includes("admin") ||
-    user?.roles?.includes("SYSTEM_ADMIN") ||
-    user?.roles?.includes("MANAGER") ||
-    user?.userName === "omar";
+  const canRead = can("fuel.read");
+  const canCreate = can("fuel.create");
+  const canUpdate = can("fuel.update");
+  const canDelete = can("fuel.delete");
+  const canManage = canUpdate || canDelete;
+  const canImport = can("fuel.read");
 
   const [activeTab, setActiveTab] = useState<FuelCardsTab>("cards");
   const [searchQuery, setSearchQuery] = useState("");
@@ -87,7 +73,7 @@ export default function FuelCardsPage() {
         onTabChange={(tab) => setActiveTab(tab)}
         onRefresh={triggerRefresh}
         onOpenCreate={() => setIsCreateOpen(true)}
-        canManage={canManage}
+        canManage={canCreate}
         canImport={canImport}
       />
 
@@ -117,7 +103,7 @@ export default function FuelCardsPage() {
       {activeTab === "monthly" && (
         <FuelMonthlyUsageView
           key={refreshKey}
-          canManage={canManage}
+          canManage={canUpdate}
           onOpenAssign={(card) => setAssignModalCard(card)}
           onOpenDetail={(cardId) => setDetailModalCardId(cardId)}
         />

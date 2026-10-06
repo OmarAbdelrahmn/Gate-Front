@@ -120,7 +120,9 @@ export default function HousingPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<{ status?: number; message: string } | null>(null);
   const [refreshingSession, setRefreshingSession] = useState(false);
-  const manage = can("housing.manage");
+  const canCreate = can("housing.create");
+  const canUpdate = can("housing.update");
+  const canDelete = can("housing.delete");
 
   async function loadData() {
     setLoading(true);
@@ -429,7 +431,7 @@ export default function HousingPage() {
               : "إدارة الوحدات السكنية والسعة الاستيعابية والسكان والمشرفين المعينين."}
           </p>
         </div>
-        {manage && activeTab === "units" && (
+        {canCreate && activeTab === "units" && (
           <Button onClick={handleOpenCreate} className="shadow-lg shadow-blue-500/10">
             <Plus size={18} />
             {t("housing.newHousing")}
@@ -804,16 +806,18 @@ export default function HousingPage() {
                       {isEn ? "Manage Rooms & Occupants →" : "إدارة الغرف والتسكين ←"}
                     </Link>
 
-                    {manage && (
+                    {(canUpdate || canDelete) && (
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEdit(x)}
-                          title={isEn ? "Edit Housing" : "تعديل السكن"}
-                          className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        {!isArchived && (
+                        {canUpdate && (
+                          <button
+                            onClick={() => handleOpenEdit(x)}
+                            title={isEn ? "Edit Housing" : "تعديل السكن"}
+                            className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                          >
+                            <Edit3 size={15} />
+                          </button>
+                        )}
+                        {!isArchived && canDelete && (
                           <button
                             onClick={() => {
                               setArchiveTarget(x);

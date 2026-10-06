@@ -59,7 +59,8 @@ function getScopeDescription(
 export function DocumentRequirementAdminPanel() {
   const { can, locale } = useAuth();
   const isEn = locale === "en";
-  const canManage = can("documents.catalog.manage");
+  const canCreate = can("documents.catalog.create");
+  const canUpdate = can("documents.catalog.update");
 
   const [docTypes, setDocTypes] = useState<DocumentType[]>([]);
   const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
@@ -216,7 +217,7 @@ export function DocumentRequirementAdminPanel() {
               : "تخصيص الوثائق المطلوبة لكل فئة موظفين/مناديب وتحديد تاريخ السريان وأيام التنبيه."}
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <Button onClick={handleOpenCreate} className="gap-2">
             <Plus size={17} />
             {isEn ? "Add Requirement Rule" : "إضافة تكليف متطلب جديد"}
@@ -262,7 +263,7 @@ export function DocumentRequirementAdminPanel() {
                   <th className="px-5 py-4">{isEn ? "Effective Dates" : "تواريخ السريان"}</th>
                   <th className="px-5 py-4">{isEn ? "Reminders (Days)" : "أيام التنبيه"}</th>
                   <th className="px-5 py-4">{isEn ? "Status" : "الحالة"}</th>
-                  {canManage && <th className="px-5 py-4 text-center">{isEn ? "Action" : "الإجراء"}</th>}
+                  {canUpdate && <th className="px-5 py-4 text-center">{isEn ? "Action" : "الإجراء"}</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)] text-sm">
@@ -321,7 +322,7 @@ export function DocumentRequirementAdminPanel() {
                           {r.status}
                         </span>
                       </td>
-                      {canManage && (
+                      {canUpdate && (
                         <td className="px-5 py-4 text-center">
                           <Button
                             variant="secondary"

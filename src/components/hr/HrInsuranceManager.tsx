@@ -81,7 +81,9 @@ export function HrInsuranceManager() {
   const [saving, setSaving] = useState(false);
 
   const canRead = can("insurance.read");
-  const canManage = can("insurance.manage");
+  const canCreate = can("insurance.create");
+  const canUpdate = can("insurance.update");
+  const canDelete = can("insurance.delete");
 
   // Load Companies & Employees on mount
   useEffect(() => {
@@ -173,12 +175,11 @@ export function HrInsuranceManager() {
     }
   }
 
-  // --- Handlers for Company ---
   async function handleSaveCompany(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!canManage) return;
-    const form = new FormData(e.currentTarget);
     const editing = companyModal.data;
+    if (editing ? !canUpdate : !canCreate) return;
+    const form = new FormData(e.currentTarget);
 
     const payload: InsuranceCompanyInput = {
       code: String(form.get("code") || "").trim(),
@@ -219,7 +220,7 @@ export function HrInsuranceManager() {
   }
 
   async function handleArchiveCompany(company: InsuranceCompany) {
-    if (!canManage) return;
+    if (!canDelete) return;
     const reason = await systemPrompt(
       locale === "en" ? "Enter reason for archiving company:" : "أدخل سبب أرشفة الشركة:",
       "",
@@ -240,12 +241,11 @@ export function HrInsuranceManager() {
     }
   }
 
-  // --- Handlers for Plan ---
   async function handleSavePlan(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!canManage) return;
-    const form = new FormData(e.currentTarget);
     const editing = planModal.data;
+    if (editing ? !canUpdate : !canCreate) return;
+    const form = new FormData(e.currentTarget);
     const companyId = String(form.get("insuranceCompanyId") || selectedCompanyId);
 
     if (!companyId) {
@@ -294,7 +294,7 @@ export function HrInsuranceManager() {
   }
 
   async function handleArchivePlan(plan: InsurancePlan) {
-    if (!canManage) return;
+    if (!canDelete) return;
     const reason = await systemPrompt(
       locale === "en" ? "Enter reason for archiving plan:" : "أدخل سبب أرشفة الخطة:",
       "",
@@ -315,12 +315,11 @@ export function HrInsuranceManager() {
     }
   }
 
-  // --- Handlers for Policy ---
   async function handleSavePolicy(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!canManage) return;
-    const form = new FormData(e.currentTarget);
     const editing = policyModal.data;
+    if (editing ? !canUpdate : !canCreate) return;
+    const form = new FormData(e.currentTarget);
     const empId = String(form.get("employeeId") || "").trim();
 
     if (!empId) {
@@ -369,7 +368,7 @@ export function HrInsuranceManager() {
   }
 
   async function handleArchivePolicy(policy: InsurancePolicy) {
-    if (!canManage) return;
+    if (!canDelete) return;
     const reason = await systemPrompt(
       locale === "en" ? "Enter reason for archiving policy:" : "أدخل سبب أرشفة الوثيقة:",
       "",
@@ -462,7 +461,7 @@ export function HrInsuranceManager() {
           </p>
         </div>
 
-        {canManage && (
+        {canCreate && (
           <div>
             {activeTab === "companies" && (
               <Button
@@ -714,8 +713,8 @@ export function HrInsuranceManager() {
                               {locale === "en" ? "Plans" : "الخطط"}
                             </button>
 
-                            {canManage && (
-                              <>
+                            <div className="flex items-center gap-1">
+                              {canUpdate && (
                                 <button
                                   onClick={() => setCompanyModal({ open: true, data: comp })}
                                   className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
@@ -723,6 +722,8 @@ export function HrInsuranceManager() {
                                 >
                                   <Edit2 size={14} />
                                 </button>
+                              )}
+                              {canDelete && (
                                 <button
                                   onClick={() => void handleArchiveCompany(comp)}
                                   className="grid h-8 w-8 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
@@ -730,8 +731,8 @@ export function HrInsuranceManager() {
                                 >
                                   <Archive size={14} />
                                 </button>
-                              </>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -861,22 +862,26 @@ export function HrInsuranceManager() {
                           </span>
                         </td>
                         <td className="p-4 text-center">
-                          {canManage && (
+                          {(canUpdate || canDelete) && (
                             <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => setPlanModal({ open: true, data: plan })}
-                                className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                                title={locale === "en" ? "Edit Plan" : "تعديل الخطة"}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => void handleArchivePlan(plan)}
-                                className="grid h-8 w-8 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                                title={locale === "en" ? "Archive Plan" : "أرشفة الخطة"}
-                              >
-                                <Archive size={14} />
-                              </button>
+                              {canUpdate && (
+                                <button
+                                  onClick={() => setPlanModal({ open: true, data: plan })}
+                                  className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                                  title={locale === "en" ? "Edit Plan" : "تعديل الخطة"}
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => void handleArchivePlan(plan)}
+                                  className="grid h-8 w-8 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                                  title={locale === "en" ? "Archive Plan" : "أرشفة الخطة"}
+                                >
+                                  <Archive size={14} />
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>
@@ -1001,25 +1006,29 @@ export function HrInsuranceManager() {
                           </span>
                         </td>
                         <td className="p-4 text-center">
-                          {canManage && (
+                          {(canUpdate || canDelete) && (
                             <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => {
-                                  setPolicyModalCompanyId(pol.insuranceCompanyId);
-                                  setPolicyModal({ open: true, data: pol });
-                                }}
-                                className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                                title={locale === "en" ? "Edit Policy" : "تعديل الوثيقة"}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => void handleArchivePolicy(pol)}
-                                className="grid h-8 w-8 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                                title={locale === "en" ? "Archive Policy" : "أرشفة الوثيقة"}
-                              >
-                                <Archive size={14} />
-                              </button>
+                              {canUpdate && (
+                                <button
+                                  onClick={() => {
+                                    setPolicyModalCompanyId(pol.insuranceCompanyId);
+                                    setPolicyModal({ open: true, data: pol });
+                                  }}
+                                  className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                                  title={locale === "en" ? "Edit Policy" : "تعديل الوثيقة"}
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => void handleArchivePolicy(pol)}
+                                  className="grid h-8 w-8 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                                  title={locale === "en" ? "Archive Policy" : "أرشفة الوثيقة"}
+                                >
+                                  <Archive size={14} />
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>

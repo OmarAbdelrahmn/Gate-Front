@@ -31,7 +31,8 @@ export function ManagePlacesModal({
   onSelectPlace,
 }: ManagePlacesModalProps) {
   const { can } = useAuth();
-  const canManage = can("phone_sims.manage");
+  const canCreate = can("phone_sims.create");
+  const canUpdate = can("phone_sims.update");
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
@@ -191,8 +192,8 @@ export function ManagePlacesModal({
           </p>
         </div>
 
-        {/* Add New Place Form (Manage permission only) */}
-        {canManage && (
+        {/* Add New Place Form (Create permission only) */}
+        {canCreate && (
           <form
             onSubmit={handleCreate}
             className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-2"
@@ -341,7 +342,7 @@ export function ManagePlacesModal({
                           </Button>
                         )}
 
-                        {canManage && (
+                        {canUpdate && (
                           <button
                             type="button"
                             onClick={() => startEdit(place)}

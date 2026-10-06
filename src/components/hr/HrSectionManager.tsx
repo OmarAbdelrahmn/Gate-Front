@@ -209,7 +209,8 @@ export function HrSectionManager({
   const [lookups, setLookups] = useState<
     Record<string, { value: string; label: string; labelEn?: string }[]>
   >({});
-  const manageable = section ? can(section.permissionManage) : false;
+  const canCreate = section ? can(section.permissionCreate) : false;
+  const canUpdate = section ? can(section.permissionUpdate) : false;
 
   const load = useCallback(async () => {
     if (!section) return;
@@ -455,7 +456,7 @@ export function HrSectionManager({
             {sectionDesc}
           </p>
         </div>
-        {manageable && (
+        {canCreate && (
           <Button onClick={() => openForm(null)}>
             <Plus size={18} />
             {t("common.add")}
@@ -573,7 +574,7 @@ export function HrSectionManager({
                     ))}
                     <td className="px-4 py-3 text-start">
                       <div className="flex flex-wrap gap-2">
-                        {manageable && section.workflow !== "status" && (
+                        {canUpdate && section.workflow !== "status" && (
                           <button
                             onClick={() => openForm(row)}
                             className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[var(--border)] px-3 font-bold text-[#1167c9]"
@@ -582,7 +583,7 @@ export function HrSectionManager({
                             {t("common.edit")}
                           </button>
                         )}
-                        {section.resource === "job-titles" && manageable && (
+                        {section.resource === "job-titles" && canUpdate && (
                           <button
                             onClick={() => setWorkTypes(row)}
                             className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[var(--border)] px-3 font-bold"
