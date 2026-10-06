@@ -44,6 +44,7 @@ import type {
   LeaveRequestResponse,
   LeaveRequestUpsertRequest,
   LeaveDateChangeRequest,
+  LeaveExtensionCreateRequest,
   LeaveCancellationRequest,
   LeaveDocumentResponse,
   LeaveDocumentKind,
@@ -191,8 +192,8 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
   const [loadingDocuments, setLoadingDocuments] = useState(false);
 
   // Sub-resource Action Modals
-  const [dateChangeModalOpen, setDateChangeModalOpen] = useState(false);
-  const [dateChangeForm, setDateChangeForm] = useState({ requestedStartDate: "", requestedEndDate: "", reason: "" });
+  const [extensionModalOpen, setExtensionModalOpen] = useState(false);
+  const [extensionForm, setExtensionForm] = useState({ newEndDate: "", reason: "" });
 
   const [cancellationModalOpen, setCancellationModalOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
@@ -896,30 +897,40 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
     }
   };
 
-  // Date Change Handlers
-  const handleCreateDateChange = async (e: FormEvent) => {
+  // Leave Extension Handlers
+  const handleCreateExtension = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedRequest) return;
-    if (!dateChangeForm.requestedStartDate || !dateChangeForm.requestedEndDate || !dateChangeForm.reason.trim()) {
-      toast.error(isEn ? "Required" : "مطلوب", isEn ? "Please fill in all date change fields." : "يرجى تعبئة جميع الحقول المطلوبة.");
+    if (!extensionForm.newEndDate || !extensionForm.reason.trim()) {
+      toast.error(isEn ? "Required" : "مطلوب", isEn ? "Please fill in all extension fields." : "يرجى تعبئة جميع الحقول المطلوبة.");
       return;
     }
-    if (dateChangeForm.requestedEndDate < dateChangeForm.requestedStartDate) {
-      toast.error(isEn ? "Invalid Dates" : "تواريخ غير صالحة", isEn ? "End date cannot be before start date." : "تاريخ النهاية لا يمكن أن يسبق تاريخ البداية.");
+    const currentEnd = selectedRequest.endDate ? selectedRequest.endDate.slice(0, 10) : "";
+    if (currentEnd && extensionForm.newEndDate <= currentEnd) {
+      toast.error(
+        isEn ? "Invalid Date" : "تاريخ غير صالح",
+        isEn
+          ? `New end date must be after current end date (${currentEnd}).`
+          : `تاريخ النهاية الجديد يجب أن يكون بعد تاريخ النهاية الحالي (${currentEnd}).`,
+      );
       return;
     }
 
     setBusy(true);
     try {
-      await hrWorkflowApi.createDateChange(selectedRequest.id, {
-        requestedStartDate: dateChangeForm.requestedStartDate,
-        requestedEndDate: dateChangeForm.requestedEndDate,
-        reason: dateChangeForm.reason.trim(),
+      await hrWorkflowApi.createExtensionRequest(selectedRequest.id, {
+        newEndDate: extensionForm.newEndDate,
+        reason: extensionForm.reason.trim(),
+        rowVersion: selectedRequest.rowVersion,
       });
-      toast.success(isEn ? "Submitted" : "تم الإرسال", isEn ? "Date change request submitted." : "تم تقديم طلب تغيير الموعد بنجاح.");
-      setDateChangeModalOpen(false);
-      setDateChangeForm({ requestedStartDate: "", requestedEndDate: "", reason: "" });
-      await loadSubResources(selectedRequest.id);
+      toast.success(
+        isEn ? "Extension Requested" : "تم تقديم طلب التمديد",
+        isEn
+          ? "Leave extension request submitted successfully. End date will update after approval."
+          : "تم تقديم طلب تمديد الإجازة بنجاح. سيتم تحديث تاريخ النهاية بعد الاعتماد.",
+      );
+      setExtensionModalOpen(false);
+      setExtensionForm({ newEndDate: "", reason: "" });
       await loadRequests();
     } catch (err: any) {
       toast.error(isEn ? "Failed" : "فشل الطلب", err.message);
@@ -2074,11 +2085,18 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                 </Button>
               )}
 
-              {/* Date Change trigger */}
+              {/* Extension trigger */}
               {canUpdate && (selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
-                <Button className="min-h-9 px-3 text-xs" variant="secondary" onClick={() => setDateChangeModalOpen(true)}>
-                  <Calendar size={14} />
-                  {isEn ? "Request Date Change" : "طلب تغيير الموعد"}
+                <Button
+                  className="min-h-9 px-3 text-xs"
+                  variant="secondary"
+                  onClick={() => {
+                    setExtensionForm({ newEndDate: "", reason: "" });
+                    setExtensionModalOpen(true);
+                  }}
+                >
+                  <CalendarCheck size={14} />
+                  {isEn ? "Request Extension" : "طلب تمديد إجازة"}
                 </Button>
               )}
 
@@ -2267,9 +2285,15 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-black">{isEn ? "Date Change Requests" : "سجل طلبات تغيير المواعيد"}</h4>
                     {canUpdate && (selectedRequest.status === "Approved" || selectedRequest.status === "Active") && (
-                      <Button className="min-h-9 px-3 text-xs" onClick={() => setDateChangeModalOpen(true)}>
+                      <Button
+                        className="min-h-9 px-3 text-xs"
+                        onClick={() => {
+                          setExtensionForm({ newEndDate: "", reason: "" });
+                          setExtensionModalOpen(true);
+                        }}
+                      >
                         <Plus size={14} />
-                        {isEn ? "Request Date Change" : "طلب تغيير موعد"}
+                        {isEn ? "Request Extension" : "طلب تمديد إجازة"}
                       </Button>
                     )}
                   </div>
@@ -2533,54 +2557,79 @@ export function LeaveRequestsView({ embedded = false }: { embedded?: boolean }) 
         </div>
       )}
 
-      {/* Date Change Request Modal */}
-      {dateChangeModalOpen && (
+      {/* Leave Extension Request Modal */}
+      {extensionModalOpen && selectedRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <Card className="w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-              <h3 className="text-base font-black">{isEn ? "Request Date Change" : "طلب تغيير موعد الإجازة"}</h3>
-              <button type="button" onClick={() => setDateChangeModalOpen(false)}>
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="text-[#1167c9]" size={18} />
+                <h3 className="text-base font-black">{isEn ? "Request Leave Extension" : "طلب تمديد إجازة"}</h3>
+              </div>
+              <button type="button" onClick={() => setExtensionModalOpen(false)}>
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreateDateChange} className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold">{isEn ? "New Start Date *" : "تاريخ البداية الجديد *"}</label>
-                <input
-                  type="date"
-                  required
-                  value={dateChangeForm.requestedStartDate}
-                  onChange={(e) => setDateChangeForm((prev) => ({ ...prev, requestedStartDate: e.target.value }))}
-                  className="h-10 w-full rounded-xl border border-[var(--border)] px-3 text-xs"
-                />
+
+            {/* Current leave summary */}
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-[var(--muted)]">{isEn ? "Employee:" : "الموظف:"}</span>
+                <span className="font-bold">{selectedRequest.employeeNameAr}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--muted)]">{isEn ? "Current Period:" : "الفترة الحالية:"}</span>
+                <span className="font-mono font-bold" dir="ltr">
+                  {selectedRequest.startDate?.slice(0, 10)} → {selectedRequest.endDate?.slice(0, 10)} ({selectedRequest.calendarDays} {isEn ? "days" : "يوم"})
+                </span>
+              </div>
+              <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                {isEn
+                  ? "Note: End date will take effect once the extension request is approved."
+                  : "ملاحظة: سيتم تحديث تاريخ نهاية الإجازة بعد اعتماد طلب التمديد."}
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateExtension} className="space-y-3 text-xs">
               <div className="space-y-1">
                 <label className="font-bold">{isEn ? "New End Date *" : "تاريخ النهاية الجديد *"}</label>
                 <input
                   type="date"
                   required
-                  value={dateChangeForm.requestedEndDate}
-                  onChange={(e) => setDateChangeForm((prev) => ({ ...prev, requestedEndDate: e.target.value }))}
+                  min={selectedRequest.endDate ? selectedRequest.endDate.slice(0, 10) : undefined}
+                  value={extensionForm.newEndDate}
+                  onChange={(e) => setExtensionForm((prev) => ({ ...prev, newEndDate: e.target.value }))}
                   className="h-10 w-full rounded-xl border border-[var(--border)] px-3 text-xs"
                 />
+                {extensionForm.newEndDate && selectedRequest.startDate && (
+                  <p className="text-[11px] text-[var(--muted)] mt-1">
+                    {isEn ? "New total days:" : "إجمالي الأيام الجديد:"}{" "}
+                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                      {calculateCalendarDays(selectedRequest.startDate, extensionForm.newEndDate)} {isEn ? "days" : "يوم"}
+                    </span>
+                  </p>
+                )}
               </div>
+
               <div className="space-y-1">
-                <label className="font-bold">{isEn ? "Reason for Change *" : "سبب التغيير *"}</label>
+                <label className="font-bold">{isEn ? "Extension Reason *" : "سبب التمديد *"}</label>
                 <textarea
                   rows={3}
                   required
-                  value={dateChangeForm.reason}
-                  onChange={(e) => setDateChangeForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  value={extensionForm.reason}
+                  onChange={(e) => setExtensionForm((prev) => ({ ...prev, reason: e.target.value }))}
                   className="w-full rounded-xl border border-[var(--border)] p-2 text-xs"
-                  placeholder={isEn ? "Explain why dates need changing..." : "وضح سبب تغيير التواريخ..."}
+                  placeholder={isEn ? "Explain why extension is needed..." : "وضح سبب طلب تمديد الإجازة..."}
                 />
               </div>
+
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="secondary" className="min-h-9 px-3 text-xs" onClick={() => setDateChangeModalOpen(false)}>
+                <Button type="button" variant="secondary" className="min-h-9 px-3 text-xs" onClick={() => setExtensionModalOpen(false)}>
                   {t("common.cancel")}
                 </Button>
                 <Button type="submit" className="min-h-9 px-3 text-xs" loading={busy}>
-                  {isEn ? "Submit Request" : "إرسال الطلب"}
+                  <Send size={14} />
+                  {isEn ? "Submit Extension Request" : "إرسال طلب التمديد"}
                 </Button>
               </div>
             </form>

@@ -175,6 +175,24 @@ export interface LeaveDateChangeResolveRequest {
   rowVersion: string;
 }
 
+export interface LeaveExtensionCreateRequest {
+  newEndDate: string;
+  reason: string;
+  rowVersion: string;
+}
+
+export interface LeaveExtensionRequest {
+  id: string;
+  leaveRequestId: string;
+  newEndDate: string;
+  reason: string;
+  status: DateChangeOrCancellationStatus;
+  resolutionReason?: string | null;
+  createdAtUtc?: string | null;
+  resolvedAtUtc?: string | null;
+  rowVersion: string;
+}
+
 export interface LeaveCancellationRequest {
   id: string;
   leaveRequestId: string;

@@ -8,6 +8,8 @@ import type {
   LeaveDateChangeRequest,
   LeaveDateChangeCreateRequest,
   LeaveDateChangeResolveRequest,
+  LeaveExtensionCreateRequest,
+  LeaveExtensionRequest,
   LeaveCancellationRequest,
   LeaveCancellationResolveRequest,
   LeaveDocumentResponse,
@@ -58,6 +60,13 @@ export const hrWorkflowApi = {
   listDateChanges: (id: string) => authFetch<LeaveDateChangeRequest[]>(`${workflowBase}/leave-requests/${encodeURIComponent(id)}/date-change-requests`),
   createDateChange: (id: string, payload: LeaveDateChangeCreateRequest) => authFetch<LeaveDateChangeRequest>(`${workflowBase}/leave-requests/${encodeURIComponent(id)}/date-change-requests`, { method: "POST", body: JSON.stringify(payload) }),
   resolveDateChange: (id: string, changeId: string, payload: LeaveDateChangeResolveRequest) => authFetch<LeaveDateChangeRequest>(`${workflowBase}/leave-requests/${encodeURIComponent(id)}/date-change-requests/${encodeURIComponent(changeId)}/resolve`, { method: "POST", body: JSON.stringify(payload) }),
+
+  // Extension Requests
+  createExtensionRequest: (id: string, payload: LeaveExtensionCreateRequest) =>
+    authFetch<unknown>(`${workflowBase}/leave-requests/${encodeURIComponent(id)}/extension-requests`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   // Cancellation Requests
   listCancellations: (id: string) => authFetch<LeaveCancellationRequest[]>(`${workflowBase}/leave-requests/${encodeURIComponent(id)}/cancellation-requests`),
