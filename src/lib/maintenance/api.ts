@@ -39,6 +39,7 @@ import type {
   UpdateMaintenancePlanRequest,
   CompleteOilChangeRequest,
   CompleteOilChangeResult,
+  CorrectOilChangeVehicleRequest,
   DirectOilChangeRequest,
   DirectOilInventoryLocation,
   DirectOilBarrel,
@@ -612,6 +613,20 @@ export async function completeDirectOilChange(
     body: JSON.stringify(payload),
     notifySuccess: "تم تغيير الزيت وصرف المواد وتحديث التذكير بنجاح",
   });
+}
+
+export async function correctOilChangeVehicle(
+  oilChangeId: string,
+  payload: CorrectOilChangeVehicleRequest,
+): Promise<CompleteOilChangeResult> {
+  return authFetch<CompleteOilChangeResult>(
+    `/api/maintenance/oil-changes/${encodeURIComponent(oilChangeId)}/vehicle`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      notifySuccess: "تم تصحيح المركبة وتحديث السجلات المرتبطة بنجاح",
+    },
+  );
 }
 
 export async function getDirectOilInventoryLocations(): Promise<DirectOilInventoryLocation[]> {

@@ -13,6 +13,7 @@ import {
   Bike,
   Search,
   FileSpreadsheet,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { exportToExcel } from "@/lib/export-excel";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/maintenance/constants";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehiclePlate, useVehiclePlates } from "@/lib/fleet/vehicle-plate-cache";
+import { CorrectOilChangeVehicleModal } from "./CorrectOilChangeVehicleModal";
 
 interface OilRemindersViewProps {
   onStartOilChange: (vehicleId: string) => void;
@@ -44,6 +46,7 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [isCorrectVehicleModalOpen, setIsCorrectVehicleModalOpen] = useState(false);
 
   const getPlate = (r: OilReminder) => {
     return (
@@ -238,6 +241,17 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
               )}
             </div>
           )}
+          {canManage && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsCorrectVehicleModalOpen(true)}
+              className="inline-flex items-center gap-2 bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 font-bold h-9 text-xs"
+              title="تصحيح اختيار مركبة خاطئة على عملية غيار زيت سابقة"
+            >
+              <ArrowLeftRight size={14} />
+              تصحيح مركبة
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={handleExportExcel}
@@ -371,6 +385,14 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
           </tbody>
         </table>
       </div>
+
+      <CorrectOilChangeVehicleModal
+        isOpen={isCorrectVehicleModalOpen}
+        onClose={() => setIsCorrectVehicleModalOpen(false)}
+        onSuccess={() => {
+          loadReminders();
+        }}
+      />
     </div>
   );
 }

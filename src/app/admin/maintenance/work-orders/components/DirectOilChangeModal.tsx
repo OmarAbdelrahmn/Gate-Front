@@ -8,14 +8,14 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { getVehicleDetail } from "@/lib/fleet/api";
 import { completeDirectOilChange, getDirectOilBarrels, getDirectOilInventoryLocations, getInventoryItems } from "@/lib/maintenance/api";
-import { ItemType, OilBarrelStatus, UnitOfMeasure, type DirectOilBarrel, type DirectOilInventoryLocation, type InventoryItem, type OilReminder } from "@/lib/maintenance/types";
+import { ItemType, OilBarrelStatus, UnitOfMeasure, type DirectOilBarrel, type DirectOilInventoryLocation, type InventoryItem, type OilReminder, type CompleteOilChangeResult } from "@/lib/maintenance/types";
 import { canUseItem, formatCompatibleVehicleTypes } from "@/lib/maintenance/constants";
 
 interface Props {
   vehicleId: string;
   reminder: OilReminder | null;
   onClose: () => void;
-  onCompleted: () => void;
+  onCompleted: (result?: CompleteOilChangeResult) => void;
 }
 
 function localDateTime(): string {
@@ -137,7 +137,7 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
     attemptKey.current ??= crypto.randomUUID();
     setSubmitting(true);
     try {
-      await completeDirectOilChange(vehicleId, {
+      const result = await completeDirectOilChange(vehicleId, {
         performedAtUtc: new Date(performedAtLocal).toISOString(),
         odometerAtChange: odometer,
         inventoryLocationId,
@@ -150,7 +150,7 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
         notes: notes.trim() || null,
         vehicleRowVersion,
       }, attemptKey.current);
-      onCompleted();
+      onCompleted(result);
     } catch (err: any) {
       const code = err?.details?.errorCode || err?.details?.title || err?.errorCode;
       if (code === "maintenance.incompatible_vehicle_type") {

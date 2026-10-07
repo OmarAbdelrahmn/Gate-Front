@@ -918,6 +918,11 @@ export interface CompleteOilChangeResult {
   riderProfileId: string | null;
 }
 
+export interface CorrectOilChangeVehicleRequest {
+  vehicleId: string;
+  reason: string;
+}
+
 // ==========================================
 // Workshop Financials & Profit Report
 // ==========================================

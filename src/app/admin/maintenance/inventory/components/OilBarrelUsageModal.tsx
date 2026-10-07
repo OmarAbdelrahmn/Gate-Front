@@ -17,12 +17,14 @@ import {
   TrendingDown,
   RotateCcw,
   FileSpreadsheet,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
 import { getOilBarrelUsage } from "@/lib/maintenance/api";
+import { CorrectOilChangeVehicleModal } from "@/app/admin/maintenance/work-orders/components/CorrectOilChangeVehicleModal";
 import type {
   OilBarrel,
   OilBarrelUsageResponse,
@@ -55,6 +57,7 @@ export function OilBarrelUsageModal({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [exporting, setExporting] = useState(false);
+  const [isCorrectVehicleModalOpen, setIsCorrectVehicleModalOpen] = useState(false);
 
   const handleExportExcel = async () => {
     if (!barrel || !data) return;
@@ -295,6 +298,16 @@ export function OilBarrelUsageModal({
             >
               <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
               تصدير Excel
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={() => setIsCorrectVehicleModalOpen(true)}
+              className="h-9 text-xs gap-1.5 font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-amber-300 dark:border-amber-800"
+              title="تصحيح اختيار مركبة خاطئة على عملية غيار زيت"
+            >
+              <ArrowLeftRight size={13} />
+              تصحيح مركبة
             </Button>
 
             <Button
@@ -578,6 +591,15 @@ export function OilBarrelUsageModal({
           </Button>
         </div>
       </div>
+
+      <CorrectOilChangeVehicleModal
+        isOpen={isCorrectVehicleModalOpen}
+        onClose={() => setIsCorrectVehicleModalOpen(false)}
+        currentVehicleType={currentBarrel.allowedVehicleType}
+        onSuccess={() => {
+          loadUsage(page, pageSize);
+        }}
+      />
     </Modal>
   );
 }

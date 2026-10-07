@@ -309,6 +309,13 @@ export function getFriendlyErrorMessage(
         return "أجور اليد والعمالة مقتصرة فقط على إصلاحات العملاء الخارجيين.";
       case "maintenance.incompatible_vehicle_type":
         return "صنف المخزون غير متوافق مع نوع المركبة المحددة.";
+      case "maintenance.vehicle_type_mismatch":
+      case "maintenance.replacement_vehicle_type_mismatch":
+        return "يجب أن تكون المركبة البديلة من نفس نوع المركبة الأصلية (سيارة / دراجة نارية).";
+      case "maintenance.oil_change_not_found":
+        return "سجل عملية تغيير الزيت غير موجود أو تم حذفه.";
+      case "maintenance.vehicle_not_found":
+        return "المركبة المحددة غير موجودة.";
       case "maintenance.invalid_request":
         return rawMessage || "طلب صيانة غير صالح. يرجى مراجعة الحقول والمدخلات.";
       case "system.concurrency_conflict":

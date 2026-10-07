@@ -23,6 +23,7 @@ import {
   Hash,
   ExternalLink,
   Filter,
+  ArrowLeftRight,
 } from "lucide-react";
 import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
@@ -37,6 +38,7 @@ import {
   getChangeValueNavigation,
 } from "@/lib/audit/audit-resolver";
 import { getDocumentTypes } from "@/lib/workforce/documents-api";
+import { CorrectOilChangeVehicleModal } from "@/app/admin/maintenance/work-orders/components/CorrectOilChangeVehicleModal";
 
 interface AuditEntryDetailModalProps {
   isOpen: boolean;
@@ -75,6 +77,7 @@ export function AuditEntryDetailModal({
   const [showTechnical, setShowTechnical] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [showCorrectOilChangeModal, setShowCorrectOilChangeModal] = useState(false);
 
   // Document types catalog map
   const [docTypes, setDocTypes] = useState<Record<string, { nameAr?: string; nameEn?: string; code?: string }>>(documentTypesMap || {});
@@ -713,12 +716,33 @@ export function AuditEntryDetailModal({
         )}
 
         {/* Modal Footer */}
-        <div className="flex justify-end pt-3 border-t border-[var(--border)]">
+        <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+          {entry?.entityType === "OilChangeOperation" && entry.entityId ? (
+            <Button
+              variant="secondary"
+              onClick={() => setShowCorrectOilChangeModal(true)}
+              className="h-8 px-2.5 text-xs font-bold text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 flex items-center gap-1.5"
+            >
+              <ArrowLeftRight size={13} />
+              <span>{isEn ? "Correct Vehicle Selection" : "تصحيح المركبة لعملية غيار الزيت"}</span>
+            </Button>
+          ) : (
+            <div />
+          )}
+
           <Button variant="secondary" onClick={onClose}>
             {isEn ? "Close" : "إغلاق"}
           </Button>
         </div>
       </div>
+
+      {entry?.entityType === "OilChangeOperation" && entry.entityId && (
+        <CorrectOilChangeVehicleModal
+          isOpen={showCorrectOilChangeModal}
+          onClose={() => setShowCorrectOilChangeModal(false)}
+          oilChangeId={entry.entityId}
+        />
+      )}
     </Modal>
   );
 }
