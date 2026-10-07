@@ -678,6 +678,13 @@ export interface RiderVehicleAssignmentResponse {
   rowVersion: string;
 }
 
+export interface EmployeeVehicleProfileResponse {
+  employeeId: string;
+  isEmployee: boolean;
+  exists: boolean;
+  riderProfileId: string | null;
+}
+
 export interface TakeVehicleRequest {
   riderProfileId: string;
   isRealRider: boolean;

@@ -1,16 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition, useMemo, useRef } from "react";
-import { takeVehicle, getVehiclesLookup, getVehicleDetail, getAllVehicles, getRiderPromissoryFiles } from "@/lib/fleet/api";
+import {
+  takeVehicle,
+  getVehiclesLookup,
+  getVehicleDetail,
+  getAllVehicles,
+  getRiderPromissoryFiles,
+  getAllVehicleAssignments,
+  getEmployeeVehicleProfile,
+  ensureEmployeeVehicleProfile,
+  generateUUID,
+} from "@/lib/fleet/api";
 import { listExternalRiders } from "@/lib/workforce/external-riders-api";
 import { listRiders, listEmployees } from "@/lib/workforce/api";
 import { getPlatformAccounts, type AccountResponse } from "@/lib/platforms/api";
 import { getVehicleAccountAssignments } from "@/lib/fleet/vehicle-account-assignments-api";
-import { VehicleCondition, VehicleOperationalStatus, type VehicleSummaryResponse, type TakeVehicleRequest, type VehicleLookupResponse } from "@/lib/fleet/types";
+import {
+  VehicleCondition,
+  VehicleOperationalStatus,
+  RiderVehicleAssignmentStatus,
+  type VehicleSummaryResponse,
+  type TakeVehicleRequest,
+  type VehicleLookupResponse,
+} from "@/lib/fleet/types";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { Upload, X, FileText, AlertCircle, CheckCircle2, UserCheck, Sparkles, RefreshCw, Check } from "lucide-react";
 
@@ -19,6 +36,7 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
   preselectedVehicle: VehicleSummaryResponse | null;
+  preselectedEmployeeId?: string | null;
 }
 
 interface VehicleSuggestion {
@@ -30,20 +48,38 @@ interface VehicleSuggestion {
   reason: string;
 }
 
+interface SelectablePerson {
+  key: string;
+  riderProfileId: string | null;
+  employeeId: string | null;
+  name: string;
+  iqamaNo?: string | null;
+  isEmployee: boolean;
+  typeLabel: string;
+}
+
 const getCurrentLocalDateTimeString = () => {
   const now = new Date();
   const tzOffset = now.getTimezoneOffset() * 60000;
   return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
 };
 
-export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicle }: Props) {
+export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicle, preselectedEmployeeId }: Props) {
   const [isPending, startTransition] = useTransition();
 
-  const [riders, setRiders] = useState<{ value: string; label: string }[]>([]);
+  const [riders, setRiders] = useState<SelectOption[]>([]);
   const [availableLookupVehicles, setAvailableLookupVehicles] = useState<VehicleLookupResponse[]>([]);
   const [suggestedVehicles, setSuggestedVehicles] = useState<VehicleSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState<boolean>(false);
-  const riderMetaMapRef = useRef<Map<string, { riderProfileId: string; employeeId?: string; name: string }>>(new Map());
+  const personMetaMapRef = useRef<Map<string, SelectablePerson>>(new Map());
+
+  // Background employee profile ensuring state & promise
+  const backgroundProfilePromiseRef = useRef<Promise<string | null> | null>(null);
+  const [isEnsuringProfileInBackground, setIsEnsuringProfileInBackground] = useState<boolean>(false);
+  const [profileReadyNotice, setProfileReadyNotice] = useState<string | null>(null);
+
+  // Idempotency key reference for retries
+  const retryIdempotencyKeyRef = useRef<string>("");
 
   const [minOdometer, setMinOdometer] = useState<number>(0);
   const [existingPromissoryCount, setExistingPromissoryCount] = useState<number>(0);
@@ -70,21 +106,17 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
   const [files, setFiles] = useState<File[]>([]);
 
-  useEffect(() => {
-    if (!formData.riderProfileId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+  const loadPromissoryFiles = useCallback((targetRiderId: string) => {
+    if (!targetRiderId) {
       setExistingPromissoryCount(0);
       setLoadingPromissory(false);
       return;
     }
-
-    const meta = riderMetaMapRef.current.get(formData.riderProfileId);
-    const targetRiderId = meta?.riderProfileId || formData.riderProfileId;
     let cancelled = false;
     setLoadingPromissory(true);
     getRiderPromissoryFiles(targetRiderId)
       .then((promissoryFiles) => {
-        if (!cancelled) setExistingPromissoryCount(promissoryFiles.length);
+        if (!cancelled) setExistingPromissoryCount(promissoryFiles?.length || 0);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -95,12 +127,224 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       .finally(() => {
         if (!cancelled) setLoadingPromissory(false);
       });
-    return () => { cancelled = true; };
-  }, [formData.riderProfileId]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handlePersonChange = useCallback((value: string) => {
+    retryIdempotencyKeyRef.current = "";
+    setFormData((prev) => ({ ...prev, riderProfileId: value }));
+    setProfileReadyNotice(null);
+
+    if (!value) {
+      backgroundProfilePromiseRef.current = null;
+      setIsEnsuringProfileInBackground(false);
+      setExistingPromissoryCount(0);
+      setLoadingPromissory(false);
+      setSuggestedVehicles([]);
+      return;
+    }
+
+    const person = personMetaMapRef.current.get(value);
+    if (!person) return;
+
+    // If person already has a riderProfileId (e.g. existing operational/external rider or already resolved)
+    if (person.riderProfileId) {
+      backgroundProfilePromiseRef.current = Promise.resolve(person.riderProfileId);
+      setIsEnsuringProfileInBackground(false);
+      loadPromissoryFiles(person.riderProfileId);
+      return;
+    }
+
+    // If person is an employee without a riderProfileId, ensure it immediately in the background!
+    if (person.employeeId) {
+      setIsEnsuringProfileInBackground(true);
+      const bgPromise = (async () => {
+        try {
+          // 1. GET /api/employees/{employeeId}/vehicle-profile to check existing
+          let profile = await getEmployeeVehicleProfile(person.employeeId!).catch(() => null);
+
+          // 2. If null or !exists, call PUT to create minimal profile in the background
+          if (!profile?.exists || !profile?.riderProfileId) {
+            profile = await ensureEmployeeVehicleProfile(person.employeeId!).catch((err) => {
+              console.warn("Background vehicle-profile creation failed:", err);
+              return null;
+            });
+          }
+
+          if (profile?.riderProfileId) {
+            person.riderProfileId = profile.riderProfileId;
+            setProfileReadyNotice("تم تجهيز ملف تسليم المركبة في الخلفية بنجاح");
+            loadPromissoryFiles(profile.riderProfileId);
+            return profile.riderProfileId;
+          }
+        } catch (err) {
+          console.warn("Background ensureEmployeeVehicleProfile error:", err);
+        } finally {
+          setIsEnsuringProfileInBackground(false);
+        }
+        return null;
+      })();
+
+      backgroundProfilePromiseRef.current = bgPromise;
+    } else {
+      backgroundProfilePromiseRef.current = null;
+      setIsEnsuringProfileInBackground(false);
+    }
+  }, [loadPromissoryFiles]);
+
+  const loadModalData = useCallback(async () => {
+    try {
+      const [ridersRes, externalRes, employeesRes, assignedVehicles, activeAssignments] = await Promise.all([
+        listRiders().catch(() => []),
+        listExternalRiders().catch(() => []),
+        listEmployees().catch(() => []),
+        getAllVehicles({ status: VehicleOperationalStatus.Assigned.toString() }).catch(() => []),
+        getAllVehicleAssignments({ status: RiderVehicleAssignmentStatus.Active }).catch(() => []),
+      ]);
+
+      const assignedRiderProfileIds = new Set<string>();
+      const assignedEmployeeIds = new Set<string>();
+
+      if (Array.isArray(assignedVehicles)) {
+        assignedVehicles.forEach((v) => {
+          if (v.currentRiderProfileId) {
+            assignedRiderProfileIds.add(v.currentRiderProfileId);
+          }
+        });
+      }
+
+      if (Array.isArray(activeAssignments)) {
+        activeAssignments.forEach((a) => {
+          if (a.riderProfileId) assignedRiderProfileIds.add(a.riderProfileId);
+          if (a.employeeId) assignedEmployeeIds.add(a.employeeId);
+        });
+      }
+
+      const map = new Map<string, SelectOption>();
+      const metaMap = new Map<string, SelectablePerson>();
+      const seenEmployeeIds = new Set<string>();
+      const seenRiderProfileIds = new Set<string>();
+
+      // 1. Operational Riders
+      (ridersRes || []).forEach((r) => {
+        if (!r.id) return;
+        if (
+          assignedRiderProfileIds.has(r.id) ||
+          (r.employeeId && assignedEmployeeIds.has(r.employeeId))
+        ) {
+          return;
+        }
+        const key = `rider_${r.id}`;
+        const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+        map.set(key, {
+          value: key,
+          label: `${r.fullNameAr}${iqamaStr} — مندوب`,
+          keywords: `${r.fullNameAr} ${r.iqamaNo || ""} مندوب`,
+        });
+        metaMap.set(key, {
+          key,
+          riderProfileId: r.id,
+          employeeId: r.employeeId || null,
+          name: r.fullNameAr,
+          iqamaNo: r.iqamaNo,
+          isEmployee: false,
+          typeLabel: "مندوب",
+        });
+        if (r.employeeId) seenEmployeeIds.add(r.employeeId);
+        seenRiderProfileIds.add(r.id);
+      });
+
+      // 2. External Riders
+      (externalRes || []).forEach((r) => {
+        if (!r.riderProfileId) return;
+        if (
+          assignedRiderProfileIds.has(r.riderProfileId) ||
+          (r.employeeId && assignedEmployeeIds.has(r.employeeId))
+        ) {
+          return;
+        }
+        const key = `external_${r.riderProfileId}`;
+        const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+        map.set(key, {
+          value: key,
+          label: `${r.fullNameAr}${iqamaStr} — مندوب خارجي`,
+          keywords: `${r.fullNameAr} ${r.iqamaNo || ""} خارجي`,
+        });
+        metaMap.set(key, {
+          key,
+          riderProfileId: r.riderProfileId,
+          employeeId: r.employeeId || null,
+          name: r.fullNameAr,
+          iqamaNo: r.iqamaNo,
+          isEmployee: false,
+          typeLabel: "مندوب خارجي",
+        });
+        if (r.employeeId) seenEmployeeIds.add(r.employeeId);
+        seenRiderProfileIds.add(r.riderProfileId);
+      });
+
+      // 3. Employees (including administrative employees)
+      (employeesRes || []).forEach((e) => {
+        if (!e.id) return;
+        if (seenEmployeeIds.has(e.id)) return;
+        const existingRiderId = e.riderProfileId || e.rider?.id;
+        if (existingRiderId && seenRiderProfileIds.has(existingRiderId)) return;
+
+        // Eligibility: must be Active
+        const statusStr = String(e.status || "").toLowerCase();
+        if (statusStr !== "active") return;
+
+        // Check if employee already has active vehicle assignment
+        if (
+          (existingRiderId && assignedRiderProfileIds.has(existingRiderId)) ||
+          assignedEmployeeIds.has(e.id)
+        ) {
+          return;
+        }
+
+        const key = `emp_${e.id}`;
+        const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
+        const isAdministrative = e.isEmployee !== false;
+        const typeTag = isAdministrative ? "موظف إداري" : "موظف";
+
+        map.set(key, {
+          value: key,
+          label: `${e.fullNameAr}${iqamaStr} — ${typeTag}`,
+          keywords: `${e.fullNameAr} ${e.iqamaNo || ""} ${typeTag} موظف`,
+        });
+        metaMap.set(key, {
+          key,
+          riderProfileId: existingRiderId || null,
+          employeeId: e.id,
+          name: e.fullNameAr,
+          iqamaNo: e.iqamaNo,
+          isEmployee: isAdministrative,
+          typeLabel: typeTag,
+        });
+
+        seenEmployeeIds.add(e.id);
+        if (existingRiderId) seenRiderProfileIds.add(existingRiderId);
+      });
+
+      personMetaMapRef.current = metaMap;
+      setRiders(Array.from(map.values()));
+
+      // If preselectedEmployeeId was provided, auto-select them!
+      if (preselectedEmployeeId) {
+        const found = Array.from(metaMap.values()).find((p) => p.employeeId === preselectedEmployeeId);
+        if (found) {
+          handlePersonChange(found.key);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load riders/employees data:", err);
+    }
+  }, [preselectedEmployeeId, handlePersonChange]);
 
   useEffect(() => {
     if (isOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsRealRider(true);
       setRealRider({
         name: "",
@@ -109,80 +353,10 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       });
       setSuggestedVehicles([]);
       setLoadingSuggestions(false);
+      setProfileReadyNotice(null);
+      retryIdempotencyKeyRef.current = "";
 
-      Promise.all([
-        listRiders().catch(() => []),
-        listExternalRiders().catch(() => []),
-        listEmployees().catch(() => []),
-        getAllVehicles({ status: VehicleOperationalStatus.Assigned.toString() }).catch(() => []),
-      ]).then(([ridersRes, externalRes, employeesRes, assignedVehicles]) => {
-        const assignedRiderIds = new Set<string>();
-        if (Array.isArray(assignedVehicles)) {
-          assignedVehicles.forEach((v) => {
-            if (v.currentRiderProfileId) {
-              assignedRiderIds.add(v.currentRiderProfileId);
-            }
-          });
-        }
-
-        const map = new Map<string, { value: string; label: string }>();
-        const metaMap = new Map<string, { riderProfileId: string; employeeId?: string; name: string }>();
-
-        ridersRes.forEach((r) => {
-          const id = r.id;
-          const riderId = r.id;
-          const empId = r.employeeId;
-          if (id && !map.has(id)) {
-            if (
-              (riderId && assignedRiderIds.has(riderId)) ||
-              (empId && assignedRiderIds.has(empId))
-            ) {
-              return;
-            }
-            const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
-            map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
-            metaMap.set(id, { riderProfileId: r.id, employeeId: r.employeeId, name: r.fullNameAr });
-          }
-        });
-
-        externalRes.forEach((r) => {
-          const id = r.riderProfileId;
-          const riderId = r.riderProfileId;
-          const empId = r.employeeId;
-          if (id && !map.has(id)) {
-            if (
-              (riderId && assignedRiderIds.has(riderId)) ||
-              (empId && assignedRiderIds.has(empId))
-            ) {
-              return;
-            }
-            const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
-            map.set(id, { value: id, label: `${r.fullNameAr}${iqamaStr}` });
-            metaMap.set(id, { riderProfileId: r.riderProfileId, employeeId: r.employeeId, name: r.fullNameAr });
-          }
-        });
-
-        employeesRes.forEach((e) => {
-          const riderId = e.riderProfileId || e.rider?.id;
-          const id = riderId;
-          const empId = e.id;
-          if (id && !map.has(id)) {
-            if (
-              (riderId && assignedRiderIds.has(riderId)) ||
-              (empId && assignedRiderIds.has(empId)) ||
-              assignedRiderIds.has(id)
-            ) {
-              return;
-            }
-            const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
-            map.set(id, { value: id, label: `${e.fullNameAr}${iqamaStr}` });
-            metaMap.set(id, { riderProfileId: riderId, employeeId: e.id, name: e.fullNameAr });
-          }
-        });
-
-        riderMetaMapRef.current = metaMap;
-        setRiders(Array.from(map.values()));
-      });
+      loadModalData();
 
       if (preselectedVehicle) {
         setFormData({
@@ -249,7 +423,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       }
       setFiles([]);
     }
-  }, [isOpen, preselectedVehicle]);
+  }, [isOpen, preselectedVehicle, loadModalData]);
 
   const handleVehicleChange = useCallback(async (vehicleId: string) => {
     setFormData((prev) => ({ ...prev, vehicleId }));
@@ -286,8 +460,15 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
     const fetchRiderPlatformVehicles = async () => {
       try {
-        const meta = riderMetaMapRef.current.get(riderIdKey);
-        const targetRiderId = meta?.riderProfileId || riderIdKey;
+        const meta = personMetaMapRef.current.get(riderIdKey);
+        const targetRiderId = meta?.riderProfileId;
+        if (!targetRiderId) {
+          if (!isCancelled) {
+            setSuggestedVehicles([]);
+            setLoadingSuggestions(false);
+          }
+          return;
+        }
 
         const accountQueries: Promise<AccountResponse[]>[] = [
           getPlatformAccounts({ actualRiderProfileId: targetRiderId, currentOnly: false }).catch(() => []),
@@ -452,7 +633,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
     e.preventDefault();
 
     if (!formData.riderProfileId) {
-      toast.error("خطأ في البيانات", "يرجى اختيار المندوب المستلم أولاً.");
+      toast.error("خطأ في البيانات", "يرجى اختيار المندوب أو الموظف المستلم أولاً.");
       return;
     }
     if (!formData.vehicleId) {
@@ -486,7 +667,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         return;
       }
       if (!realRider.relationshipToAssignedRider.trim()) {
-        toast.error("خطأ في البيانات", "يرجى إدخال صلة القرابة/العلاقة بالسائق المندوب.");
+        toast.error("خطأ في البيانات", "يرجى إدخال صلة القرابة/العلاقة بالسائق المستلم.");
         return;
       }
       if (realRider.relationshipToAssignedRider.trim().length > 200) {
@@ -495,25 +676,49 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       }
     }
 
-    const fuelVal = formData.startFuelLevelPercentage !== "" ? Number(formData.startFuelLevelPercentage) : undefined;
-    if (fuelVal !== undefined && (fuelVal < 0 || fuelVal > 100)) {
+    const fuelVal = formData.startFuelLevelPercentage !== "" ? Number(formData.startFuelLevelPercentage) : null;
+    if (fuelVal !== null && (fuelVal < 0 || fuelVal > 100)) {
       toast.error("خطأ في الوقود", "نسبة الوقود يجب أن تكون بين 0 و 100%.");
       return;
     }
 
     if (loadingPromissory && files.length > 0) {
-      toast.error("يرجى الانتظار", "جارٍ التحقق من سجل سندات الأمر الخاصة بالمندوب...");
+      toast.error("يرجى الانتظار", "جارٍ التحقق من سجل سندات الأمر الخاصة بالمستلم...");
       return;
     }
     if (existingPromissoryCount + files.length > 3) {
-      toast.error("عدد الملفات كبير", "المجموع الكلي المسموح به هو 3 سندات أمر للمندوب. احذف بعض الملفات الجديدة ثم حاول مرة أخرى.");
+      toast.error("عدد الملفات كبير", "المجموع الكلي المسموح به هو 3 سندات أمر للمستلم. احذف بعض الملفات الجديدة ثم حاول مرة أخرى.");
       return;
     }
 
     startTransition(async () => {
       try {
-        const meta = riderMetaMapRef.current.get(formData.riderProfileId);
-        const resolvedRiderId = meta?.riderProfileId || formData.riderProfileId;
+        const person = personMetaMapRef.current.get(formData.riderProfileId);
+        if (!person) {
+          toast.error("خطأ في البيانات", "يرجى اختيار المندوب أو الموظف المستلم.");
+          return;
+        }
+
+        let resolvedRiderId = person.riderProfileId;
+
+        // If background creation was initiated, await it!
+        if (!resolvedRiderId && backgroundProfilePromiseRef.current) {
+          resolvedRiderId = await backgroundProfilePromiseRef.current;
+        }
+
+        // Safety fallback if still null and it is an employee:
+        if (!resolvedRiderId && person.employeeId) {
+          const profileRes = await ensureEmployeeVehicleProfile(person.employeeId);
+          resolvedRiderId = profileRes?.riderProfileId || null;
+          if (resolvedRiderId) {
+            person.riderProfileId = resolvedRiderId;
+          }
+        }
+
+        if (!resolvedRiderId) {
+          toast.error("خطأ في ملف المركبة", "تعذر الحصول على معرف ملف المركبة للموظف. يرجى المحاولة مجدداً.");
+          return;
+        }
 
         const metadataJSON: TakeVehicleRequest = {
           riderProfileId: resolvedRiderId,
@@ -542,31 +747,51 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           payload.append("promissoryFiles", file);
         });
 
-        const response = await takeVehicle(payload);
+        // Use or generate idempotency key for retry support
+        if (!retryIdempotencyKeyRef.current) {
+          retryIdempotencyKeyRef.current = generateUUID();
+        }
+
+        const response = await takeVehicle(payload, retryIdempotencyKeyRef.current);
         console.log("Take Vehicle API Response:", response);
+        retryIdempotencyKeyRef.current = ""; // Cleared on success
         onSuccess();
-      } catch {
-        // Error toast handled by authFetch
+      } catch (err: any) {
+        console.error("Take vehicle failed:", err);
+        // Reload current data on failure
+        loadModalData();
       }
     });
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="تسليم مركبة لمندوب (عهدة جديدة)" maxWidth="max-w-2xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="تسليم مركبة لمندوب أو موظف (عهدة جديدة)" maxWidth="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-5 pt-3">
         {/* Rider & Vehicle Section: Rider FIRST, Vehicle SECOND */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-              المندوب المستلم <span className="text-red-500">*</span>
+              المندوب أو الموظف المستلم <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
               options={riders}
               value={formData.riderProfileId}
-              placeholder="اختر المندوب أولاً..."
+              placeholder="اختر المندوب أو الموظف أولاً..."
               searchPlaceholder="بحث بالاسم أو رقم الإقامة..."
-              onChange={(v) => setFormData({ ...formData, riderProfileId: v })}
+              onChange={handlePersonChange}
             />
+            {isEnsuringProfileInBackground && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-50/70 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200/70 dark:border-blue-900/50 animate-pulse">
+                <RefreshCw className="h-3 w-3 animate-spin shrink-0" />
+                <span>جاري تجهيز ملف تسليم المركبة للموظف في الخلفية تلقائياً...</span>
+              </div>
+            )}
+            {profileReadyNotice && !isEnsuringProfileInBackground && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/40 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{profileReadyNotice}</span>
+              </div>
+            )}
           </div>
 
           <div>
@@ -576,7 +801,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
             <SearchableSelect
               options={vehicleOptions}
               value={formData.vehicleId}
-              placeholder={formData.riderProfileId ? "اختر المركبة (أو اختر من المقترحات)..." : "اختر المندوب أولاً أو اختر مركبة..."}
+              placeholder={formData.riderProfileId ? "اختر المركبة (أو اختر من المقترحات)..." : "اختر المندوب أو الموظف أولاً أو اختر مركبة..."}
               searchPlaceholder="بحث برقم المركبة أو اللوحة أو المنصة..."
               onChange={handleVehicleChange}
               disabled={!!preselectedVehicle}
@@ -675,7 +900,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
               className="h-3.5 w-3.5 rounded border-slate-300 text-[#1167c9] focus:ring-[#1167c9] dark:border-slate-700 dark:bg-slate-800"
             />
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              المندوب المختار هو السائق الفعلي للمركبة
+              المندوب أو الموظف المختار هو السائق الفعلي للمركبة
             </span>
           </label>
 
@@ -863,7 +1088,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
                       : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300"
                   }`}
                 >
-                  سندات المندوب السابقة: {existingPromissoryCount} / 3
+                  سندات المستلم السابقة: {existingPromissoryCount} / 3
                 </span>
               ) : null}
             </div>
@@ -877,20 +1102,20 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
                   <div>
                     <p className="font-bold">يمكن إتمام التسليم دون إرفاق سند أمر</p>
                     <p className="mt-0.5 font-normal leading-relaxed">
-                      لا توجد سندات أمر سابقة لهذا المندوب. يمكنك إرفاق حتى 3 سندات الآن أو المتابعة دون ملفات.
+                      لا توجد سندات أمر سابقة لهذا المستلم. يمكنك إرفاق حتى 3 سندات الآن أو المتابعة دون ملفات.
                     </p>
                   </div>
                 </div>
               ) : existingPromissoryCount >= 3 ? (
                 <div className="flex items-center gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
                   <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-                  <span>المندوب يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى). يمكنك إتمام التسليم دون إضافة ملفات.</span>
+                  <span>المستلم يمتلك بالفعل 3 سندات أمر مسجلة (الحد الأقصى). يمكنك إتمام التسليم دون إضافة ملفات.</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs font-medium dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span>
-                    المندوب يمتلك {existingPromissoryCount} {existingPromissoryCount === 1 ? "سند أمر مسجل مسبقاً" : "سندات أمر مسجلة مسبقاً"}. إرفاق سند جديد اختياري (متبقي {3 - existingPromissoryCount} كحد أقصى).
+                    المستلم يمتلك {existingPromissoryCount} {existingPromissoryCount === 1 ? "سند أمر مسجل مسبقاً" : "سندات أمر مسجلة مسبقاً"}. إرفاق سند جديد اختياري (متبقي {3 - existingPromissoryCount} كحد أقصى).
                   </span>
                 </div>
               )}

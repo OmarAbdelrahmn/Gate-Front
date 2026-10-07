@@ -8,6 +8,7 @@ import type {
   UpdateEmployeeRequest,
   UpdateRiderProfileRequest,
   RoleTransitionRequest,
+  EmployeeVehicleProfileResponse,
 } from "./types";
 export function listEmployees() {
   return authFetch<Employee[]>("/api/employees");
@@ -273,5 +274,18 @@ export function updateOperatingCity(
   return authFetch<OperatingCity>(
     `/api/hr-catalogs/operating-cities/${encodeURIComponent(id)}`,
     { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export function getEmployeeVehicleProfile(employeeId: string) {
+  return authFetch<EmployeeVehicleProfileResponse>(
+    `/api/employees/${encodeURIComponent(employeeId)}/vehicle-profile`
+  );
+}
+
+export function ensureEmployeeVehicleProfile(employeeId: string) {
+  return authFetch<EmployeeVehicleProfileResponse>(
+    `/api/employees/${encodeURIComponent(employeeId)}/vehicle-profile`,
+    { method: "PUT" }
   );
 }

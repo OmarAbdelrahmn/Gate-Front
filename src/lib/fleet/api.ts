@@ -4,7 +4,7 @@ import * as T from "./types";
 // ---------------------------
 // Helpers
 // ---------------------------
-function generateUUID(): string {
+export function generateUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
@@ -289,14 +289,30 @@ export const downloadVehicleFile = (vehicleId: string, attachmentId: string, ver
 // ---------------------------
 // Assignments
 // ---------------------------
-export const takeVehicle = (formData: FormData) =>
+export const getEmployeeVehicleProfile = (employeeId: string) =>
+  authFetch<T.EmployeeVehicleProfileResponse>(
+    `/api/employees/${encodeURIComponent(employeeId)}/vehicle-profile`
+  );
+
+export const ensureEmployeeVehicleProfile = (employeeId: string) =>
+  authFetch<T.EmployeeVehicleProfileResponse>(
+    `/api/employees/${encodeURIComponent(employeeId)}/vehicle-profile`,
+    {
+      method: "PUT",
+    }
+  );
+
+export const takeVehicle = (formData: FormData, idempotencyKey?: string) =>
   authFetch<T.RiderVehicleAssignmentResponse>(
     "/api/vehicle-assignments/take",
-    withIdempotency({
-      method: "POST",
-      body: formData,
-      notifySuccess: "تم تسليم المركبة بنجاح",
-    })
+    withIdempotency(
+      {
+        method: "POST",
+        body: formData,
+        notifySuccess: "تم تسليم المركبة بنجاح",
+      },
+      idempotencyKey
+    )
   ).then((res) => {
     console.log("[API Response] POST /api/vehicle-assignments/take:", res);
     return res;

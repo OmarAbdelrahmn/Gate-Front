@@ -13,6 +13,7 @@ import {
   ContactRound,
   FileText,
   History,
+  Key,
   MapPin,
   Pencil,
   Plus,
@@ -56,6 +57,7 @@ import { EmployeeRiderHistoryModal } from "../../../../components/employees/Empl
 import { DriverLicensesView } from "../../../../components/employees/DriverLicensesView";
 import { AssignmentPromissoryFiles } from "../../../../components/fleet/AssignmentPromissoryFiles";
 import { RiderAssignmentReportModal } from "@/components/fleet/RiderAssignmentReportModal";
+import { TakeVehicleModal } from "@/app/admin/fleet/assignments/components/TakeVehicleModal";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
   SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
@@ -469,11 +471,19 @@ export default function EmployeeDetailsPage({
   const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
   const [openRiderHistoryModal, setOpenRiderHistoryModal] = useState(false);
   const [isRiderPeriodReportOpen, setIsRiderPeriodReportOpen] = useState(false);
+  const [isTakeVehicleModalOpen, setIsTakeVehicleModalOpen] = useState(false);
 
   // Vehicle Timeline & Details State
   const [vehicleTimeline, setVehicleTimeline] = useState<RiderVehicleTimelineResponse[]>([]);
   const [loadingVehicleTimeline, setLoadingVehicleTimeline] = useState(false);
   const [currentVehicleDetails, setCurrentVehicleDetails] = useState<VehicleDetailResponse | null>(null);
+
+  const refreshVehicleData = () => {
+    if (!employeeId) return;
+    getEmployee(employeeId).then((data) => {
+      setDetails(data);
+    });
+  };
 
   useEffect(() => {
     if (!details) return;
@@ -1328,9 +1338,21 @@ export default function EmployeeDetailsPage({
               </div>
             </div>
           ) : (
-            <p className="mt-4 text-sm font-medium text-[var(--muted)]">
-              {locale === "en" ? "No current vehicle assigned." : "لا توجد مركبة مسلمة حالياً."}
-            </p>
+            <div className="mt-4 space-y-3">
+              <p className="text-sm font-medium text-[var(--muted)]">
+                {locale === "en" ? "No current vehicle assigned." : "لا توجد مركبة مسلمة حالياً."}
+              </p>
+              {isActive && can("fleet.assignments.create") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsTakeVehicleModalOpen(true)}
+                  className="text-xs gap-1.5 h-8 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                >
+                  <Key size={14} />
+                  <span>{locale === "en" ? "Assign Vehicle" : "تسليم مركبة (بدء عهدة)"}</span>
+                </Button>
+              )}
+            </div>
           )}
         </Card>
       </div>
@@ -1595,6 +1617,20 @@ export default function EmployeeDetailsPage({
         riderName={displayName || employee.fullNameAr || null}
         employeeId={employee.id}
       />
+
+      {/* Take Vehicle Modal */}
+      {details && (
+        <TakeVehicleModal
+          isOpen={isTakeVehicleModalOpen}
+          onClose={() => setIsTakeVehicleModalOpen(false)}
+          onSuccess={() => {
+            setIsTakeVehicleModalOpen(false);
+            refreshVehicleData();
+          }}
+          preselectedVehicle={null}
+          preselectedEmployeeId={details.employee.id}
+        />
+      )}
     </div>
   );
 }

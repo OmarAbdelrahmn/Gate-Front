@@ -223,6 +223,12 @@ export function getFriendlyErrorMessage(
         return "تم تعديل بيانات الشريحة بواسطة مستخدم آخر. يرجى إعادة تحميل الصفحة والمحاولة مجدداً.";
       case "fleet.invalid_request":
         return rawMessage || "طلب الأسطول غير صالح. يرجى مراجعة الحقول المدخلة.";
+      case "fleet.rider_unavailable":
+        return rawMessage || "المندوب أو الموظف غير متاح حالياً لاستلام مركبة.";
+      case "fleet.rider_already_has_vehicle":
+        return rawMessage || "المندوب أو الموظف لديه مركبة مستلمة بالفعل في عهدة نشطة.";
+      case "fleet.vehicle_unavailable":
+        return rawMessage || "المركبة غير متاحة حالياً للتسليم أو تم تعيينها لمستلم آخر.";
       case "fleet.lease_vehicle_sponsor_mismatch":
         return "المركبة المحددة لا تنتمي إلى الكفيل المؤجر الأصلي.";
       case "fleet.lease_period_conflict":

@@ -249,3 +249,9 @@ export type RoleTransitionRequest = {
   rider: RiderInput | null;
 };
 
+export interface EmployeeVehicleProfileResponse {
+  employeeId: string;
+  isEmployee: boolean;
+  exists: boolean;
+  riderProfileId: string | null;
+}
