@@ -1,7 +1,15 @@
 import type { UserStatus } from "../auth/permissions";
+export type ManagedUserEmployeeSummary = {
+  id: string;
+  fullNameAr: string;
+  fullNameEn?: string | null;
+  employeeNumber?: string | null;
+};
+
 export type ManagedUser = {
   id: string;
   employeeId: string | null;
+  employee?: ManagedUserEmployeeSummary | null;
   userName: string;
   email: string;
   phoneNumber: string;

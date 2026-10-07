@@ -153,12 +153,8 @@ export default function UsersPage() {
     setLoading(true);
     setError("");
     try {
-      const [usersData, employeesData] = await Promise.all([
-        listUsers(search),
-        listEmployees().catch(() => [] as Employee[]),
-      ]);
+      const usersData = await listUsers(search);
       setUsers(usersData);
-      setEmployees(employeesData);
     } catch {
       setError(
         locale === "en"
@@ -169,6 +165,22 @@ export default function UsersPage() {
       setLoading(false);
     }
   }, [search, locale]);
+
+  // Lazy-load employees list only when the create user form is opened
+  // useEffect(() => {
+  //   if (!showForm || employees.length > 0) return;
+  //   let active = true;
+  //   listEmployees()
+  //     .then((data) => {
+  //       if (active) setEmployees(data);
+  //     })
+  //     .catch(() => {
+  //       if (active) setEmployees([]);
+  //     });
+  //   return () => {
+  //     active = false;
+  //   };
+  // }, [showForm, employees.length]);
 
   const loadArchived = useCallback(
     async (query = archivedSearch) => {
@@ -1305,9 +1317,9 @@ export default function UsersPage() {
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {(viewTab === "active" ? users : archivedUsers).map((user) => {
-                const linkedEmp = user.employeeId
+                const linkedEmp = user.employee || (user.employeeId
                   ? employees.find((e) => e.id === user.employeeId)
-                  : null;
+                  : null);
                 return (
                   <tr key={user.id} className="hover:bg-blue-500/5">
                     <td className="px-5 py-4">
@@ -1353,6 +1365,7 @@ export default function UsersPage() {
                               {locale === "en"
                                 ? `Employee: ${linkedEmp.fullNameEn || linkedEmp.fullNameAr}`
                                 : `الموظف: ${linkedEmp.fullNameAr}`}
+                              {linkedEmp.employeeNumber ? ` (${linkedEmp.employeeNumber})` : ""}
                             </span>
                           )}
                         </div>

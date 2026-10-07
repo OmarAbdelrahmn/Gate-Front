@@ -32,7 +32,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { toast } from "../ui/Toast";
-import { SearchableSelect } from "../ui/SearchableSelect";
+import { SearchableSelect, type SelectOption } from "../ui/SearchableSelect";
 import { ArchiveUserModal } from "./ArchiveUserModal";
 import { RestoreUserModal } from "./RestoreUserModal";
 
@@ -213,15 +213,25 @@ export function UserManagementPanel({ user, onChanged }: Props) {
   }, []);
 
   const employeeOptions = useMemo(() => {
-    return [
+    const opts: SelectOption[] = [
       { value: "", label: locale === "en" ? "None (No linked employee)" : "بدون (غير مرتبط بموظف)" },
+    ];
+    if (user.employee && !employees.some((e) => e.id === user.employee?.id)) {
+      opts.push({
+        value: user.employee.id,
+        label: `${locale === "en" && user.employee.fullNameEn ? user.employee.fullNameEn : user.employee.fullNameAr}`,
+        sublabel: user.employee.employeeNumber ? `رقم: ${user.employee.employeeNumber}` : "",
+      });
+    }
+    opts.push(
       ...employees.map((emp) => ({
         value: emp.id,
         label: `${locale === "en" && emp.fullNameEn ? emp.fullNameEn : emp.fullNameAr}`,
         sublabel: emp.employeeNumber ? `رقم: ${emp.employeeNumber}` : emp.iqamaNo ? `هوية: ${emp.iqamaNo}` : emp.primaryPhone || "",
-      })),
-    ];
-  }, [employees, locale]);
+      }))
+    );
+    return opts;
+  }, [employees, user.employee, locale]);
 
   const handleEmployeeChange = (employeeId: string) => {
     const selected = employees.find((e) => e.id === employeeId);

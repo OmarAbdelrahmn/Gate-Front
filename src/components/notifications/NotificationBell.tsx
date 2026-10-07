@@ -41,7 +41,7 @@ import {
 } from "../../lib/notifications/utils";
 import { toast } from "../ui/Toast";
 import { NotificationDetailModal } from "./NotificationDetailModal";
-import { useVehiclePlates } from "../../lib/fleet/vehicle-plate-cache";
+import { loadVehiclePlates } from "../../lib/fleet/vehicle-plate-cache";
 
 export interface NotificationBellProps {
   permissions?: string[] | null;
@@ -52,13 +52,17 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
   const isAr = locale === "ar";
   const router = useRouter();
 
-  // Load and subscribe to vehicle plates cache
-  useVehiclePlates();
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Lazy-load vehicle plates cache only when notifications popover is opened
+  useEffect(() => {
+    if (isOpen) {
+      void loadVehiclePlates();
+    }
+  }, [isOpen]);
 
   // Gate the entire center on 'notifications.read'
   const canReadNotifications = can("notifications.read");
-
-  const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
