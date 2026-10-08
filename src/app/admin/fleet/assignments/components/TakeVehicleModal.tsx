@@ -206,6 +206,7 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
       const assignedRiderProfileIds = new Set<string>();
       const assignedEmployeeIds = new Set<string>();
+      const assignedIqamaNos = new Set<string>();
 
       if (Array.isArray(assignedVehicles)) {
         assignedVehicles.forEach((v) => {
@@ -250,6 +251,8 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           if (isAssignmentActive) {
             if (a.riderProfileId) assignedRiderProfileIds.add(a.riderProfileId);
             if (a.employeeId) assignedEmployeeIds.add(a.employeeId);
+            const cleanIqama = a.riderIqamaNo?.trim();
+            if (cleanIqama) assignedIqamaNos.add(cleanIqama);
           }
         });
       }
@@ -258,16 +261,37 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
       const metaMap = new Map<string, SelectablePerson>();
       const seenEmployeeIds = new Set<string>();
       const seenRiderProfileIds = new Set<string>();
+      const seenIqamaNos = new Set<string>();
 
-      // 1. Operational Riders
+      const isPersonAssigned = (riderId?: string | null, empId?: string | null, iqama?: string | null) => {
+        if (riderId && assignedRiderProfileIds.has(riderId)) return true;
+        if (empId && assignedEmployeeIds.has(empId)) return true;
+        const cleanIqama = iqama?.trim();
+        if (cleanIqama && assignedIqamaNos.has(cleanIqama)) return true;
+        return false;
+      };
+
+      const isPersonSeen = (riderId?: string | null, empId?: string | null, iqama?: string | null) => {
+        if (riderId && seenRiderProfileIds.has(riderId)) return true;
+        if (empId && seenEmployeeIds.has(empId)) return true;
+        const cleanIqama = iqama?.trim();
+        if (cleanIqama && seenIqamaNos.has(cleanIqama)) return true;
+        return false;
+      };
+
+      const markPersonSeen = (riderId?: string | null, empId?: string | null, iqama?: string | null) => {
+        if (riderId) seenRiderProfileIds.add(riderId);
+        if (empId) seenEmployeeIds.add(empId);
+        const cleanIqama = iqama?.trim();
+        if (cleanIqama) seenIqamaNos.add(cleanIqama);
+      };
+
+      // 1. Operational Riders (from /api/riders)
       (ridersRes || []).forEach((r) => {
         if (!r.id) return;
-        if (
-          assignedRiderProfileIds.has(r.id) ||
-          (r.employeeId && assignedEmployeeIds.has(r.employeeId))
-        ) {
-          return;
-        }
+        if (isPersonAssigned(r.id, r.employeeId, r.iqamaNo)) return;
+        if (isPersonSeen(r.id, r.employeeId, r.iqamaNo)) return;
+
         const key = `rider_${r.id}`;
         const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
         map.set(key, {
@@ -284,57 +308,21 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           isEmployee: false,
           typeLabel: "مندوب",
         });
-        if (r.employeeId) seenEmployeeIds.add(r.employeeId);
-        seenRiderProfileIds.add(r.id);
+
+        markPersonSeen(r.id, r.employeeId, r.iqamaNo);
       });
 
-      // 2. External Riders
-      (externalRes || []).forEach((r) => {
-        if (!r.riderProfileId) return;
-        if (
-          assignedRiderProfileIds.has(r.riderProfileId) ||
-          (r.employeeId && assignedEmployeeIds.has(r.employeeId))
-        ) {
-          return;
-        }
-        const key = `external_${r.riderProfileId}`;
-        const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
-        map.set(key, {
-          value: key,
-          label: `${r.fullNameAr}${iqamaStr} — مندوب خارجي`,
-          keywords: `${r.fullNameAr} ${r.iqamaNo || ""} خارجي`,
-        });
-        metaMap.set(key, {
-          key,
-          riderProfileId: r.riderProfileId,
-          employeeId: r.employeeId || null,
-          name: r.fullNameAr,
-          iqamaNo: r.iqamaNo,
-          isEmployee: false,
-          typeLabel: "مندوب خارجي",
-        });
-        if (r.employeeId) seenEmployeeIds.add(r.employeeId);
-        seenRiderProfileIds.add(r.riderProfileId);
-      });
-
-      // 3. Employees (including administrative employees)
+      // 2. Employees (including administrative employees and sponsored riders from /api/employees)
       (employeesRes || []).forEach((e) => {
         if (!e.id) return;
-        if (seenEmployeeIds.has(e.id)) return;
-        const existingRiderId = e.riderProfileId || e.rider?.id;
-        if (existingRiderId && seenRiderProfileIds.has(existingRiderId)) return;
 
-        // Eligibility: must be Active
+        // Eligibility: must be Active in HR
         const statusStr = String(e.status || "").toLowerCase();
         if (statusStr !== "active") return;
 
-        // Check if employee already has active vehicle assignment
-        if (
-          (existingRiderId && assignedRiderProfileIds.has(existingRiderId)) ||
-          assignedEmployeeIds.has(e.id)
-        ) {
-          return;
-        }
+        const existingRiderId = (e as any).riderProfileId || e.rider?.id;
+        if (isPersonAssigned(existingRiderId, e.id, e.iqamaNo)) return;
+        if (isPersonSeen(existingRiderId, e.id, e.iqamaNo)) return;
 
         const key = `emp_${e.id}`;
         const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
@@ -356,8 +344,33 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
           typeLabel: typeTag,
         });
 
-        seenEmployeeIds.add(e.id);
-        if (existingRiderId) seenRiderProfileIds.add(existingRiderId);
+        markPersonSeen(existingRiderId, e.id, e.iqamaNo);
+      });
+
+      // 3. External Riders (from /api/external-riders) - only add if not already present as employee or rider
+      (externalRes || []).forEach((r) => {
+        if (!r.riderProfileId) return;
+        if (isPersonAssigned(r.riderProfileId, r.employeeId, r.iqamaNo)) return;
+        if (isPersonSeen(r.riderProfileId, r.employeeId, r.iqamaNo)) return;
+
+        const key = `external_${r.riderProfileId}`;
+        const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+        map.set(key, {
+          value: key,
+          label: `${r.fullNameAr}${iqamaStr} — مندوب خارجي`,
+          keywords: `${r.fullNameAr} ${r.iqamaNo || ""} خارجي`,
+        });
+        metaMap.set(key, {
+          key,
+          riderProfileId: r.riderProfileId,
+          employeeId: r.employeeId || null,
+          name: r.fullNameAr,
+          iqamaNo: r.iqamaNo,
+          isEmployee: false,
+          typeLabel: "مندوب خارجي",
+        });
+
+        markPersonSeen(r.riderProfileId, r.employeeId, r.iqamaNo);
       });
 
       personMetaMapRef.current = metaMap;
