@@ -174,8 +174,8 @@ export function replaceVehicleNumbersWithPlates(
       .replace(/\bInMaintenance\b/g, "تحت الصيانة")
       .replace(/\bUnderMaintenance\b/g, "تحت الصيانة")
       .replace(/\bMaintenance\b/g, "صيانة")
-      .replace(/\bOutOfService\b/g, "خارج الخدمة")
-      .replace(/\bDecommissioned\b/g, "خارج الخدمة");
+      .replace(/\bOutOfService\b/g, "صيانة فى الورشة")
+      .replace(/\bDecommissioned\b/g, "مستبعد");
   }
 
   return result;

@@ -487,7 +487,7 @@ export default function VehicleAccountAssignmentsPage() {
       disabled: { ar: "معطل", en: "Disabled" },
       maintenance: { ar: "صيانة", en: "Maintenance" },
       inservice: { ar: "في الخدمة", en: "In Service" },
-      outofservice: { ar: "خارج الخدمة", en: "Out of Service" },
+      outofservice: { ar: "صيانة فى الورشة", en: "Out of Service" },
       incustody: { ar: "في العهدة", en: "In Custody" },
     };
 

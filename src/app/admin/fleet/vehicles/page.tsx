@@ -46,7 +46,7 @@ function getStatusArabicText(status: VehicleOperationalStatus): string {
     case VehicleOperationalStatus.Stolen:
       return "مسروق Stolen";
     case VehicleOperationalStatus.OutOfService:
-      return "خارج الخدمة OutOfService";
+      return "صيانة فى الورشة صيانة في الورشة OutOfService";
     case VehicleOperationalStatus.Decommissioned:
       return "مستبعد Decommissioned";
     default:
@@ -444,7 +444,7 @@ export default function VehiclesPage() {
       { value: "Assigned", label: "معيّن" },
       { value: "ProblemHold", label: "إيقاف (مشكلة)" },
       { value: "AccidentHold", label: "إيقاف (حادث)" },
-      { value: "OutOfService", label: "خارج الخدمة" },
+      { value: "OutOfService", label: "صيانة فى الورشة" },
       { value: "Stolen", label: "مسروق" },
       { value: "Decommissioned", label: "مستبعد" },
     ],
@@ -545,7 +545,7 @@ export default function VehiclesPage() {
       case VehicleOperationalStatus.ProblemHold: return <Badge className="bg-orange-50 text-orange-700 border-orange-200">إيقاف (مشكلة)</Badge>;
       case VehicleOperationalStatus.AccidentHold: return <Badge className="bg-red-50 text-red-700 border-red-200">إيقاف (حادث)</Badge>;
       case VehicleOperationalStatus.Stolen: return <Badge className="bg-purple-50 text-purple-700 border-purple-200">مسروق</Badge>;
-      case VehicleOperationalStatus.OutOfService: return <Badge className="bg-slate-100 text-slate-700 border-slate-300">خارج الخدمة</Badge>;
+      case VehicleOperationalStatus.OutOfService: return <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border-yellow-700">صيانة فى الورشة</Badge>;
       case VehicleOperationalStatus.Decommissioned: return <Badge className="bg-slate-800 text-slate-300 border-slate-700">مستبعد</Badge>;
       default: return <Badge>{status}</Badge>;
     }
@@ -579,7 +579,7 @@ export default function VehiclesPage() {
                 case VehicleOperationalStatus.Assigned: return "معيّن";
                 case VehicleOperationalStatus.ProblemHold: return "إيقاف (مشكلة)";
                 case VehicleOperationalStatus.AccidentHold: return "إيقاف (حادث)";
-                case VehicleOperationalStatus.OutOfService: return "خارج الخدمة";
+                case VehicleOperationalStatus.OutOfService: return "صيانة فى الورشة";
                 case VehicleOperationalStatus.Stolen: return "مسروق";
                 case VehicleOperationalStatus.Decommissioned: return "مستبعد";
                 default: return String(v.status);

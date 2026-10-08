@@ -794,7 +794,7 @@ export function translateStatus(status: string | null | undefined, locale: "ar" 
     problemhold: "إيقاف (عطل)",
     accidenthold: "إيقاف (حادث)",
     stolen: "مسروق / مفقود",
-    outofservice: "خارج الخدمة",
+    outofservice: "صيانة فى الورشة",
     decommissioned: "مستبعد نهائياً",
     active: "نشط",
     inactive: "غير نشط",

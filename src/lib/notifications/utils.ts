@@ -335,7 +335,7 @@ export const STATUS_ARABIC_MAP: Record<string, string> = {
   // Multi-word phrases with spaces (must match before single words)
   "On Leave": "في إجازة",
   "In Progress": "قيد التنفيذ",
-  "Out Of Service": "خارج الخدمة",
+  "Out Of Service": "صيانة فى الورشة",
   "Pending Approval": "بانتظار الاعتماد",
   "Pending Parts": "بانتظار قطع الغيار",
   "Awaiting Approval": "بانتظار الموافقة",
@@ -354,7 +354,7 @@ export const STATUS_ARABIC_MAP: Record<string, string> = {
   // Snake_case versions
   on_leave: "في إجازة",
   in_progress: "قيد التنفيذ",
-  out_of_service: "خارج الخدمة",
+  out_of_service: "صيانة فى الورشة",
   pending_approval: "بانتظار الاعتماد",
   pending_parts: "بانتظار قطع الغيار",
   awaiting_approval: "بانتظار الموافقة",
@@ -373,7 +373,7 @@ export const STATUS_ARABIC_MAP: Record<string, string> = {
   // CamelCase / PascalCase compound statuses
   OnLeave: "في إجازة",
   InProgress: "قيد التنفيذ",
-  OutOfService: "خارج الخدمة",
+  OutOfService: "صيانة فى الورشة",
   PendingApproval: "بانتظار الاعتماد",
   PendingParts: "بانتظار قطع الغيار",
   AwaitingApproval: "بانتظار الموافقة",

@@ -252,7 +252,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
     { value: String(VehicleOperationalStatus.ProblemHold), label: "إيقاف - مشكلة (ProblemHold)" },
     { value: String(VehicleOperationalStatus.AccidentHold), label: "إيقاف - حادث (AccidentHold)" },
     { value: String(VehicleOperationalStatus.Stolen), label: "مسروق (Stolen)" },
-    { value: String(VehicleOperationalStatus.OutOfService), label: "خارج الخدمة (OutOfService)" },
+    { value: String(VehicleOperationalStatus.OutOfService), label: "صيانة فى الورشة (OutOfService)" },
     ...(canDecommission || editingVehicle?.summary.status === VehicleOperationalStatus.Decommissioned
       ? [{ value: String(VehicleOperationalStatus.Decommissioned), label: "تالف / مستبعد (Decommissioned)" }]
       : []),

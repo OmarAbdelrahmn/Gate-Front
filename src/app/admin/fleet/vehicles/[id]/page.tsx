@@ -312,7 +312,7 @@ export default function VehicleDetailPage() {
       case VehicleOperationalStatus.ProblemHold: return <Badge className="bg-orange-50 text-orange-700 border-orange-200">إيقاف (مشكلة)</Badge>;
       case VehicleOperationalStatus.AccidentHold: return <Badge className="bg-red-50 text-red-700 border-red-200">إيقاف (حادث)</Badge>;
       case VehicleOperationalStatus.Stolen: return <Badge className="bg-purple-50 text-purple-700 border-purple-200">مسروق</Badge>;
-      case VehicleOperationalStatus.OutOfService: return <Badge className="bg-slate-100 text-slate-700 border-slate-300">خارج الخدمة</Badge>;
+      case VehicleOperationalStatus.OutOfService: return <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-950/60 dark:text-yellow-300 dark:border-yellow-700">صيانة فى الورشة</Badge>;
       case VehicleOperationalStatus.Decommissioned: return <Badge className="bg-slate-800 text-slate-300 border-slate-700">مستبعد</Badge>;
       default: return <Badge>{status}</Badge>;
     }

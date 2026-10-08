@@ -541,7 +541,7 @@
       "problemHold": "إيقاف (مشكلة)",
       "accidentHold": "إيقاف (حادث)",
       "stolen": "مسروق",
-      "outOfService": "خارج الخدمة",
+      "outOfService": "صيانة فى الورشة",
       "decommissioned": "مستبعد"
     },
     "fileKinds": {
