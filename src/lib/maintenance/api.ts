@@ -629,6 +629,20 @@ export async function correctOilChangeVehicle(
   );
 }
 
+export async function getVehicleOilChanges(vehicleId: string): Promise<CompleteOilChangeResult[]> {
+  try {
+    const res = await authFetch<any>(`/api/maintenance/vehicles/${encodeURIComponent(vehicleId)}/oil-changes`);
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.items)) return res.items;
+    if (Array.isArray(res?.data)) return res.data;
+    if (res?.id) return [res];
+    return [];
+  } catch (err) {
+    console.warn("Failed to fetch vehicle oil changes directly:", err);
+    return [];
+  }
+}
+
 export async function getDirectOilInventoryLocations(): Promise<DirectOilInventoryLocation[]> {
   return authFetch<DirectOilInventoryLocation[]>("/api/maintenance/oil-inventory-locations");
 }
