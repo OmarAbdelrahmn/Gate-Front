@@ -209,7 +209,12 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
       if (Array.isArray(assignedVehicles)) {
         assignedVehicles.forEach((v) => {
-          if (v.currentRiderProfileId) {
+          const isCurrentlyAssigned =
+            v.status === VehicleOperationalStatus.Assigned ||
+            Number(v.status) === 2 ||
+            String(v.status).toLowerCase() === "assigned";
+
+          if (isCurrentlyAssigned && v.currentRiderProfileId) {
             assignedRiderProfileIds.add(v.currentRiderProfileId);
           }
         });
@@ -217,8 +222,35 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
 
       if (Array.isArray(activeAssignments)) {
         activeAssignments.forEach((a) => {
-          if (a.riderProfileId) assignedRiderProfileIds.add(a.riderProfileId);
-          if (a.employeeId) assignedEmployeeIds.add(a.employeeId);
+          // Strictly exclude ONLY if assignment is currently ACTIVE and NOT ended/completed/cancelled
+          const hasEnded = Boolean(a.endedAtUtc);
+          const statusNum = Number(a.status);
+          const statusStr = String(a.status || "").toLowerCase();
+
+          const isCompletedOrCancelled =
+            statusNum === RiderVehicleAssignmentStatus.Completed ||
+            statusNum === RiderVehicleAssignmentStatus.Cancelled ||
+            statusNum === RiderVehicleAssignmentStatus.Corrected ||
+            statusNum === 2 ||
+            statusNum === 3 ||
+            statusNum === 4 ||
+            statusStr === "completed" ||
+            statusStr === "cancelled" ||
+            statusStr === "corrected";
+
+          const isAssignmentActive =
+            !hasEnded &&
+            !isCompletedOrCancelled &&
+            (statusNum === RiderVehicleAssignmentStatus.Active ||
+              statusNum === 1 ||
+              statusStr === "active" ||
+              a.status === undefined ||
+              a.status === null);
+
+          if (isAssignmentActive) {
+            if (a.riderProfileId) assignedRiderProfileIds.add(a.riderProfileId);
+            if (a.employeeId) assignedEmployeeIds.add(a.employeeId);
+          }
         });
       }
 
