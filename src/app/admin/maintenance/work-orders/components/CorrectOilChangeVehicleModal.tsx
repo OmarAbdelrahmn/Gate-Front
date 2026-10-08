@@ -205,16 +205,16 @@ export function CorrectOilChangeVehicleModal({
   const sourceVehicleOptions: SelectOption[] = useMemo(() => {
     return vehicles.map((v) => {
       const plate = v.plateNumberAr || v.plateNumberEn || "بدون لوحة";
-      const asset = v.assetNumber ? ` • أصل #${v.assetNumber}` : "";
+      const serial = v.serialNumber ? ` • تسلسلي: ${v.serialNumber}` : "";
       const typeLabel = Number(v.vehicleType) === 1 ? "دراجة نارية" : "سيارة";
       const model = [v.manufacturer, v.model].filter(Boolean).join(" ");
       const odo = v.currentOdometer != null ? ` • العداد: ${Number(v.currentOdometer).toLocaleString()} كم` : "";
 
       return {
         value: v.id,
-        label: `${plate}${asset} (${typeLabel})`,
+        label: `${plate}${serial} (${typeLabel})`,
         sublabel: `${model ? `${model} • ` : ""}${typeLabel}${odo}`,
-        keywords: `${v.plateNumberAr || ""} ${v.plateNumberEn || ""} ${v.assetNumber || ""} ${v.serialNumber || ""} ${model} ${typeLabel}`,
+        keywords: `${v.plateNumberAr || ""} ${v.plateNumberEn || ""} ${v.serialNumber || ""} ${model} ${typeLabel}`,
       };
     });
   }, [vehicles]);
@@ -229,15 +229,15 @@ export function CorrectOilChangeVehicleModal({
       })
       .map((v) => {
         const plate = v.plateNumberAr || v.plateNumberEn || "بدون لوحة";
-        const asset = v.assetNumber ? ` • أصل #${v.assetNumber}` : "";
+        const serial = v.serialNumber ? ` • تسلسلي: ${v.serialNumber}` : "";
         const model = [v.manufacturer, v.model].filter(Boolean).join(" ");
         const odo = v.currentOdometer != null ? ` • العداد: ${Number(v.currentOdometer).toLocaleString()} كم` : "";
 
         return {
           value: v.id,
-          label: `${plate}${asset}`,
+          label: `${plate}${serial}`,
           sublabel: `${model ? `${model} • ` : ""}${odo}`,
-          keywords: `${v.plateNumberAr || ""} ${v.plateNumberEn || ""} ${v.assetNumber || ""} ${v.serialNumber || ""} ${model}`,
+          keywords: `${v.plateNumberAr || ""} ${v.plateNumberEn || ""} ${v.serialNumber || ""} ${model}`,
         };
       });
   }, [vehicles, vehicleType, sourceVehicleId]);
@@ -360,9 +360,9 @@ export function CorrectOilChangeVehicleModal({
             placeholder={
               loadingVehicles
                 ? "جارٍ تحميل قائمة المركبات..."
-                : "ابحث باللوحة أو رقم الأصل لاختيار المركبة..."
+                : "ابحث باللوحة أو الرقم التسلسلي لاختيار المركبة..."
             }
-            searchPlaceholder="بحث برقم اللوحة، الأصل، الطراز..."
+            searchPlaceholder="بحث برقم اللوحة، الرقم التسلسلي، الطراز..."
             disabled={loadingVehicles || submitting}
             required={!targetOilChangeId}
           />
@@ -378,7 +378,7 @@ export function CorrectOilChangeVehicleModal({
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">
                       {selectedSourceVehicle.plateNumberAr || selectedSourceVehicle.plateNumberEn || "بدون لوحة"}
-                      {selectedSourceVehicle.assetNumber ? ` • أصل #${selectedSourceVehicle.assetNumber}` : ""}
+                      {selectedSourceVehicle.serialNumber ? ` • تسلسلي: ${selectedSourceVehicle.serialNumber}` : ""}
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
                       النوع: {Number(selectedSourceVehicle.vehicleType) === 1 ? "دراجة نارية" : "سيارة"} •
@@ -492,9 +492,9 @@ export function CorrectOilChangeVehicleModal({
                 ? "جارٍ تحميل المركبات..."
                 : replacementVehicleOptions.length === 0
                   ? `لا توجد مركبات بديلة متاحة من نوع (${isCar ? "سيارة" : "دراجة نارية"})`
-                  : "اختر المركبة البديلة باللوحة أو رقم الأصل..."
+                  : "اختر المركبة البديلة باللوحة أو الرقم التسلسلي..."
             }
-            searchPlaceholder="بحث برقم اللوحة، الأصل، الطراز..."
+            searchPlaceholder="بحث برقم اللوحة، الرقم التسلسلي، الطراز..."
             disabled={loadingVehicles || submitting}
             required
           />
@@ -505,7 +505,7 @@ export function CorrectOilChangeVehicleModal({
                 <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
                 <span>
                   تم اختيار البديل: {selectedReplacementVehicle.plateNumberAr || selectedReplacementVehicle.plateNumberEn || "بدون لوحة"}
-                  {selectedReplacementVehicle.assetNumber ? ` (أصل #${selectedReplacementVehicle.assetNumber})` : ""}
+                  {selectedReplacementVehicle.serialNumber ? ` (تسلسلي: ${selectedReplacementVehicle.serialNumber})` : ""}
                 </span>
               </div>
               <span className="font-mono text-[11px] text-emerald-700 dark:text-emerald-400">
