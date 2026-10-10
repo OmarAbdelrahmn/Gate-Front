@@ -137,6 +137,12 @@ export const PERMISSIONS = [
   "jahez.cashbox.confirm",
   "jahez.cashbox.approve",
 
+  // Chefz Platform
+  "chefz.read",
+  "chefz.accounts.update",
+  "chefz.settlements.create",
+  "chefz.performance.import",
+
   // Reporting
   "reports.read",
   "exports.create",
@@ -317,6 +323,9 @@ export function hasPermission(
     snapshot.effectivePermissions ??
     snapshot.permissions ??
     [];
+  if (perms.includes("*")) return true;
+  const prefix = permission.split(".")[0];
+  if (prefix && perms.includes(`${prefix}.*`)) return true;
   return perms.includes(permission);
 }
 

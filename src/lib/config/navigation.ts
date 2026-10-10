@@ -38,6 +38,7 @@ import {
   PackageCheck,
   ShoppingBag,
   Scale,
+  UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
 
@@ -290,6 +291,7 @@ export const navigation: NavItem[] = [
         icon: BadgeDollarSign,
         roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
+          "jahez.read",
           "jahez.cashbox.read",
           "jahez.cashbox.submit",
           "jahez.cashbox.confirm",
@@ -332,6 +334,44 @@ export const navigation: NavItem[] = [
         icon: Truck,
         roles: ["admin", "manager", "member", "accountant"],
         permission: "jahez.read",
+      },
+    ],
+  },
+  {
+    label: "إدارة شيفز",
+    labelKey: "nav.chefz",
+    icon: UtensilsCrossed,
+    roles: ["admin", "manager", "member", "accountant"],
+    permissionsAny: [
+      "chefz.read",
+      "chefz.accounts.update",
+      "chefz.settlements.create",
+      "chefz.performance.import",
+    ],
+    children: [
+      {
+        label: "الحسابات",
+        labelKey: "nav.chefzAccounts",
+        href: "/admin/chefz/accounts",
+        icon: Server,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["chefz.read", "chefz.accounts.update"],
+      },
+      {
+        label: "التصفيات",
+        labelKey: "nav.chefzSettlements",
+        href: "/admin/chefz/settlements",
+        icon: CreditCard,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["chefz.read", "chefz.settlements.create"],
+      },
+      {
+        label: "الأداء اليومي",
+        labelKey: "nav.chefzPerformance",
+        href: "/admin/chefz/performance",
+        icon: BarChart3,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["chefz.read", "chefz.performance.import"],
       },
     ],
   },

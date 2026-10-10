@@ -76,7 +76,7 @@ export function Sidebar({
       (item) =>
         permitted(item, role, can, canAny) &&
         item.children?.some(
-          (child) => permitted(child, role, can, canAny) && isChildActive(resolveItemHref(child)),
+          (child) => Boolean(child.href) && permitted(child, role, can, canAny) && isChildActive(resolveItemHref(child)),
         ),
     );
     return parent ? (parent.labelKey || parent.label) : null;
@@ -135,7 +135,7 @@ export function Sidebar({
           (item) =>
             permitted(item, role, can, canAny) &&
             (!item.children ||
-              item.children.some((child) => permitted(child, role, can, canAny))),
+              item.children.some((child) => Boolean(child.href) && permitted(child, role, can, canAny))),
         );
 
   return (
@@ -188,6 +188,9 @@ export function Sidebar({
                 children.some((child) => isChildActive(resolveItemHref(child)));
 
               const itemLabel = item.labelKey ? t(item.labelKey) : item.label;
+
+              // Hide parent navigation item if it defines children but none are permitted/visible
+              if (item.children && !children.length) return null;
 
               // Direct link without sub-menu (e.g. Dashboard, Housing, Profile)
               if (!children.length && itemHref)

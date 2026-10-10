@@ -136,6 +136,10 @@
     "jahezApprovals": "الطلبات والاعتمادات",
     "jahezImports": "تقرير الملفات المرفوعة",
     "jahezDispatches": "تقرير طلبات المناديب اليومية",
+    "chefz": "إدارة شيفز",
+    "chefzAccounts": "الحسابات",
+    "chefzSettlements": "التصفيات",
+    "chefzPerformance": "الأداء اليومي",
     "collapseMenu": "تصغير القائمة",
     "expandMenu": "توسيع القائمة"
   },

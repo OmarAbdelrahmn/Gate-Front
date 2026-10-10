@@ -33,6 +33,11 @@ const nextConfig = {
         destination: "/admin/maintenance/:path*",
         permanent: false,
       },
+      {
+        source: "/chefz/:path*",
+        destination: "/admin/chefz/:path*",
+        permanent: false,
+      },
     ];
   },
 };
