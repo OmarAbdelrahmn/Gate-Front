@@ -22,6 +22,8 @@ import {
   Layers,
   Droplet,
   ExternalLink,
+  Car,
+  Bike,
 } from "lucide-react";
 import { getPurchaseReceipt, downloadReceiptBillFile } from "@/lib/maintenance/api";
 import type {
@@ -40,6 +42,7 @@ import {
   itemTypeBadgeStyles,
   oilBarrelStatusConfig,
   oilBarrelVehicleTypeConfig,
+  sharedOilBarrelVehicleTypeConfig,
 } from "@/lib/maintenance/constants";
 import { toast } from "@/components/ui/Toast";
 
@@ -699,8 +702,11 @@ export function ReceiptDetailsModal({
                 <tbody className="divide-y divide-[var(--border)]">
                   {barrels.map((barrel) => {
                     const statusConf = oilBarrelStatusConfig[barrel.status];
+                    const isShared = Boolean(barrel.allowBothVehicleTypes);
                     const typeConf =
-                      barrel.allowedVehicleType !== undefined && barrel.allowedVehicleType !== null
+                      !isShared &&
+                      barrel.allowedVehicleType !== undefined &&
+                      barrel.allowedVehicleType !== null
                         ? oilBarrelVehicleTypeConfig[barrel.allowedVehicleType]
                         : null;
 
@@ -710,7 +716,15 @@ export function ReceiptDetailsModal({
                           {barrel.barrelNumber}
                         </td>
                         <td className="p-2.5 text-center">
-                          {typeConf ? (
+                          {isShared ? (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${sharedOilBarrelVehicleTypeConfig.bg} ${sharedOilBarrelVehicleTypeConfig.text} border ${sharedOilBarrelVehicleTypeConfig.border}`}
+                            >
+                              <Car size={10} />
+                              <Bike size={10} />
+                              {sharedOilBarrelVehicleTypeConfig.badgeAr}
+                            </span>
+                          ) : typeConf ? (
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${typeConf.bg} ${typeConf.text} border ${typeConf.border}`}
                             >

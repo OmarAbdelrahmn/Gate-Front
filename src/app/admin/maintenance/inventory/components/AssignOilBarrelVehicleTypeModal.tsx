@@ -24,8 +24,8 @@ export function AssignOilBarrelVehicleTypeModal({
   locationName,
   onSuccess,
 }: AssignOilBarrelVehicleTypeModalProps) {
-  // Required choice with NO default selection
-  const [selectedType, setSelectedType] = useState<1 | 2 | null>(null);
+  // Required choice with NO default selection: "motorcycles" | "cars" | "both"
+  const [selectedScope, setSelectedScope] = useState<"motorcycles" | "cars" | "both" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -33,24 +33,30 @@ export function AssignOilBarrelVehicleTypeModal({
 
   const handleClose = () => {
     if (submitting) return;
-    setSelectedType(null);
+    setSelectedScope(null);
     setErrorMsg(null);
     onClose();
   };
 
   const handleConfirm = async () => {
-    if (!selectedType) return;
+    if (!selectedScope) return;
 
     setSubmitting(true);
     setErrorMsg(null);
 
     try {
       const res = await assignOilBarrelVehicleType(barrel.id, {
-        allowedVehicleType: selectedType,
+        allowedVehicleType:
+          selectedScope === "motorcycles"
+            ? 1
+            : selectedScope === "cars"
+              ? 2
+              : null,
+        allowBothVehicleTypes: selectedScope === "both",
         rowVersion: barrel.rowVersion,
       });
 
-      setSelectedType(null);
+      setSelectedScope(null);
       onSuccess(res);
     } catch (err: unknown) {
       console.error(err);
@@ -65,8 +71,8 @@ export function AssignOilBarrelVehicleTypeModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="تحديد نوع المركبة / Assign Vehicle Type"
-      maxWidth="max-w-lg"
+      title="تحديد نطاق المركبات / Assign Vehicle Scope"
+      maxWidth="max-w-xl"
     >
       <div className="space-y-4 text-right" dir="rtl">
         {/* Barrel Info Summary */}
@@ -108,7 +114,7 @@ export function AssignOilBarrelVehicleTypeModal({
             <p className="font-bold">إجراء توافقي لبرميل مفتوح سابقاً:</p>
             <p>
               هذا البرميل فُتح قبل تطبيق قيود نوع المركبات. البراميل المفتوحة غير المحددة لا يمكنها تزويد عمليات تغيير زيت جديدة حتى يتم تحديد نوعها.
-              اختيارك سيقفل البرميل حصراً للنوع المختار، دون تعديل الاستهلاك التاريخي السابق.
+              اختيارك سيقفل البرميل حصراً للنطاق المختار، دون تعديل الاستهلاك التاريخي السابق.
             </p>
           </div>
         </div>
@@ -116,16 +122,16 @@ export function AssignOilBarrelVehicleTypeModal({
         {/* Selection Cards (Required, No Default) */}
         <div className="space-y-2">
           <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-            حدد نوع المركبة لهذا البرميل المفتوح <span className="text-red-500">*</span>
+            حدد نطاق المركبات المسموح به لهذا البرميل المفتوح <span className="text-red-500">*</span>
           </label>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {/* Motorcycles Option (1) */}
             <button
               type="button"
-              onClick={() => setSelectedType(1)}
-              className={`relative flex flex-col p-4 rounded-xl border text-right transition-all cursor-pointer ${
-                selectedType === 1
+              onClick={() => setSelectedScope("motorcycles")}
+              className={`relative flex flex-col p-3.5 rounded-xl border text-right transition-all cursor-pointer ${
+                selectedScope === "motorcycles"
                   ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30 shadow-xs"
                   : "border-[var(--border)] bg-[var(--surface)] hover:border-slate-400 dark:hover:border-slate-600"
               }`}
@@ -133,21 +139,22 @@ export function AssignOilBarrelVehicleTypeModal({
               <div className="flex items-center justify-between w-full mb-2">
                 <div
                   className={`grid size-9 place-items-center rounded-lg ${
-                    selectedType === 1
+                    selectedScope === "motorcycles"
                       ? "bg-amber-600 text-white"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                   }`}
                 >
                   <Bike size={20} />
                 </div>
-                {selectedType === 1 && (
+                {selectedScope === "motorcycles" && (
                   <CheckCircle2 size={18} className="text-amber-600 dark:text-amber-400" />
                 )}
               </div>
-              <div className="font-bold text-sm text-slate-900 dark:text-white">
-                دراجات نارية / Motorcycles
+              <div className="font-bold text-xs text-slate-900 dark:text-white">
+                دراجات نارية فقط
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+              <div className="text-[10px] text-slate-400 font-mono">Motorcycles only</div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
                 دراجات نارية فقط (نوع 1).
               </p>
             </button>
@@ -155,9 +162,9 @@ export function AssignOilBarrelVehicleTypeModal({
             {/* Cars Option (2) */}
             <button
               type="button"
-              onClick={() => setSelectedType(2)}
-              className={`relative flex flex-col p-4 rounded-xl border text-right transition-all cursor-pointer ${
-                selectedType === 2
+              onClick={() => setSelectedScope("cars")}
+              className={`relative flex flex-col p-3.5 rounded-xl border text-right transition-all cursor-pointer ${
+                selectedScope === "cars"
                   ? "border-blue-500 bg-blue-500/10 ring-2 ring-blue-500/30 shadow-xs"
                   : "border-[var(--border)] bg-[var(--surface)] hover:border-slate-400 dark:hover:border-slate-600"
               }`}
@@ -165,22 +172,57 @@ export function AssignOilBarrelVehicleTypeModal({
               <div className="flex items-center justify-between w-full mb-2">
                 <div
                   className={`grid size-9 place-items-center rounded-lg ${
-                    selectedType === 2
+                    selectedScope === "cars"
                       ? "bg-blue-600 text-white"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                   }`}
                 >
                   <Car size={20} />
                 </div>
-                {selectedType === 2 && (
+                {selectedScope === "cars" && (
                   <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400" />
                 )}
               </div>
-              <div className="font-bold text-sm text-slate-900 dark:text-white">
-                سيارات / Cars
+              <div className="font-bold text-xs text-slate-900 dark:text-white">
+                سيارات فقط
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+              <div className="text-[10px] text-slate-400 font-mono">Cars only</div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
                 سيارات فقط (نوع 2).
+              </p>
+            </button>
+
+            {/* Both Option (null, true) */}
+            <button
+              type="button"
+              onClick={() => setSelectedScope("both")}
+              className={`relative flex flex-col p-3.5 rounded-xl border text-right transition-all cursor-pointer ${
+                selectedScope === "both"
+                  ? "border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30 shadow-xs"
+                  : "border-[var(--border)] bg-[var(--surface)] hover:border-slate-400 dark:hover:border-slate-600"
+              }`}
+            >
+              <div className="flex items-center justify-between w-full mb-2">
+                <div
+                  className={`flex items-center justify-center gap-1 size-9 rounded-lg ${
+                    selectedScope === "both"
+                      ? "bg-purple-600 text-white"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  }`}
+                >
+                  <Car size={13} />
+                  <Bike size={13} />
+                </div>
+                {selectedScope === "both" && (
+                  <CheckCircle2 size={18} className="text-purple-600 dark:text-purple-400" />
+                )}
+              </div>
+              <div className="font-bold text-xs text-slate-900 dark:text-white">
+                سيارات ودراجات نارية
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono">Both (Shared)</div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                برميل مشترك يغذي النوعين تلقائياً.
               </p>
             </button>
           </div>
@@ -210,10 +252,10 @@ export function AssignOilBarrelVehicleTypeModal({
             variant="primary"
             onClick={handleConfirm}
             loading={submitting}
-            disabled={!selectedType || submitting}
+            disabled={!selectedScope || submitting}
             className="text-xs font-bold px-4"
           >
-            تأكيد نوع المركبة
+            تأكيد نطاق المركبات
           </Button>
         </div>
       </div>

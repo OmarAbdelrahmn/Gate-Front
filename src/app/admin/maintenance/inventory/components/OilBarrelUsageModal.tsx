@@ -33,6 +33,7 @@ import type {
 import {
   oilBarrelStatusConfig,
   oilBarrelVehicleTypeConfig,
+  sharedOilBarrelVehicleTypeConfig,
   formatDateTime,
 } from "@/lib/maintenance/constants";
 
@@ -218,9 +219,12 @@ export function OilBarrelUsageModal({
   if (!barrel) return null;
 
   const currentBarrel = data?.barrel || barrel;
+  const isShared = Boolean(currentBarrel.allowBothVehicleTypes);
   const statusCfg = oilBarrelStatusConfig[currentBarrel.status];
   const typeCfg =
-    currentBarrel.allowedVehicleType !== undefined && currentBarrel.allowedVehicleType !== null
+    !isShared &&
+    currentBarrel.allowedVehicleType !== undefined &&
+    currentBarrel.allowedVehicleType !== null
       ? oilBarrelVehicleTypeConfig[currentBarrel.allowedVehicleType]
       : null;
 
@@ -264,7 +268,15 @@ export function OilBarrelUsageModal({
                     {statusCfg.label}
                   </span>
                 )}
-                {typeCfg ? (
+                {isShared ? (
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${sharedOilBarrelVehicleTypeConfig.border} ${sharedOilBarrelVehicleTypeConfig.bg} ${sharedOilBarrelVehicleTypeConfig.text}`}
+                  >
+                    <Car size={13} />
+                    <Bike size={13} />
+                    {sharedOilBarrelVehicleTypeConfig.badgeAr}
+                  </span>
+                ) : typeCfg ? (
                   <span
                     className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${typeCfg.border} ${typeCfg.bg} ${typeCfg.text}`}
                   >
@@ -324,7 +336,7 @@ export function OilBarrelUsageModal({
 
         {/* Global Summary KPI Cards (Cover entire barrel) */}
         {data && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
             {/* Net Used */}
             <div className="p-3 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/30">
               <span className="text-[11px] text-blue-700 dark:text-blue-300 block font-medium">
@@ -370,12 +382,23 @@ export function OilBarrelUsageModal({
             </div>
 
             {/* Recorded Loss */}
-            <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 col-span-2 sm:col-span-1">
+            <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20">
               <span className="text-[11px] text-amber-700 dark:text-amber-400 block font-medium">
-                الفاقد الموثق
+                الفاقد الطبيعي (2%)
               </span>
               <span className="text-lg font-mono font-black text-amber-800 dark:text-amber-300">
                 {currentBarrel.recordedLossLiters.toFixed(2)}
+                <span className="text-xs font-normal mr-1">لتر</span>
+              </span>
+            </div>
+
+            {/* Recorded Missing (Warehouse write-off) */}
+            <div className="p-3 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20">
+              <span className="text-[11px] text-rose-700 dark:text-rose-400 block font-medium">
+                المفقود والتالف (المستودع)
+              </span>
+              <span className="text-lg font-mono font-black text-rose-800 dark:text-rose-300">
+                {(currentBarrel.recordedMissingLiters || 0).toFixed(2)}
                 <span className="text-xs font-normal mr-1">لتر</span>
               </span>
             </div>
@@ -384,7 +407,7 @@ export function OilBarrelUsageModal({
 
         {/* Informational note about totals */}
         <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between px-1">
-          <span>* الإجماليات أعلاه تغطي كافة استهلاك البرميل بالكامل عبر جميع الصفحات. الفاقد الموثق يبقى منفصلاً عن استهلاك المركبات.</span>
+          <span>* الإجماليات أعلاه تغطي استهلاك البرميل بالكامل. الفاقد الطبيعي الموثق ومفقودات المستودع تبقى منفصلة ومستقلة عن استهلاك المركبات.</span>
           {data && (
             <span className="font-medium">
               إجمالي المركبات / السجلات: {data.totalCount}

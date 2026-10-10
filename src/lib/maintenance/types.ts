@@ -395,6 +395,12 @@ export interface CostLayer {
   rowVersion: string;
 }
 
+export enum OilBarrelMissingReason {
+  Missing = 1,
+  WastedOrSpilled = 2,
+  Theft = 3,
+}
+
 export interface OilBarrel {
   id: string;
   barrelNumber: string;
@@ -411,22 +417,63 @@ export interface OilBarrel {
   maximumAllowedLossLiters: number;
   recordedLossLiters: number;
   remainingLossAllowanceLiters: number;
+  recordedMissingLiters?: number;
   status: OilBarrelStatus;
   openedAtUtc: string | null;
   depletedAtUtc: string | null;
   allowedVehicleType?: number | null;
+  allowBothVehicleTypes?: boolean;
   rowVersion: string;
 }
 
 export interface OpenOilBarrelRequest {
   openedAtUtc: string;
   rowVersion: string;
-  allowedVehicleType: number; // 1 = Motorcycles, 2 = Cars
+  allowedVehicleType: number | null; // 1 = Motorcycles, 2 = Cars, null = Both (when allowBothVehicleTypes: true)
+  allowBothVehicleTypes?: boolean;
 }
 
 export interface AssignOilBarrelVehicleTypeRequest {
-  allowedVehicleType: number; // 1 = Motorcycles, 2 = Cars
+  allowedVehicleType: number | null; // 1 = Motorcycles, 2 = Cars, null = Both
+  allowBothVehicleTypes?: boolean;
   rowVersion: string;
+}
+
+export interface RecordOilBarrelMissingRequest {
+  occurredAtUtc: string;
+  quantityLiters: number;
+  missingReason: number; // 1 = Missing, 2 = Wasted/Spilled, 3 = Theft
+  reason: string;
+  rowVersion: string;
+}
+
+export interface OilBarrelMissingEntry {
+  id: string;
+  oilBarrelId: string;
+  responsibleInventoryLocationId: string;
+  occurredAtUtc: string;
+  quantityLiters: number;
+  costAmount: number;
+  missingReason: number; // 1 = Missing, 2 = Wasted/Spilled, 3 = Theft
+  reason: string;
+  recordedByUserId: string;
+  recordedAtUtc: string;
+  stockMovementId: string;
+}
+
+export interface RecordOilBarrelMissingResponse {
+  entry: OilBarrelMissingEntry;
+  barrel: OilBarrel;
+}
+
+export interface OilBarrelMissingHistoryResponse {
+  oilBarrelId: string;
+  totalMissingLiters: number;
+  totalCostAmount: number;
+  entries: OilBarrelMissingEntry[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
 }
 
 export interface OilBarrelUsageVehicleRow {
@@ -459,8 +506,11 @@ export interface OpenBarrelResponse {
   barrel: {
     id: string;
     remainingLiters: number;
+    recordedMissingLiters?: number;
+    recordedLossLiters?: number;
     status: OilBarrelStatus;
     allowedVehicleType?: number | null;
+    allowBothVehicleTypes?: boolean;
     rowVersion: string;
   };
   opened: boolean;
@@ -899,6 +949,7 @@ export interface DirectOilBarrel {
   status: OilBarrelStatus;
   remainingLiters: number;
   allowedVehicleType?: number | null;
+  allowBothVehicleTypes?: boolean;
 }
 
 export interface CompleteOilChangeResult {

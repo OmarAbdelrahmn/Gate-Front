@@ -327,6 +327,49 @@ export const oilBarrelVehicleTypeConfig: Record<
   },
 };
 
+export const sharedOilBarrelVehicleTypeConfig = {
+  labelAr: "سيارات ودراجات نارية",
+  labelEn: "Cars & Motorcycles",
+  badgeAr: "سيارات ودراجات نارية (مشترك)",
+  badgeEn: "Cars & Motorcycles (Shared)",
+  bg: "bg-purple-50 dark:bg-purple-950/40",
+  text: "text-purple-700 dark:text-purple-300",
+  border: "border-purple-300 dark:border-purple-800",
+};
+
+export const oilBarrelMissingReasonConfig: Record<
+  number,
+  {
+    labelAr: string;
+    labelEn: string;
+    bg: string;
+    text: string;
+    border: string;
+  }
+> = {
+  1: {
+    labelAr: "مفقود",
+    labelEn: "Missing",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-300 dark:border-amber-800",
+  },
+  2: {
+    labelAr: "تالف أو مسكوب",
+    labelEn: "Wasted or spilled",
+    bg: "bg-rose-50 dark:bg-rose-950/40",
+    text: "text-rose-700 dark:text-rose-300",
+    border: "border-rose-300 dark:border-rose-800",
+  },
+  3: {
+    labelAr: "مسروق",
+    labelEn: "Theft",
+    bg: "bg-red-50 dark:bg-red-950/40",
+    text: "text-red-700 dark:text-red-300",
+    border: "border-red-300 dark:border-red-800",
+  },
+};
+
 export const oilReminderStatusConfig: Record<
   OilReminderStatus,
   { label: string; bg: string; text: string; border: string; level: number }

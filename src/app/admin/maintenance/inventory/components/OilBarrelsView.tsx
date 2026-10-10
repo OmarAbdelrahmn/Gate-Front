@@ -16,6 +16,7 @@ import {
   Bike,
   Eye,
   ShieldAlert,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -31,11 +32,13 @@ import type {
   MaintenanceLocation,
   InventoryItem,
   OpenBarrelResponse,
+  RecordOilBarrelMissingResponse,
 } from "@/lib/maintenance/types";
 import { ItemType, OilBarrelStatus } from "@/lib/maintenance/types";
 import {
   oilBarrelStatusConfig,
   oilBarrelVehicleTypeConfig,
+  sharedOilBarrelVehicleTypeConfig,
   formatCurrency,
   formatDateTime,
 } from "@/lib/maintenance/constants";
@@ -43,6 +46,8 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { OpenOilBarrelModal } from "./OpenOilBarrelModal";
 import { AssignOilBarrelVehicleTypeModal } from "./AssignOilBarrelVehicleTypeModal";
 import { OilBarrelUsageModal } from "./OilBarrelUsageModal";
+import { RecordMissingOilModal } from "./RecordMissingOilModal";
+import { OilBarrelMissingHistoryModal } from "./OilBarrelMissingHistoryModal";
 
 interface OilBarrelsViewProps {
   locations: MaintenanceLocation[];
@@ -53,6 +58,7 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
   const { can } = useAuth();
   const canMove = can("inventory.stock.move");
   const canAdjust = can("inventory.stock.adjust");
+  const canReadWriteOffs = can("inventory.stock.read") && can("inventory.cost_layers.read");
   const canViewUsage = can("inventory.stock.read") || can("maintenance.oil.read");
 
   const [loading, setLoading] = useState(true);
@@ -67,10 +73,12 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
   const [actionLoading, setActionLoading] = useState(false);
   const [warningModalMessage, setWarningModalMessage] = useState<string | null>(null);
 
-  // New Modals
+  // Modals
   const [openModalBarrel, setOpenModalBarrel] = useState<OilBarrel | null>(null);
   const [assignTypeModalBarrel, setAssignTypeModalBarrel] = useState<OilBarrel | null>(null);
   const [usageModalBarrel, setUsageModalBarrel] = useState<OilBarrel | null>(null);
+  const [recordMissingModalBarrel, setRecordMissingModalBarrel] = useState<OilBarrel | null>(null);
+  const [missingHistoryModalBarrel, setMissingHistoryModalBarrel] = useState<OilBarrel | null>(null);
 
   // Loss Modal
   const [lossModalBarrel, setLossModalBarrel] = useState<OilBarrel | null>(null);
@@ -80,14 +88,22 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
   const loadBarrels = async () => {
     setLoading(true);
     try {
+      const isBothFilter = vehicleTypeFilter === "both";
       const data = await getOilBarrels({
         inventoryLocationId: selectedLocationId || undefined,
         inventoryItemId: selectedItemId || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
         vehicleType:
-          vehicleTypeFilter === "all" ? undefined : Number(vehicleTypeFilter),
+          vehicleTypeFilter === "all" || isBothFilter
+            ? undefined
+            : Number(vehicleTypeFilter),
       });
-      setBarrels(data);
+
+      const filtered = isBothFilter
+        ? data.filter((b) => Boolean(b.allowBothVehicleTypes))
+        : data;
+
+      setBarrels(filtered);
     } catch (err) {
       console.error(err);
     } finally {
@@ -98,6 +114,15 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
   useEffect(() => {
     loadBarrels();
   }, [selectedLocationId, selectedItemId, statusFilter, vehicleTypeFilter]);
+
+  // Handle Record Missing write-off response
+  const handleRecordMissingSuccess = (res: RecordOilBarrelMissingResponse) => {
+    setRecordMissingModalBarrel(null);
+    setBarrels((prev) =>
+      prev.map((b) => (b.id === res.barrel.id ? { ...b, ...res.barrel } : b)),
+    );
+    loadBarrels();
+  };
 
   // Handle Open Barrel response from OpenOilBarrelModal
   const handleOpenSuccess = (res: OpenBarrelResponse) => {
@@ -185,12 +210,14 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
         {
           header: "نوع المركبة المسموح",
           accessor: (b) =>
-            b.allowedVehicleType === 2
-              ? "سيارات فقط"
-              : b.allowedVehicleType === 1
-                ? "دراجات نارية فقط"
-                : "غير محدد",
-          width: 20,
+            b.allowBothVehicleTypes
+              ? "مشترك (سيارات ودراجات)"
+              : b.allowedVehicleType === 2
+                ? "سيارات فقط"
+                : b.allowedVehicleType === 1
+                  ? "دراجات نارية فقط"
+                  : "غير محدد",
+          width: 22,
         },
         {
           header: "الحالة",
@@ -200,8 +227,9 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
         { header: "سلسلة الطرد", accessor: "packageSequence", width: 14 },
         { header: "السعة الاسمية (لتر)", accessor: "nominalCapacityLiters", width: 18 },
         { header: "المتبقي (لتر)", accessor: (b) => Number(b.remainingLiters.toFixed(2)), width: 15 },
-        { header: "المستهلك (لتر)", accessor: (b) => Number(b.consumedLiters.toFixed(2)), width: 15 },
-        { header: "الفاقد المسجل (لتر)", accessor: (b) => Number(b.recordedLossLiters.toFixed(2)), width: 18 },
+        { header: "المستهلك في المركبات (لتر)", accessor: (b) => Number(b.consumedLiters.toFixed(2)), width: 18 },
+        { header: "الفاقد الطبيعي الموثق (لتر)", accessor: (b) => Number(b.recordedLossLiters.toFixed(2)), width: 18 },
+        { header: "الزيت المفقود/التالف (المستودع)", accessor: (b) => Number((b.recordedMissingLiters || 0).toFixed(2)), width: 22 },
         { header: "الحد الأقصى للفاقد (لتر)", accessor: (b) => Number(b.maximumAllowedLossLiters.toFixed(2)), width: 22 },
         { header: "تكلفة اللتر (ر.س)", accessor: (b) => Number(b.unitCostPerLiter.toFixed(2)), width: 18 },
         { header: "قيمة المخزون المتبقي (ر.س)", accessor: (b) => Number(b.remainingInventoryValue.toFixed(2)), width: 22 },
@@ -284,8 +312,9 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
             className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
           >
             <option value="all">جميع أنواع المركبات</option>
-            <option value="2">سيارات فقط (Cars - 2)</option>
-            <option value="1">دراجات نارية فقط (Motorcycles - 1)</option>
+            <option value="2">سيارات (Cars - 2)</option>
+            <option value="1">دراجات نارية (Motorcycles - 1)</option>
+            <option value="both">مشتركة فقط (سيارات ودراجات)</option>
           </select>
         </div>
 
@@ -325,9 +354,15 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
             const isOpen = barrel.status === OilBarrelStatus.Open;
             const isSealed = barrel.status === OilBarrelStatus.Sealed;
             const isDepleted = barrel.status === OilBarrelStatus.Depleted;
-            const isUnclassifiedOpen = isOpen && (barrel.allowedVehicleType === null || barrel.allowedVehicleType === undefined);
+            const isShared = Boolean(barrel.allowBothVehicleTypes);
+            const isUnclassifiedOpen =
+              isOpen &&
+              !isShared &&
+              (barrel.allowedVehicleType === null || barrel.allowedVehicleType === undefined);
             const typeCfg =
-              barrel.allowedVehicleType !== undefined && barrel.allowedVehicleType !== null
+              !isShared &&
+              barrel.allowedVehicleType !== undefined &&
+              barrel.allowedVehicleType !== null
                 ? oilBarrelVehicleTypeConfig[barrel.allowedVehicleType]
                 : null;
 
@@ -373,7 +408,15 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
                       >
                         {statusCfg?.label}
                       </span>
-                      {typeCfg ? (
+                      {isShared ? (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${sharedOilBarrelVehicleTypeConfig.border} ${sharedOilBarrelVehicleTypeConfig.bg} ${sharedOilBarrelVehicleTypeConfig.text}`}
+                        >
+                          <Car size={11} />
+                          <Bike size={11} />
+                          {sharedOilBarrelVehicleTypeConfig.badgeAr}
+                        </span>
+                      ) : typeCfg ? (
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${typeCfg.border} ${typeCfg.bg} ${typeCfg.text}`}
                         >
@@ -424,7 +467,7 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
                     </div>
                   </div>
 
-                  {/* Key Metrics Grid */}
+                  {/* Key Metrics Grid - Distinct categories for consumption, allowance loss, and warehouse write-off */}
                   <div className="mt-4 grid grid-cols-2 gap-2 pt-3 border-t border-[var(--border)] text-xs">
                     <div>
                       <span className="text-[11px] text-slate-400 block">تكلفة اللتر:</span>
@@ -439,22 +482,28 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
                       </span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-slate-400 block">المستهلك:</span>
-                      <span className="font-mono text-slate-600 dark:text-slate-300">
+                      <span className="text-[11px] text-slate-400 block">استهلاك المركبات:</span>
+                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
                         {barrel.consumedLiters.toFixed(2)} لتر
                       </span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-slate-400 block">الفاقد المسجل:</span>
+                      <span className="text-[11px] text-slate-400 block">الفاقد الطبيعي (2%):</span>
                       <span className="font-mono text-amber-600 dark:text-amber-400">
                         {barrel.recordedLossLiters.toFixed(2)} لتر
+                      </span>
+                    </div>
+                    <div className="col-span-2 pt-1 border-t border-[var(--border)]/60 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">المفقود/التالف (المستودع):</span>
+                      <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                        {(barrel.recordedMissingLiters || 0).toFixed(2)} لتر
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Actions Footer */}
-                <div className="mt-4 pt-3 border-t border-[var(--border)] flex flex-wrap items-center gap-2">
+                <div className="mt-4 pt-3 border-t border-[var(--border)] space-y-2">
                   {/* Sealed Barrel Open Action */}
                   {isSealed && canMove && (
                     <Button
@@ -479,34 +528,59 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
                     </Button>
                   )}
 
-                  {/* View Usage Action (for Open and Depleted barrels) */}
-                  {(isOpen || isDepleted) && canViewUsage && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => setUsageModalBarrel(barrel)}
-                      className={`h-8 text-xs font-bold ${
-                        isOpen && !isUnclassifiedOpen ? "flex-1" : isDepleted ? "w-full" : "flex-1"
-                      }`}
-                    >
-                      <Eye size={13} />
-                      عرض الاستهلاك
-                    </Button>
+                  {/* Open Barrel Write-off & Normal Loss Actions */}
+                  {isOpen && canAdjust && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => setRecordMissingModalBarrel(barrel)}
+                        className="h-8 text-xs font-bold text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-300 dark:border-rose-800 flex-1"
+                        title="تسجيل زيت مفقود أو تالف تحت مسؤولية وتكلفة المستودع"
+                      >
+                        <ShieldAlert size={13} className="text-rose-600 dark:text-rose-400" />
+                        تسجيل زيت مفقود أو تالف
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setLossModalBarrel(barrel);
+                          setLossQuantity("");
+                          setLossReason("");
+                        }}
+                        className="h-8 text-xs font-bold text-amber-700 dark:text-amber-400 flex-1"
+                        title="تسجيل فاقد وإهلاك طبيعي ضمن نسبة 2%"
+                      >
+                        <TrendingDown size={13} />
+                        تسجيل فاقد (2%)
+                      </Button>
+                    </div>
                   )}
 
-                  {/* Record Loss Action (Open barrels only) */}
-                  {isOpen && canAdjust && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setLossModalBarrel(barrel);
-                        setLossQuantity("");
-                        setLossReason("");
-                      }}
-                      className="h-8 text-xs font-bold text-amber-700 dark:text-amber-400 flex-1"
-                    >
-                      <TrendingDown size={13} />
-                      تسجيل فاقد
-                    </Button>
+                  {/* Usage and Write-off History for Open & Depleted Barrels */}
+                  {(isOpen || isDepleted) && (
+                    <div className="flex items-center gap-2">
+                      {canViewUsage && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => setUsageModalBarrel(barrel)}
+                          className="h-8 text-xs font-bold flex-1"
+                        >
+                          <Eye size={13} />
+                          عرض الاستهلاك
+                        </Button>
+                      )}
+                      {canReadWriteOffs && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => setMissingHistoryModalBarrel(barrel)}
+                          className="h-8 text-xs font-bold text-slate-700 dark:text-slate-300 flex-1"
+                          title="عرض سجل شطب ومفقودات المستودع"
+                        >
+                          <FileText size={13} />
+                          سجل المفقودات
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -642,6 +716,26 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
           </div>
         </form>
       </Modal>
+
+      {/* Record Missing Oil Modal (Warehouse write-off) */}
+      <RecordMissingOilModal
+        isOpen={Boolean(recordMissingModalBarrel)}
+        onClose={() => setRecordMissingModalBarrel(null)}
+        barrel={recordMissingModalBarrel}
+        locationName={getBarrelLocationName(recordMissingModalBarrel)}
+        itemName={getBarrelItemName(recordMissingModalBarrel)}
+        onSuccess={handleRecordMissingSuccess}
+      />
+
+      {/* Oil Barrel Missing Write-off History Modal */}
+      <OilBarrelMissingHistoryModal
+        isOpen={Boolean(missingHistoryModalBarrel)}
+        onClose={() => setMissingHistoryModalBarrel(null)}
+        barrel={missingHistoryModalBarrel}
+        locations={locations}
+        itemName={getBarrelItemName(missingHistoryModalBarrel)}
+        locationName={getBarrelLocationName(missingHistoryModalBarrel)}
+      />
     </div>
   );
 }

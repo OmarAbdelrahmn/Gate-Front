@@ -354,7 +354,7 @@ export function CompleteOilChangeModal({
                     onChange={(val) => setNextOilBarrelId(val)}
                     options={sealedBarrels.map((b) => ({
                       value: b.id,
-                      label: `${b.barrelNumber} (${b.remainingLiters}L)${b.allowedVehicleType ? (b.allowedVehicleType === 1 ? " - دراجات فقط" : " - سيارات فقط") : " - مؤهل للفتح تلقائياً"}`,
+                      label: `${b.barrelNumber} (${b.remainingLiters}L)${b.allowBothVehicleTypes ? " - مشترك (سيارات ودراجات)" : b.allowedVehicleType ? (b.allowedVehicleType === 1 ? " - دراجات فقط" : " - سيارات فقط") : " - مؤهل للفتح تلقائياً"}`,
                     }))}
                     placeholder="اختر البرميل التالي لفتحه..."
                     required

@@ -316,6 +316,12 @@ export function getFriendlyErrorMessage(
         return "سجل عملية تغيير الزيت غير موجود أو تم حذفه.";
       case "maintenance.vehicle_not_found":
         return "المركبة المحددة غير موجودة.";
+      case "maintenance.invalid_oil_barrel":
+        return "بيانات البرميل غير صالحة للعملية. قد لا يكون البرميل مفتوحاً أو لا تتوفر كمية كافية. يرجى التحديث والمحاولة مجدداً.";
+      case "maintenance.invalid_oil_barrel_vehicle_type":
+        return "نوع المركبة المحدد للبرميل غير صالح. يتطلب اختيار نوع مفرد، أو تحديد البرميل كمشترك (Both).";
+      case "maintenance.oil_barrel_vehicle_type_locked":
+        return "لا يمكن تغيير نوع المركبة؛ نطاق البرميل المفتوح مقفل نهائياً.";
       case "maintenance.invalid_request":
         return rawMessage || "طلب صيانة غير صالح. يرجى مراجعة الحقول والمدخلات.";
       case "system.concurrency_conflict":

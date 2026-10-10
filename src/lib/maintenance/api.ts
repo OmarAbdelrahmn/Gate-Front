@@ -19,6 +19,9 @@ import type {
   OpenOilBarrelRequest,
   AssignOilBarrelVehicleTypeRequest,
   OilBarrelUsageResponse,
+  RecordOilBarrelMissingRequest,
+  RecordOilBarrelMissingResponse,
+  OilBarrelMissingHistoryResponse,
   OpenBarrelResponse,
   OilLossResponse,
   TransferRequest,
@@ -326,6 +329,34 @@ export async function recordOilLoss(
     body: JSON.stringify(payload),
     notifySuccess: "تم تسجيل فاقد الزيت بنجاح",
   });
+}
+
+export async function recordOilBarrelMissing(
+  barrelId: string,
+  payload: RecordOilBarrelMissingRequest,
+): Promise<RecordOilBarrelMissingResponse> {
+  return authFetch<RecordOilBarrelMissingResponse>(
+    `/api/maintenance-inventory/oil-barrels/${barrelId}/missing`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      notifySuccess: "تم تسجيل الزيت المفقود/التالف وتحديث المخزون بنجاح",
+    },
+  );
+}
+
+export async function getOilBarrelMissingHistory(
+  barrelId: string,
+  page = 1,
+  pageSize = 50,
+): Promise<OilBarrelMissingHistoryResponse> {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(Math.min(pageSize, 200)),
+  });
+  return authFetch<OilBarrelMissingHistoryResponse>(
+    `/api/maintenance-inventory/oil-barrels/${barrelId}/missing?${query}`,
+  );
 }
 
 export async function createTransfer(payload: TransferRequest): Promise<TransferResponse> {

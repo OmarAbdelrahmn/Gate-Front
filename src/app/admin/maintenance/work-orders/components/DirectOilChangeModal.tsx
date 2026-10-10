@@ -197,7 +197,7 @@ export function DirectOilChangeModal({ vehicleId, reminder, onClose, onCompleted
           <SearchableSelect value={nextBarrelId} onChange={(value) => { setNextBarrelId(value); attemptKey.current = null; }}
             options={barrels.filter((barrel) => barrel.status === OilBarrelStatus.Sealed).map((barrel) => ({
               value: barrel.id,
-              label: `${barrel.barrelNumber} (${barrel.remainingLiters} لتر)${barrel.allowedVehicleType ? (barrel.allowedVehicleType === 1 ? " - دراجات فقط" : " - سيارات فقط") : " - مؤهل للفتح تلقائياً"}`,
+              label: `${barrel.barrelNumber} (${barrel.remainingLiters} لتر)${barrel.allowBothVehicleTypes ? " - مشترك (سيارات ودراجات)" : barrel.allowedVehicleType ? (barrel.allowedVehicleType === 1 ? " - دراجات فقط" : " - سيارات فقط") : " - مؤهل للفتح تلقائياً"}`,
             }))}
             placeholder="اختر البرميل التالي" required />
         </label>}
