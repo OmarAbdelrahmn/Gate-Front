@@ -197,10 +197,22 @@ export function FuelCardsListView({
         const options: SelectOption[] = [];
         const seenIds = new Set<string>();
 
+        const isValidId = (id?: string | null): boolean => {
+          if (!id) return false;
+          const trimmed = String(id).trim();
+          return (
+            trimmed !== "" &&
+            trimmed !== "0" &&
+            trimmed !== "00000000-0000-0000-0000-000000000000" &&
+            trimmed.toLowerCase() !== "null" &&
+            trimmed.toLowerCase() !== "undefined"
+          );
+        };
+
         (riders || []).forEach((r) => {
-          if (!r.id) return;
+          if (!isValidId(r.id)) return;
           seenIds.add(r.id);
-          if (r.employeeId) seenIds.add(r.employeeId);
+          if (isValidId(r.employeeId)) seenIds.add(r.employeeId);
 
           options.push({
             value: r.id,
@@ -210,12 +222,12 @@ export function FuelCardsListView({
         });
 
         (employees || []).forEach((e) => {
-          if (!e.id) return;
+          if (!isValidId(e.id)) return;
           const riderId = (e as any).riderProfileId || e.rider?.id;
-          if (riderId && seenIds.has(riderId)) return;
+          if (isValidId(riderId) && seenIds.has(riderId)) return;
           if (seenIds.has(e.id)) return;
 
-          const val = riderId || e.id;
+          const val = isValidId(riderId) ? riderId : e.id;
           const typeTag = e.isEmployee !== false ? "موظف إداري" : "موظف";
           options.push({
             value: val,
@@ -224,6 +236,7 @@ export function FuelCardsListView({
           });
         });
 
+        options.sort((a, b) => a.label.localeCompare(b.label, "ar"));
         setRidersOptions(options);
       })
       .catch((err) => console.error("Failed to fetch riders/employees lookup:", err));

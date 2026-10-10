@@ -82,41 +82,81 @@ export function AssignFuelCardRiderModal({
           const seenRiderProfileIds = new Set<string>();
           const seenIqamaNos = new Set<string>();
 
+          const isValidId = (id?: string | null): boolean => {
+            if (!id) return false;
+            const trimmed = String(id).trim();
+            return (
+              trimmed !== "" &&
+              trimmed !== "0" &&
+              trimmed !== "00000000-0000-0000-0000-000000000000" &&
+              trimmed.toLowerCase() !== "null" &&
+              trimmed.toLowerCase() !== "undefined"
+            );
+          };
+
+          const isValidIqama = (iqama?: string | null): boolean => {
+            if (!iqama) return false;
+            const trimmed = String(iqama).trim();
+            return (
+              trimmed.length >= 6 &&
+              trimmed !== "-" &&
+              trimmed !== "0" &&
+              trimmed.toLowerCase() !== "null" &&
+              trimmed.toLowerCase() !== "undefined"
+            );
+          };
+
+          const formatStatusLabel = (status: any): string => {
+            if (!status) return "";
+            const s = String(status).trim();
+            const lower = s.toLowerCase();
+            if (lower === "active" || lower === "1") return "نشط";
+            if (lower === "onboarding") return "قيد التهيئة";
+            if (lower === "probation") return "تحت التجربة";
+            if (lower === "suspended") return "موقوف";
+            if (lower === "onleave") return "في إجازة";
+            if (lower === "sick") return "إجازة مرضية";
+            if (lower === "draft" || lower === "0") return "مسودة";
+            if (lower === "terminated") return "منتهي الخدمة";
+            if (lower === "archived") return "مؤرشف";
+            return s;
+          };
+
           const isPersonSeen = (riderId?: string | null, empId?: string | null, iqama?: string | null) => {
-            if (riderId && seenRiderProfileIds.has(riderId)) return true;
-            if (empId && seenEmployeeIds.has(empId)) return true;
-            const cleanIqama = iqama?.trim();
-            if (cleanIqama && seenIqamaNos.has(cleanIqama)) return true;
+            if (isValidId(riderId) && seenRiderProfileIds.has(riderId!)) return true;
+            if (isValidId(empId) && seenEmployeeIds.has(empId!)) return true;
+            if (isValidIqama(iqama) && seenIqamaNos.has(iqama!.trim())) return true;
             return false;
           };
 
           const markPersonSeen = (riderId?: string | null, empId?: string | null, iqama?: string | null) => {
-            if (riderId) seenRiderProfileIds.add(riderId);
-            if (empId) seenEmployeeIds.add(empId);
-            const cleanIqama = iqama?.trim();
-            if (cleanIqama) seenIqamaNos.add(cleanIqama);
+            if (isValidId(riderId)) seenRiderProfileIds.add(riderId!);
+            if (isValidId(empId)) seenEmployeeIds.add(empId!);
+            if (isValidIqama(iqama)) seenIqamaNos.add(iqama!.trim());
           };
 
           // 1. Operational Riders (from /api/riders)
           (ridersRes || []).forEach((r) => {
-            if (!r.id) return;
+            if (!isValidId(r.id)) return;
             if (isPersonSeen(r.id, r.employeeId, r.iqamaNo)) return;
 
             const key = `rider_${r.id}`;
             const name = r.fullNameAr || r.fullNameEn || "مندوب بدون اسم";
-            const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+            const iqamaStr = isValidIqama(r.iqamaNo) ? ` (${r.iqamaNo?.trim()})` : "";
+            const stLabel = formatStatusLabel(r.status);
+            const statusBadge = stLabel && stLabel !== "نشط" ? ` • ${stLabel}` : "";
 
             options.push({
               value: key,
               label: `${name}${iqamaStr} — مندوب`,
-              sublabel: `مندوب • هوية: ${r.iqamaNo || "—"}`,
-              keywords: `${name} ${r.iqamaNo || ""} مندوب`,
+              sublabel: `مندوب • هوية: ${r.iqamaNo || "—"}${statusBadge}`,
+              keywords: `${name} ${r.fullNameEn || ""} ${r.iqamaNo || ""} مندوب موظف`,
             });
 
             metaMap.set(key, {
               key,
               riderProfileId: r.id,
-              employeeId: r.employeeId || null,
+              employeeId: isValidId(r.employeeId) ? r.employeeId : null,
               name,
               iqamaNo: r.iqamaNo,
               isEmployee: false,
@@ -126,31 +166,31 @@ export function AssignFuelCardRiderModal({
             markPersonSeen(r.id, r.employeeId, r.iqamaNo);
           });
 
-          // 2. Employees (administrative and operational employees from /api/employees)
+          // 2. Employees (ALL administrative and operational employees from /api/employees)
           (employeesRes || []).forEach((e) => {
-            if (!e.id) return;
-            const statusStr = String(e.status || "").toLowerCase();
-            if (statusStr !== "active") return;
+            if (!isValidId(e.id)) return;
 
             const existingRiderId = (e as any).riderProfileId || e.rider?.id;
             if (isPersonSeen(existingRiderId, e.id, e.iqamaNo)) return;
 
             const key = `emp_${e.id}`;
             const name = e.fullNameAr || e.fullNameEn || "موظف بدون اسم";
-            const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
+            const iqamaStr = isValidIqama(e.iqamaNo) ? ` (${e.iqamaNo?.trim()})` : "";
             const isAdministrative = e.isEmployee !== false;
             const typeTag = isAdministrative ? "موظف إداري" : "موظف";
+            const stLabel = formatStatusLabel(e.status);
+            const statusBadge = stLabel && stLabel !== "نشط" ? ` • ${stLabel}` : "";
 
             options.push({
               value: key,
               label: `${name}${iqamaStr} — ${typeTag}`,
-              sublabel: `${typeTag} • هوية: ${e.iqamaNo || "—"}`,
-              keywords: `${name} ${e.iqamaNo || ""} ${typeTag} موظف`,
+              sublabel: `${typeTag} • هوية: ${e.iqamaNo || "—"}${statusBadge}`,
+              keywords: `${name} ${e.fullNameEn || ""} ${e.iqamaNo || ""} ${typeTag} موظف مندوب`,
             });
 
             metaMap.set(key, {
               key,
-              riderProfileId: existingRiderId || null,
+              riderProfileId: isValidId(existingRiderId) ? existingRiderId : null,
               employeeId: e.id,
               name,
               iqamaNo: e.iqamaNo,
@@ -163,24 +203,26 @@ export function AssignFuelCardRiderModal({
 
           // 3. External Riders (from /api/external-riders)
           (externalRes || []).forEach((r) => {
-            if (!r.riderProfileId) return;
+            if (!isValidId(r.riderProfileId)) return;
             if (isPersonSeen(r.riderProfileId, r.employeeId, r.iqamaNo)) return;
 
             const key = `external_${r.riderProfileId}`;
             const name = r.fullNameAr || "مندوب خارجي";
-            const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+            const iqamaStr = isValidIqama(r.iqamaNo) ? ` (${r.iqamaNo?.trim()})` : "";
+            const stLabel = formatStatusLabel(r.status);
+            const statusBadge = stLabel && stLabel !== "نشط" ? ` • ${stLabel}` : "";
 
             options.push({
               value: key,
               label: `${name}${iqamaStr} — مندوب خارجي`,
-              sublabel: `مندوب خارجي • هوية: ${r.iqamaNo || "—"}`,
-              keywords: `${name} ${r.iqamaNo || ""} مندوب خارجي`,
+              sublabel: `مندوب خارجي • هوية: ${r.iqamaNo || "—"}${statusBadge}`,
+              keywords: `${name} ${r.iqamaNo || ""} مندوب خارجي موظف`,
             });
 
             metaMap.set(key, {
               key,
               riderProfileId: r.riderProfileId,
-              employeeId: r.employeeId || null,
+              employeeId: isValidId(r.employeeId) ? r.employeeId : null,
               name,
               iqamaNo: r.iqamaNo,
               isEmployee: false,
@@ -189,6 +231,9 @@ export function AssignFuelCardRiderModal({
 
             markPersonSeen(r.riderProfileId, r.employeeId, r.iqamaNo);
           });
+
+          // Sort alphabetically by Arabic label
+          options.sort((a, b) => a.label.localeCompare(b.label, "ar"));
 
           personMetaMapRef.current = metaMap;
           setPersonsOptions(options);
