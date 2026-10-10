@@ -30,6 +30,7 @@ import {
   Search,
   FileSpreadsheet,
   CheckCircle2,
+  Lock,
 } from "lucide-react";
 
 export default function JahezSettlementsPage() {
@@ -62,6 +63,7 @@ export default function JahezSettlementsPage() {
   // Live balance preview for selected handover in modal
   const [modalBalance, setModalBalance] = useState<JahezBalance | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const [balanceTrigger, setBalanceTrigger] = useState(0);
 
   // Load handovers
   const loadHandovers = async () => {
@@ -111,16 +113,24 @@ export default function JahezSettlementsPage() {
   useEffect(() => {
     if (!modalHandoverId || !throughDate) {
       setModalBalance(null);
+      setCommissionPayment("");
       return;
     }
     let cancelled = false;
     setBalanceLoading(true);
     getJahezHandoverBalance(modalHandoverId, throughDate)
       .then((b) => {
-        if (!cancelled) setModalBalance(b);
+        if (!cancelled) {
+          setModalBalance(b);
+          const totalComm = (b.postedCommission || 0) + (b.unpostedCommission || 0);
+          setCommissionPayment(Number(Math.max(0, totalComm).toFixed(2)));
+        }
       })
       .catch(() => {
-        if (!cancelled) setModalBalance(null);
+        if (!cancelled) {
+          setModalBalance(null);
+          setCommissionPayment(0);
+        }
       })
       .finally(() => {
         if (!cancelled) setBalanceLoading(false);
@@ -129,16 +139,17 @@ export default function JahezSettlementsPage() {
     return () => {
       cancelled = true;
     };
-  }, [modalHandoverId, throughDate]);
+  }, [modalHandoverId, throughDate, balanceTrigger]);
 
   const handleOpenModal = (handoverId?: string) => {
-    setModalHandoverId(handoverId || selectedHandoverId || (handovers[0]?.id ?? ""));
+    const targetHandoverId = handoverId || selectedHandoverId || (handovers[0]?.id ?? "");
+    setModalHandoverId(targetHandoverId);
     setThroughDate(new Date().toISOString().split("T")[0]);
     setFeePayment("");
     setDebtPayment("");
-    setCommissionPayment("");
     setCountsAsSettlement(true);
     setReason(isEn ? "Rider cash collection and settlement" : "تحصيل وتسوية نقدية للمندوب");
+    setBalanceTrigger((prev) => prev + 1);
     setIsModalOpen(true);
   };
 
@@ -146,6 +157,11 @@ export default function JahezSettlementsPage() {
     e.preventDefault();
     if (!modalHandoverId) {
       toast.error("تنبيه", "يرجى اختيار حساب التسليم أولاً");
+      return;
+    }
+
+    if (balanceLoading) {
+      toast.error("تنبيه", isEn ? "Please wait for the balance to finish calculating" : "يرجى الانتظار حتى اكتمال استعلام الرصيد");
       return;
     }
     const fPay = Number(feePayment) || 0;
@@ -547,7 +563,15 @@ export default function JahezSettlementsPage() {
             <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-3.5 dark:border-gray-800 dark:bg-gray-800/40 text-xs space-y-2">
               <div className="flex items-center justify-between font-semibold text-gray-700 dark:text-gray-200">
                 <span>{isEn ? "Current Outstanding Balance" : "الأرصدة المستحقة حالياً"}</span>
-                {balanceLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-600" />}
+                <button
+                  type="button"
+                  onClick={() => setBalanceTrigger((prev) => prev + 1)}
+                  disabled={balanceLoading}
+                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  title={isEn ? "Refresh Balance" : "تحديث الرصيد"}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 text-emerald-600 ${balanceLoading ? "animate-spin" : ""}`} />
+                </button>
               </div>
 
               {modalBalance ? (
@@ -563,7 +587,7 @@ export default function JahezSettlementsPage() {
                   <div className="bg-white p-2 rounded border border-gray-200 dark:bg-gray-900 dark:border-gray-800">
                     <span className="text-gray-400 block">{isEn ? "Commission" : "العمولة"}</span>
                     <span className="font-bold text-purple-600">
-                      {(modalBalance.postedCommission + modalBalance.unpostedCommission)} ر.س
+                      {((modalBalance.postedCommission || 0) + (modalBalance.unpostedCommission || 0)).toFixed(2)} ر.س
                     </span>
                   </div>
                 </div>
@@ -612,20 +636,41 @@ export default function JahezSettlementsPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex justify-between mb-1">
-                <span>{isEn ? "Commission Payment (SAR)" : "تحصيل عمولة التشغيل (ر.س)"}</span>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex justify-between items-center mb-1">
+                <span className="flex items-center gap-1.5">
+                  <span>{isEn ? "Commission Payment (SAR)" : "تحصيل عمولة التشغيل (ر.س)"}</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                    <Lock className="h-3 w-3" />
+                    {isEn ? "Auto-calculated" : "محسوبة تلقائياً"}
+                  </span>
+                </span>
                 <span className="text-purple-600 text-[11px] font-normal">
                   {isEn ? "→ Goes to Settlements Cashbox" : "← يدخل في صندوق التسويات"}
                 </span>
               </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={commissionPayment}
-                onChange={(e) => setCommissionPayment(e.target.value === "" ? "" : Number(e.target.value))}
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={balanceLoading ? (isEn ? "Calculating..." : "جارٍ الاحتساب...") : "0.00"}
+                  value={commissionPayment}
+                  readOnly
+                  disabled
+                  tabIndex={-1}
+                  className="bg-gray-100/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-100 font-semibold cursor-not-allowed select-none border-dashed"
+                />
+                {balanceLoading && (
+                  <div className="absolute inset-y-0 end-3 flex items-center pointer-events-none">
+                    <RefreshCw className="h-4 w-4 animate-spin text-purple-600" />
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                {isEn
+                  ? "Calculated automatically like the outstanding balance (posted + unposted commission) and locked from editing."
+                  : "تُحسب تلقائياً مثل رصيد العمولة المستحقة حالياً (المرحلة + غير المرحلة) ومقفلة بالكامل ولا يمكن تعديلها."}
+              </p>
             </div>
           </div>
 
@@ -676,10 +721,14 @@ export default function JahezSettlementsPage() {
             <Button
               type="submit"
               variant="primary"
-              disabled={isSubmitting}
+              disabled={isSubmitting || balanceLoading}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
-              {isSubmitting ? (isEn ? "Recording..." : "جارٍ التسجيل...") : (isEn ? "Confirm Collection" : "تأكيد التحصيل")}
+              {isSubmitting
+                ? (isEn ? "Recording..." : "جارٍ التسجيل...")
+                : balanceLoading
+                ? (isEn ? "Calculating balance..." : "جارٍ استعلام الرصيد...")
+                : (isEn ? "Confirm Collection" : "تأكيد التحصيل")}
             </Button>
           </div>
         </form>
