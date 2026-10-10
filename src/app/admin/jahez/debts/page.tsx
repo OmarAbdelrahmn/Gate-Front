@@ -21,6 +21,7 @@ import {
   Search,
   CheckCircle2,
   Scale,
+  Lock,
 } from "lucide-react";
 
 export default function JahezDebtsPage() {
@@ -82,6 +83,17 @@ export default function JahezDebtsPage() {
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBalance) return;
+
+    if (!selectedBalance.commissionComplete) {
+      toast.error(
+        "تنبيه",
+        isEn
+          ? "Cannot finalize settlement because commission calculation data is incomplete for this period."
+          : "لا يمكن تسجيل التصفية لأن بيانات احتساب العمولة غير مكتملة لهذه الفترة (يرجى إدخال كشوف الأرباح المعتمدة)."
+      );
+      return;
+    }
+
     const fPay = Number(feePayment) || 0;
     const dPay = Number(debtPayment) || 0;
     const cPay = Number(commissionPayment) || 0;
@@ -91,6 +103,45 @@ export default function JahezDebtsPage() {
       return;
     }
 
+    // Ceilings per bucket: Cannot pay more than positive outstanding balance
+    const maxFee = Math.max(0, selectedBalance.fees ?? 0);
+    const maxDebt = Math.max(0, selectedBalance.platformDebt ?? 0);
+    const maxComm = Math.max(0, Number(((selectedBalance.postedCommission ?? 0) + (selectedBalance.unpostedCommission ?? 0)).toFixed(2)));
+
+    if (fPay > maxFee) {
+      toast.error(
+        "خطأ",
+        isEn
+          ? `Fee payment (${fPay} SAR) exceeds outstanding fees balance (${maxFee} SAR)`
+          : `المبلغ المدخل لرسوم الحساب (${fPay} ر.س) يتجاوز الرصيد المستحق (${maxFee} ر.س)`
+      );
+      return;
+    }
+
+    if (dPay > maxDebt) {
+      toast.error(
+        "خطأ",
+        isEn
+          ? `Debt payment (${dPay} SAR) exceeds platform debt balance (${maxDebt} SAR)`
+          : `المبلغ المدخل لمديونية جاهز (${dPay} ر.س) يتجاوز الرصيد المستحق (${maxDebt} ر.س)`
+      );
+      return;
+    }
+
+    if (cPay > maxComm) {
+      toast.error(
+        "خطأ",
+        isEn
+          ? `Commission payment (${cPay} SAR) exceeds outstanding commission (${maxComm} SAR)`
+          : `المبلغ المدخل لعمولة التشغيل (${cPay} ر.س) يتجاوز الرصيد المستحق (${maxComm} ر.س)`
+      );
+      return;
+    }
+
+    // countsAsSettlement enforcement: Any collection of debt or commission MUST count as settlement
+    const mustCountAsSettlement = dPay > 0 || cPay > 0;
+    const finalCountsAsSettlement = mustCountAsSettlement ? true : countsAsSettlement;
+
     setIsPaying(true);
     try {
       const payload: PaymentRequest = {
@@ -99,7 +150,7 @@ export default function JahezDebtsPage() {
         feePayment: fPay,
         debtPayment: dPay,
         commissionPayment: cPay,
-        countsAsSettlement,
+        countsAsSettlement: finalCountsAsSettlement,
         reason: paymentReason.trim(),
       };
       await createSettlement(payload);
@@ -461,8 +512,8 @@ export default function JahezDebtsPage() {
       >
         {selectedBalance && (
           <form onSubmit={handleSubmitPayment} className="space-y-4">
-            <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-xs">
-              <div className="font-semibold text-gray-800 dark:text-gray-200 mb-2">
+            <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-xs space-y-2">
+              <div className="font-semibold text-gray-800 dark:text-gray-200">
                 حساب: [{selectedBalance.account?.externalAccountId || selectedBalance.externalAccountId || selectedBalance.account?.code || "-"}]
                 {(selectedBalance.actualRiderNameAr || selectedBalance.ownerRiderNameAr) && (
                   <span className="text-gray-500 font-normal mr-2">
@@ -482,9 +533,50 @@ export default function JahezDebtsPage() {
                 <div className="bg-white p-2 rounded border dark:bg-gray-900">
                   <span className="text-gray-400 block">العمولة</span>
                   <span className="font-bold text-purple-600">
-                    {selectedBalance.postedCommission + selectedBalance.unpostedCommission} ر.س
+                    {(selectedBalance.postedCommission + selectedBalance.unpostedCommission).toFixed(2)} ر.س
                   </span>
                 </div>
+              </div>
+
+              {/* Incomplete Commission Warning */}
+              {(!selectedBalance.commissionComplete || (selectedBalance.problems && selectedBalance.problems.length > 0)) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-2.5 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/20 dark:text-amber-300 space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                    <span>{isEn ? "Commission Data Incomplete" : "بيانات احتساب العمولة غير مكتملة"}</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    {isEn
+                      ? "Commission calculation data is incomplete. Settlements cannot be finalized until earnings are recorded."
+                      : "بيانات نسبة الأرباح غير مكتملة لهذه الفترة، وسيرفض النظام التصفية حتى يتم إدخال كشوف الأرباح المعتمدة."}
+                  </p>
+                  {selectedBalance.problems && selectedBalance.problems.length > 0 && (
+                    <ul className="list-disc list-inside text-[11px] pt-0.5 space-y-0.5 text-amber-800 dark:text-amber-300">
+                      {selectedBalance.problems.map((prob, idx) => (
+                        <li key={idx}>{prob}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* Quick Fill Full Outstanding Amounts */}
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setFeePayment(Math.max(0, selectedBalance.fees));
+                    setDebtPayment(Math.max(0, selectedBalance.platformDebt));
+                    const comm = Math.max(0, Number((selectedBalance.postedCommission + selectedBalance.unpostedCommission).toFixed(2)));
+                    setCommissionPayment(comm > 0 ? comm : "");
+                    setCountsAsSettlement(true);
+                  }}
+                  className="text-xs py-1 px-2.5 h-auto font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 inline" />
+                  {isEn ? "Fill Full Outstanding Amounts" : "سداد كامل الأرصدة المستحقة"}
+                </Button>
               </div>
             </div>
 
@@ -504,10 +596,18 @@ export default function JahezDebtsPage() {
               <div>
                 <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
                   {isEn ? "Fee Payment" : "رسوم الحساب (ر.س)"}
+                  {selectedBalance.fees > 0 && (
+                    <span className="text-gray-400 text-[10px] block">
+                      ({isEn ? "Max:" : "الحد:"} {selectedBalance.fees})
+                    </span>
+                  )}
                 </label>
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
+                  max={Math.max(0, selectedBalance.fees)}
+                  placeholder="0.00"
                   value={feePayment}
                   onChange={(e) => setFeePayment(e.target.value === "" ? "" : Number(e.target.value))}
                 />
@@ -516,39 +616,78 @@ export default function JahezDebtsPage() {
               <div>
                 <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
                   {isEn ? "Debt Payment" : "مديونية جاهز (ر.س)"}
+                  {selectedBalance.platformDebt > 0 && (
+                    <span className="text-gray-400 text-[10px] block">
+                      ({isEn ? "Max:" : "الحد:"} {selectedBalance.platformDebt})
+                    </span>
+                  )}
                 </label>
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
+                  max={Math.max(0, selectedBalance.platformDebt)}
+                  placeholder="0.00"
                   value={debtPayment}
                   onChange={(e) => setDebtPayment(e.target.value === "" ? "" : Number(e.target.value))}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  {isEn ? "Commission Payment" : "العمولة (ر.س)"}
+                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between mb-1">
+                  <span>{isEn ? "Commission Payment" : "العمولة (ر.س)"}</span>
+                  <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                    <Lock className="h-2.5 w-2.5" />
+                    محسوبة
+                  </span>
                 </label>
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
+                  placeholder="0.00"
                   value={commissionPayment}
-                  onChange={(e) => setCommissionPayment(e.target.value === "" ? "" : Number(e.target.value))}
+                  readOnly
+                  disabled
+                  className="bg-gray-100/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-100 font-semibold cursor-not-allowed select-none border-dashed"
                 />
               </div>
             </div>
 
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-800 dark:text-gray-200">
-                <input
-                  type="checkbox"
-                  checked={countsAsSettlement}
-                  onChange={(e) => setCountsAsSettlement(e.target.checked)}
-                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
-                />
-                <span>{isEn ? "Counts as Settlement (Resets 10-day overdue timer)" : "تحتسب كتسوية رسمية (تجدد عداد الـ 10 أيام)"}</span>
-              </label>
-            </div>
+            {/* Counts as settlement */}
+            {(() => {
+              const mustCountAsSettlement = (Number(debtPayment) > 0) || (Number(commissionPayment) > 0);
+              return (
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                  <label className={`flex items-start gap-2.5 ${mustCountAsSettlement ? "cursor-default" : "cursor-pointer"}`}>
+                    <input
+                      type="checkbox"
+                      checked={mustCountAsSettlement || countsAsSettlement}
+                      disabled={mustCountAsSettlement}
+                      onChange={(e) => setCountsAsSettlement(e.target.checked)}
+                      className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 mt-0.5"
+                    />
+                    <div className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">
+                          {isEn ? "Counts as Settlement (Resets 10-day overdue timer)" : "تحتسب كتسوية رسمية (تجدد عداد الـ 10 أيام)"}
+                        </span>
+                        {mustCountAsSettlement && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium">
+                            {isEn ? "Mandatory for Debt/Commission" : "إلزامي عند سداد مديونية أو عمولة"}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-gray-500 dark:text-gray-400 text-[11px] block mt-0.5">
+                        {isEn
+                          ? "Any payment of debt or commission must count as settlement and resets the overdue countdown."
+                          : "سداد مديونية جاهز أو عمولة التشغيل يُحتسب تلقائياً كتسوية رسمية ويعيد ضبط مؤقت المطالبة."}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              );
+            })()}
 
             <div>
               <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
@@ -574,10 +713,14 @@ export default function JahezDebtsPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isPaying}
+                disabled={isPaying || !selectedBalance.commissionComplete}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
               >
-                {isPaying ? (isEn ? "Saving..." : "جارٍ الحفظ...") : (isEn ? "Confirm Collection" : "تأكيد التحصيل")}
+                {isPaying
+                  ? (isEn ? "Saving..." : "جارٍ الحفظ...")
+                  : !selectedBalance.commissionComplete
+                  ? (isEn ? "Commission Incomplete" : "بيانات العمولة غير مكتملة")
+                  : (isEn ? "Confirm Collection" : "تأكيد التحصيل")}
               </Button>
             </div>
           </form>

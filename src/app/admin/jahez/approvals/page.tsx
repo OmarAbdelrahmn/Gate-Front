@@ -101,6 +101,7 @@ export default function JahezApprovalsPage() {
   const [totalTips, setTotalTips] = useState<number>(0);
   const [totalFreeOrders, setTotalFreeOrders] = useState<number>(0);
   const [earnReason, setEarnReason] = useState("احتساب بيان أرباح وعمولة بنسبة 15%");
+  const [supersedesId, setSupersedesId] = useState("");
   const [submittingEarn, setSubmittingEarn] = useState(false);
 
   const commissionBase =
@@ -171,6 +172,34 @@ export default function JahezApprovalsPage() {
     if (!reqReason.trim()) {
       toast.error("تنبيه", "يرجى كتابة سبب الطلب");
       return;
+    }
+
+    if (reqKind === JahezApprovalKind.FeeException) {
+      const w = Number(waiverAmount);
+      if (!waiverAmount || w <= 0) {
+        toast.error("خطأ", isEn ? "Please enter a valid waiver amount" : "يرجى إدخال مبلغ إعفاء صحيح أكبر من صفر");
+        return;
+      }
+      if (w > 200) {
+        toast.error("خطأ", isEn ? "Fee waiver cannot exceed maximum account fee (200 SAR)" : "مبلغ الإعفاء لا يمكن أن يتجاوز أصل رسوم الحساب (200 ر.س)");
+        return;
+      }
+    }
+
+    if (reqKind === JahezApprovalKind.PercentageCommission) {
+      if (!policyFromDate || !policyToDate) {
+        toast.error("خطأ", isEn ? "Please select both from and to dates" : "يرجى تحديد تاريخ البداية والنهاية كاملاً");
+        return;
+      }
+      if (new Date(policyToDate) < new Date(policyFromDate)) {
+        toast.error("خطأ", isEn ? "To date cannot be earlier than from date" : "تاريخ النهاية لا يمكن أن يسبق تاريخ البداية");
+        return;
+      }
+      const daysDiff = Math.round((new Date(policyToDate).getTime() - new Date(policyFromDate).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff > 731) {
+        toast.error("خطأ", isEn ? "Policy duration cannot exceed 732 days" : "فترة سياسة النسبة لا يمكن أن تتجاوز 732 يوماً (سنتين)");
+        return;
+      }
     }
 
     setSubmittingReq(true);
@@ -297,7 +326,7 @@ export default function JahezApprovalsPage() {
         totalTips,
         totalFreeOrders,
         reason: earnReason.trim(),
-        supersedesId: null,
+        supersedesId: supersedesId.trim() || null,
       };
 
       await createEarnings(payload);
@@ -685,19 +714,32 @@ export default function JahezApprovalsPage() {
           </div>
 
           {reqKind === JahezApprovalKind.FeeException && (
-            <div>
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                مبلغ الإعفاء المطلوب من الرسوم غير المسددة (ر.س)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max="200"
-                value={waiverAmount}
-                onChange={(e) => setWaiverAmount(e.target.value === "" ? "" : Number(e.target.value))}
-                required
-              />
+            <div className="space-y-3">
+              <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-2.5 text-blue-900 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300 text-xs">
+                <span className="font-semibold block mb-0.5">
+                  {isEn ? "Account Reception Fee Waiver Only:" : "إعفاء رسوم استلام الحساب فقط:"}
+                </span>
+                <span className="text-[11px] text-blue-700 dark:text-blue-400">
+                  {isEn
+                    ? "This approval applies strictly to account reception fees (max 200 SAR). It cannot be used to waive or reduce operational commission or platform debt."
+                    : "هذا الطلب يخص رسوم استلام الحساب فقط (بحد أقصى 200 ر.س). لا يمكن استخدامه لإعفاء أو تخفيض عمولة التشغيل أو مديونية جاهز."}
+                </span>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                  مبلغ الإعفاء المطلوب من الرسوم غير المسددة (ر.س) - الحد الأقصى 200
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max="200"
+                  placeholder="200.00"
+                  value={waiverAmount}
+                  onChange={(e) => setWaiverAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                  required
+                />
+              </div>
             </div>
           )}
 
@@ -1088,6 +1130,21 @@ export default function JahezApprovalsPage() {
             </span>
             <span className="text-xl font-bold text-purple-800 dark:text-purple-200 mt-1 block">
               العمولة المستحقة (15%): {computedCommission.toFixed(2)} ر.س
+            </span>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+              معرف كشف أرباح سابق لتصحيحه واستبداله (supersedesId - اختياري)
+            </label>
+            <Input
+              type="text"
+              placeholder="مثال: UUID للكشف السابق المراد استبداله..."
+              value={supersedesId}
+              onChange={(e) => setSupersedesId(e.target.value)}
+            />
+            <span className="text-[11px] text-gray-400 block mt-0.5">
+              يُستخدم فقط عند الحاجة لتصحيح أو تعديل كشف أرباح تم إدخاله مسبقاً لنفس الفترة.
             </span>
           </div>
 

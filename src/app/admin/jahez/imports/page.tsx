@@ -10,6 +10,7 @@ import {
   getImportBatches,
   getImportPreview,
   uploadImportBatch,
+  getJahezHandovers,
 } from "@/lib/jahez/api";
 import {
   JahezImportKind,
@@ -17,6 +18,7 @@ import {
   type ImportCommitRequest,
   type JahezImportBatch,
   type JahezImportPreview,
+  type JahezHandover,
 } from "@/lib/jahez/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -64,6 +66,13 @@ export default function JahezImportsReportPage() {
 
   // Dispatch Allocations Modal
   const [allocations, setAllocations] = useState<Record<string, { handoverId: string; count: number; reason: string }>>({});
+  const [handovers, setHandovers] = useState<JahezHandover[]>([]);
+
+  useEffect(() => {
+    getJahezHandovers({ pageSize: 100 })
+      .then((res) => setHandovers(res.items || []))
+      .catch(() => {});
+  }, []);
 
   const loadBatches = async () => {
     setLoading(true);
@@ -145,9 +154,21 @@ export default function JahezImportsReportPage() {
   const handleCommitBatch = async () => {
     if (!preview) return;
 
-    if (preview.issues.length > 0) {
+    const blockingIssues = preview.issues.filter((iss) => iss.code !== "assignment_ambiguous");
+    if (blockingIssues.length > 0) {
       toast.error("تنبيه", "لا يمكن ترحيل الدفعة طالما توجد ملاحظات أو أخطاء تعارض غير محلولة");
       return;
+    }
+
+    const ambiguousIssues = preview.issues.filter((iss) => iss.code === "assignment_ambiguous");
+    if (ambiguousIssues.length > 0) {
+      const missingAlloc = ambiguousIssues.some(
+        (iss) => !iss.rowId || !allocations[iss.rowId] || !allocations[iss.rowId].handoverId || allocations[iss.rowId].count <= 0
+      );
+      if (missingAlloc) {
+        toast.error("تنبيه", "يرجى استكمال تحديد توزيع جميع الصفوف الملتبسة وتعيين الحساب والعدد قبل الترحيل");
+        return;
+      }
     }
 
     setCommitting(true);
@@ -537,23 +558,148 @@ export default function JahezImportsReportPage() {
               </div>
             </div>
 
-            {preview.issues.length > 0 && (
+            {preview.issues.filter((iss) => iss.code !== "assignment_ambiguous").length > 0 && (
               <div className="rounded-lg border border-red-200 bg-red-50/70 p-3.5 dark:border-red-900/60 dark:bg-red-950/20 text-xs">
                 <h4 className="font-bold text-red-800 dark:text-red-300 flex items-center gap-1.5 mb-2">
                   <AlertTriangle className="h-4 w-4 text-red-600" />
-                  ملاحظات وموانع الترحيل المكتشفة ({preview.issues.length}):
+                  ملاحظات وموانع الترحيل المكتشفة ({preview.issues.filter((iss) => iss.code !== "assignment_ambiguous").length}):
                 </h4>
                 <div className="space-y-1 max-h-36 overflow-y-auto">
-                  {preview.issues.map((iss, i) => (
-                    <div key={i} className="text-red-700 dark:text-red-300 text-[11px] flex gap-2">
-                      <span className="font-mono bg-red-100 dark:bg-red-900/40 px-1 rounded">
-                        [{iss.code}]
-                      </span>
-                      <span>
-                        الملف: {iss.fileName} {iss.rowNumber ? `(سطر ${iss.rowNumber})` : ""} - {iss.description}
-                      </span>
-                    </div>
-                  ))}
+                  {preview.issues
+                    .filter((iss) => iss.code !== "assignment_ambiguous")
+                    .map((iss, i) => (
+                      <div key={i} className="text-red-700 dark:text-red-300 text-[11px] flex gap-2">
+                        <span className="font-mono bg-red-100 dark:bg-red-900/40 px-1 rounded">
+                          [{iss.code}]
+                        </span>
+                        <span>
+                          الملف: {iss.fileName} {iss.rowNumber ? `(سطر ${iss.rowNumber})` : ""} - {iss.description}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {preview.issues.filter((iss) => iss.code === "assignment_ambiguous").length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50/80 p-3.5 dark:border-amber-900/60 dark:bg-amber-950/20 text-xs space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <h4 className="font-bold text-amber-900 dark:text-amber-200">
+                    توزيع الطلبات الملتبسة (Ambiguous Dispatch Allocations) - {preview.issues.filter((iss) => iss.code === "assignment_ambiguous").length} سطر يتطلب التعيين:
+                  </h4>
+                </div>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  يسمح النظام بترحيل الدفعة عند وجود أسطر ملتبسة الفترات فقط بعد تعيين سجل التسليم (Handover) والعدد والسبب يدويًا لكل سطر.
+                </p>
+                <div className="space-y-2.5 max-h-60 overflow-y-auto">
+                  {preview.issues
+                    .filter((iss) => iss.code === "assignment_ambiguous")
+                    .map((iss, i) => {
+                      const rowId = iss.rowId || `idx-${i}`;
+                      const currentAlloc = allocations[rowId] || {
+                        handoverId: "",
+                        count: 1,
+                        reason: isEn ? "Manual allocation for ambiguous dispatch" : "توزيع يدوي لطلبات ملتبسة",
+                      };
+                      return (
+                        <div
+                          key={rowId}
+                          className="bg-white dark:bg-gray-800 p-2.5 rounded border border-amber-200 dark:border-amber-800 space-y-2"
+                        >
+                          <div className="flex justify-between items-center text-[11px] text-gray-700 dark:text-gray-300">
+                            <span className="font-semibold">
+                              الملف: {iss.fileName} {iss.rowNumber ? `(سطر ${iss.rowNumber})` : ""}
+                            </span>
+                            <span className="text-gray-500">{iss.description}</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-0.5">
+                                {isEn ? "Handover Account" : "حساب التسليم (Handover)"}
+                              </label>
+                              <select
+                                value={currentAlloc.handoverId}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setAllocations((prev) => ({
+                                    ...prev,
+                                    [rowId]: {
+                                      ...(prev[rowId] || {
+                                        count: 1,
+                                        reason: isEn ? "Manual allocation" : "توزيع يدوي لطلبات ملتبسة",
+                                      }),
+                                      handoverId: val,
+                                    },
+                                  }));
+                                }}
+                                className="w-full text-xs p-1.5 border rounded dark:bg-gray-900 dark:border-gray-700 text-gray-900 dark:text-white"
+                              >
+                                <option value="">-- {isEn ? "Select Handover" : "اختر التسليم"} --</option>
+                                {handovers.map((h) => {
+                                  const driverId = h.externalAccountId || h.account?.externalAccountId || h.account?.code || h.id.slice(0, 8);
+                                  const riderName = isEn
+                                    ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr || "Rider")
+                                    : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn || "مندوب");
+                                  const period = h.commissionStartsOn || h.startedAtUtc?.slice(0, 10);
+                                  return (
+                                    <option key={h.id} value={h.id}>
+                                      {driverId} - {riderName} ({period})
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-0.5">
+                                {isEn ? "Orders Count" : "عدد الطلبات (Count)"}
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={currentAlloc.count || ""}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value, 10) || 0;
+                                  setAllocations((prev) => ({
+                                    ...prev,
+                                    [rowId]: {
+                                      ...(prev[rowId] || {
+                                        handoverId: "",
+                                        reason: isEn ? "Manual allocation" : "توزيع يدوي لطلبات ملتبسة",
+                                      }),
+                                      count: val,
+                                    },
+                                  }));
+                                }}
+                                className="w-full text-xs p-1.5 border rounded dark:bg-gray-900 dark:border-gray-700 text-gray-900 dark:text-white"
+                                placeholder={isEn ? "Count" : "العدد"}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-0.5">
+                                {isEn ? "Allocation Reason" : "سبب التوزيع (Reason)"}
+                              </label>
+                              <input
+                                type="text"
+                                value={currentAlloc.reason}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setAllocations((prev) => ({
+                                    ...prev,
+                                    [rowId]: {
+                                      ...(prev[rowId] || { handoverId: "", count: 1 }),
+                                      reason: val,
+                                    },
+                                  }));
+                                }}
+                                className="w-full text-xs p-1.5 border rounded dark:bg-gray-900 dark:border-gray-700 text-gray-900 dark:text-white"
+                                placeholder={isEn ? "Reason" : "سبب التوزيع"}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -632,8 +778,21 @@ export default function JahezImportsReportPage() {
                 <Button
                   variant="primary"
                   onClick={handleCommitBatch}
-                  disabled={committing || preview.issues.length > 0}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+                  disabled={
+                    committing ||
+                    preview.issues.some((iss) => iss.code !== "assignment_ambiguous") ||
+                    (preview.issues.some((iss) => iss.code === "assignment_ambiguous") &&
+                      preview.issues
+                        .filter((iss) => iss.code === "assignment_ambiguous")
+                        .some(
+                          (iss) =>
+                            !iss.rowId ||
+                            !allocations[iss.rowId] ||
+                            !allocations[iss.rowId].handoverId ||
+                            allocations[iss.rowId].count <= 0
+                        ))
+                  }
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <FileCheck className="h-4 w-4" />
                   {committing ? "جارٍ الترحيل..." : "ترحيل واعتماد الدفعة في السجلات"}
