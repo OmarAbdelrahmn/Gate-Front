@@ -123,6 +123,8 @@ export function OilBarrelMissingHistoryModal({
   const resolveWarehouseName = (locationId: string) => {
     const loc = locations.find((l) => l.id === locationId);
     if (loc) return `${loc.nameAr} (${loc.code})`;
+    if (locationId === "019d77f0-0000-7000-8000-000000000003") return "مستودع جدة (JED-WH)";
+    if (locationId === "019d77f0-0000-7000-8000-000000000004") return "مستودع الرياض (RUH-WH)";
     return locationName || locationId;
   };
 

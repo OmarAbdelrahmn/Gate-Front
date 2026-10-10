@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Droplets,
   Package,
@@ -17,6 +17,7 @@ import {
   Eye,
   ShieldAlert,
   FileText,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -26,11 +27,13 @@ import { exportToExcel } from "@/lib/export-excel";
 import {
   getOilBarrels,
   recordOilLoss,
+  getDirectOilInventoryLocations,
 } from "@/lib/maintenance/api";
 import type {
   OilBarrel,
   MaintenanceLocation,
   InventoryItem,
+  DirectOilInventoryLocation,
   OpenBarrelResponse,
   RecordOilBarrelMissingResponse,
 } from "@/lib/maintenance/types";
@@ -41,6 +44,9 @@ import {
   sharedOilBarrelVehicleTypeConfig,
   formatCurrency,
   formatDateTime,
+  WORK_SITE_TO_INVENTORY_LOCATION_MAP,
+  INVENTORY_TO_WORK_SITE_LOCATION_MAP,
+  getLinkedInventoryLocationId,
 } from "@/lib/maintenance/constants";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { OpenOilBarrelModal } from "./OpenOilBarrelModal";
@@ -52,9 +58,14 @@ import { OilBarrelMissingHistoryModal } from "./OilBarrelMissingHistoryModal";
 interface OilBarrelsViewProps {
   locations: MaintenanceLocation[];
   items: InventoryItem[];
+  oilLocations?: DirectOilInventoryLocation[];
 }
 
-export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
+export function OilBarrelsView({
+  locations,
+  items,
+  oilLocations: initialOilLocations = [],
+}: OilBarrelsViewProps) {
   const { can } = useAuth();
   const canMove = can("inventory.stock.move");
   const canAdjust = can("inventory.stock.adjust");
@@ -67,6 +78,7 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>("all");
 
+  const [oilLocations, setOilLocations] = useState<DirectOilInventoryLocation[]>(initialOilLocations);
   const [barrels, setBarrels] = useState<OilBarrel[]>([]);
 
   // Action / Warning Modals
@@ -85,12 +97,125 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
   const [lossQuantity, setLossQuantity] = useState<string>("");
   const [lossReason, setLossReason] = useState<string>("");
 
+  // Sync / fetch oil locations
+  useEffect(() => {
+    if (initialOilLocations && initialOilLocations.length > 0) {
+      setOilLocations(initialOilLocations);
+    } else {
+      getDirectOilInventoryLocations()
+        .then((res) => {
+          if (Array.isArray(res) && res.length > 0) setOilLocations(res);
+        })
+        .catch(() => {});
+    }
+  }, [initialOilLocations]);
+
+  // Helper to resolve the true inventory warehouse ID for a given selection (site or warehouse ID)
+  const resolveInventoryLocationId = (locId: string | undefined | null): string => {
+    if (!locId) return "";
+
+    // 1. Direct oil locations match
+    const oilMatch = oilLocations.find(
+      (o) => o.inventoryLocationId === locId || o.maintenanceLocationId === locId,
+    );
+    if (oilMatch) return oilMatch.inventoryLocationId;
+
+    // 2. Known mapping
+    if (WORK_SITE_TO_INVENTORY_LOCATION_MAP[locId]) {
+      return WORK_SITE_TO_INVENTORY_LOCATION_MAP[locId];
+    }
+
+    // 3. Fallback to getLinkedInventoryLocationId
+    const linked = getLinkedInventoryLocationId(locId, locations);
+    if (linked) return linked;
+
+    return locId;
+  };
+
+  // Helper to check if a barrel belongs to a selected filter location
+  const isBarrelMatchingLocation = (
+    barrel: OilBarrel,
+    filterLocId: string,
+  ): boolean => {
+    if (!filterLocId) return true;
+    const bLocId = barrel.inventoryLocationId;
+    if (!bLocId) return false;
+
+    // Direct match
+    if (bLocId === filterLocId) return true;
+
+    // Direct oil locations match
+    const directMatch = oilLocations.find(
+      (o) =>
+        (o.inventoryLocationId === filterLocId || o.maintenanceLocationId === filterLocId) &&
+        (o.inventoryLocationId === bLocId || o.maintenanceLocationId === bLocId),
+    );
+    if (directMatch) return true;
+
+    // Known site-to-warehouse mapping
+    if (WORK_SITE_TO_INVENTORY_LOCATION_MAP[filterLocId] === bLocId) return true;
+    if (INVENTORY_TO_WORK_SITE_LOCATION_MAP[bLocId] === filterLocId) return true;
+    if (WORK_SITE_TO_INVENTORY_LOCATION_MAP[bLocId] === filterLocId) return true;
+    if (INVENTORY_TO_WORK_SITE_LOCATION_MAP[filterLocId] === bLocId) return true;
+
+    // Resolved linked ID match
+    const resolvedFilter = resolveInventoryLocationId(filterLocId);
+    if (resolvedFilter && resolvedFilter === bLocId) return true;
+
+    // Known city IDs (Jeddah & Riyadh)
+    const jeddahIds = new Set([
+      "019d77f0-0000-7000-8000-000000000001",
+      "019d77f0-0000-7000-8000-000000000003",
+    ]);
+    if (jeddahIds.has(filterLocId) && jeddahIds.has(bLocId)) return true;
+
+    const riyadhIds = new Set([
+      "019d77f0-0000-7000-8000-000000000002",
+      "019d77f0-0000-7000-8000-000000000004",
+    ]);
+    if (riyadhIds.has(filterLocId) && riyadhIds.has(bLocId)) return true;
+
+    // Match by operating city
+    const locA = locations.find((l) => l.id === filterLocId || l.id === resolvedFilter);
+    const locB = locations.find((l) => l.id === bLocId);
+    if (
+      locA?.operatingCityId &&
+      locB?.operatingCityId &&
+      locA.operatingCityId === locB.operatingCityId
+    ) {
+      return true;
+    }
+
+    // Name-based city match
+    if (locA?.nameAr && locB?.nameAr) {
+      if (
+        (locA.nameAr.includes("جدة") || locA.nameEn?.toLowerCase().includes("jeddah")) &&
+        (locB.nameAr.includes("جدة") || locB.nameEn?.toLowerCase().includes("jeddah"))
+      ) {
+        return true;
+      }
+      if (
+        (locA.nameAr.includes("الرياض") || locA.nameEn?.toLowerCase().includes("riyadh")) &&
+        (locB.nameAr.includes("الرياض") || locB.nameEn?.toLowerCase().includes("riyadh"))
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   const loadBarrels = async () => {
     setLoading(true);
     try {
       const isBothFilter = vehicleTypeFilter === "both";
-      const data = await getOilBarrels({
-        inventoryLocationId: selectedLocationId || undefined,
+      const targetInvLocId = selectedLocationId
+        ? resolveInventoryLocationId(selectedLocationId)
+        : undefined;
+
+      // 1. Fetch from API with resolved warehouse ID
+      let data = await getOilBarrels({
+        inventoryLocationId: targetInvLocId,
         inventoryItemId: selectedItemId || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
         vehicleType:
@@ -99,13 +224,52 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
             : Number(vehicleTypeFilter),
       });
 
+      // 2. If filtered by a location and got 0 results, try original ID if different
+      if (
+        (!data || data.length === 0) &&
+        selectedLocationId &&
+        targetInvLocId &&
+        targetInvLocId !== selectedLocationId
+      ) {
+        const altData = await getOilBarrels({
+          inventoryLocationId: selectedLocationId,
+          inventoryItemId: selectedItemId || undefined,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          vehicleType:
+            vehicleTypeFilter === "all" || isBothFilter
+              ? undefined
+              : Number(vehicleTypeFilter),
+        });
+        if (altData && altData.length > 0) {
+          data = altData;
+        }
+      }
+
+      // 3. Fallback: If still empty while a location was selected, fetch all barrels and filter client-side!
+      if ((!data || data.length === 0) && selectedLocationId) {
+        const allData = await getOilBarrels({
+          inventoryItemId: selectedItemId || undefined,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          vehicleType:
+            vehicleTypeFilter === "all" || isBothFilter
+              ? undefined
+              : Number(vehicleTypeFilter),
+        });
+        const matched = (allData || []).filter((b) =>
+          isBarrelMatchingLocation(b, selectedLocationId),
+        );
+        if (matched.length > 0) {
+          data = matched;
+        }
+      }
+
       const filtered = isBothFilter
-        ? data.filter((b) => Boolean(b.allowBothVehicleTypes))
-        : data;
+        ? (data || []).filter((b) => Boolean(b.allowBothVehicleTypes))
+        : data || [];
 
       setBarrels(filtered);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load oil barrels:", err);
     } finally {
       setLoading(false);
     }
@@ -113,7 +277,7 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
 
   useEffect(() => {
     loadBarrels();
-  }, [selectedLocationId, selectedItemId, statusFilter, vehicleTypeFilter]);
+  }, [selectedLocationId, selectedItemId, statusFilter, vehicleTypeFilter, oilLocations]);
 
   // Handle Record Missing write-off response
   const handleRecordMissingSuccess = (res: RecordOilBarrelMissingResponse) => {
@@ -193,10 +357,7 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
         { header: "رقم البرميل", accessor: "barrelNumber", isText: true, width: 22 },
         {
           header: "المستودع / الموقع",
-          accessor: (b) => {
-            const loc = locations.find((l) => l.id === b.inventoryLocationId);
-            return loc ? `${loc.nameAr} (${loc.code})` : b.inventoryLocationId;
-          },
+          accessor: (b) => getBarrelLocationName(b),
           width: 25,
         },
         {
@@ -258,27 +419,117 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
 
   const getBarrelLocationName = (barrel: OilBarrel | null) => {
     if (!barrel) return "";
-    const loc = locations.find((l) => l.id === barrel.inventoryLocationId);
-    return loc ? `${loc.nameAr} (${loc.code})` : "";
+    const bLocId = barrel.inventoryLocationId;
+    if (!bLocId) return "";
+
+    // 1. Direct match in locations
+    const loc = locations.find((l) => l.id === bLocId);
+    if (loc) return `${loc.nameAr} (${loc.code})`;
+
+    // 2. Direct oil locations match
+    const oilLoc = oilLocations.find((o) => o.inventoryLocationId === bLocId);
+    if (oilLoc) {
+      return oilLoc.inventoryLocationNameAr
+        ? `${oilLoc.inventoryLocationNameAr}${oilLoc.maintenanceLocationNameAr ? ` — ${oilLoc.maintenanceLocationNameAr}` : ""}`
+        : oilLoc.maintenanceLocationNameAr;
+    }
+
+    // 3. Linked work site from map
+    const workSiteId = INVENTORY_TO_WORK_SITE_LOCATION_MAP[bLocId];
+    if (workSiteId) {
+      const siteLoc = locations.find((l) => l.id === workSiteId);
+      if (siteLoc) return `${siteLoc.nameAr} (${siteLoc.code})`;
+    }
+
+    // 4. Fallback for known IDs
+    if (bLocId === "019d77f0-0000-7000-8000-000000000003") {
+      return "مستودع جدة (JED-WH)";
+    }
+    if (bLocId === "019d77f0-0000-7000-8000-000000000004") {
+      return "مستودع الرياض (RUH-WH)";
+    }
+
+    return bLocId;
   };
+
+  const locationOptions = useMemo(() => {
+    const opts: { value: string; label: string; sublabel?: string; keywords?: string }[] = [
+      { value: "", label: "جميع المستودعات والمواقع" },
+    ];
+    const seen = new Set<string>();
+
+    // 1. Add direct oil locations from API
+    for (const o of oilLocations) {
+      if (!seen.has(o.inventoryLocationId)) {
+        seen.add(o.inventoryLocationId);
+        if (o.maintenanceLocationId) seen.add(o.maintenanceLocationId);
+        const label = o.inventoryLocationNameAr
+          ? `${o.inventoryLocationNameAr}${o.maintenanceLocationNameAr ? ` (${o.maintenanceLocationNameAr})` : ""}`
+          : o.maintenanceLocationNameAr;
+        opts.push({
+          value: o.inventoryLocationId,
+          label,
+          sublabel: "مستودع زيوت معتمد",
+          keywords: `${o.inventoryLocationNameAr} ${o.maintenanceLocationNameAr} جدة الرياض jeddah riyadh`,
+        });
+      }
+    }
+
+    // 2. Add maintenance locations
+    for (const l of locations) {
+      const linkedWhId = WORK_SITE_TO_INVENTORY_LOCATION_MAP[l.id];
+      const optVal = linkedWhId || l.id;
+      if (!seen.has(l.id) && !seen.has(optVal)) {
+        seen.add(l.id);
+        seen.add(optVal);
+        opts.push({
+          value: optVal,
+          label: `${l.nameAr} (${l.code})`,
+          sublabel: l.inventoryEnabled ? "مستودع مخزون" : "موقع صيانة ومستودع",
+          keywords: `${l.nameAr} ${l.nameEn} ${l.code}`,
+        });
+      }
+    }
+
+    // 3. Fallbacks for Jeddah and Riyadh warehouses if not present
+    if (
+      !seen.has("019d77f0-0000-7000-8000-000000000003") &&
+      !seen.has("019d77f0-0000-7000-8000-000000000001")
+    ) {
+      opts.push({
+        value: "019d77f0-0000-7000-8000-000000000003",
+        label: "مستودع جدة (Jeddah Warehouse Stock)",
+        sublabel: "مستودع الزيوت والمخزون",
+        keywords: "جدة jeddah warehouse مستودع",
+      });
+    }
+
+    if (
+      !seen.has("019d77f0-0000-7000-8000-000000000004") &&
+      !seen.has("019d77f0-0000-7000-8000-000000000002")
+    ) {
+      opts.push({
+        value: "019d77f0-0000-7000-8000-000000000004",
+        label: "مستودع الرياض (Riyadh Warehouse Stock)",
+        sublabel: "مستودع الزيوت والمخزون",
+        keywords: "الرياض riyadh warehouse مستودع",
+      });
+    }
+
+    return opts;
+  }, [locations, oilLocations]);
 
   return (
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="w-56">
+          <div className="w-64">
             <SearchableSelect
               value={selectedLocationId}
               onChange={(val) => setSelectedLocationId(val)}
-              options={[
-                { value: "", label: "جميع المستودعات والمواقع" },
-                ...locations.map((l) => ({
-                  value: l.id,
-                  label: `${l.nameAr} (${l.code})`,
-                })),
-              ]}
-              placeholder="الموقع..."
+              options={locationOptions}
+              placeholder="المستودع / الموقع..."
             />
           </div>
           <div className="w-64">
@@ -430,6 +681,17 @@ export function OilBarrelsView({ locations, items }: OilBarrelsViewProps) {
                         </span>
                       ) : null}
                     </div>
+                  </div>
+
+                  {/* Item and Warehouse/Location Info */}
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-1 text-[11px] pb-2 border-b border-[var(--border)]/60">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[180px]" title={getBarrelItemName(barrel)}>
+                      {getBarrelItemName(barrel) || "صنف الزيت"}
+                    </span>
+                    <span className="inline-flex items-center gap-1 font-medium text-slate-500 dark:text-slate-400">
+                      <Building2 size={12} className="text-slate-400 shrink-0" />
+                      {getBarrelLocationName(barrel) || "المستودع"}
+                    </span>
                   </div>
 
                   {/* Warning banner for legacy unclassified open barrel */}
