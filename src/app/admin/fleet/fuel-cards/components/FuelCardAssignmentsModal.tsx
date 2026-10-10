@@ -103,7 +103,7 @@ export function FuelCardAssignmentsModal({
                           href={`/admin/employees/${item.employeeId}`}
                           className="font-bold text-sm text-[#1167c9] hover:underline flex items-center gap-1"
                         >
-                          {item.riderNameAr || item.riderNameEn || "مندوب"}
+                          {item.riderNameAr || item.riderNameEn || "مندوب / موظف"}
                           <ExternalLink size={12} className="opacity-60" />
                         </Link>
                         {isActive ? (

@@ -112,7 +112,7 @@ export function StopFuelCardRiderModal({
         {/* Current Rider Summary Box */}
         <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-b border-[var(--border)] text-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[var(--muted)] font-medium">المندوب الحالي:</span>
+            <span className="text-[var(--muted)] font-medium">المندوب أو الموظف الحالي:</span>
             <span className="font-bold text-[#1167c9] dark:text-blue-400">
               {currentRider.riderNameAr || currentRider.riderNameEn || "—"}
             </span>

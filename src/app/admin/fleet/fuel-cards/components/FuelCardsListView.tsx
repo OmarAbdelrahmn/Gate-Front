@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { Badge } from "@/components/ui/Badge";
-import { listRiders, listSponsors, Sponsor } from "@/lib/workforce/api";
+import { listRiders, listEmployees, listSponsors, Sponsor } from "@/lib/workforce/api";
 import {
   getFuelCards,
   getAllFuelCards,
@@ -187,18 +187,46 @@ export function FuelCardsListView({
       });
   }, []);
 
-  // Load riders for lookup filter
+  // Load riders and employees for lookup filter
   useEffect(() => {
-    listRiders()
-      .then((riders) => {
-        const options = (riders || []).map((r) => ({
-          value: r.id, // riderProfileId
-          label: r.fullNameAr || r.fullNameEn || "مندوب",
-          sublabel: `هوية: ${r.iqamaNo || ""}`,
-        }));
+    Promise.all([
+      listRiders().catch(() => []),
+      listEmployees().catch(() => []),
+    ])
+      .then(([riders, employees]) => {
+        const options: SelectOption[] = [];
+        const seenIds = new Set<string>();
+
+        (riders || []).forEach((r) => {
+          if (!r.id) return;
+          seenIds.add(r.id);
+          if (r.employeeId) seenIds.add(r.employeeId);
+
+          options.push({
+            value: r.id,
+            label: `${r.fullNameAr || r.fullNameEn || "مندوب"} — مندوب`,
+            sublabel: `هوية: ${r.iqamaNo || ""}`,
+          });
+        });
+
+        (employees || []).forEach((e) => {
+          if (!e.id) return;
+          const riderId = (e as any).riderProfileId || e.rider?.id;
+          if (riderId && seenIds.has(riderId)) return;
+          if (seenIds.has(e.id)) return;
+
+          const val = riderId || e.id;
+          const typeTag = e.isEmployee !== false ? "موظف إداري" : "موظف";
+          options.push({
+            value: val,
+            label: `${e.fullNameAr || e.fullNameEn || "موظف"} — ${typeTag}`,
+            sublabel: `هوية: ${e.iqamaNo || ""}`,
+          });
+        });
+
         setRidersOptions(options);
       })
-      .catch((err) => console.error("Failed to fetch riders lookup:", err));
+      .catch((err) => console.error("Failed to fetch riders/employees lookup:", err));
   }, []);
 
   const fetchCards = useCallback(async () => {
@@ -277,14 +305,14 @@ export function FuelCardsListView({
 
   const assignmentOptions = useMemo<FilterOption[]>(() => {
     const opts: FilterOption[] = [
-      { value: "assigned", label: "معينة لمندوب (نشطة)", count: assignedCount },
+      { value: "assigned", label: "معينة لمندوب/موظف (نشطة)", count: assignedCount },
       { value: "unassigned", label: "شاغرة (غير مسندة)", count: unassignedCount },
     ];
     const riderMap = new Map<string, { label: string; count: number }>();
     allCards.forEach((c) => {
       if (c.currentRider) {
         const id = c.currentRider.riderProfileId;
-        const name = c.currentRider.riderNameAr || c.currentRider.riderNameEn || "مندوب";
+        const name = c.currentRider.riderNameAr || c.currentRider.riderNameEn || "مندوب/موظف";
         const curr = riderMap.get(id) || { label: name, count: 0 };
         curr.count++;
         riderMap.set(id, curr);
@@ -374,8 +402,12 @@ export function FuelCardsListView({
         return false;
       }
 
-      // Top Rider Filter
-      if (riderFilterId && card.currentRider?.riderProfileId !== riderFilterId) {
+      // Top Rider / Employee Filter
+      if (
+        riderFilterId &&
+        card.currentRider?.riderProfileId !== riderFilterId &&
+        card.currentRider?.employeeId !== riderFilterId
+      ) {
         return false;
       }
 
@@ -489,8 +521,8 @@ export function FuelCardsListView({
             width: 24,
           },
           { header: "اللوحة المرتبطة", accessor: (c) => c.plateNumberText || "—", width: 16, isText: true },
-          { header: "المندوب المعين", accessor: (c) => c.currentRider?.riderNameAr || c.currentRider?.riderNameEn || "غير معين", width: 24 },
-          { header: "الرقم الوظيفي للمندوب", accessor: (c) => c.currentRider?.employeeId || "—", width: 18, isText: true },
+          { header: "المندوب أو الموظف المعين", accessor: (c) => c.currentRider?.riderNameAr || c.currentRider?.riderNameEn || "غير معين", width: 24 },
+          { header: "الرقم الوظيفي", accessor: (c) => c.currentRider?.employeeId || "—", width: 18, isText: true },
           { header: "تاريخ بداية التعيين", accessor: (c) => c.currentRider?.effectiveFrom ? c.currentRider.effectiveFrom.split("T")[0] : "—", width: 18 },
           { header: "حالة التعيين", accessor: (c) => c.currentRider ? "معين" : "شاغر (متاح)", width: 16 },
           { header: "ملاحظات", accessor: (c) => c.notes || "—", width: 24 },
@@ -595,8 +627,8 @@ export function FuelCardsListView({
                   setPage(1);
                 }}
                 options={ridersOptions}
-                placeholder="المندوب المعين..."
-                searchPlaceholder="بحث في المناديب..."
+                placeholder="المندوب أو الموظف المعين..."
+                searchPlaceholder="بحث في المناديب والموظفين..."
               />
             </div>
           </div>
@@ -734,13 +766,13 @@ export function FuelCardsListView({
                 </th>
                 <th className="px-4 py-3.5 text-start whitespace-nowrap">
                   <div className="inline-flex items-center gap-1.5">
-                    <span>المندوب المعين حالياً</span>
+                    <span>المندوب أو الموظف المعين حالياً</span>
                     <TableHeaderColumnFilter
-                      label="المندوب"
+                      label="المندوب أو الموظف"
                       value={headerAssignmentFilter}
                       onChange={setHeaderAssignmentFilter}
                       options={assignmentOptions}
-                      placeholder="تصفية بالمندوب والحالة..."
+                      placeholder="تصفية بالمستلم والحالة..."
                     />
                   </div>
                 </th>

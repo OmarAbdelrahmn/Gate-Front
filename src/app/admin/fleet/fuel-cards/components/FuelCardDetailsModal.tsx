@@ -229,7 +229,7 @@ export function FuelCardDetailsModal({
 
               {/* Current Rider Box */}
               <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/20">
-                <span className="text-[var(--muted)] font-medium block mb-2">المندوب المعين حالياً:</span>
+                <span className="text-[var(--muted)] font-medium block mb-2">المندوب أو الموظف المعين حالياً:</span>
                 {card.currentRider ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -251,7 +251,7 @@ export function FuelCardDetailsModal({
                   </div>
                 ) : (
                   <div className="text-[var(--muted)] font-medium italic">
-                    لا يوجد مندوب معين لهذه البطاقة حالياً (البطاقة شاعرة ومتاحة للإسناد).
+                    لا يوجد مندوب أو موظف معين لهذه البطاقة حالياً (البطاقة شاغرة ومتاحة للإسناد).
                   </div>
                 )}
               </div>
