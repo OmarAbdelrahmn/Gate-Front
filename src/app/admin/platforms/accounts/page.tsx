@@ -457,9 +457,9 @@ export default function PlatformAccountsPage() {
       userName: acc.userName || "",
       paymentModel: acc.paymentModel || "PayPerOrder",
       status: acc.status as AccountStatus,
-      acquisitionDate: acc.acquisitionDate || "",
-      startDate: acc.startDate || "",
-      endDate: acc.endDate || null,
+      acquisitionDate: acc.acquisitionDate ? acc.acquisitionDate.split("T")[0] : "",
+      startDate: acc.startDate ? acc.startDate.split("T")[0] : "",
+      endDate: acc.endDate ? acc.endDate.split("T")[0] : null,
       notes: acc.notes || "",
       archiveReason: null,
       rowVersion: acc.rowVersion,
@@ -591,9 +591,20 @@ export default function PlatformAccountsPage() {
       try {
         const payload: AccountUpsertRequest = {
           ...accountFormData,
+          acquisitionDate: accountFormData.acquisitionDate?.trim()
+            ? accountFormData.acquisitionDate.trim().split("T")[0]
+            : null,
+          startDate: accountFormData.startDate?.trim()
+            ? accountFormData.startDate.trim().split("T")[0]
+            : null,
+          endDate: accountFormData.endDate?.trim()
+            ? accountFormData.endDate.trim().split("T")[0]
+            : null,
+          userName: accountFormData.userName?.trim() || null,
+          notes: accountFormData.notes?.trim() || null,
           externalAccountId: !editingAccount
             ? accountFormData.code
-            : (accountFormData.externalAccountId || accountFormData.code),
+            : (accountFormData.externalAccountId?.trim() || accountFormData.code),
         };
 
         if (editingAccount) {

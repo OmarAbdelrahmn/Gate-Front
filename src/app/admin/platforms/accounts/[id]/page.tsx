@@ -224,17 +224,17 @@ export default function AccountDetailPage() {
 
             <div>
               <span className="text-xs font-bold text-[var(--muted)] block">تاريخ الاستحواذ:</span>
-              <span className="text-[var(--foreground)]">{account.acquisitionDate || "—"}</span>
+              <span className="text-[var(--foreground)]">{account.acquisitionDate ? account.acquisitionDate.split("T")[0] : "—"}</span>
             </div>
 
             <div>
               <span className="text-xs font-bold text-[var(--muted)] block">تاريخ البداية:</span>
-              <span className="text-[var(--foreground)]">{account.startDate || "—"}</span>
+              <span className="text-[var(--foreground)]">{account.startDate ? account.startDate.split("T")[0] : "—"}</span>
             </div>
 
             <div>
               <span className="text-xs font-bold text-[var(--muted)] block">تاريخ النهاية:</span>
-              <span className="text-[var(--foreground)]">{account.endDate || "—"}</span>
+              <span className="text-[var(--foreground)]">{account.endDate ? account.endDate.split("T")[0] : "—"}</span>
             </div>
           </div>
 
