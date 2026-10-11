@@ -166,21 +166,27 @@ export default function UsersPage() {
     }
   }, [search, locale]);
 
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+
+  const loadEmployees = useCallback(async () => {
+    if (employees.length > 0) return;
+    setEmployeesLoading(true);
+    try {
+      const data = await listEmployees();
+      setEmployees(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load employees for user creation:", err);
+      setEmployees([]);
+    } finally {
+      setEmployeesLoading(false);
+    }
+  }, [employees.length]);
+
   // Lazy-load employees list only when the create user form is opened
-  // useEffect(() => {
-  //   if (!showForm || employees.length > 0) return;
-  //   let active = true;
-  //   listEmployees()
-  //     .then((data) => {
-  //       if (active) setEmployees(data);
-  //     })
-  //     .catch(() => {
-  //       if (active) setEmployees([]);
-  //     });
-  //   return () => {
-  //     active = false;
-  //   };
-  // }, [showForm, employees.length]);
+  useEffect(() => {
+    if (!showForm || employees.length > 0) return;
+    void loadEmployees();
+  }, [showForm, employees.length, loadEmployees]);
 
   const loadArchived = useCallback(
     async (query = archivedSearch) => {
@@ -268,6 +274,7 @@ export default function UsersPage() {
       setManuallyAddedKeys(new Set());
       setManuallyRemovedKeys(new Set());
       void loadCatalogs();
+      void loadEmployees();
     }
   };
 
@@ -280,18 +287,25 @@ export default function UsersPage() {
             ? "None (No linked employee)"
             : "بدون (غير مرتبط بموظف)",
       },
-      ...employees.map((emp) => ({
-        value: emp.id,
-        label:
+      ...employees.map((emp) => {
+        const label =
           locale === "en" && emp.fullNameEn
             ? emp.fullNameEn
-            : emp.fullNameAr,
-        sublabel: emp.employeeNumber
-          ? `رقم: ${emp.employeeNumber}`
-          : emp.iqamaNo
-            ? `هوية: ${emp.iqamaNo}`
-            : emp.primaryPhone || "",
-      })),
+            : emp.fullNameAr || emp.fullNameEn || (locale === "en" ? "Unnamed Employee" : "موظف بدون اسم");
+
+        const subparts = [
+          emp.employeeNumber ? `${locale === "en" ? "Emp #" : "رقم"}: ${emp.employeeNumber}` : null,
+          emp.iqamaNo ? `${locale === "en" ? "ID" : "هوية"}: ${emp.iqamaNo}` : null,
+          emp.primaryPhone || null,
+        ].filter(Boolean);
+
+        return {
+          value: emp.id,
+          label,
+          sublabel: subparts.join(" · "),
+          keywords: `${emp.fullNameAr || ""} ${emp.fullNameEn || ""} ${emp.iqamaNo || ""} ${emp.employeeNumber || ""} ${emp.primaryPhone || ""}`,
+        };
+      }),
     ];
   }, [employees, locale]);
 
@@ -772,15 +786,27 @@ export default function UsersPage() {
             {activeTab === "basic" && (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label className="mb-1 block text-xs font-bold text-[var(--foreground)]">
-                    {locale === "en" ? "Linked Employee" : "الموظف المرتبط"}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-[var(--foreground)]">
+                      {locale === "en" ? "Linked Employee" : "الموظف المرتبط"}
+                    </label>
+                    {employeesLoading && (
+                      <span className="text-[11px] font-bold text-[#1167c9] animate-pulse">
+                        {locale === "en" ? "Loading employees..." : "جاري تحميل الموظفين..."}
+                      </span>
+                    )}
+                  </div>
                   <SearchableSelect
                     value={form.employeeId || ""}
                     onChange={handleEmployeeChange}
                     options={employeeOptions}
+                    disabled={employeesLoading}
                     placeholder={
-                      locale === "en"
+                      employeesLoading
+                        ? locale === "en"
+                          ? "Loading employees..."
+                          : "جاري تحميل الموظفين..."
+                        : locale === "en"
                         ? "Select Employee (Optional)..."
                         : "اختر الموظف (اختياري)..."
                     }
