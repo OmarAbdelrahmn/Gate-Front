@@ -9,8 +9,10 @@ import { createSettlement, getJahezDebts, getDebtActionGates } from "@/lib/jahez
 import {
   JahezDebtStatus,
   JahezPaymentStatus,
-  type JahezBalance,
-  type PaymentRequest,
+} from "@/lib/jahez/constants";
+import type {
+  JahezBalance,
+  PaymentRequest,
 } from "@/lib/jahez/types";
 import { JahezDebtStatusBadge } from "@/components/jahez/JahezDebtStatusBadge";
 import { JahezPaymentStatusBadge } from "@/components/jahez/JahezPaymentStatusBadge";

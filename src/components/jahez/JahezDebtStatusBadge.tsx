@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import { JahezDebtStatus } from "@/lib/jahez/types";
+import { JahezDebtStatus } from "@/lib/jahez/constants";
 import {
   Activity,
   CheckCircle,

@@ -12,13 +12,13 @@ import {
   getJahezHandoverBalance,
   getJahezHandovers,
 } from "@/lib/jahez/api";
-import {
-  JahezDebtStatus,
-  type CloseJahezHandoverRequest,
-  type CreateJahezHandoverRequest,
-  type JahezBalance,
-  type JahezHandover,
-  type LegacyAdoptionRequest,
+import { JahezDebtStatus } from "@/lib/jahez/constants";
+import type {
+  CloseJahezHandoverRequest,
+  CreateJahezHandoverRequest,
+  JahezBalance,
+  JahezHandover,
+  LegacyAdoptionRequest,
 } from "@/lib/jahez/types";
 import { getDebtActionGates } from "@/lib/jahez/api";
 import { JahezDebtStatusBadge } from "@/components/jahez/JahezDebtStatusBadge";

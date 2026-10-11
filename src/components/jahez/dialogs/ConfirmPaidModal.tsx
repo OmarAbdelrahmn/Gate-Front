@@ -6,7 +6,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
 import { confirmJahezPaid, generateIdempotencyKey } from "@/lib/jahez/api";
-import { JahezDebtStatus, type JahezBalance, type JahezHandover } from "@/lib/jahez/types";
+import { JahezDebtStatus } from "@/lib/jahez/constants";
+import type { JahezBalance, JahezHandover } from "@/lib/jahez/types";
 import { CheckCircle2, AlertTriangle, ShieldCheck, Lock, Info } from "lucide-react";
 
 interface ConfirmPaidModalProps {
@@ -41,7 +42,10 @@ export function ConfirmPaidModal({
     handover?.actualRiderNameEn ||
     "-";
 
-  const isFrozen = (balance?.debtStatus ?? handover?.debtStatus) === JahezDebtStatus.Frozen;
+  const rawDebtStatus = balance?.debtStatus ?? handover?.debtStatus;
+  const isFrozen =
+    rawDebtStatus === JahezDebtStatus.Frozen ||
+    Boolean(balance?.isAccountFrozen);
   const outstanding = balance?.outstandingAmount ?? 0;
   const isCommissionIncomplete = balance && !balance.commissionComplete;
 

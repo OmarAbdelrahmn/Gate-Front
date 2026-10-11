@@ -1,64 +1,19 @@
 // src/lib/jahez/types.ts
 
-// --- Enums ---
-export enum JahezApprovalKind {
-  FeeException = 1,
-  FreeSwitch = 2,
-  PercentageCommission = 3,
-  AccountResetDebtTransfer = 4,
-}
+// --- Enums and Constants ---
+import type {
+  JahezDebtStatus,
+  JahezPaymentStatus,
+  JahezApprovalKind,
+  JahezApprovalStatus,
+  JahezLedgerBucket,
+  JahezLedgerKind,
+  JahezCashboxSection,
+  JahezCashboxHandoffStatus,
+  JahezImportKind,
+} from "./constants";
 
-export enum JahezApprovalStatus {
-  Pending = 1,
-  Approved = 2,
-  Rejected = 3,
-  Cancelled = 4,
-}
-
-export enum JahezLedgerBucket {
-  AccountFee = 1,
-  PlatformDebt = 2,
-  Commission = 3,
-}
-
-export enum JahezLedgerKind {
-  Charge = 1,
-  Payment = 2,
-  Adjustment = 3,
-  Transfer = 4,
-  OpeningBalance = 5,
-  StatusChange = 6,
-}
-
-export enum JahezDebtStatus {
-  Active = 1,
-  Closed = 2,
-  TransferredToRider = 3,
-  Frozen = 4,
-  AccountCleared = 5,
-}
-
-export enum JahezPaymentStatus {
-  Outstanding = 1,
-  Paid = 2,
-}
-
-export enum JahezCashboxSection {
-  AccountFees = 1,
-  Settlements = 2,
-}
-
-export enum JahezCashboxHandoffStatus {
-  Pending = 1,
-  AccountantConfirmed = 2,
-  Approved = 3,
-  Rejected = 4,
-}
-
-export enum JahezImportKind {
-  Transactions = 1,
-  DailyDispatches = 2,
-}
+export * from "./constants";
 
 // --- Display companions & Identity shapes ---
 export interface JahezAccountReference {

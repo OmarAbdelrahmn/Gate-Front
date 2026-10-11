@@ -8,9 +8,11 @@ import { createAdjustment, getJahezHandovers, getJahezLedger } from "@/lib/jahez
 import {
   JahezLedgerBucket,
   JahezLedgerKind,
-  type JahezHandover,
-  type JahezLedgerEntry,
-  type LedgerAdjustmentRequest,
+} from "@/lib/jahez/constants";
+import type {
+  JahezHandover,
+  JahezLedgerEntry,
+  LedgerAdjustmentRequest,
 } from "@/lib/jahez/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";

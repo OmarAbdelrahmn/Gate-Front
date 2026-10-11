@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import { JahezDebtStatus, JahezPaymentStatus } from "@/lib/jahez/types";
+import { JahezDebtStatus, JahezPaymentStatus } from "@/lib/jahez/constants";
 import { AlertCircle, CheckCircle2, Lock, HelpCircle } from "lucide-react";
 
 interface JahezPaymentStatusBadgeProps {

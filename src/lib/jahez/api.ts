@@ -1,6 +1,7 @@
 // src/lib/jahez/api.ts
+export * from "./constants";
 import { authDownload, authFetch, type CustomRequestInit } from "../auth/api";
-import { JahezDebtStatus } from "./types";
+import { JahezDebtStatus } from "./constants";
 import type {
   AccountantConfirmRequest,
   ApprovalCancelRequest,
