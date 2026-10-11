@@ -35,6 +35,10 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
+import {
+  useRiderIqamaCache,
+  ensureRiderIqamaLoaded,
+} from "@/lib/fleet/rider-iqama-cache";
 
 function isInsideMonth(fromDateStr: string, toDateStr: string): boolean {
   if (!fromDateStr || !toDateStr) return false;
@@ -85,6 +89,7 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const { getRiderIqama } = useRiderIqamaCache();
 
   // Date validation
   const dateError = useMemo(() => {
@@ -257,6 +262,10 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
               .map((m) => m.reportMonth)
               .join(" ، ");
 
+            const riderIqama = getRiderIqama(rider);
+            const riderDisplay = rider.riderNameAr || rider.riderNameEn || rider.riderProfileId;
+            const riderWithIqama = riderIqama ? `${riderDisplay} (${riderIqama})` : riderDisplay;
+
             exportRows.push({
               cardIdx: cardIdx + 1,
               provider: card.providerNameAr || fuelProviderLabels[card.provider] || card.provider,
@@ -264,7 +273,8 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
               plateNumber: card.plateNumberText || "—",
               cardTotalLiters: card.totalLiters,
               cardTotalAmount: card.totalAmount,
-              riderName: rider.riderNameAr || rider.riderNameEn || rider.riderProfileId,
+              riderName: riderWithIqama,
+              riderIqama: riderIqama || "—",
               riderLiters: rider.totalLiters,
               riderAmount: rider.totalAmount,
               assignmentFrom,
@@ -277,6 +287,8 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
         }
       });
 
+      await ensureRiderIqamaLoaded();
+
       await exportToExcel({
         filename: `fuel-period-usage-${from}-to-${to}`,
         sheetName: `استهلاك الفترة`.slice(0, 31),
@@ -288,7 +300,8 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
           { header: "رقم اللوحة", accessor: (row) => row.plateNumber, width: 16, isText: true },
           { header: "إجمالي لترات البطاقة", accessor: (row) => row.cardTotalLiters, width: 20 },
           { header: "إجمالي مبلغ البطاقة (ر.س)", accessor: (row) => row.cardTotalAmount, width: 22 },
-          { header: "اسم المندوب", accessor: (row) => row.riderName, width: 24 },
+          { header: "اسم المندوب", accessor: (row) => row.riderName, width: 26 },
+          { header: "رقم الهوية / الإقامة للمندوب", accessor: (row) => row.riderIqama, width: 20, isText: true },
           { header: "لترات المندوب", accessor: (row) => row.riderLiters, width: 16 },
           { header: "مبلغ المندوب (ر.س)", accessor: (row) => row.riderAmount, width: 18 },
           { header: "بداية الإسناد في الفترة", accessor: (row) => row.assignmentFrom, width: 20, isText: true },
@@ -792,6 +805,15 @@ export function FuelCardPeriodUsageView({ onOpenDetail }: FuelCardPeriodUsageVie
                                                 الرقم الوظيفي: {rider.employeeId}
                                               </span>
                                             )}
+
+                                            {(() => {
+                                              const iqama = getRiderIqama(rider);
+                                              return iqama ? (
+                                                <span className="text-[11px] font-mono text-[var(--muted)] bg-slate-200/60 dark:bg-slate-700/60 px-2 py-0.5 rounded-md">
+                                                  هوية: {iqama}
+                                                </span>
+                                              ) : null;
+                                            })()}
 
                                             {!rider.riderNameAr && (
                                               <span className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded">

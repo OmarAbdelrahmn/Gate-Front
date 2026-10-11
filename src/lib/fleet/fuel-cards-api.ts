@@ -34,6 +34,7 @@ export interface FuelCardCurrentRider {
   employeeId: string;
   riderNameAr: string;
   riderNameEn: string | null;
+  iqamaNo?: string | null;
   effectiveFrom: string;
   rowVersion: string;
 }
@@ -65,6 +66,7 @@ export interface FuelCardAssignment {
   employeeId: string;
   riderNameAr: string;
   riderNameEn: string | null;
+  iqamaNo?: string | null;
   effectiveFrom: string;
   effectiveTo: string | null;
   assignmentReason: string;

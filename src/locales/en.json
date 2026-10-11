@@ -138,7 +138,8 @@
     "chefz": "Chefz Management",
     "chefzAccounts": "Accounts",
     "chefzSettlements": "Settlements",
-    "chefzPerformance": "Daily Performance",
+    "chefzPerformance": "Performance",
+    "chefzSponsorStatistics": "Sponsor Statistics",
     "collapseMenu": "Collapse Menu",
     "expandMenu": "Expand Menu"
   },

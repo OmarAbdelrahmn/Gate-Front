@@ -4,12 +4,19 @@ import { getPlatforms, type PlatformResponse } from "../platforms/api";
 import type {
   ChefzAccount,
   ChefzAccountDetailsRequest,
+  ChefzAccountReminder,
   ChefzImportResult,
+  ChefzManagementReport,
   ChefzPage,
   ChefzPasswordRequest,
   ChefzPerformance,
+  ChefzRiderReport,
   ChefzSettlement,
   ChefzSettlementRequest,
+  ChefzSettingsRequest,
+  ChefzSettingsResponse,
+  ChefzStatisticsRequest,
+  ChefzStatisticsResponse,
 } from "./types";
 
 export const CHEFZ_PLATFORM_CODES = ["SHIFTZ", "CHEFZ", "THECHEFZ", "CHEFSZ"];
@@ -175,7 +182,7 @@ export async function getChefzSettlements(params?: {
 }
 
 // -------------------------------------------------------------
-// 4. Chefz Daily Performance
+// 4. Chefz Daily Performance & Import
 // -------------------------------------------------------------
 
 export async function uploadChefzPerformance(
@@ -187,7 +194,6 @@ export async function uploadChefzPerformance(
   form.append("file", file, file.name);
   form.append("reportDate", reportDate);
 
-  // authFetch handles FormData without overriding Content-Type
   return authFetch<ChefzImportResult>("/api/chefz/performance/import", {
     method: "POST",
     body: form,
@@ -214,4 +220,197 @@ export async function getChefzPerformance(params: {
   return authFetch<ChefzPage<ChefzPerformance>>(
     `/api/chefz/performance?${queryString}`
   );
+}
+
+// -------------------------------------------------------------
+// 5. Performance Settings
+// -------------------------------------------------------------
+
+export async function getChefzPerformanceSettings(): Promise<ChefzSettingsResponse> {
+  return authFetch<ChefzSettingsResponse>("/api/chefz/settings/performance", {
+    method: "GET",
+  });
+}
+
+export async function updateChefzPerformanceSettings(
+  data: ChefzSettingsRequest
+): Promise<ChefzSettingsResponse> {
+  return authFetch<ChefzSettingsResponse>("/api/chefz/settings/performance", {
+    method: "PUT",
+    body: JSON.stringify(data),
+    notifySuccess: "تم حفظ إعدادات الأداء بنجاح",
+  });
+}
+
+// -------------------------------------------------------------
+// 6. Rider / Account Performance Report
+// -------------------------------------------------------------
+
+export async function getChefzRiderReport(params: {
+  accountId?: string;
+  riderId?: string;
+  year: number;
+  month: number;
+  half: number;
+  halves: number;
+}): Promise<ChefzRiderReport> {
+  const query = new URLSearchParams();
+  if (params.accountId) query.set("accountId", params.accountId);
+  if (params.riderId) query.set("riderId", params.riderId);
+  query.set("year", String(params.year));
+  query.set("month", String(params.month));
+  query.set("half", String(params.half));
+  query.set("halves", String(params.halves));
+
+  return authFetch<ChefzRiderReport>(`/api/chefz/reports/riders?${query.toString()}`, {
+    method: "GET",
+  });
+}
+
+// -------------------------------------------------------------
+// 7. Management Report
+// -------------------------------------------------------------
+
+export async function getChefzManagementReport(params: {
+  reportDate: string;
+  sponsorId?: string;
+}): Promise<ChefzManagementReport[]> {
+  const query = new URLSearchParams();
+  query.set("reportDate", params.reportDate);
+  if (params.sponsorId) query.set("sponsorId", params.sponsorId);
+
+  return authFetch<ChefzManagementReport[]>(`/api/chefz/reports/management?${query.toString()}`, {
+    method: "GET",
+  });
+}
+
+// -------------------------------------------------------------
+// 8. Sponsor Statistics CRUD
+// -------------------------------------------------------------
+
+export async function getChefzSponsorStatistics(params?: {
+  page?: number;
+  pageSize?: number;
+}): Promise<ChefzPage<ChefzStatisticsResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  const queryString = query.toString();
+
+  return authFetch<ChefzPage<ChefzStatisticsResponse>>(
+    `/api/chefz/sponsor-statistics${queryString ? `?${queryString}` : ""}`,
+    { method: "GET" }
+  );
+}
+
+export async function getAllChefzSponsorStatistics(pageSize = 50): Promise<ChefzStatisticsResponse[]> {
+  const all: ChefzStatisticsResponse[] = [];
+  let page = 1;
+  const maxPages = 50;
+
+  while (page <= maxPages) {
+    const res = await getChefzSponsorStatistics({ page, pageSize });
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    all.push(...items);
+
+    const actualPageSize = res?.pageSize || pageSize;
+    if (items.length < actualPageSize) {
+      break;
+    }
+    page++;
+  }
+
+  return all;
+}
+
+export async function getChefzSponsorStatistic(sponsorId: string): Promise<ChefzStatisticsResponse> {
+  return authFetch<ChefzStatisticsResponse>(
+    `/api/chefz/sponsor-statistics/${encodeURIComponent(sponsorId)}`,
+    { method: "GET" }
+  );
+}
+
+export async function createChefzSponsorStatistic(
+  sponsorId: string,
+  values: ChefzStatisticsRequest
+): Promise<ChefzStatisticsResponse> {
+  return authFetch<ChefzStatisticsResponse>(
+    `/api/chefz/sponsor-statistics/${encodeURIComponent(sponsorId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(values),
+      notifySuccess: "تم إضافة إحصائيات الكفيل بنجاح",
+    }
+  );
+}
+
+export async function updateChefzSponsorStatistic(
+  sponsorId: string,
+  values: ChefzStatisticsRequest
+): Promise<ChefzStatisticsResponse> {
+  return authFetch<ChefzStatisticsResponse>(
+    `/api/chefz/sponsor-statistics/${encodeURIComponent(sponsorId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(values),
+      notifySuccess: "تم تحديث إحصائيات الكفيل بنجاح",
+    }
+  );
+}
+
+export async function deleteChefzSponsorStatistic(
+  sponsorId: string,
+  rowVersion: string
+): Promise<void> {
+  const query = new URLSearchParams({ rowVersion });
+  return authFetch<void>(
+    `/api/chefz/sponsor-statistics/${encodeURIComponent(sponsorId)}?${query.toString()}`,
+    {
+      method: "DELETE",
+      notifySuccess: "تم حذف إحصائيات الكفيل بنجاح",
+    }
+  );
+}
+
+// -------------------------------------------------------------
+// 9. Chefz Reminders
+// -------------------------------------------------------------
+
+export async function getChefzReminders(params?: {
+  page?: number;
+  pageSize?: number;
+}): Promise<ChefzPage<ChefzAccountReminder>> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  const queryString = query.toString();
+
+  return authFetch<ChefzPage<ChefzAccountReminder>>(
+    `/api/chefz/reminders${queryString ? `?${queryString}` : ""}`,
+    { method: "GET" }
+  );
+}
+
+export async function getAllChefzReminders(pageSize = 100): Promise<ChefzAccountReminder[]> {
+  const all: ChefzAccountReminder[] = [];
+  let page = 1;
+  const maxPages = 50;
+
+  while (page <= maxPages) {
+    const res = await getChefzReminders({ page, pageSize });
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    all.push(...items);
+
+    const actualPageSize = res?.pageSize || pageSize;
+    if (items.length < actualPageSize) {
+      break;
+    }
+    page++;
+  }
+
+  return all;
 }

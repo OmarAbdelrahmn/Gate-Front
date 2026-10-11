@@ -6,6 +6,11 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { SearchableSelect, SelectOption } from "@/components/ui/SearchableSelect";
 import { Badge } from "@/components/ui/Badge";
 import { listRiders, listEmployees, listSponsors, Sponsor } from "@/lib/workforce/api";
+import { listExternalRiders } from "@/lib/workforce/external-riders-api";
+import {
+  useRiderIqamaCache,
+  ensureRiderIqamaLoaded,
+} from "@/lib/fleet/rider-iqama-cache";
 import {
   getFuelCards,
   getAllFuelCards,
@@ -171,6 +176,7 @@ export function FuelCardsListView({
   const [allCards, setAllCards] = useState<FuelCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [ridersOptions, setRidersOptions] = useState<SelectOption[]>([]);
+  const { getRiderIqama } = useRiderIqamaCache();
 
   // Load sponsors to resolve names
   useEffect(() => {
@@ -192,8 +198,9 @@ export function FuelCardsListView({
     Promise.all([
       listRiders().catch(() => []),
       listEmployees().catch(() => []),
+      listExternalRiders().catch(() => []),
     ])
-      .then(([riders, employees]) => {
+      .then(([riders, employees, externalRiders]) => {
         const options: SelectOption[] = [];
         const seenIds = new Set<string>();
 
@@ -234,6 +241,21 @@ export function FuelCardsListView({
             label: `${e.fullNameAr || e.fullNameEn || "موظف"} — ${typeTag}`,
             sublabel: `هوية: ${e.iqamaNo || ""}`,
           });
+        });
+
+        (externalRiders || []).forEach((er) => {
+          const rId = er.riderProfileId;
+          const eId = er.employeeId;
+          if (isValidId(rId) && seenIds.has(rId)) return;
+          if (isValidId(eId) && seenIds.has(eId)) return;
+          if (isValidId(rId)) {
+            seenIds.add(rId);
+            options.push({
+              value: rId,
+              label: `${er.fullNameAr || "مندوب خارجي"} — مندوب خارجي`,
+              sublabel: `هوية: ${er.iqamaNo || ""}`,
+            });
+          }
         });
 
         options.sort((a, b) => a.label.localeCompare(b.label, "ar"));
@@ -326,7 +348,9 @@ export function FuelCardsListView({
       if (c.currentRider) {
         const id = c.currentRider.riderProfileId;
         const name = c.currentRider.riderNameAr || c.currentRider.riderNameEn || "مندوب/موظف";
-        const curr = riderMap.get(id) || { label: name, count: 0 };
+        const iqama = getRiderIqama(c.currentRider);
+        const label = iqama ? `${name} (${iqama})` : name;
+        const curr = riderMap.get(id) || { label, count: 0 };
         curr.count++;
         riderMap.set(id, curr);
       }
@@ -339,7 +363,7 @@ export function FuelCardsListView({
       });
     });
     return opts;
-  }, [allCards, assignedCount, unassignedCount]);
+  }, [allCards, assignedCount, unassignedCount, getRiderIqama]);
 
   const sponsorOptions = useMemo<FilterOption[]>(() => {
     const map = new Map<string, number>();
@@ -457,6 +481,7 @@ export function FuelCardsListView({
       if (searchQuery.trim()) {
         const sp = sponsorsMap[card.sponsorId];
         const sponsorName = sp ? (sp.registryNameAr || sp.registryNameEn || sp.id) : (card.sponsorId || "");
+        const iqama = getRiderIqama(card.currentRider);
         const searchableText = normalizeText(
           [
             card.cardNumber,
@@ -466,6 +491,7 @@ export function FuelCardsListView({
             card.currentRider?.riderNameAr,
             card.currentRider?.riderNameEn,
             card.currentRider?.employeeId,
+            iqama,
             sponsorName,
             card.notes,
             card.providerNameAr,
@@ -512,6 +538,8 @@ export function FuelCardsListView({
     if (filteredCards.length === 0) return;
     setExporting(true);
     try {
+      await ensureRiderIqamaLoaded();
+
       await exportToExcel({
         filename: `fuel-cards-${new Date().toISOString().split("T")[0]}`,
         sheetName: "بطاقات الوقود",
@@ -534,7 +562,22 @@ export function FuelCardsListView({
             width: 24,
           },
           { header: "اللوحة المرتبطة", accessor: (c) => c.plateNumberText || "—", width: 16, isText: true },
-          { header: "المندوب أو الموظف المعين", accessor: (c) => c.currentRider?.riderNameAr || c.currentRider?.riderNameEn || "غير معين", width: 24 },
+          {
+            header: "المندوب أو الموظف المعين",
+            accessor: (c) => {
+              if (!c.currentRider) return "غير معين";
+              const name = c.currentRider.riderNameAr || c.currentRider.riderNameEn || "—";
+              const iqama = getRiderIqama(c.currentRider);
+              return iqama ? `${name} (${iqama})` : name;
+            },
+            width: 28,
+          },
+          {
+            header: "رقم الهوية / الإقامة",
+            accessor: (c) => (c.currentRider ? getRiderIqama(c.currentRider) || "—" : "—"),
+            width: 20,
+            isText: true,
+          },
           { header: "الرقم الوظيفي", accessor: (c) => c.currentRider?.employeeId || "—", width: 18, isText: true },
           { header: "تاريخ بداية التعيين", accessor: (c) => c.currentRider?.effectiveFrom ? c.currentRider.effectiveFrom.split("T")[0] : "—", width: 18 },
           { header: "حالة التعيين", accessor: (c) => c.currentRider ? "معين" : "شاغر (متاح)", width: 16 },
@@ -905,13 +948,23 @@ export function FuelCardsListView({
                       {/* Current Rider */}
                       <td className="px-4 py-3.5">
                         {card.currentRider ? (
-                          <Link
-                            href={`/admin/employees/${card.currentRider.employeeId}`}
-                            className="font-bold text-[#1167c9] dark:text-blue-400 hover:underline flex items-center gap-1"
-                          >
-                            {card.currentRider.riderNameAr || card.currentRider.riderNameEn}
-                            <ExternalLink size={12} className="opacity-60" />
-                          </Link>
+                          <div className="flex flex-col text-start">
+                            <Link
+                              href={`/admin/employees/${card.currentRider.employeeId}`}
+                              className="font-bold text-[#1167c9] dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                            >
+                              {card.currentRider.riderNameAr || card.currentRider.riderNameEn}
+                              <ExternalLink size={12} className="opacity-60" />
+                            </Link>
+                            {(() => {
+                              const iqama = getRiderIqama(card.currentRider);
+                              return iqama ? (
+                                <span className="text-[10px] text-[var(--muted)] font-mono">
+                                  هوية: {iqama}
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
                         ) : (
                           <span className="text-amber-600 dark:text-amber-400 font-semibold text-[11px] bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-lg border border-amber-200 dark:border-amber-900">
                             شاغرة (غير مسندة)

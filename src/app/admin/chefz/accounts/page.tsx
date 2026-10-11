@@ -12,10 +12,12 @@ import {
   updateChefzAccountDetails,
   setChefzPassword,
   getChefzPassword,
+  getAllChefzReminders,
 } from "@/lib/chefz/api";
 import type {
   ChefzAccount,
   ChefzAccountType,
+  ChefzAccountReminder,
 } from "@/lib/chefz/types";
 import {
   getPlatformAccounts,
@@ -75,6 +77,7 @@ export default function ChefzAccountsPage() {
   const [cities, setCities] = useState<OperatingCity[]>([]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
+  const [reminders, setReminders] = useState<ChefzAccountReminder[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -90,7 +93,7 @@ export default function ChefzAccountsPage() {
   // Modals
   // 1. Chefz Setup / Configuration Modal
   const [setupAccount, setSetupAccount] = useState<JoinedAccount | null>(null);
-  const [setupAccountType, setSetupAccountType] = useState<ChefzAccountType>("Freelancer");
+  const [setupAccountType, setSetupAccountType] = useState<"Freelancer" | "FullTime">("Freelancer");
   const [setupReportIdNumber, setSetupReportIdNumber] = useState("");
   const [setupSubmitting, setSetupSubmitting] = useState(false);
   const [setupConflictError, setSetupConflictError] = useState<string | null>(null);
@@ -138,18 +141,20 @@ export default function ChefzAccountsPage() {
         return;
       }
 
-      // 2. Parallel fetch base accounts, chefz configured accounts, metadata
-      const [baseAccounts, chefzAccounts, cityList, sponsorList, riderList] = await Promise.all([
+      // 2. Parallel fetch base accounts, chefz accounts, metadata, and reminders
+      const [baseAccounts, chefzAccounts, cityList, sponsorList, riderList, reminderList] = await Promise.all([
         getAllPlatformAccounts({ platformId: plat.id, includeArchived: false }),
         getAllChefzAccounts().catch(() => [] as ChefzAccount[]),
         listOperatingCities().catch(() => []),
         listSponsors().catch(() => []),
         listRiders().catch(() => []),
+        getAllChefzReminders().catch(() => [] as ChefzAccountReminder[]),
       ]);
 
       setCities(cityList);
       setSponsors(sponsorList);
       setRiders(riderList);
+      setReminders(reminderList);
 
       // 3. Map chefz by accountId
       const chefzMap = new Map<string, ChefzAccount>();
@@ -176,14 +181,27 @@ export default function ChefzAccountsPage() {
     loadData();
   }, []);
 
+  // Reminder lookup map (FinalExit takes precedence over OutsideSponsorship)
+  const reminderMap = useMemo(() => {
+    const map = new Map<string, ChefzAccountReminder>();
+    for (const r of reminders) {
+      const existing = map.get(r.accountId);
+      if (!existing || (existing.condition !== "FinalExit" && r.condition === "FinalExit")) {
+        map.set(r.accountId, r);
+      }
+    }
+    return map;
+  }, [reminders]);
+
   // Filtered accounts
   const filteredAccounts = useMemo(() => {
     return accounts.filter((item) => {
       const { base, chefz } = item;
+      const isConfigured = Boolean(chefz && chefz.accountType !== "Unconfigured");
 
       // Setup filter
-      if (filterSetupStatus === "configured" && !chefz) return false;
-      if (filterSetupStatus === "not_configured" && chefz) return false;
+      if (filterSetupStatus === "configured" && !isConfigured) return false;
+      if (filterSetupStatus === "not_configured" && isConfigured) return false;
 
       // Type filter
       if (filterType !== "all") {
@@ -234,12 +252,12 @@ export default function ChefzAccountsPage() {
   const openSetupModal = (item: JoinedAccount) => {
     setSetupAccount(item);
     setSetupConflictError(null);
-    if (item.chefz) {
-      setSetupAccountType(item.chefz.accountType);
+    if (item.chefz && item.chefz.accountType !== "Unconfigured") {
+      setSetupAccountType(item.chefz.accountType as "Freelancer" | "FullTime");
       setSetupReportIdNumber(item.chefz.reportIdNumber || "");
     } else {
       setSetupAccountType("Freelancer");
-      setSetupReportIdNumber("");
+      setSetupReportIdNumber(item.chefz?.reportIdNumber || "");
     }
   };
 
@@ -254,7 +272,7 @@ export default function ChefzAccountsPage() {
       const updated = await updateChefzAccountDetails(setupAccount.base.id, {
         accountType: setupAccountType,
         reportIdNumber: setupReportIdNumber.trim() || null,
-        rowVersion: setupAccount.chefz?.rowVersion || null,
+        rowVersion: setupAccount.chefz?.accountType === "Unconfigured" ? null : setupAccount.chefz?.rowVersion || null,
       });
 
       // Update in local state
@@ -743,12 +761,35 @@ export default function ChefzAccountsPage() {
                         </div>
                       </td>
 
-                      {/* Owner Rider */}
+                      {/* Owner Rider & Reminders */}
                       <td className="px-4 py-3">
-                        <div className="text-[var(--foreground)]">
+                        <div className="text-[var(--foreground)] font-medium">
                           {base.ownerRiderNameAr || "—"}
                         </div>
                         <div className="text-xs text-[var(--muted)]">المالك المسجل</div>
+
+                        {/* Reminder Badge */}
+                        {reminderMap.get(base.id) && (
+                          <div className="mt-1">
+                            {reminderMap.get(base.id)?.condition === "FinalExit" ? (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
+                                title={reminderMap.get(base.id)?.message}
+                              >
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                خروج نهائي — معرض للبلوك
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                                title={reminderMap.get(base.id)?.message}
+                              >
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                اقترب من البلوك
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Actual Rider */}
@@ -777,14 +818,14 @@ export default function ChefzAccountsPage() {
 
                       {/* Chefz Account Type */}
                       <td className="px-4 py-3">
-                        {chefz ? (
+                        {chefz && chefz.accountType !== "Unconfigured" ? (
                           chefz.accountType === "Freelancer" ? (
                             <Badge tone="blue">فريلانسر</Badge>
                           ) : (
                             <Badge tone="orange">دوام كامل</Badge>
                           )
                         ) : (
-                          <Badge tone="gray">غير معد</Badge>
+                          <Badge tone="orange">إعداد الحساب مطلوب</Badge>
                         )}
                       </td>
 

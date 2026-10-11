@@ -38,6 +38,10 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
+import {
+  useRiderIqamaCache,
+  ensureRiderIqamaLoaded,
+} from "@/lib/fleet/rider-iqama-cache";
 
 interface FuelMonthlyUsageViewProps {
   canManage?: boolean;
@@ -92,6 +96,7 @@ export function FuelMonthlyUsageView({
   const [unassignedData, setUnassignedData] = useState<FuelUnassignedUsagePage | null>(null);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
   const [unassignedExporting, setUnassignedExporting] = useState(false);
+  const { getRiderIqama } = useRiderIqamaCache();
 
   useEffect(() => {
     listRiders()
@@ -185,6 +190,8 @@ export function FuelMonthlyUsageView({
 
       if (allMonthlyItems.length === 0) return;
 
+      await ensureRiderIqamaLoaded();
+
       await exportToExcel({
         filename: `fuel-monthly-usage-${month}`,
         sheetName: `استهلاك شهر ${month}`.slice(0, 31),
@@ -201,8 +208,19 @@ export function FuelMonthlyUsageView({
           { header: "رقم اللوحة", accessor: (item) => item.plateNumberText || "—", width: 16, isText: true },
           {
             header: "المندوب المسند له",
-            accessor: (item) => item.riderNameAr || item.riderNameEn || (item.riderProfileId ? "مندوب" : "غير مسندة (بحاجة لمراجعة)"),
-            width: 24,
+            accessor: (item) => {
+              if (!item.riderProfileId) return "غير مسندة (بحاجة لمراجعة)";
+              const name = item.riderNameAr || item.riderNameEn || "مندوب";
+              const iqama = getRiderIqama(item);
+              return iqama ? `${name} (${iqama})` : name;
+            },
+            width: 26,
+          },
+          {
+            header: "رقم الهوية / الإقامة للمندوب",
+            accessor: (item) => (item.riderProfileId ? getRiderIqama(item) || "—" : "—"),
+            width: 20,
+            isText: true,
           },
           { header: "الرقم الوظيفي للمندوب", accessor: (item) => item.employeeId || "—", width: 18, isText: true },
           { header: "حالة الإسناد", accessor: (item) => item.riderProfileId ? "مسندة" : "بحاجة لمراجعة", width: 16 },
@@ -572,13 +590,23 @@ export function FuelMonthlyUsageView({
                         {/* Rider */}
                         <td className="px-4 py-3.5">
                           {item.riderProfileId ? (
-                            <Link
-                              href={`/admin/employees/${item.employeeId}`}
-                              className="font-bold text-[#1167c9] dark:text-blue-400 hover:underline flex items-center gap-1"
-                            >
-                              {item.riderNameAr || item.riderNameEn || "مندوب"}
-                              <ExternalLink size={12} className="opacity-60" />
-                            </Link>
+                            <div className="flex flex-col text-start">
+                              <Link
+                                href={`/admin/employees/${item.employeeId}`}
+                                className="font-bold text-[#1167c9] dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                              >
+                                {item.riderNameAr || item.riderNameEn || "مندوب"}
+                                <ExternalLink size={12} className="opacity-60" />
+                              </Link>
+                              {(() => {
+                                const iqama = getRiderIqama(item);
+                                return iqama ? (
+                                  <span className="text-[10px] text-[var(--muted)] font-mono">
+                                    هوية: {iqama}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
                           ) : (
                             <div className="flex items-center gap-2">
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">

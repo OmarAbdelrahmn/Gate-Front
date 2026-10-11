@@ -68,8 +68,7 @@ export default function ChefzAccountDetailPage() {
   const [settlements, setSettlements] = useState<ChefzSettlement[]>([]);
   const [performance, setPerformance] = useState<ChefzPerformance[]>([]);
 
-  // Configuration Form State
-  const [accountType, setAccountType] = useState<ChefzAccountType>("Freelancer");
+  const [accountType, setAccountType] = useState<"Freelancer" | "FullTime">("Freelancer");
   const [reportIdNumber, setReportIdNumber] = useState("");
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [detailsConflict, setDetailsConflict] = useState<string | null>(null);
@@ -100,12 +99,12 @@ export default function ChefzAccountDetailPage() {
       setAssignments(asgns || []);
       setCredentials(creds || []);
 
-      if (chefz) {
-        setAccountType(chefz.accountType);
+      if (chefz && chefz.accountType !== "Unconfigured") {
+        setAccountType(chefz.accountType as "Freelancer" | "FullTime");
         setReportIdNumber(chefz.reportIdNumber || "");
       } else {
         setAccountType("Freelancer");
-        setReportIdNumber("");
+        setReportIdNumber(chefz?.reportIdNumber || "");
       }
 
       // Load related settlements & recent performance
@@ -142,11 +141,13 @@ export default function ChefzAccountDetailPage() {
       const updated = await updateChefzAccountDetails(accountId, {
         accountType,
         reportIdNumber: reportIdNumber.trim() || null,
-        rowVersion: chefzDetail?.rowVersion || null,
+        rowVersion: chefzDetail?.accountType === "Unconfigured" ? null : chefzDetail?.rowVersion || null,
       });
 
       setChefzDetail(updated);
-      setAccountType(updated.accountType);
+      if (updated.accountType !== "Unconfigured") {
+        setAccountType(updated.accountType);
+      }
       setReportIdNumber(updated.reportIdNumber || "");
     } catch (err: unknown) {
       const e = err as { status?: number; details?: { detail?: string; message?: string } };
@@ -157,7 +158,9 @@ export default function ChefzAccountDetailPage() {
         const fresh = await getChefzAccount(accountId);
         if (fresh) {
           setChefzDetail(fresh);
-          setAccountType(fresh.accountType);
+          if (fresh.accountType !== "Unconfigured") {
+            setAccountType(fresh.accountType);
+          }
           setReportIdNumber(fresh.reportIdNumber || "");
         }
       }
@@ -257,12 +260,12 @@ export default function ChefzAccountDetailPage() {
             <h1 className="text-2xl font-extrabold text-[var(--foreground)]">
               {baseAccount.code}
             </h1>
-            {chefzDetail ? (
+            {chefzDetail && chefzDetail.accountType !== "Unconfigured" ? (
               <Badge tone="green">معد لشيفز</Badge>
             ) : (
-              <Badge tone="orange">بانتظار الإعداد</Badge>
+              <Badge tone="orange">إعداد الحساب مطلوب</Badge>
             )}
-            {chefzDetail && (
+            {chefzDetail && chefzDetail.accountType !== "Unconfigured" && (
               <Badge tone={chefzDetail.accountType === "Freelancer" ? "blue" : "orange"}>
                 {chefzDetail.accountType === "Freelancer" ? "فريلانسر (15%)" : "دوام كامل (25 ر.س/يوم)"}
               </Badge>
@@ -294,12 +297,23 @@ export default function ChefzAccountDetailPage() {
           )}
 
           {can("chefz.settlements.create") && (
-            <Link href={`/admin/chefz/settlements?accountId=${baseAccount.id}`}>
-              <Button className="gap-2 bg-[var(--brand)] text-white hover:opacity-90">
+            chefzDetail && chefzDetail.accountType !== "Unconfigured" ? (
+              <Link href={`/admin/chefz/settlements?accountId=${baseAccount.id}`}>
+                <Button className="gap-2 bg-[var(--brand)] text-white hover:opacity-90">
+                  <CreditCard className="h-4 w-4" />
+                  تصفية جديدة للحساب
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                disabled
+                title="يلزم ضبط إعدادات الحساب ونوع التكليف أولاً قبل إنشاء تصفية مالية"
+                className="gap-2 opacity-60 cursor-not-allowed"
+              >
                 <CreditCard className="h-4 w-4" />
-                تصفية جديدة للحساب
+                تصفية جديدة (يتطلب إعداد الحساب)
               </Button>
-            </Link>
+            )
           )}
         </div>
       </div>

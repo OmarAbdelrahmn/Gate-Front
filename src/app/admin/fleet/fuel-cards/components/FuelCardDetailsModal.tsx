@@ -24,6 +24,7 @@ import {
   FuelCard,
 } from "@/lib/fleet/fuel-cards-api";
 import { listSponsors, Sponsor } from "@/lib/workforce/api";
+import { useRiderIqamaCache } from "@/lib/fleet/rider-iqama-cache";
 
 interface FuelCardDetailsModalProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ export function FuelCardDetailsModal({
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { getRiderIqama } = useRiderIqamaCache();
 
   useEffect(() => {
     if (isOpen && cardId) {
@@ -241,6 +243,18 @@ export function FuelCardDetailsModal({
                         <ExternalLink size={12} className="opacity-60" />
                       </Link>
                       <Badge tone="green">تعيين نشط</Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-[var(--muted)]">
+                      <span>رقم الهوية / الإقامة:</span>
+                      <span className="font-mono font-bold text-[var(--foreground)] dir-ltr">
+                        {getRiderIqama(card.currentRider) || "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-[var(--muted)]">
+                      <span>الرقم الوظيفي:</span>
+                      <span className="font-mono font-bold text-[var(--foreground)] dir-ltr">
+                        {card.currentRider.employeeId || "—"}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-[var(--muted)]">
                       <span>تاريخ بدء التعيين:</span>

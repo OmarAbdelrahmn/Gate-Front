@@ -9,6 +9,7 @@ import {
   FuelCard,
   FuelCardAssignment,
 } from "@/lib/fleet/fuel-cards-api";
+import { useRiderIqamaCache } from "@/lib/fleet/rider-iqama-cache";
 
 interface FuelCardAssignmentsModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export function FuelCardAssignmentsModal({
   const [assignments, setAssignments] = useState<FuelCardAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { getRiderIqama } = useRiderIqamaCache();
 
   useEffect(() => {
     if (isOpen && card) {
@@ -106,6 +108,14 @@ export function FuelCardAssignmentsModal({
                           {item.riderNameAr || item.riderNameEn || "مندوب / موظف"}
                           <ExternalLink size={12} className="opacity-60" />
                         </Link>
+                        {(() => {
+                          const iqama = getRiderIqama(item);
+                          return iqama ? (
+                            <span className="text-[10px] font-mono text-[var(--muted)] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
+                              هوية: {iqama}
+                            </span>
+                          ) : null;
+                        })()}
                         {isActive ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                             تعيين نشط حالياً
