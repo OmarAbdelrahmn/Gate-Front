@@ -19,6 +19,7 @@ import type {
 } from "@/lib/chefz/types";
 import {
   getPlatformAccounts,
+  getAllPlatformAccounts,
   assignPlatformAccount,
   releasePlatformAccount,
   getAccountAssignmentHistory,
@@ -139,7 +140,7 @@ export default function ChefzAccountsPage() {
 
       // 2. Parallel fetch base accounts, chefz configured accounts, metadata
       const [baseAccounts, chefzAccounts, cityList, sponsorList, riderList] = await Promise.all([
-        getPlatformAccounts({ platformId: plat.id, includeArchived: false }),
+        getAllPlatformAccounts({ platformId: plat.id, includeArchived: false }),
         getAllChefzAccounts().catch(() => [] as ChefzAccount[]),
         listOperatingCities().catch(() => []),
         listSponsors().catch(() => []),

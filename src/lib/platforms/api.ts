@@ -168,6 +168,9 @@ export interface AccountFilterParams {
   status?: AccountStatus | string;
   currentOnly?: boolean;
   includeArchived?: boolean;
+  page?: number;
+  pageSize?: number;
+  search?: string;
 }
 
 // 1. GET /api/platforms?includeArchived=false
@@ -212,6 +215,9 @@ export const getPlatformAccounts = async (filters?: AccountFilterParams) => {
   if (filters?.status) query.set("status", filters.status);
   if (filters?.currentOnly !== undefined) query.set("currentOnly", String(filters.currentOnly));
   if (filters?.includeArchived !== undefined) query.set("includeArchived", String(filters.includeArchived));
+  if (filters?.page !== undefined) query.set("page", String(filters.page));
+  if (filters?.pageSize !== undefined) query.set("pageSize", String(filters.pageSize));
+  if (filters?.search) query.set("search", filters.search);
 
   const queryString = query.toString();
   const url = `/api/platform-accounts${queryString ? `?${queryString}` : ""}`;
@@ -224,6 +230,57 @@ export const getPlatformAccounts = async (filters?: AccountFilterParams) => {
     // Rethrow so calling pages can detect 403 (missing isAllClientScope) and display an error.
     throw err;
   }
+};
+
+/**
+ * Fetch all platform accounts across all pages.
+ */
+export const getAllPlatformAccounts = async (
+  filters?: Omit<AccountFilterParams, "page" | "pageSize">,
+  pageSize = 200
+): Promise<AccountResponse[]> => {
+  const all: AccountResponse[] = [];
+  const seenIds = new Set<string>();
+  let page = 1;
+  const maxPages = 50;
+
+  while (page <= maxPages) {
+    const res = await getPlatformAccounts({
+      ...filters,
+      page,
+      pageSize,
+    });
+    const items: AccountResponse[] = Array.isArray(res) ? res : (res as any)?.items || [];
+    if (!items.length) break;
+
+    let newCount = 0;
+    for (const item of items) {
+      if (item?.id && !seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        all.push(item);
+        newCount++;
+      } else if (!item?.id) {
+        all.push(item);
+        newCount++;
+      }
+    }
+
+    // Stop if server does not support pagination and returns duplicates
+    if (newCount === 0) break;
+
+    const totalCount = (res as any)?.totalCount;
+    if (typeof totalCount === "number" && all.length >= totalCount) {
+      break;
+    }
+
+    const actualPageSize = (res as any)?.pageSize || pageSize;
+    if (items.length < actualPageSize) {
+      break;
+    }
+    page++;
+  }
+
+  return all;
 };
 
 // 5. GET /api/platform-accounts/{id}

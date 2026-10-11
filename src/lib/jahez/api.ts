@@ -122,6 +122,38 @@ export async function getJahezHandovers(params?: {
   return authFetch<JahezPage<JahezHandover>>(`/api/jahez/handovers${buildQuery(safeParams)}`);
 }
 
+/**
+ * Fetch all Jahez handovers across all pages.
+ */
+export async function getAllJahezHandovers(params?: {
+  accountId?: string;
+  riderId?: string;
+}): Promise<JahezHandover[]> {
+  const all: JahezHandover[] = [];
+  let page = 1;
+  const pageSize = 100;
+  const maxPages = 50;
+
+  while (page <= maxPages) {
+    const res = await getJahezHandovers({ ...params, page, pageSize });
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    all.push(...items);
+
+    if (typeof res?.totalCount === "number" && all.length >= res.totalCount) {
+      break;
+    }
+    const actualPageSize = res?.pageSize || pageSize;
+    if (items.length < actualPageSize) {
+      break;
+    }
+    page++;
+  }
+
+  return all;
+}
+
 export async function getJahezHandoverBalance(
   handoverId: string,
   throughDate: string,

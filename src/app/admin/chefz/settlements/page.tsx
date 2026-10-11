@@ -21,6 +21,7 @@ import type {
 } from "@/lib/chefz/types";
 import {
   getPlatformAccounts,
+  getAllPlatformAccounts,
   getAccountAssignmentHistory,
   type AccountResponse,
   type AssignmentResponse,
@@ -112,7 +113,7 @@ export default function ChefzSettlementsPage() {
 
       if (plat) {
         const [accs, chefzAccs, riderList, settlePage] = await Promise.all([
-          getPlatformAccounts({ platformId: plat.id, includeArchived: false }).catch(() => []),
+          getAllPlatformAccounts({ platformId: plat.id, includeArchived: false }).catch(() => []),
           getAllChefzAccounts().catch(() => []),
           listRiders().catch(() => []),
           getChefzSettlements({
@@ -450,8 +451,12 @@ export default function ChefzSettlementsPage() {
                 { value: "", label: "جميع حسابات شيفز" },
                 ...baseAccounts.map((a) => ({
                   value: a.id,
-                  label: `${a.code} ${a.externalAccountId ? `(${a.externalAccountId})` : ""}`,
-                  keywords: `${a.code} ${a.externalAccountId || ""}`,
+                  label: `${a.code} ${a.externalAccountId ? `(${a.externalAccountId})` : ""} — ${a.ownerRiderNameAr || "بدون مالك"}${
+                    a.currentAssignment?.actualRiderNameAr && a.currentAssignment.actualRiderNameAr !== a.ownerRiderNameAr
+                      ? ` (${a.currentAssignment.actualRiderNameAr})`
+                      : ""
+                  }`,
+                  keywords: `${a.code} ${a.externalAccountId || ""} ${a.userName || ""} ${a.ownerRiderNameAr || ""} ${a.ownerRiderNameEn || ""} ${a.currentAssignment?.actualRiderNameAr || ""} ${a.currentAssignment?.actualRiderNameEn || ""}`,
                 })),
               ]}
               placeholder="اختر الحساب..."
@@ -707,15 +712,21 @@ export default function ChefzSettlementsPage() {
               }}
               options={baseAccounts.map((a) => {
                 const chefz = chefzAccountMap.get(a.id);
+                const assignedRider = a.currentAssignment?.actualRiderNameAr;
                 return {
                   value: a.id,
-                  label: `${a.code} — ${a.ownerRiderNameAr || "بدون مالك"} ${
+                  label: `${a.code} — ${a.ownerRiderNameAr || "بدون مالك"}${
+                    assignedRider && assignedRider !== a.ownerRiderNameAr
+                      ? ` (المعيّن: ${assignedRider})`
+                      : ""
+                  } ${
                     chefz ? `(${chefz.accountType === "Freelancer" ? "فريلانسر" : "دوام كامل"})` : "(غير معد)"
                   }`,
-                  keywords: `${a.code} ${a.externalAccountId || ""} ${a.ownerRiderNameAr || ""}`,
+                  sublabel: `${a.userName ? `المستخدم: ${a.userName}` : ""} ${a.externalAccountId ? `| معرف: ${a.externalAccountId}` : ""}`.trim() || undefined,
+                  keywords: `${a.code} ${a.externalAccountId || ""} ${a.userName || ""} ${a.ownerRiderNameAr || ""} ${a.ownerRiderNameEn || ""} ${a.currentAssignment?.actualRiderNameAr || ""} ${a.currentAssignment?.actualRiderNameEn || ""}`,
                 };
               })}
-              placeholder="ابحث بكود الحساب أو اسم المالك..."
+              placeholder="ابحث بكود الحساب، اسم المالك، المندوب المعيّن، أو اسم المستخدم..."
             />
           </div>
 

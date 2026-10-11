@@ -8,6 +8,7 @@ import {
   createSettlement,
   getJahezHandoverBalance,
   getJahezHandovers,
+  getAllJahezHandovers,
   getJahezHandoverSettlements,
 } from "@/lib/jahez/api";
 import type {
@@ -69,8 +70,8 @@ export default function JahezSettlementsPage() {
   // Load handovers
   const loadHandovers = async () => {
     try {
-      const res = await getJahezHandovers({ pageSize: 100 });
-      setHandovers(res.items || []);
+      const all = await getAllJahezHandovers();
+      setHandovers(all);
     } catch {
       // Handled silently
     }
@@ -84,10 +85,12 @@ export default function JahezSettlementsPage() {
         const res = await getJahezHandoverSettlements(selectedHandoverId, { page, pageSize });
         setSettlements(res.items || []);
       } else {
-        const resHandovers = await getJahezHandovers({ pageSize: 50 });
-        setHandovers(resHandovers.items || []);
+        const currentHandovers = handovers.length > 0 ? handovers : await getAllJahezHandovers().catch(() => []);
+        if (handovers.length === 0 && currentHandovers.length > 0) {
+          setHandovers(currentHandovers);
+        }
         const allSettlements: JahezSettlement[] = [];
-        for (const h of (resHandovers.items || []).slice(0, 5)) {
+        for (const h of currentHandovers.slice(0, 5)) {
           const sRes = await getJahezHandoverSettlements(h.id, { pageSize: 20 });
           allSettlements.push(...(sRes.items || []));
         }
@@ -443,6 +446,8 @@ export default function JahezSettlementsPage() {
                 return {
                   value: h.id,
                   label: `[${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                  sublabel: rider ? `${isEn ? "Rider:" : "المندوب:"} ${rider}` : undefined,
+                  keywords: `${accDisplay} ${h.account?.code || ""} ${h.externalAccountId || ""} ${h.account?.externalAccountId || ""} ${h.actualRiderNameAr || ""} ${h.actualRiderNameEn || ""} ${h.ownerRiderNameAr || ""} ${h.ownerRiderNameEn || ""} ${h.commissionStartsOn || ""}`,
                 };
               }),
             ]}
@@ -592,6 +597,8 @@ export default function JahezSettlementsPage() {
                 return {
                   value: h.id,
                   label: `${isEn ? "Account" : "حساب"} [${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
+                  sublabel: rider ? `${isEn ? "Rider:" : "المندوب:"} ${rider}` : undefined,
+                  keywords: `${accDisplay} ${h.account?.code || ""} ${h.externalAccountId || ""} ${h.account?.externalAccountId || ""} ${h.actualRiderNameAr || ""} ${h.actualRiderNameEn || ""} ${h.ownerRiderNameAr || ""} ${h.ownerRiderNameEn || ""} ${h.commissionStartsOn || ""}`,
                 };
               })}
             />

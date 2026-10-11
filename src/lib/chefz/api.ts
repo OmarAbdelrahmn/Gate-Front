@@ -69,9 +69,17 @@ export async function getAllChefzAccounts(pageSize = 100): Promise<ChefzAccount[
 
   while (page <= maxPages) {
     const res = await getChefzAccounts({ page, pageSize });
-    const items = res.items || [];
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
     all.push(...items);
-    if (items.length < pageSize) {
+
+    if (typeof res?.totalCount === "number" && all.length >= res.totalCount) {
+      break;
+    }
+
+    const actualPageSize = res?.pageSize || pageSize;
+    if (items.length < actualPageSize) {
       break;
     }
     page++;

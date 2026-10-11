@@ -18,6 +18,7 @@ import type {
 } from "@/lib/chefz/types";
 import {
   getPlatformAccounts,
+  getAllPlatformAccounts,
   type AccountResponse,
   type PlatformResponse,
 } from "@/lib/platforms/api";
@@ -89,7 +90,7 @@ export default function ChefzPerformancePage() {
       setPlatform(plat);
       if (plat) {
         const [accs, riderList] = await Promise.all([
-          getPlatformAccounts({ platformId: plat.id, includeArchived: false }).catch(() => []),
+          getAllPlatformAccounts({ platformId: plat.id, includeArchived: false }).catch(() => []),
           listRiders().catch(() => []),
         ]);
         setBaseAccounts(accs);
