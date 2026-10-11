@@ -115,7 +115,11 @@ export async function getJahezHandovers(params?: {
   page?: number;
   pageSize?: number;
 }): Promise<JahezPage<JahezHandover>> {
-  return authFetch<JahezPage<JahezHandover>>(`/api/jahez/handovers${buildQuery(params)}`);
+  const safeParams = {
+    ...params,
+    pageSize: params?.pageSize ? Math.min(Math.max(1, params.pageSize), 100) : undefined,
+  };
+  return authFetch<JahezPage<JahezHandover>>(`/api/jahez/handovers${buildQuery(safeParams)}`);
 }
 
 export async function getJahezHandoverBalance(

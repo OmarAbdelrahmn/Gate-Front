@@ -334,6 +334,12 @@ export interface JahezPage<T> {
   items: T[];
   page: number;
   pageSize: number;
+  totalCount?: number;
+  totalPages?: number;
+  total?: number;
+  count?: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
 }
 
 // --- Request DTOs ---
