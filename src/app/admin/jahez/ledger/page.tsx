@@ -30,6 +30,7 @@ import {
   FileCode,
   TrendingDown,
   TrendingUp,
+  Lock,
 } from "lucide-react";
 
 export default function JahezLedgerPage() {
@@ -122,8 +123,17 @@ export default function JahezLedgerPage() {
   };
 
   const handleReverseEntry = (entry: JahezLedgerEntry) => {
-    if (entry.kind === JahezLedgerKind.Payment) {
-      toast.error("تنبيه", "لا يمكن عكس مدفوعات النقد عبر قيود التسوية اليدوية");
+    if (
+      entry.kind === JahezLedgerKind.Payment ||
+      entry.kind === JahezLedgerKind.Transfer ||
+      entry.kind === JahezLedgerKind.StatusChange
+    ) {
+      toast.error(
+        "تنبيه",
+        isEn
+          ? "Cannot reverse payments, transfers, or status change events via manual adjustments."
+          : "لا يمكن عكس مدفوعات النقد أو ترحيل الديون أو قيود الحالة عبر قيود التسوية اليدوية",
+      );
       return;
     }
     setAdjHandoverId(entry.handoverId);
@@ -228,6 +238,13 @@ export default function JahezLedgerPage() {
         return (
           <Badge tone="orange">
             {isEn ? "Opening Balance" : "رصيد افتتاحي"}
+          </Badge>
+        );
+      case JahezLedgerKind.StatusChange:
+        return (
+          <Badge tone="blue">
+            <Lock className="h-3 w-3 mr-1 inline text-blue-600" />
+            {isEn ? "Status Change Event" : "قيد تغيير حالة"}
           </Badge>
         );
       default:
@@ -394,6 +411,7 @@ export default function JahezLedgerPage() {
             <option value="3">{isEn ? "3 - Adjustment" : "3 - تسوية (Adjustment)"}</option>
             <option value="4">{isEn ? "4 - Transfer Marker" : "4 - علامة ترحيل (Transfer)"}</option>
             <option value="5">{isEn ? "5 - Opening Balance" : "5 - رصيد افتتاحي"}</option>
+            <option value="6">{isEn ? "6 - Status Change" : "6 - تغيير حالة (StatusChange)"}</option>
           </select>
         </div>
 
@@ -483,16 +501,24 @@ export default function JahezLedgerPage() {
                       <td className="px-4 py-3">{kindLabel(e.kind)}</td>
 
                       <td className="px-4 py-3 font-mono font-bold">
-                        <span
-                          className={
-                            isPositive
-                              ? "text-red-600 dark:text-red-400"
-                              : "text-emerald-600 dark:text-emerald-400"
-                          }
-                        >
-                          {isPositive ? `+${e.amount.toLocaleString("ar-SA", { minimumFractionDigits: 2 })}` : `${e.amount.toLocaleString("ar-SA", { minimumFractionDigits: 2 })}`}{" "}
-                          ر.س
-                        </span>
+                        {e.kind === JahezLedgerKind.StatusChange ? (
+                          <span className="text-gray-400 font-normal text-xs font-sans">
+                            {isEn ? "0.00 (Status Record)" : "0.00 (توثيق حالة)"}
+                          </span>
+                        ) : (
+                          <span
+                            className={
+                              isPositive
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-emerald-600 dark:text-emerald-400"
+                            }
+                          >
+                            {isPositive
+                              ? `+${e.amount.toLocaleString("ar-SA", { minimumFractionDigits: 2 })}`
+                              : `${e.amount.toLocaleString("ar-SA", { minimumFractionDigits: 2 })}`}{" "}
+                            ر.س
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 text-xs text-gray-500">
@@ -538,7 +564,9 @@ export default function JahezLedgerPage() {
                           )}
 
                           {can("jahez.adjustments.create") &&
-                            e.kind !== JahezLedgerKind.Payment && (
+                            e.kind !== JahezLedgerKind.Payment &&
+                            e.kind !== JahezLedgerKind.Transfer &&
+                            e.kind !== JahezLedgerKind.StatusChange && (
                               <Button
                                 variant="secondary"
                                 onClick={() => handleReverseEntry(e)}
@@ -674,12 +702,19 @@ export default function JahezLedgerPage() {
           </p>
 
           <pre className="p-3 bg-gray-900 text-emerald-400 font-mono text-xs rounded-lg overflow-x-auto max-h-96">
-            {selectedCalcJson ? JSON.stringify(JSON.parse(selectedCalcJson), null, 2) : ""}
+            {(() => {
+              if (!selectedCalcJson) return "";
+              try {
+                return JSON.stringify(JSON.parse(selectedCalcJson), null, 2);
+              } catch {
+                return selectedCalcJson;
+              }
+            })()}
           </pre>
 
           <div className="flex justify-end pt-2">
             <Button variant="secondary" onClick={() => setSelectedCalcJson(null)}>
-              {isEn ? "Close" : "إلغاء"}
+              {isEn ? "Close" : "إغلاق"}
             </Button>
           </div>
         </div>

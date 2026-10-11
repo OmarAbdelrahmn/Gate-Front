@@ -5,8 +5,18 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
-import { createSettlement, getJahezDebts } from "@/lib/jahez/api";
-import type { JahezBalance, PaymentRequest } from "@/lib/jahez/types";
+import { createSettlement, getJahezDebts, getDebtActionGates } from "@/lib/jahez/api";
+import {
+  JahezDebtStatus,
+  JahezPaymentStatus,
+  type JahezBalance,
+  type PaymentRequest,
+} from "@/lib/jahez/types";
+import { JahezDebtStatusBadge } from "@/components/jahez/JahezDebtStatusBadge";
+import { JahezPaymentStatusBadge } from "@/components/jahez/JahezPaymentStatusBadge";
+import { JahezFinancialCards } from "@/components/jahez/JahezFinancialCards";
+import { ConfirmPaidModal } from "@/components/jahez/dialogs/ConfirmPaidModal";
+import { FreezeAccountModal } from "@/components/jahez/dialogs/FreezeAccountModal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -22,6 +32,11 @@ import {
   CheckCircle2,
   Scale,
   Lock,
+  Eye,
+  Coins,
+  ChevronLeft,
+  ChevronRight,
+  Info,
 } from "lucide-react";
 
 export default function JahezDebtsPage() {
@@ -34,7 +49,15 @@ export default function JahezDebtsPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [riderFilter, setRiderFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Modals & Action States
+  const [inspectBalance, setInspectBalance] = useState<JahezBalance | null>(null);
+  const [confirmPaidBalance, setConfirmPaidBalance] = useState<JahezBalance | null>(null);
+  const [freezeBalance, setFreezeBalance] = useState<JahezBalance | null>(null);
 
   // Quick Settlement Modal State
   const [selectedBalance, setSelectedBalance] = useState<JahezBalance | null>(null);
@@ -46,15 +69,18 @@ export default function JahezDebtsPage() {
   const [paymentReason, setPaymentReason] = useState("سداد مديونية مستحقة لمندوب جاهز");
   const [isPaying, setIsPaying] = useState(false);
 
-  const loadDebts = async () => {
+  const loadDebts = async (targetPage = page) => {
     setLoading(true);
     try {
       const res = await getJahezDebts({
         overdueOnly,
         riderId: riderFilter || undefined,
-        pageSize: 100,
+        page: targetPage,
+        pageSize,
       });
-      setBalances(res.items || []);
+      const items = res.items || [];
+      setBalances(items);
+      setHasNextPage(items.length >= pageSize);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "تعذر استعلام المديونيات";
       toast.error("خطأ", msg);
@@ -64,10 +90,17 @@ export default function JahezDebtsPage() {
   };
 
   useEffect(() => {
+    setPage(1);
     startTransition(() => {
-      loadDebts();
+      loadDebts(1);
     });
   }, [overdueOnly, riderFilter]);
+
+  useEffect(() => {
+    startTransition(() => {
+      loadDebts(page);
+    });
+  }, [page]);
 
   const handleOpenSettlement = (b: JahezBalance) => {
     setSelectedBalance(b);
@@ -221,8 +254,18 @@ export default function JahezDebtsPage() {
   });
 
   const totalOverdueCount = balances.filter((b) => b.isOverdue).length;
-  const totalReceivableSum = balances.reduce((sum, b) => sum + b.totalReceivable, 0);
-  const totalDebtSum = balances.reduce((sum, b) => sum + b.platformDebt, 0);
+  const totalReceivableSum = balances.reduce((sum, b) => sum + (b.totalReceivable ?? 0), 0);
+  const totalOutstandingSum = balances.reduce(
+    (sum, b) =>
+      sum +
+      (typeof b.outstandingAmount === "number"
+        ? b.outstandingAmount
+        : Math.max(0, b.fees ?? 0) +
+          Math.max(0, b.platformDebt ?? 0) +
+          Math.max(0, (b.postedCommission ?? 0) + (b.unpostedCommission ?? 0))),
+    0,
+  );
+  const totalDebtSum = balances.reduce((sum, b) => sum + (b.platformDebt ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -243,7 +286,7 @@ export default function JahezDebtsPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            onClick={loadDebts}
+            onClick={() => loadDebts()}
             disabled={loading}
             className="flex items-center gap-1.5"
           >
@@ -291,58 +334,66 @@ export default function JahezDebtsPage() {
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            {isEn ? "Total Outstanding Receivables" : "إجمالي الذمم المستحقة"}
+        {/* Outstanding to collect */}
+        <div className="rounded-xl border border-amber-300 bg-amber-50/60 p-4 shadow-sm dark:border-amber-800/60 dark:bg-amber-950/20">
+          <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+            <Coins className="h-4 w-4 text-amber-600" />
+            {isEn ? "Collectible Outstanding (Loaded)" : "المطلوب تحصيله (في هذه الصفحة)"}
           </span>
-          <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+          <p className="mt-2 text-2xl font-black text-amber-950 dark:text-amber-100 font-mono">
+            {totalOutstandingSum.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
+          </p>
+          <span className="text-[11px] text-amber-700/80 mt-1 block">
+            {isEn ? "Sum of positive bucket receivables" : "مجموع الذمم الإيجابية المستحقة للتحصيل"}
+          </span>
+        </div>
+
+        {/* Signed Net Balance */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+            <Scale className="h-4 w-4 text-gray-400" />
+            {isEn ? "Signed Net Balance (Loaded)" : "صافي رصيد الفترة الشامل"}
+          </span>
+          <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white font-mono">
             {totalReceivableSum.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
           </p>
-          <span className="text-xs text-gray-400 mt-1 block">
-            {balances.length} {isEn ? "tracked handovers" : "حساب تسليم"}
+          <span className="text-[11px] text-gray-400 mt-1 block">
+            {isEn ? "Mathematical net across buckets" : "الصافي الحسابي شاملاً الأرصدة الدائنة"}
           </span>
         </div>
 
-        <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
-          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-            {isEn ? "Platform Debt Portion" : "مديونية جاهز من العمليات"}
-          </span>
-          <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-300">
-            {totalDebtSum.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
-          </p>
-          <span className="text-xs text-amber-500 mt-1 block">
-            {isEn ? "Source Net Amount debt" : "مستورد من ملفات العمليات"}
-          </span>
-        </div>
-
+        {/* Overdue Accounts */}
         <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 shadow-sm dark:border-red-900/40 dark:bg-red-950/20">
-          <span className="text-xs font-medium text-red-600 dark:text-red-400">
+          <span className="text-xs font-medium text-red-600 dark:text-red-400 flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
             {isEn ? "Overdue Accounts (>10 Days)" : "الحسابات المتأخرة (>10 أيام)"}
           </span>
-          <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-300">
+          <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-300 font-mono">
             {totalOverdueCount}
           </p>
-          <span className="text-xs text-red-500 mt-1 block">
-            {isEn ? "Require immediate collection" : "تتطلب تحصيل عاجل"}
+          <span className="text-[11px] text-red-500 mt-1 block">
+            {isEn ? "Using server isOverdue flag" : "بناءً على حالة الخادم الفعلية"}
           </span>
         </div>
 
+        {/* Commission Readiness */}
         <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
-          <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+          <span className="text-xs font-medium text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+            <CheckCircle2 className="h-4 w-4 text-blue-500" />
             {isEn ? "Commission Readiness" : "اكتمال احتساب العمولات"}
           </span>
-          <p className="mt-2 text-2xl font-bold text-blue-700 dark:text-blue-300">
+          <p className="mt-2 text-2xl font-bold text-blue-700 dark:text-blue-300 font-mono">
             {balances.filter((b) => b.commissionComplete).length} / {balances.length}
           </p>
-          <span className="text-xs text-blue-500 mt-1 block">
-            {isEn ? "Covered by daily/percentage policy" : "مغطاة بالسياسات اليومية/النسبة"}
+          <span className="text-[11px] text-blue-500 mt-1 block">
+            {isEn ? "Covered by approved earnings" : "مغطاة بكشوف أرباح معتمدة"}
           </span>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 flex flex-col sm:flex-row gap-3">
-        <div className="flex items-center gap-2">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 flex flex-col md:flex-row gap-3">
+        <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">
             <input
               type="checkbox"
@@ -350,18 +401,28 @@ export default function JahezDebtsPage() {
               onChange={(e) => setOverdueOnly(e.target.checked)}
               className="rounded border-gray-300 text-red-600 focus:ring-red-500 h-4 w-4"
             />
-            <span>{isEn ? "Overdue Accounts Only" : "عرض الحسابات المتأخرة فقط"}</span>
+            <span>{isEn ? "Overdue Accounts Only" : "عرض المتأخرين فقط"}</span>
           </label>
+        </div>
+
+        <div className="w-full md:w-64">
+          <Input
+            type="text"
+            placeholder={isEn ? "Filter by Rider ID..." : "تصفية بمعرف المندوب (خادم)..."}
+            value={riderFilter}
+            onChange={(e) => setRiderFilter(e.target.value)}
+            className="text-xs"
+          />
         </div>
 
         <div className="flex-1 relative">
           <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
           <Input
             type="text"
-            placeholder={isEn ? "Search by Account, Rider, or Handover ID..." : "ابحث برقم الحساب الخارجي، المندوب، أو معرف التسليم..."}
+            placeholder={isEn ? "Filter loaded results (Account, Rider, ID)..." : "تصفية النتائج المعروضة (الحساب، المندوب، الرمز)..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pr-9"
+            className="pr-9 text-xs"
           />
         </div>
       </div>
@@ -374,26 +435,28 @@ export default function JahezDebtsPage() {
               <tr>
                 <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
                 <th className="px-4 py-3">{isEn ? "Rider Profile" : "المندوب الفعلي"}</th>
-                <th className="px-4 py-3">{isEn ? "Account Fees" : "رسوم الحساب"}</th>
+                <th className="px-4 py-3">{isEn ? "Lifecycle" : "حالة الفترة"}</th>
+                <th className="px-4 py-3">{isEn ? "Payment Status" : "حالة السداد"}</th>
+                <th className="px-4 py-3">{isEn ? "Fees" : "رسوم الحساب"}</th>
                 <th className="px-4 py-3">{isEn ? "Platform Debt" : "مديونية جاهز"}</th>
                 <th className="px-4 py-3">{isEn ? "Commission" : "العمولة"}</th>
-                <th className="px-4 py-3">{isEn ? "Total Receivable" : "إجمالي الذمة"}</th>
-                <th className="px-4 py-3">{isEn ? "Days Since Settlement" : "الأيام منذ آخر تسوية"}</th>
-                <th className="px-4 py-3">{isEn ? "Overdue State" : "حالة التأخير"}</th>
+                <th className="px-4 py-3">{isEn ? "Outstanding" : "المطلوب تحصيله"}</th>
+                <th className="px-4 py-3">{isEn ? "Attributed" : "رصيد الحساب"}</th>
+                <th className="px-4 py-3">{isEn ? "Days / Overdue" : "المهلة / التأخير"}</th>
                 <th className="px-4 py-3">{isEn ? "Actions" : "الإجراءات"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-10 text-gray-500">
+                  <td colSpan={11} className="text-center py-10 text-gray-500">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto text-amber-600 mb-2" />
                     {isEn ? "Loading debts..." : "جارٍ تحميل الذمم..."}
                   </td>
                 </tr>
               ) : filteredBalances.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-gray-400">
+                  <td colSpan={11} className="text-center py-12 text-gray-400">
                     <CheckCircle2 className="h-10 w-10 mx-auto text-emerald-500 mb-2" />
                     <p className="font-medium text-gray-600 dark:text-gray-300">
                       {isEn ? "No debts matching criteria" : "لا توجد مديونيات مطابقة للشروط"}
@@ -402,10 +465,15 @@ export default function JahezDebtsPage() {
                 </tr>
               ) : (
                 filteredBalances.map((b) => {
+                  const gates = getDebtActionGates(b, can);
+                  const totalComm = (b.postedCommission ?? 0) + (b.unpostedCommission ?? 0);
+                  const outstanding = typeof b.outstandingAmount === "number" ? b.outstandingAmount : Math.max(0, b.fees ?? 0) + Math.max(0, b.platformDebt ?? 0) + Math.max(0, totalComm);
+                  const accRec = typeof b.accountReceivable === "number" ? b.accountReceivable : (b.debtTransferred ? 0 : b.totalReceivable);
+
                   return (
                     <tr key={b.handoverId} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
                       <td className="px-4 py-3">
-                        <span className="font-bold text-gray-900 dark:text-white block">
+                        <span className="font-bold text-gray-900 dark:text-white block font-mono">
                           {b.account?.externalAccountId || b.externalAccountId
                             ? `[${b.account?.externalAccountId || b.externalAccountId}]`
                             : b.account?.code || "-"}
@@ -428,11 +496,24 @@ export default function JahezDebtsPage() {
                           : b.actualRiderNameAr || b.actualRiderNameEn) || "-"}
                       </td>
 
-                      <td className="px-4 py-3 font-semibold text-blue-600">
+                      <td className="px-4 py-3">
+                        <JahezDebtStatusBadge status={b.debtStatus} locale={locale} />
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <JahezPaymentStatusBadge
+                          status={b.paymentStatus}
+                          debtStatus={b.debtStatus}
+                          debtPaidAtUtc={b.debtPaidAtUtc}
+                          locale={locale}
+                        />
+                      </td>
+
+                      <td className="px-4 py-3 font-mono text-xs">
                         {b.fees > 0 ? `${b.fees.toLocaleString("ar-SA")} ر.س` : "-"}
                       </td>
 
-                      <td className="px-4 py-3 font-semibold">
+                      <td className="px-4 py-3 font-mono text-xs">
                         {b.platformDebt < 0 ? (
                           <span className="text-emerald-600" title="رصيد دائن للمندوب">
                             {b.platformDebt.toLocaleString("ar-SA")} ر.س (دائن)
@@ -446,54 +527,81 @@ export default function JahezDebtsPage() {
                         )}
                       </td>
 
-                      <td className="px-4 py-3 text-purple-600 font-semibold">
-                        {(b.postedCommission + b.unpostedCommission).toLocaleString("ar-SA")} ر.س
-                        {b.unpostedCommission > 0 && (
-                          <span className="text-[10px] text-gray-400 block">
-                            (غير مرحل: {b.unpostedCommission} ر.س)
+                      <td className="px-4 py-3 font-mono text-xs text-purple-600 font-semibold">
+                        {totalComm.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
+                        {!b.commissionComplete && (
+                          <span className="text-[10px] text-amber-600 block" title="حساب العمولة غير مكتمل">
+                            ⚠️ غير مكتمل
                           </span>
                         )}
                       </td>
 
-                      <td className="px-4 py-3 font-bold text-base text-gray-900 dark:text-white">
-                        {b.totalReceivable.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
+                      <td className="px-4 py-3 font-bold text-base text-amber-900 dark:text-amber-100 font-mono">
+                        {outstanding.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
                       </td>
 
-                      <td className="px-4 py-3">
-                        <span className="font-semibold text-gray-800 dark:text-gray-200">
-                          {b.daysSinceSettlementPayment} {isEn ? "days" : "يوم"}
-                        </span>
-                        <span className="text-[10px] text-gray-400 block">
-                          {b.reminderAnchorAtUtc
-                            ? new Date(b.reminderAnchorAtUtc).toLocaleDateString("ar-SA")
-                            : "-"}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {b.isOverdue ? (
-                          <Badge tone="red">
-                            <AlertTriangle className="h-3 w-3 mr-1 inline" />
-                            {isEn ? "Overdue (>10 d)" : "متأخر (>10 أيام)"}
-                          </Badge>
-                        ) : (
-                          <Badge tone="green">
-                            {isEn ? "On Schedule" : "ضمن المهلة"}
-                          </Badge>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
+                        {accRec.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
+                        {b.debtTransferred && (
+                          <span className="text-[10px] text-purple-600 block font-sans">
+                            (منقول للمندوب)
+                          </span>
                         )}
                       </td>
 
                       <td className="px-4 py-3">
-                        {can("jahez.collections.create") && (
+                        <div className="flex flex-col gap-1">
+                          {b.isOverdue ? (
+                            <Badge tone="red">
+                              <AlertTriangle className="h-3 w-3 mr-1 inline" />
+                              {isEn ? "Overdue" : "متأخر (>10 أيام)"}
+                            </Badge>
+                          ) : (
+                            <Badge tone="green">
+                              {isEn ? "On Schedule" : "ضمن المهلة"}
+                            </Badge>
+                          )}
+                          <span className="text-[10px] text-gray-400">
+                            {b.daysSinceSettlementPayment} {isEn ? "days" : "يوم"}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
                           <Button
-                            variant="primary"
-                            onClick={() => handleOpenSettlement(b)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-1 px-2.5 h-8 flex items-center gap-1 shadow-xs"
+                            variant="secondary"
+                            onClick={() => setInspectBalance(b)}
+                            className="text-xs py-1 px-2 h-8 text-blue-700 border-blue-200 hover:bg-blue-50 flex items-center gap-1"
+                            title={isEn ? "Financial Details" : "التفاصيل المالية"}
                           >
-                            <CreditCard className="h-3.5 w-3.5" />
-                            {isEn ? "Collect" : "تحصيل"}
+                            <Eye className="h-3.5 w-3.5" />
                           </Button>
-                        )}
+
+                          {gates.collect && (
+                            <Button
+                              variant="primary"
+                              onClick={() => handleOpenSettlement(b)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-1 px-2 h-8 flex items-center gap-1 shadow-xs"
+                              title={isEn ? "Collect Payment" : "تسجيل تحصيل"}
+                            >
+                              <CreditCard className="h-3.5 w-3.5" />
+                              {isEn ? "Collect" : "تحصيل"}
+                            </Button>
+                          )}
+
+                          {gates.confirmPaid && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => setConfirmPaidBalance(b)}
+                              className="text-xs py-1 px-2 h-8 text-teal-700 border-teal-200 hover:bg-teal-50 flex items-center gap-1"
+                              title={isEn ? "Confirm Paid" : "تأكيد السداد"}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {isEn ? "Confirm" : "تأكيد"}
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -501,6 +609,33 @@ export default function JahezDebtsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-850 text-xs">
+          <span className="text-gray-500">
+            {isEn ? `Page ${page} (Max 50 items/page)` : `الصفحة ${page} (بحد أقصى 50 عنصرًا لكل صفحة)`}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+              className="h-8 text-xs flex items-center gap-1"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+              {isEn ? "Previous" : "السابق"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!hasNextPage || loading}
+              className="h-8 text-xs flex items-center gap-1"
+            >
+              {isEn ? "Next" : "التالي"}
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -726,6 +861,38 @@ export default function JahezDebtsPage() {
           </form>
         )}
       </Modal>
+
+      {/* Financial Details Drawer Modal */}
+      <Modal
+        isOpen={Boolean(inspectBalance)}
+        onClose={() => setInspectBalance(null)}
+        title={isEn ? "Period Financial Details" : "تفاصيل الذمة المالية للفترة"}
+        maxWidth="max-w-4xl"
+      >
+        {inspectBalance && (
+          <div className="space-y-4">
+            <JahezFinancialCards balance={inspectBalance} locale={locale} />
+            <div className="flex justify-end pt-3 border-t border-gray-100 dark:border-gray-800">
+              <Button variant="secondary" onClick={() => setInspectBalance(null)}>
+                {isEn ? "Close" : "إغلاق"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Confirm Paid Modal */}
+      <ConfirmPaidModal
+        isOpen={Boolean(confirmPaidBalance)}
+        onClose={() => setConfirmPaidBalance(null)}
+        handover={null}
+        balance={confirmPaidBalance}
+        locale={locale}
+        onSuccess={() => {
+          setConfirmPaidBalance(null);
+          loadDebts(page);
+        }}
+      />
     </div>
   );
 }

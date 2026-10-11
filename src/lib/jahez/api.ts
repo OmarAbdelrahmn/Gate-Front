@@ -1,5 +1,6 @@
 // src/lib/jahez/api.ts
 import { authDownload, authFetch, type CustomRequestInit } from "../auth/api";
+import { JahezDebtStatus } from "./types";
 import type {
   AccountantConfirmRequest,
   ApprovalCancelRequest,
@@ -7,9 +8,12 @@ import type {
   ApprovalDecisionRequest,
   CashboxCreateRequest,
   CashboxDecisionRequest,
+  ClearAccountRequest,
   CloseJahezHandoverRequest,
+  ConfirmPaidRequest,
   CreateJahezHandoverRequest,
   EarningsRequest,
+  FreezeHandoverRequest,
   ImportCommitRequest,
   JahezApprovalRequest,
   JahezApprovalResponse,
@@ -26,10 +30,12 @@ import type {
   JahezImportPreview,
   JahezLedgerEntry,
   JahezPage,
+  JahezRiderDebtSummary,
   JahezSettlement,
   LedgerAdjustmentRequest,
   LegacyAdoptionRequest,
   PaymentRequest,
+  TransferDebtRequest,
 } from "./types";
 
 export function generateIdempotencyKey(prefix = "jhz"): string {
@@ -109,6 +115,58 @@ export async function closeJahezHandover(
   );
 }
 
+export async function freezeJahezHandover(
+  handoverId: string,
+  data: FreezeHandoverRequest,
+  idempotencyKey?: string,
+): Promise<JahezBalance> {
+  return jahezPostFetch<JahezBalance>(
+    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/freeze`,
+    data,
+    idempotencyKey,
+    { notifySuccess: "تم تجميد حساب جاهز وحجز العهدة بنجاح" },
+  );
+}
+
+export async function transferJahezDebt(
+  handoverId: string,
+  data: TransferDebtRequest,
+  idempotencyKey?: string,
+): Promise<JahezHandover> {
+  return jahezPostFetch<JahezHandover>(
+    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/transfer-debt`,
+    data,
+    idempotencyKey,
+    { notifySuccess: "تم نقل المديونية للمندوب وتحرير الحساب بنجاح" },
+  );
+}
+
+export async function clearJahezAccount(
+  handoverId: string,
+  data: ClearAccountRequest,
+  idempotencyKey?: string,
+): Promise<JahezHandover> {
+  return jahezPostFetch<JahezHandover>(
+    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/clear-account`,
+    data,
+    idempotencyKey,
+    { notifySuccess: "تم تأكيد تصفية الحساب مع جاهز وتحرير الحساب بنجاح" },
+  );
+}
+
+export async function confirmJahezPaid(
+  handoverId: string,
+  data: ConfirmPaidRequest,
+  idempotencyKey?: string,
+): Promise<JahezBalance> {
+  return jahezPostFetch<JahezBalance>(
+    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/confirm-paid`,
+    data,
+    idempotencyKey,
+    { notifySuccess: "تم تأكيد اكتمال سداد المندوب بنجاح" },
+  );
+}
+
 export async function getJahezHandovers(params?: {
   accountId?: string;
   riderId?: string;
@@ -170,6 +228,47 @@ export async function getJahezDebts(params?: {
   pageSize?: number;
 }): Promise<JahezPage<JahezBalance>> {
   return authFetch<JahezPage<JahezBalance>>(`/api/jahez/debts${buildQuery(params)}`);
+}
+
+export async function getJahezRiderDebtSummary(riderId: string): Promise<JahezRiderDebtSummary> {
+  return authFetch<JahezRiderDebtSummary>(
+    `/api/jahez/riders/${encodeURIComponent(riderId)}/debt-summary`,
+  );
+}
+
+export function getDebtActionGates(
+  b: JahezBalance,
+  can: (key: string) => boolean,
+) {
+  const canRead = can("jahez.read");
+  const canReset = canRead && can("jahez.resets.approve");
+  const canCollect = canRead && can("jahez.collections.create");
+  const outstanding = b.outstandingAmount ?? 0;
+  const isComplete = Boolean(b.commissionComplete);
+  const status = b.debtStatus;
+
+  return {
+    freeze:
+      canReset &&
+      status === JahezDebtStatus.Active &&
+      (outstanding > 0 || !isComplete),
+    transfer:
+      canReset &&
+      status === JahezDebtStatus.Active &&
+      isComplete,
+    clear:
+      canReset &&
+      status === JahezDebtStatus.Frozen &&
+      isComplete,
+    confirmPaid:
+      canCollect &&
+      status !== JahezDebtStatus.Active &&
+      isComplete &&
+      outstanding === 0,
+    collect:
+      canCollect &&
+      outstanding > 0,
+  };
 }
 
 export async function getJahezLedger(params?: {

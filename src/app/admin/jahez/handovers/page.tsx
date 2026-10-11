@@ -13,12 +13,21 @@ import {
   getJahezHandovers,
 } from "@/lib/jahez/api";
 import {
+  JahezDebtStatus,
   type CloseJahezHandoverRequest,
   type CreateJahezHandoverRequest,
   type JahezBalance,
   type JahezHandover,
   type LegacyAdoptionRequest,
 } from "@/lib/jahez/types";
+import { getDebtActionGates } from "@/lib/jahez/api";
+import { JahezDebtStatusBadge } from "@/components/jahez/JahezDebtStatusBadge";
+import { JahezPaymentStatusBadge } from "@/components/jahez/JahezPaymentStatusBadge";
+import { JahezFinancialCards } from "@/components/jahez/JahezFinancialCards";
+import { FreezeAccountModal } from "@/components/jahez/dialogs/FreezeAccountModal";
+import { TransferDebtModal } from "@/components/jahez/dialogs/TransferDebtModal";
+import { ClearAccountModal } from "@/components/jahez/dialogs/ClearAccountModal";
+import { ConfirmPaidModal } from "@/components/jahez/dialogs/ConfirmPaidModal";
 import { getPlatformAccounts, type AccountResponse } from "@/lib/platforms/api";
 import { listRiders } from "@/lib/workforce/api";
 import type { Rider } from "@/lib/workforce/types";
@@ -43,6 +52,10 @@ import {
   FileText,
   Copy,
   Check,
+  Lock,
+  ArrowRightLeft,
+  ShieldCheck,
+  CheckCircle2,
 } from "lucide-react";
 
 export default function JahezHandoversPage() {
@@ -105,6 +118,12 @@ export default function JahezHandoversPage() {
   const [inspectHandover, setInspectHandover] = useState<JahezHandover | null>(null);
   const [inspectBalance, setInspectBalance] = useState<JahezBalance | null>(null);
   const [inspectLoading, setInspectLoading] = useState(false);
+
+  // 5. Debt Action Modals
+  const [freezingHandover, setFreezingHandover] = useState<JahezHandover | null>(null);
+  const [transferringHandover, setTransferringHandover] = useState<JahezHandover | null>(null);
+  const [clearingHandover, setClearingHandover] = useState<JahezHandover | null>(null);
+  const [confirmPaidHandover, setConfirmPaidHandover] = useState<JahezHandover | null>(null);
 
   const BACKEND_MAX_PAGE_SIZE = 100;
 
@@ -666,15 +685,10 @@ export default function JahezHandoversPage() {
                       </td>
 
                       <td className="px-4 py-3">
-                        {isActive ? (
-                          <Badge tone="green">
-                            نشط بالتشغيل
-                          </Badge>
-                        ) : (
-                          <Badge tone="gray">
-                            منتهي الاستخدام
-                          </Badge>
-                        )}
+                        <JahezDebtStatusBadge
+                          status={h.debtStatus ?? (isActive ? JahezDebtStatus.Active : JahezDebtStatus.Closed)}
+                          locale={locale}
+                        />
                       </td>
 
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
@@ -703,27 +717,73 @@ export default function JahezHandoversPage() {
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <Button
                             variant="secondary"
                             onClick={() => setInspectDetailsHandover(h)}
-                            className="text-xs py-1 px-2.5 h-8 text-gray-700 border-gray-200 hover:bg-gray-50 flex items-center gap-1 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800"
+                            className="text-xs py-1 px-2 h-8 text-gray-700 border-gray-200 hover:bg-gray-50 flex items-center gap-1 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800"
                             title={isEn ? "Handover Details" : "تفاصيل التسليم"}
                           >
                             <FileText className="h-3.5 w-3.5" />
-                            {isEn ? "Details" : "التفاصيل"}
                           </Button>
 
                           <Button
                             variant="secondary"
                             onClick={() => handleOpenBalance(h)}
-                            className="text-xs py-1 px-2.5 h-8 text-blue-700 border-blue-200 hover:bg-blue-50 flex items-center gap-1"
+                            className="text-xs py-1 px-2 h-8 text-blue-700 border-blue-200 hover:bg-blue-50 flex items-center gap-1"
+                            title={isEn ? "Financial Balance" : "الرصيد المالي"}
                           >
                             <Eye className="h-3.5 w-3.5" />
                             {isEn ? "Balance" : "الرصيد"}
                           </Button>
 
-                          {isActive && can("jahez.handovers.delete") && (
+                          {/* Freeze Button */}
+                          {isActive && h.debtStatus !== JahezDebtStatus.Frozen && can("jahez.resets.approve") && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setFreezingHandover(h);
+                              }}
+                              className="text-xs py-1 px-2 h-8 text-rose-700 border-rose-200 hover:bg-rose-50 flex items-center gap-1 dark:text-rose-300 dark:border-rose-800"
+                              title={isEn ? "Freeze Jahez Account" : "تجميد الحساب"}
+                            >
+                              <Lock className="h-3.5 w-3.5" />
+                              {isEn ? "Freeze" : "تجميد"}
+                            </Button>
+                          )}
+
+                          {/* Transfer Debt Button */}
+                          {isActive && h.debtStatus !== JahezDebtStatus.Frozen && can("jahez.resets.approve") && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setTransferringHandover(h);
+                              }}
+                              className="text-xs py-1 px-2 h-8 text-purple-700 border-purple-200 hover:bg-purple-50 flex items-center gap-1 dark:text-purple-300 dark:border-purple-800"
+                              title={isEn ? "Transfer Debt to Rider" : "نقل المديونية"}
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                              {isEn ? "Transfer" : "نقل"}
+                            </Button>
+                          )}
+
+                          {/* Clear Account Button */}
+                          {h.debtStatus === JahezDebtStatus.Frozen && can("jahez.resets.approve") && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setClearingHandover(h);
+                              }}
+                              className="text-xs py-1 px-2 h-8 text-emerald-700 border-emerald-200 hover:bg-emerald-50 flex items-center gap-1 dark:text-emerald-300 dark:border-emerald-800"
+                              title={isEn ? "Clear Account with Jahez" : "تصفية الحساب"}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              {isEn ? "Clear" : "تصفية"}
+                            </Button>
+                          )}
+
+                          {/* Normal Close Button */}
+                          {isActive && h.debtStatus !== JahezDebtStatus.Frozen && can("jahez.handovers.delete") && (
                             <Button
                               variant="secondary"
                               onClick={() => {
@@ -731,7 +791,8 @@ export default function JahezHandoversPage() {
                                 setCloseEffectiveAt(new Date().toISOString().slice(0, 16));
                                 setCloseReason(isEn ? "Handover termination and account clearance" : "إنهاء تشغيل الحساب واستلام العهدة");
                               }}
-                              className="text-xs py-1 px-2.5 h-8 text-red-700 border-red-200 hover:bg-red-50 flex items-center gap-1"
+                              className="text-xs py-1 px-2 h-8 text-red-700 border-red-200 hover:bg-red-50 flex items-center gap-1"
+                              title={isEn ? "Normal Close" : "إنهاء"}
                             >
                               <XCircle className="h-3.5 w-3.5" />
                               {isEn ? "Close" : "إنهاء"}
@@ -1184,114 +1245,192 @@ export default function JahezHandoversPage() {
           setInspectHandover(null);
           setInspectBalance(null);
         }}
-        title={isEn ? "Handover Real-Time Financial Balance" : "كشف الرصيد المالي المباشر لحساب التسليم"}
+        title={isEn ? "Handover Financial Balance & Period State" : "كشف الرصيد المالي المباشر وحالة الفترة"}
+        maxWidth="max-w-4xl"
       >
         <div className="space-y-4">
           {inspectLoading ? (
             <div className="py-8 text-center text-gray-500">
               <RefreshCw className="h-6 w-6 animate-spin mx-auto text-emerald-600 mb-2" />
-              جارٍ استعلام الرصيد...
+              {isEn ? "Loading balance..." : "جارٍ استعلام الرصيد..."}
             </div>
           ) : inspectBalance ? (
-            <div className="space-y-3">
-              <div className="bg-gray-50 p-3 rounded-lg dark:bg-gray-800 text-xs flex justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800 text-xs">
                 <div>
-                  <span className="text-gray-400 block">رقم الحساب:</span>
-                  <span className="font-bold text-gray-900 dark:text-white">
+                  <span className="text-gray-400 block">{isEn ? "Account:" : "الحساب:"}</span>
+                  <span className="font-bold font-mono text-gray-900 dark:text-white">
                     {inspectBalance.account?.externalAccountId || inspectBalance.externalAccountId
                       ? `[${inspectBalance.account?.externalAccountId || inspectBalance.externalAccountId}]`
                       : inspectBalance.account?.code || "-"}
                   </span>
-                  {inspectBalance.account?.code && inspectBalance.account.code !== (inspectBalance.account.externalAccountId || inspectBalance.externalAccountId) && (
-                    <span className="text-xs text-emerald-600 block">
-                      {inspectBalance.account.code}
-                    </span>
-                  )}
                 </div>
                 <div>
-                  <span className="text-gray-400 block">المندوب:</span>
+                  <span className="text-gray-400 block">{isEn ? "Rider:" : "المندوب:"}</span>
                   <span className="font-bold text-gray-900 dark:text-white">
                     {getRiderDisplayName(inspectBalance) || "-"}
                   </span>
                 </div>
-                <div>
-                  <span className="text-gray-400 block">تاريخ الاحتساب:</span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">
-                    {inspectBalance.throughDate}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <JahezDebtStatusBadge status={inspectBalance.debtStatus} locale={locale} />
+                  <JahezPaymentStatusBadge
+                    status={inspectBalance.paymentStatus}
+                    debtStatus={inspectBalance.debtStatus}
+                    debtPaidAtUtc={inspectBalance.debtPaidAtUtc}
+                    locale={locale}
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="bg-white p-3 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-                  <span className="text-gray-500 block">رسوم الحساب المستحقة:</span>
-                  <span className="text-base font-bold text-blue-600 mt-1 block">
-                    {inspectBalance.fees.toLocaleString("ar-SA")} ر.س
-                  </span>
-                </div>
+              {/* Comprehensive Financial Cards */}
+              <JahezFinancialCards balance={inspectBalance} locale={locale} />
 
-                <div className="bg-white p-3 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-                  <span className="text-gray-500 block">مديونية جاهز من العمليات:</span>
-                  <span className="text-base font-bold text-amber-600 mt-1 block">
-                    {inspectBalance.platformDebt.toLocaleString("ar-SA")} ر.س
-                  </span>
-                </div>
+              {/* Action Buttons based on Gates */}
+              {(() => {
+                const gates = getDebtActionGates(inspectBalance, can);
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-2">
+                      {gates.freeze && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setFreezingHandover(inspectHandover);
+                          }}
+                          className="text-xs py-1 px-2.5 h-8 text-rose-700 border-rose-200 hover:bg-rose-50 flex items-center gap-1"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          {isEn ? "Freeze Account" : "تجميد الحساب"}
+                        </Button>
+                      )}
 
-                <div className="bg-white p-3 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-                  <span className="text-gray-500 block">العمولة المرحلة بالسجل:</span>
-                  <span className="text-base font-bold text-purple-600 mt-1 block">
-                    {inspectBalance.postedCommission.toLocaleString("ar-SA")} ر.س
-                  </span>
-                </div>
+                      {gates.transfer && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setTransferringHandover(inspectHandover);
+                          }}
+                          className="text-xs py-1 px-2.5 h-8 text-purple-700 border-purple-200 hover:bg-purple-50 flex items-center gap-1"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5" />
+                          {isEn ? "Transfer Debt" : "نقل المديونية"}
+                        </Button>
+                      )}
 
-                <div className="bg-white p-3 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-                  <span className="text-gray-500 block">العمولة غير المرحلة (تراكمية):</span>
-                  <span className="text-base font-bold text-purple-700 mt-1 block">
-                    {inspectBalance.unpostedCommission.toLocaleString("ar-SA")} ر.س
-                  </span>
-                </div>
-              </div>
+                      {gates.clear && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setClearingHandover(inspectHandover);
+                          }}
+                          className="text-xs py-1 px-2.5 h-8 text-emerald-700 border-emerald-200 hover:bg-emerald-50 flex items-center gap-1"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          {isEn ? "Clear Account" : "تصفية الحساب"}
+                        </Button>
+                      )}
 
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-center dark:bg-emerald-950/20 dark:border-emerald-800">
-                <span className="text-xs text-emerald-800 dark:text-emerald-300 font-medium block">
-                  إجمالي الذمة المالية المستحقة
-                </span>
-                <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-1 block">
-                  {inspectBalance.totalReceivable.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
-                </span>
-              </div>
+                      {gates.confirmPaid && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setConfirmPaidHandover(inspectHandover);
+                          }}
+                          className="text-xs py-1 px-2.5 h-8 text-teal-700 border-teal-200 hover:bg-teal-50 flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {isEn ? "Confirm Paid" : "تأكيد السداد"}
+                        </Button>
+                      )}
+                    </div>
 
-              <div className="text-xs text-gray-500 flex justify-between pt-1">
-                <span>الأيام منذ آخر تسوية: <strong>{inspectBalance.daysSinceSettlementPayment} يوم</strong></span>
-                <span>الحالة: {inspectBalance.isOverdue ? <strong className="text-red-600">متأخر بالسداد</strong> : <strong className="text-emerald-600">منتظم</strong>}</span>
-              </div>
-
-              {inspectBalance.problems.length > 0 && (
-                <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-xs text-amber-800">
-                  <span className="font-bold block mb-1">ملاحظات اكتمال العمولة:</span>
-                  {inspectBalance.problems.map((p, i) => (
-                    <div key={i}>• {p}</div>
-                  ))}
-                </div>
-              )}
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setInspectHandover(null);
+                        setInspectBalance(null);
+                      }}
+                      className="text-xs"
+                    >
+                      {isEn ? "Close Drawer" : "إغلاق"}
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
-            <p className="text-center text-gray-400">لا تتوفر بيانات للرصيد</p>
+            <p className="text-center text-gray-400">{isEn ? "No balance data available" : "لا تتوفر بيانات للرصيد"}</p>
           )}
-
-          <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setInspectHandover(null);
-                setInspectBalance(null);
-              }}
-            >
-              إغلاق
-            </Button>
-          </div>
         </div>
       </Modal>
+
+      {/* Freeze Account Modal */}
+      <FreezeAccountModal
+        isOpen={Boolean(freezingHandover)}
+        onClose={() => setFreezingHandover(null)}
+        handover={freezingHandover}
+        balance={inspectBalance && inspectBalance.handoverId === freezingHandover?.id ? inspectBalance : null}
+        locale={locale}
+        onSuccess={() => {
+          const h = freezingHandover;
+          setFreezingHandover(null);
+          loadHandoversList(page, pageSize);
+          if (h && inspectHandover?.id === h.id) {
+            handleOpenBalance(h);
+          }
+        }}
+      />
+
+      {/* Transfer Debt Modal */}
+      <TransferDebtModal
+        isOpen={Boolean(transferringHandover)}
+        onClose={() => setTransferringHandover(null)}
+        handover={transferringHandover}
+        balance={inspectBalance && inspectBalance.handoverId === transferringHandover?.id ? inspectBalance : null}
+        locale={locale}
+        onSuccess={() => {
+          const h = transferringHandover;
+          setTransferringHandover(null);
+          loadHandoversList(page, pageSize);
+          if (h && inspectHandover?.id === h.id) {
+            handleOpenBalance(h);
+          }
+        }}
+      />
+
+      {/* Clear Account Modal */}
+      <ClearAccountModal
+        isOpen={Boolean(clearingHandover)}
+        onClose={() => setClearingHandover(null)}
+        handover={clearingHandover}
+        balance={inspectBalance && inspectBalance.handoverId === clearingHandover?.id ? inspectBalance : null}
+        locale={locale}
+        onSuccess={() => {
+          const h = clearingHandover;
+          setClearingHandover(null);
+          loadHandoversList(page, pageSize);
+          if (h && inspectHandover?.id === h.id) {
+            handleOpenBalance(h);
+          }
+        }}
+      />
+
+      {/* Confirm Paid Modal */}
+      <ConfirmPaidModal
+        isOpen={Boolean(confirmPaidHandover)}
+        onClose={() => setConfirmPaidHandover(null)}
+        handover={confirmPaidHandover}
+        balance={inspectBalance && inspectBalance.handoverId === confirmPaidHandover?.id ? inspectBalance : null}
+        locale={locale}
+        onSuccess={() => {
+          const h = confirmPaidHandover;
+          setConfirmPaidHandover(null);
+          loadHandoversList(page, pageSize);
+          if (h && inspectHandover?.id === h.id) {
+            handleOpenBalance(h);
+          }
+        }}
+      />
 
       {/* Modal 5: Handover Operational Details */}
       <Modal

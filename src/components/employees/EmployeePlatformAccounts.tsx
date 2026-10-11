@@ -13,6 +13,7 @@ import {
 } from "@/lib/platforms/api";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { JahezRiderDebtSummaryCard } from "@/components/jahez/JahezRiderDebtSummaryCard";
 
 interface PlatformAccountDisplayItem {
   id: string;
@@ -272,6 +273,11 @@ export function EmployeePlatformAccounts({
           </button>
         </div>
       </div>
+
+      {/* Jahez Debt Summary Card if authorized */}
+      {can("jahez.read") && targetRiderId && (
+        <JahezRiderDebtSummaryCard riderId={targetRiderId} locale={locale} />
+      )}
 
       {loading ? (
         <div className="py-4 text-center text-xs text-[var(--muted)]">

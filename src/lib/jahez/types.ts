@@ -27,6 +27,20 @@ export enum JahezLedgerKind {
   Adjustment = 3,
   Transfer = 4,
   OpeningBalance = 5,
+  StatusChange = 6,
+}
+
+export enum JahezDebtStatus {
+  Active = 1,
+  Closed = 2,
+  TransferredToRider = 3,
+  Frozen = 4,
+  AccountCleared = 5,
+}
+
+export enum JahezPaymentStatus {
+  Outstanding = 1,
+  Paid = 2,
 }
 
 export enum JahezCashboxSection {
@@ -103,6 +117,11 @@ export interface JahezHandover extends JahezDisplayIdentity {
   lastSettlementPaymentAtUtc: string | null;
   isLegacy: boolean;
   debtTransferred: boolean;
+  debtStatus?: JahezDebtStatus;
+  frozenAtUtc?: string | null;
+  accountClearedAtUtc?: string | null;
+  debtPaidAtUtc?: string | null;
+  externalClearanceReference?: string | null;
 }
 
 export interface JahezBalance extends JahezDisplayIdentity {
@@ -123,6 +142,28 @@ export interface JahezBalance extends JahezDisplayIdentity {
   isOverdue: boolean;
   debtTransferred: boolean;
   latestTransactionAtUtc: string | null;
+  debtStatus: JahezDebtStatus;
+  paymentStatus: JahezPaymentStatus;
+  frozenAtUtc: string | null;
+  accountClearedAtUtc: string | null;
+  debtPaidAtUtc: string | null;
+  outstandingAmount: number;
+  accountReceivable: number;
+  isAccountFrozen: boolean;
+  isAccountReady: boolean;
+}
+
+export interface JahezRiderDebtSummary {
+  riderProfileId: string;
+  fees: number;
+  platformDebt: number;
+  postedCommission: number;
+  unpostedCommission: number;
+  totalReceivable: number;
+  outstandingAmount: number;
+  paymentStatus: JahezPaymentStatus;
+  frozenAccountCount: number;
+  trackedHandoversCount?: number;
 }
 
 export interface JahezFee extends JahezAuditableMetadata, JahezDisplayIdentity {
@@ -215,6 +256,20 @@ export interface JahezLedgerEntry extends JahezHistoryMetadata, JahezDisplayIden
   fromDate: string | null;
   throughDate: string | null;
   calculationJson: string | null;
+}
+
+export interface JahezLedgerStatusChangeDetails {
+  Action?: string;
+  action?: string;
+  FromStatus?: JahezDebtStatus | number;
+  fromStatus?: JahezDebtStatus | number;
+  ToStatus?: JahezDebtStatus | number;
+  toStatus?: JahezDebtStatus | number;
+  EffectiveAtUtc?: string | null;
+  effectiveAtUtc?: string | null;
+  ExternalClearanceReference?: string | null;
+  externalClearanceReference?: string | null;
+  [key: string]: unknown;
 }
 
 export interface JahezImportBatch extends JahezAuditableMetadata {
@@ -448,3 +503,24 @@ export interface CashboxDecisionRequest {
   approve: boolean;
   reason: string;
 }
+
+export interface FreezeHandoverRequest {
+  effectiveAtUtc: string;
+  reason: string;
+}
+
+export interface TransferDebtRequest {
+  effectiveAtUtc: string;
+  reason: string;
+  externalClearanceReference: string;
+}
+
+export interface ClearAccountRequest {
+  externalClearanceReference: string;
+  reason: string;
+}
+
+export interface ConfirmPaidRequest {
+  reason: string;
+}
+

@@ -468,6 +468,30 @@ export default function PlatformAccountsPage() {
   };
 
   const handleOpenAssign = (acc: AccountResponse) => {
+    const isJahez =
+      acc.platformCode === "JAHEZ" ||
+      acc.platformNameAr?.includes("جاهز") ||
+      acc.platformNameEn?.toLowerCase().includes("jahez");
+
+    if (isJahez && acc.status === "Suspended") {
+      toast.error(
+        "تنبيه",
+        isEn
+          ? "This Jahez account is suspended/frozen. Assignment is blocked until clearance or paid confirmation."
+          : "الحساب مجمد ومحجوز للمندوب؛ يلزم تصفية الحساب أو تأكيد السداد قبل إسناد جديد.",
+      );
+      return;
+    }
+
+    if (isJahez) {
+      toast.warning(
+        "توجيه",
+        isEn
+          ? "Jahez accounts require financial handovers. Please use the Jahez Handovers screen."
+          : "حسابات جاهز تتطلب دورة تسليم مالية؛ يرجى استخدام شاشة تسليم حسابات جاهز لإسناد الحساب.",
+      );
+    }
+
     setAssigningAccount(acc);
     setAssignFormData({
       actualRiderProfileId: "",
@@ -1096,7 +1120,17 @@ export default function PlatformAccountsPage() {
                       )}
                     </td>
 
-                    <td className="px-6 py-4">{renderStatusBadge(acc.status)}</td>
+                    <td className="px-6 py-4">
+                      {renderStatusBadge(acc.status)}
+                      {(acc.platformCode === "JAHEZ" || acc.platformNameAr?.includes("جاهز") || acc.platformNameEn?.toLowerCase().includes("jahez")) &&
+                        acc.status === "Suspended" && (
+                          <span className="block text-[10px] text-rose-600 dark:text-rose-400 font-medium mt-1 leading-tight max-w-[180px]">
+                            {isEn
+                              ? "Frozen & reserved for rider; requires clearance or paid confirmation."
+                              : "الحساب مجمد ومحجوز للمندوب؛ يلزم تصفية الحساب أو تأكيد السداد قبل إسناد جديد."}
+                          </span>
+                        )}
+                    </td>
 
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-1">
