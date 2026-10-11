@@ -221,14 +221,24 @@ export function UserManagementPanel({ user, onChanged }: Props) {
         value: user.employee.id,
         label: `${locale === "en" && user.employee.fullNameEn ? user.employee.fullNameEn : user.employee.fullNameAr}`,
         sublabel: user.employee.employeeNumber ? `رقم: ${user.employee.employeeNumber}` : "",
+        keywords: `${user.employee.fullNameAr} ${user.employee.fullNameEn || ""} ${user.employee.employeeNumber || ""}`,
       });
     }
     opts.push(
-      ...employees.map((emp) => ({
-        value: emp.id,
-        label: `${locale === "en" && emp.fullNameEn ? emp.fullNameEn : emp.fullNameAr}`,
-        sublabel: emp.employeeNumber ? `رقم: ${emp.employeeNumber}` : emp.iqamaNo ? `هوية: ${emp.iqamaNo}` : emp.primaryPhone || "",
-      }))
+      ...employees.map((emp) => {
+        const subparts = [
+          emp.employeeNumber ? `${locale === "en" ? "Emp #" : "رقم"}: ${emp.employeeNumber}` : null,
+          emp.iqamaNo ? `${locale === "en" ? "ID" : "هوية"}: ${emp.iqamaNo}` : null,
+          emp.primaryPhone || null,
+        ].filter(Boolean);
+
+        return {
+          value: emp.id,
+          label: `${locale === "en" && emp.fullNameEn ? emp.fullNameEn : emp.fullNameAr}`,
+          sublabel: subparts.join(" · "),
+          keywords: `${emp.fullNameAr || ""} ${emp.fullNameEn || ""} ${emp.iqamaNo || ""} ${emp.employeeNumber || ""} ${emp.primaryPhone || ""}`,
+        };
+      })
     );
     return opts;
   }, [employees, user.employee, locale]);
