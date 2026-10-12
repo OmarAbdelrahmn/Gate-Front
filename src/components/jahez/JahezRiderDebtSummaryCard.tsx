@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { getJahezRiderDebtSummary } from "@/lib/jahez/api";
+import { getJahezRiderAllPeriods, getJahezRiderDebtSummary } from "@/lib/jahez/api";
 import type { JahezRiderDebtSummary } from "@/lib/jahez/types";
 import { JahezPaymentStatusBadge } from "./JahezPaymentStatusBadge";
 import {
@@ -43,8 +43,9 @@ export function JahezRiderDebtSummaryCard({
     setErrorMessage(null);
 
     try {
-      const res = await getJahezRiderDebtSummary(riderId);
-      setSummary(res);
+      const today = new Date().toISOString().split("T")[0];
+      const res = await getJahezRiderAllPeriods(riderId, today);
+      setSummary(res.summary);
     } catch (err: unknown) {
       const status = (err as { status?: number })?.status ?? 500;
       const msg = err instanceof Error ? err.message : "تعذر استعلام ملخص مديونية المندوب";
@@ -237,6 +238,11 @@ export function JahezRiderDebtSummaryCard({
               <span className="text-[11px] text-gray-500 block">{isEn ? "Commission" : "إجمالي العمولة"}</span>
               <span className="font-bold text-gray-900 dark:text-white font-mono text-sm block mt-0.5">
                 {formatSAR(commTotal)}
+              </span>
+              <span className="text-[10px] text-gray-400 block mt-0.5">
+                {isEn
+                  ? `Posted: ${formatSAR(summary.postedCommission)} | Unposted: ${formatSAR(summary.unpostedCommission)}`
+                  : `مرحّلة: ${formatSAR(summary.postedCommission)} | غير مرحّلة: ${formatSAR(summary.unpostedCommission)}`}
               </span>
             </div>
           </div>

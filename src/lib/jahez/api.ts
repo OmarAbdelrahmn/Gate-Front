@@ -1,7 +1,7 @@
 // src/lib/jahez/api.ts
 export * from "./constants";
 import { authDownload, authFetch, type CustomRequestInit } from "../auth/api";
-import { JahezDebtStatus } from "./constants";
+import { JahezDebtStatus, JahezPaymentStatus } from "./constants";
 import type {
   AccountantConfirmRequest,
   ApprovalCancelRequest,
@@ -235,6 +235,167 @@ export async function getJahezRiderDebtSummary(riderId: string): Promise<JahezRi
   return authFetch<JahezRiderDebtSummary>(
     `/api/jahez/riders/${encodeURIComponent(riderId)}/debt-summary`,
   );
+}
+
+export interface JahezRiderPeriodDetail {
+  handover: JahezHandover;
+  balance: JahezBalance;
+}
+
+export interface JahezRiderFullDebtData {
+  summary: JahezRiderDebtSummary | null;
+  periods: JahezRiderPeriodDetail[];
+}
+
+export async function getJahezRiderAllPeriods(
+  riderId: string,
+  throughDate: string,
+): Promise<JahezRiderFullDebtData> {
+  // 1. Fetch rider debt summary
+  const summaryPromise = getJahezRiderDebtSummary(riderId).catch(() => null);
+
+  // 2. Fetch all handovers for this rider (checking both riderId and riderProfileId)
+  const handoversPromise = getAllJahezHandovers({
+    riderId,
+    riderProfileId: riderId,
+  } as any).catch(() => [] as JahezHandover[]);
+
+  // 3. Fetch all debts across all pages for this rider
+  const debtsPromise = (async () => {
+    const allDebts: JahezBalance[] = [];
+    let p = 1;
+    while (p <= 20) {
+      const res = await getJahezDebts({
+        riderId,
+        riderProfileId: riderId,
+        page: p,
+        pageSize: 50,
+      } as any).catch(() => null);
+      if (!res || !res.items || res.items.length === 0) break;
+      allDebts.push(...res.items);
+      if (typeof res.totalCount === "number" && allDebts.length >= res.totalCount) break;
+      if (res.items.length < (res.pageSize || 50)) break;
+      p++;
+    }
+    return allDebts;
+  })();
+
+  const [summary, handovers, debts] = await Promise.all([
+    summaryPromise,
+    handoversPromise,
+    debtsPromise,
+  ]);
+
+  const handoverMap = new Map<string, JahezHandover>();
+  for (const h of handovers) {
+    handoverMap.set(h.id, h);
+  }
+
+  for (const d of debts) {
+    if (!handoverMap.has(d.handoverId)) {
+      handoverMap.set(d.handoverId, {
+        id: d.handoverId,
+        accountId: d.accountId,
+        externalAccountId: d.externalAccountId,
+        riderProfileId: d.riderProfileId,
+        assignmentId: "",
+        startedAtUtc: d.latestTransactionAtUtc || new Date().toISOString(),
+        endedAtUtc: null,
+        commissionStartsOn: d.throughDate || new Date().toISOString().split("T")[0],
+        commissionPostedThrough: null,
+        lastSettlementPaymentAtUtc: null,
+        isLegacy: false,
+        debtTransferred: d.debtTransferred,
+        debtStatus: d.debtStatus,
+        frozenAtUtc: d.frozenAtUtc,
+        accountClearedAtUtc: d.accountClearedAtUtc,
+        debtPaidAtUtc: d.debtPaidAtUtc,
+        externalClearanceReference: null,
+        account: d.account,
+        actualRiderNameAr: d.actualRiderNameAr,
+        actualRiderNameEn: d.actualRiderNameEn,
+        ownerRiderNameAr: d.ownerRiderNameAr,
+        ownerRiderNameEn: d.ownerRiderNameEn,
+      });
+    }
+  }
+
+  const allHandoversList = Array.from(handoverMap.values());
+  const balancePromises = allHandoversList.map(async (h) => {
+    try {
+      const bal = await getJahezHandoverBalance(h.id, throughDate);
+      return { handover: h, balance: bal };
+    } catch {
+      const existingDebt = debts.find((d) => d.handoverId === h.id);
+      if (existingDebt) {
+        return { handover: h, balance: existingDebt };
+      }
+      return null;
+    }
+  });
+
+  const periodResults = (await Promise.all(balancePromises)).filter(
+    (item): item is JahezRiderPeriodDetail => item !== null,
+  );
+
+  periodResults.sort((a, b) => {
+    const dateA = a.handover.commissionStartsOn || a.handover.startedAtUtc || "";
+    const dateB = b.handover.commissionStartsOn || b.handover.startedAtUtc || "";
+    return dateA.localeCompare(dateB);
+  });
+
+  // Calculate accurate aggregations across all real-time periods
+  const totalPostedCommission = Number(
+    periodResults.reduce((acc, p) => acc + (p.balance.postedCommission || 0), 0).toFixed(2)
+  );
+  const totalUnpostedCommission = Number(
+    periodResults.reduce((acc, p) => acc + (p.balance.unpostedCommission || 0), 0).toFixed(2)
+  );
+  const totalCommission = Number((totalPostedCommission + totalUnpostedCommission).toFixed(2));
+  const totalPlatformDebt = Number(
+    periodResults.reduce((acc, p) => acc + (p.balance.platformDebt || 0), 0).toFixed(2)
+  );
+  const totalFees = Number(
+    periodResults.reduce((acc, p) => acc + (p.balance.fees || 0), 0).toFixed(2)
+  );
+  const totalReceivable = Number(
+    periodResults.reduce((acc, p) => acc + (p.balance.totalReceivable || 0), 0).toFixed(2)
+  );
+
+  const calculatedOutstanding = Number((
+    Math.max(0, totalPlatformDebt) +
+    Math.max(0, totalFees) +
+    Math.max(0, totalCommission)
+  ).toFixed(2));
+
+  // Enrich summary so that commission or debts are never zero when period data exists
+  const finalSummary: JahezRiderDebtSummary = summary
+    ? {
+        ...summary,
+        postedCommission: summary.postedCommission || totalPostedCommission,
+        unpostedCommission: summary.unpostedCommission || totalUnpostedCommission,
+        platformDebt: summary.platformDebt || totalPlatformDebt,
+        fees: summary.fees || totalFees,
+        totalReceivable: summary.totalReceivable || totalReceivable,
+        outstandingAmount: summary.outstandingAmount || calculatedOutstanding,
+      }
+    : {
+        riderProfileId: riderId,
+        fees: totalFees,
+        platformDebt: totalPlatformDebt,
+        postedCommission: totalPostedCommission,
+        unpostedCommission: totalUnpostedCommission,
+        totalReceivable,
+        outstandingAmount: calculatedOutstanding,
+        paymentStatus: calculatedOutstanding > 0 ? JahezPaymentStatus.Outstanding : JahezPaymentStatus.Paid,
+        frozenAccountCount: periodResults.filter((p) => p.balance.isAccountFrozen).length,
+        trackedHandoversCount: periodResults.length,
+      };
+
+  return {
+    summary: finalSummary,
+    periods: periodResults,
+  };
 }
 
 export interface ThroughDateValidation {
