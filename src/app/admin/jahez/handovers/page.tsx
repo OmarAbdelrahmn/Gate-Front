@@ -45,6 +45,7 @@ import {
   Search,
   FileSpreadsheet,
   XCircle,
+  AlertTriangle,
   Eye,
   Info,
   ChevronLeft,
@@ -395,6 +396,14 @@ export default function JahezHandoversPage() {
       toast.error("تنبيه", "يرجى إدخال معرف التعيين السابق (Assignment ID)");
       return;
     }
+    if (Number(legacyFees) < 0) {
+      toast.error("خطأ", isEn ? "Opening fees must be non-negative" : "رسوم الحساب الافتتاحية يجب ألا تكون سالبة (صفر أو أكبر)");
+      return;
+    }
+    if (Number(legacyCommission) < 0) {
+      toast.error("خطأ", isEn ? "Opening commission must be non-negative" : "العمولة الافتتاحية يجب ألا تكون سالبة (صفر أو أكبر)");
+      return;
+    }
     if (!legacyReason.trim()) {
       toast.error("تنبيه", "يرجى إدخال سبب الاعتماد المالي السابق");
       return;
@@ -406,17 +415,19 @@ export default function JahezHandoversPage() {
         assignmentId: legacyAssignmentId.trim(),
         financialStartOn: legacyStartOn,
         openingDebt: Number(legacyDebt) || 0,
-        openingFees: Number(legacyFees) || 0,
-        openingCommission: Number(legacyCommission) || 0,
+        openingFees: Math.max(0, Number(legacyFees) || 0),
+        openingCommission: Math.max(0, Number(legacyCommission) || 0),
         reason: legacyReason.trim(),
       };
 
       await createLegacyAdoption(payload);
+      toast.success("تم بنجاح", isEn ? "Legacy assignment initialized successfully" : "تمت تهيئة واعتماد الإسناد القديم بنجاح");
       setIsLegacyOpen(false);
       loadHandoversList(1, pageSize);
+      loadCatalogs();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "فشل اعتماد الحساب السابق";
-      toast.error("خطأ", msg);
+      const msg = err instanceof Error ? err.message : "تم رفض التهيئة؛ قد يكون الإسناد مهيأ مسبقاً أو غير صالح للاعتماد المالي";
+      toast.error("خطأ في التهيئة", msg);
     } finally {
       setIsSubmittingLegacy(false);
     }
@@ -1013,33 +1024,43 @@ export default function JahezHandoversPage() {
         onClose={() => setIsLegacyOpen(false)}
         title={
           isEn
-            ? "Old Rider Assign"
-            : "تعيين مندوب قديم (حساب سابق)"
+            ? "Initialize Legacy Assignment (Legacy Adoption)"
+            : "تهيئة البيانات القديمة (Legacy Adoption)"
         }
       >
         <form onSubmit={handleSubmitLegacy} className="space-y-4">
+          {/* Explanation Box */}
           <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 space-y-2">
             <div className="font-semibold text-sm flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
               <Info className="h-4 w-4 shrink-0" />
-              <span>ما فائدة هذا الإجراء ومتى يُستخدم؟</span>
+              <span>{isEn ? "Legacy Adoption Rules & Scope" : "ضوابط ونطاق تهيئة الإسناد القديم"}</span>
             </div>
             <p className="leading-relaxed">
-              هذه الشاشة مخصصة <strong>فقط</strong> للمناديب الذين كانوا يستلمون حسابات جاهز ويعملون عليها <strong>قبل تدشين النظام المالي الحالي</strong>.
+              هذه الشاشة مخصصة <strong>حصراً لإسناد قديم ما زال مفتوحاً</strong> ولم تتم تهيئته مالياً من قبل في هذا النظام.
             </p>
-            <div className="border-t border-amber-200/60 dark:border-amber-900/40 pt-2 space-y-1.5 leading-relaxed">
-              <div>
-                • <strong>لماذا لا نستخدم "تسليم حساب جديد"؟</strong> لأن التسليم الجديد يفرض رسوم فتح حساب جديدة (200 ر.س) ويعتبر المندوب مستلماً جديداً، بينما هذا الخيار يعتمد تعيينه القائم دون تكرار الرسوم.
-              </div>
-              <div>
-                • <strong>ما الذي يفعله هذا الإجراء؟</strong> يربط تعيين المندوب القائم بسجلات جاهز المالية، ويثبت أرصدته الافتتاحية السابقة (المديونيات أو العمولات القديمة)، لتبدأ دورة الحسابات والتسويات الآلية من التاريخ المحدد.
-              </div>
+            <ul className="list-disc list-inside space-y-1 text-[11px] leading-relaxed pt-1">
+              <li>الأرصدة الافتتاحية تمثل <strong>المتبقي القديم</strong> بعد التحصيلات السابقة.</li>
+              <li>العمولة الجديدة تبدأ من تاريخ البداية المالية (<strong>financialStartOn</strong>) شاملاً ذلك اليوم بالكامل.</li>
+              <li>العملية <strong>تهيئة محاسبية فقط</strong>؛ لا تسجل قبضاً نقدياً في الصندوق ولا تفرض رسوم استلام جديدة تلقائياً.</li>
+              <li>مديونية جاهز الافتتاحية تسمح بقيمة <strong>موجبة</strong> (مدين) أو <strong>سالبة</strong> (دائن)، بينما الرسوم والعمولة الافتتاحيتان <strong>غير سالبتين</strong> (≥ 0).</li>
+            </ul>
+          </div>
+
+          {/* Strict Warning Alert Against Duplication */}
+          <div className="rounded-xl border border-red-300 bg-red-50/90 p-3.5 text-xs text-red-900 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200 space-y-1.5">
+            <div className="font-bold flex items-center gap-1.5 text-red-700 dark:text-red-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+              <span>{isEn ? "Strict Warning: Do Not Duplicate Balances or Imports" : "تحذير قطعي: منع تكرار الأرصدة واستيراد الحركات المكررة"}</span>
             </div>
+            <p className="text-[11px] leading-relaxed text-red-800 dark:text-red-200">
+              يُمنع إعادة إدخال رصيد مسجل بالفعل في النظام، ويُحذر بشدة من استيراد ملفات حركات أو طلبات سابقة سبق تضمين قيمتها في الأرصدة الافتتاحية؛ <strong>لأن النظام لا يكتشف هذا التكرار تلقائيًا</strong> وسيترتب عليه تكرار المديونية أو العمولات.
+            </p>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                {isEn ? "Select Assigned Account & Rider" : "اختر الحساب والمندوب المسند له حالياً"}
+                {isEn ? "Assignment ID (assignmentId)" : "معرف الإسناد القديم (assignmentId)"}
               </label>
               <button
                 type="button"
@@ -1047,7 +1068,7 @@ export default function JahezHandoversPage() {
                 className="text-[11px] text-blue-600 hover:underline dark:text-blue-400"
               >
                 {isManualAssignmentId
-                  ? (isEn ? "Select from list" : "الرجوع للاختيار من القائمة")
+                  ? (isEn ? "Select from uninitialized assignments" : "الرجوع لاختيار إسناد غير مهيأ")
                   : (isEn ? "Enter UUID manually" : "أو إدخال المعرف يدوياً")}
               </button>
             </div>
@@ -1073,21 +1094,21 @@ export default function JahezHandoversPage() {
                 options={legacyAssignmentOptions}
                 placeholder={
                   legacyAssignmentOptions.length === 0
-                    ? (isEn ? "No active assigned Jahez accounts found" : "لا توجد حسابات جاهز مسندة حالياً")
-                    : (isEn ? "Select assigned account & rider..." : "اختر الحساب والمندوب من القائمة...")
+                    ? (isEn ? "No uninitialized assignments found" : "لا توجد إسنادات قديمة غير مهيأة")
+                    : (isEn ? "Select uninitialized open assignment..." : "اختر الإسناد المفتوح غير المهيأ...")
                 }
               />
             )}
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
               {isEn
-                ? "Selects the existing active assignment in the system to link it to Jahez financial tracking."
-                : "يعرض حسابات جاهز المسندة لمناديب حالياً لربطها بدورة المطابقة المالية دون الحاجة لنسخ معرفات UUID."}
+                ? "Specifies the open historical assignment to initialize financially."
+                : "تحديد الإسناد القديم المفتوح للبدء في ربطه بالدورة المالية."}
             </p>
           </div>
 
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              {isEn ? "Financial Start On" : "تاريخ البداية المالية"}
+              {isEn ? "Financial Start On (financialStartOn)" : "تاريخ البداية المالية (financialStartOn)"}
             </label>
             <Input
               type="date"
@@ -1097,19 +1118,19 @@ export default function JahezHandoversPage() {
             />
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
               {isEn
-                ? "The date from which daily commission and order calculations begin in this module."
-                : "تاريخ بدء احتساب العمليات والعمولات اليومية في هذا النظام (افتراضياً تاريخ استلام المندوب للحساب)."}
+                ? "New daily commission calculation starts from this date, inclusive of that entire day."
+                : "احتساب العمولات والحركات الجديدة يبدأ من هذا التاريخ شاملاً ذلك اليوم بالكامل."}
             </p>
           </div>
 
           <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 space-y-3 bg-gray-50/50 dark:bg-gray-900/30">
             <div className="text-xs font-semibold text-gray-900 dark:text-white">
-              {isEn ? "Opening Balances from Previous Records" : "الأرصدة الافتتاحية المرحلة من السجلات السابقة"}
+              {isEn ? "Opening Balances (Remaining after previous collections)" : "الأرصدة الافتتاحية (المتبقي القديم بعد التحصيلات السابقة)"}
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-[11px] font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  مديونية جاهز (ر.س)
+                  مديونية جاهز (openingDebt)
                 </label>
                 <Input
                   type="number"
@@ -1117,38 +1138,40 @@ export default function JahezHandoversPage() {
                   value={legacyDebt}
                   onChange={(e) => setLegacyDebt(Number(e.target.value))}
                 />
-                <span className="text-[10px] text-gray-400 block mt-0.5">ديون سابقة مستحقة</span>
+                <span className="text-[10px] text-gray-400 block mt-0.5">موجب (مدين) أو سالب (دائن)</span>
               </div>
               <div>
                 <label className="text-[11px] font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  رسوم الحساب (ر.س)
+                  رسوم الحساب (openingFees)
                 </label>
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={legacyFees}
-                  onChange={(e) => setLegacyFees(Number(e.target.value))}
+                  onChange={(e) => setLegacyFees(Math.max(0, Number(e.target.value)))}
                 />
-                <span className="text-[10px] text-gray-400 block mt-0.5">رسوم فتح غير مسددة</span>
+                <span className="text-[10px] text-gray-400 block mt-0.5">غير سالبة (≥ 0)</span>
               </div>
               <div>
                 <label className="text-[11px] font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  عمولة المندوب (ر.س)
+                  العمولة (openingCommission)
                 </label>
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={legacyCommission}
-                  onChange={(e) => setLegacyCommission(Number(e.target.value))}
+                  onChange={(e) => setLegacyCommission(Math.max(0, Number(e.target.value)))}
                 />
-                <span className="text-[10px] text-gray-400 block mt-0.5">عمولات سابقة لصالحه</span>
+                <span className="text-[10px] text-gray-400 block mt-0.5">غير سالبة (≥ 0)</span>
               </div>
             </div>
           </div>
 
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              {isEn ? "Reason & Notes" : "السبب والمبرر للترحيل"}
+              {isEn ? "Reason (reason)" : "السبب والمبرر المالي (reason)"}
             </label>
             <Input
               type="text"
@@ -1175,8 +1198,8 @@ export default function JahezHandoversPage() {
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               {isSubmittingLegacy
-                ? (isEn ? "Assigning..." : "جارٍ الحفظ...")
-                : (isEn ? "Assign Old Rider" : "تأكيد تعيين المندوب القديم")}
+                ? (isEn ? "Initializing..." : "جارٍ التهيئة...")
+                : (isEn ? "Initialize Legacy Assignment" : "تأكيد تهيئة الإسناد القديم")}
             </Button>
           </div>
         </form>

@@ -17,6 +17,7 @@ interface ConfirmPaidModalProps {
   balance: JahezBalance | null;
   onSuccess?: (updatedBalance: JahezBalance) => void;
   locale?: "ar" | "en";
+  wasPrecededByCollection?: boolean;
 }
 
 export function ConfirmPaidModal({
@@ -26,6 +27,7 @@ export function ConfirmPaidModal({
   balance,
   onSuccess,
   locale = "ar",
+  wasPrecededByCollection = false,
 }: ConfirmPaidModalProps) {
   const isEn = locale === "en";
 
@@ -53,18 +55,29 @@ export function ConfirmPaidModal({
   const platformDebt = balance?.platformDebt ?? 0;
   const commission = Number(((balance?.postedCommission ?? 0) + (balance?.unpostedCommission ?? 0)).toFixed(2));
 
-  const hasPositiveDebt = outstanding > 0 || fees > 0 || platformDebt > 0 || commission > 0;
+  const isActive = rawDebtStatus === JahezDebtStatus.Active;
+  const hasOutstandingToCollect = outstanding > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetId) return;
 
-    if (hasPositiveDebt) {
+    if (isActive) {
       toast.error(
         "خطأ",
         isEn
-          ? `Cannot confirm paid while outstanding balance exists (${outstanding} SAR). Settle all positive buckets first.`
-          : `لا يمكن تأكيد السداد ويوجد رصيد مستحق (${outstanding} ر.س). يجب تحصيل وسداد كافة السلات أولاً.`,
+          ? "Confirm Paid is not available for active accounts. Active accounts continue calculating commission after settling current dues."
+          : "لا يمكن تأكيد السداد لحساب نشط (Active = 1)؛ الحساب النشط يستمر في احتساب العمولة بعد سداد مستحقاته الحالية.",
+      );
+      return;
+    }
+
+    if (hasOutstandingToCollect) {
+      toast.error(
+        "خطأ",
+        isEn
+          ? `Cannot confirm paid while collectible outstanding exists (${outstanding} SAR). Collect all receivables first.`
+          : `لا يمكن تأكيد السداد وتوجد مبالغ مستحقة للتحصيل (${outstanding} ر.س). يجب تحصيل المستحقات أولاً.`,
       );
       return;
     }
@@ -107,7 +120,7 @@ export function ConfirmPaidModal({
         isEn
           ? "Full payment confirmed and recorded in rider history successfully"
           : isFrozen
-          ? "تم تأكيد السداد وإلغاء تجميد الفترة ليصبح الحساب متاحًا بنجاح"
+          ? "تم تسجيل تأكيد السداد وتحرير الحساب المجمد ليصبح متاحًا بنجاح"
           : "تم تسجيل تأكيد اكتمال السداد في السجل المالي للمندوب بنجاح",
       );
 
@@ -115,8 +128,17 @@ export function ConfirmPaidModal({
       onSuccess?.(res);
       onClose();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "تعذر تأكيد اكتمال السداد";
-      toast.error("خطأ في العملية", msg);
+      if (wasPrecededByCollection) {
+        toast.error(
+          "تنبيه",
+          isEn
+            ? "Collection recorded; confirm paid has not completed yet."
+            : "تم تسجيل التحصيل؛ لم يكتمل تأكيد السداد بعد.",
+        );
+      } else {
+        const msg = err instanceof Error ? err.message : "تعذر تأكيد اكتمال السداد";
+        toast.error("خطأ في العملية", msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -130,6 +152,22 @@ export function ConfirmPaidModal({
       maxWidth="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {wasPrecededByCollection && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-xs text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200 flex items-start gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <span className="font-bold block">
+                {isEn ? "Collection Recorded Successfully" : "تم تسجيل التحصيل بنجاح"}
+              </span>
+              <p className="text-[11px] mt-0.5">
+                {isEn
+                  ? "The collection is recorded on the server. You can now complete the paid confirmation step separately. If this step fails, retry confirmation only without repeating the collection."
+                  : "تم تسجيل التحصيل في الخادم بنجاح. يمكنك الآن إتمام خطوة تأكيد السداد كإجراء منفصل. في حال تعثر هذا الإجراء، أعد محاولة التأكيد فقط دون إعادة إرسال التحصيل."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Banner based on Frozen vs Released */}
         {isFrozen ? (
           <div className="rounded-xl border border-teal-200 bg-teal-50/90 p-4 dark:border-teal-900/60 dark:bg-teal-950/20 text-sm text-teal-900 dark:text-teal-200 space-y-1">
@@ -138,13 +176,31 @@ export function ConfirmPaidModal({
               <div className="space-y-1">
                 <span className="font-bold block">
                   {isEn
-                    ? "All liabilities are cleared. Frozen period will be released and account becomes available."
-                    : "تم تسجيل جميع المستحقات بالكامل. سيُغلق تجميد هذه الفترة ويصبح الحساب متاحًا للإسناد."}
+                    ? "Confirming payment records confirmation and releases the frozen account."
+                    : "تأكيد السداد يسجل التأكيد ويحرر الحساب المجمد ليصبح متاحًا للإسناد؛ ولا يسجل قبضًا جديدًا."}
                 </span>
                 <p className="text-xs text-teal-800/90 dark:text-teal-300/90 leading-relaxed">
                   {isEn
-                    ? "Confirming payment releases the operational account hold while keeping the rider's financial record."
-                    : "يؤدي تأكيد السداد إلى رفع حجز الحساب وتوثيق براءة ذمة المندوب المالية لهذه الفترة."}
+                    ? "Does not create a new cash collection. It releases the frozen account while documenting rider clearance."
+                    : "العملية توثق براءة ذمة المندوب وترفع التجميد عن الحساب دون إدخال مبالغ نقدية إلى الصندوق."}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : isActive ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 dark:border-amber-900/60 dark:bg-amber-950/20 text-sm text-amber-900 dark:text-amber-200 space-y-1">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <span className="font-bold block">
+                  {isEn
+                    ? "Account is Active: Confirm Paid is not applicable."
+                    : "الحساب نشط (Active = 1): لا ينطبق إجراء تأكيد السداد."}
+                </span>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+                  {isEn
+                    ? "Active accounts continue calculating commission even after settling current obligations."
+                    : "الحساب النشط يستمر في احتساب العمولة اليومية بعد سداد مستحقاته الحالية، ويقتصر تأكيد السداد على الحسابات غير النشطة."}
                 </p>
               </div>
             </div>
@@ -157,29 +213,29 @@ export function ConfirmPaidModal({
                 <span className="font-bold block">
                   {isEn
                     ? "Paid confirmation will be recorded in the rider's financial history."
-                    : "سيُسجل تأكيد سداد هذه الفترة في سجل المندوب المالي."}
+                    : "سيُسجل تأكيد سداد هذه الفترة في سجل المندوب المالي (توثيق حالة دون قبض جديد)."}
                 </span>
                 <p className="text-xs text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
                   {isEn
-                    ? "Creates a status event verifying zero outstanding debt without affecting current account assignments."
-                    : "يُنشئ قيد حالة لتأكيد خلو الطرف دون التأثير على إسناد الحساب الحالي في حال استخدامه من مندوب آخر."}
+                    ? "Creates a status event verifying zero collectible balance. Does not deposit cash in cashbox."
+                    : "يُنشئ قيد حالة لتأكيد خلو الطرف عند عدم وجود مبالغ مستحقة للتحصيل، دون التأثير على الصندوق."}
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {hasPositiveDebt && (
+        {hasOutstandingToCollect && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200 flex items-start gap-2.5">
             <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
             <div>
               <span className="font-bold block">
-                {isEn ? "Action Blocked: Outstanding balance is greater than zero" : "لا يمكن التأكيد: يوجد رصيد مستحق أكبر من صفر"}
+                {isEn ? "Action Blocked: Outstanding balance to collect exists" : "لا يمكن التأكيد: توجد مبالغ مستحقة للتحصيل"}
               </span>
               <p className="text-[11px] mt-0.5 text-red-700 dark:text-red-300">
                 {isEn
-                  ? `Outstanding amount is ${outstanding} SAR. All positive buckets must be fully settled first.`
-                  : `المبلغ المطلوب هو ${outstanding} ر.س. يجب تسوية كافة المستحقات الإيجابية قبل تأكيد السداد.`}
+                  ? `Outstanding amount is ${outstanding} SAR. All collectible obligations must be settled first.`
+                  : `المبلغ المطلوب تحصيله هو ${outstanding} ر.س. يجب تحصيل وسداد كافة المستحقات الإيجابية أولاً (لا توجد مبالغ مستحقة للتحصيل).`}
               </p>
             </div>
           </div>
@@ -234,9 +290,18 @@ export function ConfirmPaidModal({
           </div>
 
           <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-800">
-            <span className="font-semibold text-gray-700 dark:text-gray-300">
-              {isEn ? "Outstanding Amount to Confirm:" : "المبلغ المتبقي المطلوب تأكيده:"}
-            </span>
+            <div>
+              <span className="font-semibold text-gray-700 dark:text-gray-300 block">
+                {isEn ? "Outstanding to Collect:" : "المبالغ المستحقة للتحصيل:"}
+              </span>
+              {outstanding === 0 && (
+                <span className="text-[11px] text-emerald-600 font-medium block">
+                  {isEn
+                    ? "✓ No collectible amounts due (negative items represent credit balance)"
+                    : "✓ لا توجد مبالغ مستحقة للتحصيل (البنود السالبة تمثل رصيداً دائنًا للمندوب)"}
+                </span>
+              )}
+            </div>
             <span className={`font-bold font-mono text-sm ${outstanding === 0 ? "text-emerald-600" : "text-red-600"}`}>
               {outstanding.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س
             </span>
@@ -277,7 +342,7 @@ export function ConfirmPaidModal({
           <Button
             type="submit"
             variant="primary"
-            disabled={isSubmitting || hasPositiveDebt || isCommissionIncomplete || !reason.trim()}
+            disabled={isSubmitting || hasOutstandingToCollect || isCommissionIncomplete || !reason.trim()}
             className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm"
           >
             <CheckCircle2 className="w-4 h-4" />

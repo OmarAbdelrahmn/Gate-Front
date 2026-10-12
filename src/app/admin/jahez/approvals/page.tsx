@@ -946,7 +946,9 @@ export default function JahezApprovalsPage() {
               - (Penalties + CashAmount + DriverDebit + ServiceDeduction)
             </code>
             <p className="text-[11px] text-purple-700 dark:text-purple-300">
-              يجب إدخال جميع العناصر المالية التسعة بدقة بما فيها الأصفار الصريحة، وتغطية فترة الاعتماد كاملة بدون تداخل.
+              {isEn
+                ? "Percentage earnings are registered directly via /api/jahez/earnings once an approved percentage policy exists for the period. No separate approval step is needed for the statement."
+                : "تُسجل أرباح النسبة مباشرة عبر /api/jahez/earnings بمجرد وجود موافقة نسبة معتمدة تغطي الفترة، ولا توجد خطوة اعتماد مستقلة لبيان الأرباح."}
             </p>
           </div>
 

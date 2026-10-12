@@ -180,12 +180,12 @@ export function JahezRiderDebtSummaryCard({
         <div className="py-6 text-center text-gray-500">
           <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
           <p className="font-semibold text-gray-800 dark:text-gray-200">
-            {isEn ? "No Recorded Jahez Liabilities" : "لا توجد مستحقات جاهز مسجلة"}
+            {isEn ? "No Amounts Due for Collection" : "لا توجد مبالغ مستحقة للتحصيل"}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
             {isEn
-              ? "This rider currently has no outstanding fees, debt, or unposted commissions."
-              : "لا توجد رسوم أو مديونيات أو عمولات تشغيل مستحقة على هذا المندوب حاليًا."}
+              ? "This rider currently has no outstanding fees, debt, or unposted commissions to collect."
+              : "لا توجد رسوم أو مديونيات أو عمولات تشغيل مستحقة للتحصيل على هذا المندوب حاليًا."}
           </p>
         </div>
       ) : summary ? (

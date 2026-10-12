@@ -593,9 +593,25 @@ export default function JahezLedgerPage() {
       <Modal
         isOpen={isAdjustmentModalOpen}
         onClose={() => setIsAdjustmentModalOpen(false)}
-        title={reversesEntryId ? (isEn ? "Create Reversal Entry" : "تسجيل قيد تسوية عكسي") : (isEn ? "Create Manual Adjustment" : "تسجيل قيد تسوية يدوي")}
+        title={reversesEntryId ? (isEn ? "Direct Ledger Adjustment (Reversal)" : "تسوية مالية مباشرة (قيد عكسي)") : (isEn ? "Direct Ledger Adjustment" : "تسوية مالية مباشرة (قيد دفتر الأستاذ)")}
       >
         <form onSubmit={handleSubmitAdjustment} className="space-y-4">
+          {/* Rules and Explanation Banner */}
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-xs text-indigo-900 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-200 space-y-1.5 leading-relaxed">
+            <div className="font-semibold text-sm flex items-center gap-1.5 text-indigo-800 dark:text-indigo-300">
+              <ArrowRightLeft className="h-4 w-4 shrink-0 text-indigo-600" />
+              <span>{isEn ? "Direct Adjustment Rules & Limits" : "قواعد وضوابط التسوية المالية المباشرة"}</span>
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-[11px] pt-1">
+              <li>{isEn ? "Direct execution under jahez.adjustments.create permission (no pending approval step)." : "العملية تُنفذ مباشرة وفورياً بصلاحية jahez.adjustments.create دون انتظار اعتماد خارجي."}</li>
+              <li>{isEn ? "Positive (+) amount increases bucket balance; Negative (-) amount reduces it." : "المبلغ الموجب (+) يزيد رصيد البند (مطالبة إضافية)، والمبلغ السالب (-) يخفضه."}</li>
+              <li>{isEn ? "Adjustments do NOT add cash to the cashbox (they are non-cash accounting entries)." : "العملية لا تُدخل أموالًا إلى الصندوق إطلاقاً (ليست تحصيلاً نقدياً)."}</li>
+              <li>{isEn ? "Each request modifies a SINGLE bucket only. Multi-bucket adjustments are not supported." : "كل طلب يعدّل بنداً واحداً (سلة واحدة) فقط."}</li>
+              <li>{isEn ? "Credit balances are NOT automatically offset against other buckets. Automated offsetting is unsupported." : "الرصيد الدائن لا يُستخدم تلقائياً لسداد بند آخر؛ ولا توجد مقاصة آلية بين البنود."}</li>
+              <li>{isEn ? "This route cannot be used to cancel or reverse recorded cash payments." : "يُمنع استخدام هذا المسار لإلغاء أي دفعة نقدية مسجلة."}</li>
+            </ul>
+          </div>
+
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
               {isEn ? "Select Handover Account" : "حساب التسليم"}
@@ -618,7 +634,7 @@ export default function JahezLedgerPage() {
 
           <div>
             <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              {isEn ? "Target Bucket" : "السلة المالية المستهدفة"}
+              {isEn ? "Target Bucket (Single Bucket Only)" : "السلة المالية المستهدفة (بند واحد فقط)"}
             </label>
             <select
               value={adjBucket}

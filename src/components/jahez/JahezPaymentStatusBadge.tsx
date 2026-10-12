@@ -23,12 +23,19 @@ export function JahezPaymentStatusBadge({
   showIcon = true,
 }: JahezPaymentStatusBadgeProps) {
   const isEn = locale === "en";
-  const isFrozen = debtStatus === JahezDebtStatus.Frozen;
+  const isFrozen = debtStatus === JahezDebtStatus.Frozen || debtStatus === 4;
 
-  if (status === JahezPaymentStatus.Outstanding) {
+  if (status === JahezPaymentStatus.Outstanding || status === 1) {
     return (
       <span
         className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 ${className}`}
+        title={
+          debtPaidAtUtc
+            ? isEn
+              ? `New outstanding debt appeared after previous payment confirmation on ${new Date(debtPaidAtUtc).toLocaleDateString()}`
+              : `ظهرت مديونية جديدة بعد تأكيد السداد السابق المؤرخ في ${new Date(debtPaidAtUtc).toLocaleDateString("ar-SA")}`
+            : undefined
+        }
       >
         {showIcon && <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
         <span>{isEn ? "Outstanding Balance" : "يوجد مستحق"}</span>
@@ -36,22 +43,22 @@ export function JahezPaymentStatusBadge({
     );
   }
 
-  if (status === JahezPaymentStatus.Paid) {
+  if (status === JahezPaymentStatus.Paid || status === 2) {
     if (isFrozen && !debtPaidAtUtc) {
       return (
         <span
           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800 ${className}`}
           title={
             isEn
-              ? "No outstanding balance currently, but the account is still frozen. Paid confirmation is required to release it."
-              : "لا يوجد مستحق حاليًا — الحساب ما زال مجمدًا؛ يلزم تأكيد السداد لتحرير الحساب"
+              ? "No amounts due to collect, but account is still frozen. Paid confirmation is required to release it."
+              : "لا توجد مبالغ مستحقة للتحصيل — الحساب ما زال مجمدًا؛ يلزم تأكيد السداد لتحرير الحساب"
           }
         >
           {showIcon && <Lock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />}
           <span>
             {isEn
-              ? "Zero Balance — Still Frozen"
-              : "لا يوجد مستحق حاليًا — الحساب ما زال مجمدًا"}
+              ? "Paid — Frozen Account"
+              : "مسدد — الحساب مجمد"}
           </span>
         </span>
       );
@@ -65,13 +72,15 @@ export function JahezPaymentStatusBadge({
             ? isEn
               ? `Confirmed paid on: ${new Date(debtPaidAtUtc).toLocaleDateString()}`
               : `تم تأكيد اكتمال السداد بتاريخ: ${new Date(debtPaidAtUtc).toLocaleDateString("ar-SA")}`
-            : undefined
+            : isEn
+            ? "No amounts due to collect per server balance"
+            : "لا توجد مبالغ مستحقة للتحصيل وفق رصيد الخادم الحالي"
         }
       >
         {showIcon && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
-        <span>{isEn ? "No Outstanding Balance" : "لا يوجد مستحق حاليًا"}</span>
+        <span>{isEn ? "Paid (No Outstanding to Collect)" : "مسدد (لا توجد مبالغ مستحقة للتحصيل)"}</span>
         {debtPaidAtUtc && (
-          <span className="text-[10px] font-mono text-emerald-600/80 dark:text-emerald-400/80">
+          <span className="text-[10px] font-mono text-emerald-600/80 dark:text-emerald-400/80" title="تم توثيق تأكيد السداد">
             ✓
           </span>
         )}

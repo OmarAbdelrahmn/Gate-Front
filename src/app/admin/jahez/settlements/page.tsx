@@ -10,6 +10,8 @@ import {
   getJahezHandovers,
   getAllJahezHandovers,
   getJahezHandoverSettlements,
+  validateThroughDate,
+  generateIdempotencyKey,
 } from "@/lib/jahez/api";
 import type {
   JahezBalance,
@@ -17,6 +19,7 @@ import type {
   JahezSettlement,
   PaymentRequest,
 } from "@/lib/jahez/types";
+import { JahezDebtStatus } from "@/lib/jahez/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -24,6 +27,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
+import { ConfirmPaidModal } from "@/components/jahez/dialogs/ConfirmPaidModal";
 import {
   CreditCard,
   Plus,
@@ -61,6 +65,10 @@ export default function JahezSettlementsPage() {
   const [countsAsSettlement, setCountsAsSettlement] = useState(true);
   const [reason, setReason] = useState("تحصيل وتسوية نقدية للمندوب");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dateValidationError, setDateValidationError] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState<string>("");
+  const [lastSettlementId, setLastSettlementId] = useState<string | null>(null);
+  const [confirmPaidBalance, setConfirmPaidBalance] = useState<JahezBalance | null>(null);
 
   // Live balance preview for selected handover in modal
   const [modalBalance, setModalBalance] = useState<JahezBalance | null>(null);
@@ -126,8 +134,14 @@ export default function JahezSettlementsPage() {
       .then((b) => {
         if (!cancelled) {
           setModalBalance(b);
-          const totalComm = (b.postedCommission || 0) + (b.unpostedCommission || 0);
-          setCommissionPayment(Number(Math.max(0, totalComm).toFixed(2)));
+          if (!b.commissionComplete) {
+            setDebtPayment("");
+            setCommissionPayment(0);
+            setCountsAsSettlement(false);
+          } else {
+            const totalComm = (b.postedCommission || 0) + (b.unpostedCommission || 0);
+            setCommissionPayment(Number(Math.max(0, totalComm).toFixed(2)));
+          }
         }
       })
       .catch(() => {
@@ -149,12 +163,60 @@ export default function JahezSettlementsPage() {
     const targetHandoverId = handoverId || selectedHandoverId || (handovers[0]?.id ?? "");
     setModalHandoverId(targetHandoverId);
     setThroughDate(new Date().toISOString().split("T")[0]);
+    setDateValidationError(null);
+    setIdempotencyKey(generateIdempotencyKey("stl"));
     setFeePayment("");
     setDebtPayment("");
     setCountsAsSettlement(true);
     setReason(isEn ? "Rider cash collection and settlement" : "تحصيل وتسوية نقدية للمندوب");
     setBalanceTrigger((prev) => prev + 1);
     setIsModalOpen(true);
+  };
+
+  const handleThroughDateChange = async (newDate: string) => {
+    setThroughDate(newDate);
+    setIdempotencyKey(generateIdempotencyKey("stl"));
+    if (!modalHandoverId) return;
+
+    const val = validateThroughDate(newDate, {
+      startedAtUtc: modalBalance?.reminderAnchorAtUtc,
+    }, locale);
+    if (!val.isValid) {
+      setDateValidationError(val.error || (isEn ? "Invalid date" : "تاريخ غير صحيح"));
+      return;
+    }
+    setDateValidationError(null);
+    setBalanceLoading(true);
+    try {
+      const fresh = await getJahezHandoverBalance(modalHandoverId, newDate);
+      setModalBalance(fresh);
+      if (!fresh.commissionComplete) {
+        setDebtPayment("");
+        setCommissionPayment(0);
+        setCountsAsSettlement(false);
+      } else {
+        const comm = (fresh.postedCommission || 0) + (fresh.unpostedCommission || 0);
+        setCommissionPayment(Number(Math.max(0, comm).toFixed(2)));
+        if (Number(debtPayment) > fresh.platformDebt) {
+          setDebtPayment(fresh.platformDebt > 0 ? fresh.platformDebt : "");
+        }
+      }
+    } catch (err: unknown) {
+      console.warn("Could not refetch balance for throughDate:", err);
+    } finally {
+      setBalanceLoading(false);
+    }
+  };
+
+  const handlePaymentAmountChange = (
+    field: "fee" | "debt" | "reason" | "counts",
+    val: any
+  ) => {
+    setIdempotencyKey(generateIdempotencyKey("stl"));
+    if (field === "fee") setFeePayment(val);
+    if (field === "debt") setDebtPayment(val);
+    if (field === "reason") setReason(val);
+    if (field === "counts") setCountsAsSettlement(val);
   };
 
   const handleSubmitSettlement = async (e: React.FormEvent) => {
@@ -169,13 +231,11 @@ export default function JahezSettlementsPage() {
       return;
     }
 
-    if (modalBalance && !modalBalance.commissionComplete) {
-      toast.error(
-        "تنبيه",
-        isEn
-          ? "Cannot finalize settlement because commission calculation data is incomplete for this period."
-          : "لا يمكن تسجيل التصفية لأن بيانات احتساب العمولة غير مكتملة لهذه الفترة (يرجى إدخال كشوف الأرباح المعتمدة)."
-      );
+    const dateVal = validateThroughDate(throughDate, {
+      startedAtUtc: modalBalance?.reminderAnchorAtUtc,
+    }, locale);
+    if (!dateVal.isValid) {
+      toast.error("خطأ في التاريخ", dateVal.error || "تاريخ غير صحيح");
       return;
     }
 
@@ -187,6 +247,22 @@ export default function JahezSettlementsPage() {
     if (totalPay <= 0) {
       toast.error("خطأ", "يجب أن يكون إجمالي المبلغ المحصل أكبر من صفر");
       return;
+    }
+
+    // When commission is incomplete:
+    // - Prevent any collection that requires countsAsSettlement=true (full or partial).
+    // - Includes platform debt collection even when commissionPayment=0.
+    // - Allow fee payment only with countsAsSettlement=false.
+    if (modalBalance && !modalBalance.commissionComplete) {
+      if (countsAsSettlement || dPay > 0 || cPay > 0) {
+        toast.error(
+          "خطأ في الشروط",
+          isEn
+            ? "Commission calculation data is incomplete for this period. Settlements and debt/commission payments are blocked until earnings are recorded. You may only collect account fees with countsAsSettlement=false."
+            : "بيانات احتساب العمولة غير مكتملة لهذه الفترة. يُمنع إرسال أي تحصيل يحتاج countsAsSettlement=true (بما في ذلك مديونية جاهز)؛ لأن الباك إند يثبت العمولة حتى نهاية فترة التصفية قبل تسجيل التحصيل. يُسمح فقط بتحصيل الرسوم بدون تسوية (countsAsSettlement=false)."
+        );
+        return;
+      }
     }
 
     // Ceilings per bucket: Cannot pay more than positive outstanding balance
@@ -245,9 +321,26 @@ export default function JahezSettlementsPage() {
         reason: reason.trim(),
       };
 
-      await createSettlement(payload);
+      const result = await createSettlement(payload, idempotencyKey);
+      setLastSettlementId(result.id);
       setIsModalOpen(false);
+
+      // Refresh balance and list
+      const freshBal = await getJahezHandoverBalance(modalHandoverId, throughDate).catch(() => null);
       loadSettlements();
+
+      // Check if Confirm Paid conditions are met:
+      const checkBal = freshBal || modalBalance;
+      const canConfirm =
+        checkBal &&
+        checkBal.debtStatus !== JahezDebtStatus.Active &&
+        (checkBal.outstandingAmount ?? 0) === 0 &&
+        checkBal.commissionComplete &&
+        can("jahez.collections.create");
+
+      if (canConfirm) {
+        setConfirmPaidBalance(checkBal);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "فشلت عملية التحصيل";
       toast.error("خطأ", msg);
@@ -605,15 +698,33 @@ export default function JahezSettlementsPage() {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              {isEn ? "Settlement Cutoff Date (throughDate)" : "تاريخ استحقاق التسوية (حتى تاريخ)"}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {isEn ? "Settlement Period End Date (throughDate)" : "نهاية فترة التصفية (حتى تاريخ)"}
+              </label>
+              {balanceLoading && (
+                <span className="text-[11px] text-amber-600 flex items-center gap-1 font-medium">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  {isEn ? "Recalculating balance..." : "جارٍ إعادة احتساب الرصيد..."}
+                </span>
+              )}
+            </div>
             <Input
               type="date"
               value={throughDate}
-              onChange={(e) => setThroughDate(e.target.value)}
+              onChange={(e) => handleThroughDateChange(e.target.value)}
               required
             />
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+              {isEn
+                ? "This cutoff date freezes commission calculation up to this date. It does not alter the actual collection timestamp recorded by the server."
+                : "تحديد نهاية فترة التصفية يثبت احتساب العمولة حتى هذا التاريخ. الخادم يسجل وقت التحصيل الفعلي آليًا عند الحفظ."}
+            </p>
+            {dateValidationError && (
+              <p className="text-xs text-red-600 font-semibold mt-1">
+                {dateValidationError}
+              </p>
+            )}
           </div>
 
           {/* Balance Preview Card */}
@@ -674,21 +785,34 @@ export default function JahezSettlementsPage() {
                   )}
 
                   {/* Quick Action: Fill Full Outstanding Balances */}
-                  <div className="flex justify-end pt-1">
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="text-[11px] text-gray-500">
+                      {!modalBalance.commissionComplete
+                        ? (isEn ? "Only fees can be collected (countsAsSettlement=false)" : "متاح تحصيل رسوم الحساب فقط بدون تصفية")
+                        : (isEn ? "Select amounts to collect" : "حدد المبالغ المراد تحصيلها")}
+                    </span>
                     <Button
                       type="button"
                       variant="secondary"
                       onClick={() => {
-                        setFeePayment(Math.max(0, modalBalance.fees));
-                        setDebtPayment(Math.max(0, modalBalance.platformDebt));
-                        const comm = Math.max(0, Number(((modalBalance.postedCommission || 0) + (modalBalance.unpostedCommission || 0)).toFixed(2)));
-                        setCommissionPayment(comm);
-                        setCountsAsSettlement(true);
+                        handlePaymentAmountChange("fee", Math.max(0, modalBalance.fees));
+                        if (modalBalance.commissionComplete) {
+                          handlePaymentAmountChange("debt", Math.max(0, modalBalance.platformDebt));
+                          const comm = Math.max(0, Number(((modalBalance.postedCommission || 0) + (modalBalance.unpostedCommission || 0)).toFixed(2)));
+                          setCommissionPayment(comm);
+                          handlePaymentAmountChange("counts", true);
+                        } else {
+                          handlePaymentAmountChange("debt", "");
+                          setCommissionPayment(0);
+                          handlePaymentAmountChange("counts", false);
+                        }
                       }}
                       className="text-xs py-1 px-2.5 h-auto font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1 inline" />
-                      {isEn ? "Fill Full Outstanding Amounts" : "سداد كامل الأرصدة المستحقة"}
+                      {modalBalance.commissionComplete
+                        ? (isEn ? "Fill Full Outstanding Amounts" : "سداد كامل الأرصدة المستحقة")
+                        : (isEn ? "Fill Outstanding Fees Only" : "سداد رسوم الحساب فقط")}
                     </Button>
                   </div>
                 </>
@@ -723,7 +847,7 @@ export default function JahezSettlementsPage() {
                 max={modalBalance ? Math.max(0, modalBalance.fees) : undefined}
                 placeholder="0.00"
                 value={feePayment}
-                onChange={(e) => setFeePayment(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={(e) => handlePaymentAmountChange("fee", e.target.value === "" ? "" : Number(e.target.value))}
               />
             </div>
 
@@ -748,8 +872,17 @@ export default function JahezSettlementsPage() {
                 max={modalBalance ? Math.max(0, modalBalance.platformDebt) : undefined}
                 placeholder="0.00"
                 value={debtPayment}
-                onChange={(e) => setDebtPayment(e.target.value === "" ? "" : Number(e.target.value))}
+                disabled={Boolean(modalBalance && !modalBalance.commissionComplete)}
+                onChange={(e) => handlePaymentAmountChange("debt", e.target.value === "" ? "" : Number(e.target.value))}
+                className={modalBalance && !modalBalance.commissionComplete ? "bg-gray-100 cursor-not-allowed dark:bg-gray-800" : ""}
               />
+              {modalBalance && !modalBalance.commissionComplete && (
+                <span className="text-[10px] text-amber-600 block mt-0.5">
+                  {isEn
+                    ? "Blocked: commission must be complete first"
+                    : "محظور حتى اكتمال بيانات العمولة"}
+                </span>
+              )}
             </div>
 
             <div>
@@ -794,31 +927,47 @@ export default function JahezSettlementsPage() {
           {/* Counts as settlement checkbox */}
           {(() => {
             const mustCountAsSettlement = (Number(debtPayment) > 0) || (Number(commissionPayment) > 0);
+            const isBlocked = Boolean(modalBalance && !modalBalance.commissionComplete);
+            const isDisabled = isBlocked || mustCountAsSettlement;
+            const isChecked = !isBlocked && (mustCountAsSettlement || countsAsSettlement);
+
             return (
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3 dark:border-emerald-900/30 dark:bg-emerald-950/10">
-                <label className={`flex items-start gap-2.5 ${mustCountAsSettlement ? "cursor-default" : "cursor-pointer"}`}>
+              <div className={`rounded-lg border p-3 ${
+                isBlocked
+                  ? "border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/20"
+                  : "border-emerald-100 bg-emerald-50/40 dark:border-emerald-900/30 dark:bg-emerald-950/10"
+              }`}>
+                <label className={`flex items-start gap-2.5 ${isDisabled ? "cursor-default" : "cursor-pointer"}`}>
                   <input
                     type="checkbox"
-                    checked={mustCountAsSettlement || countsAsSettlement}
-                    disabled={mustCountAsSettlement}
-                    onChange={(e) => setCountsAsSettlement(e.target.checked)}
+                    checked={isChecked}
+                    disabled={isDisabled}
+                    onChange={(e) => handlePaymentAmountChange("counts", e.target.checked)}
                     className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 mt-0.5"
                   />
                   <div className="text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-800 dark:text-gray-200">
-                        {isEn ? "Counts as Settlement (Restarts 10-day overdue timer)" : "تحتسب كتسوية رسمية للمندوب"}
+                        {isEn ? "Counts as Settlement (Restarts 10-day overdue timer for this period)" : "تحتسب كتسوية رسمية (تجدد عداد الـ 10 أيام لهذه الفترة فقط)"}
                       </span>
-                      {mustCountAsSettlement && (
+                      {isBlocked ? (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.5 rounded font-medium">
+                          {isEn ? "Blocked (Commission Incomplete)" : "محظور لنقص العمولة"}
+                        </span>
+                      ) : mustCountAsSettlement ? (
                         <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium">
                           {isEn ? "Mandatory for Debt/Commission" : "إلزامي عند سداد مديونية أو عمولة"}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     <span className="text-gray-500 dark:text-gray-400 text-[11px] block mt-0.5">
-                      {isEn
-                        ? "Any payment of platform debt or commission must count as settlement and resets the 10-day overdue countdown anchor."
-                        : "سداد مديونية جاهز أو عمولة التشغيل يُحتسب تلقائياً كتسوية رسمية ويعيد ضبط وتجديد مؤقت المطالبة لعشرة أيام جديدة."}
+                      {isBlocked
+                        ? (isEn
+                            ? "Settlement is blocked because commission data is incomplete. Only fees can be collected without counting as settlement."
+                            : "التسوية محظورة لأن احتساب العمولة غير مكتمل. يُسمح فقط بتحصيل رسوم الحساب دون احتسابها كتسوية.")
+                        : (isEn
+                            ? "Any payment of platform debt or commission must count as settlement and resets the 10-day overdue countdown anchor for this period only."
+                            : "سداد مديونية جاهز أو عمولة التشغيل يُحتسب تلقائياً كتسوية رسمية ويعيد ضبط مؤقت المطالبة لهذه الفترة المحددة فقط.")}
                     </span>
                   </div>
                 </label>
@@ -834,7 +983,7 @@ export default function JahezSettlementsPage() {
               type="text"
               placeholder={isEn ? "e.g., Rider weekly cash settlement..." : "مثال: تسوية نقدية أسبوعية من المندوب..."}
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              onChange={(e) => handlePaymentAmountChange("reason", e.target.value)}
               required
             />
           </div>
@@ -851,20 +1000,45 @@ export default function JahezSettlementsPage() {
             <Button
               type="submit"
               variant="primary"
-              disabled={isSubmitting || balanceLoading || (modalBalance !== null && !modalBalance.commissionComplete)}
+              disabled={
+                isSubmitting ||
+                balanceLoading ||
+                Boolean(dateValidationError) ||
+                (Number(feePayment) || 0) + (Number(debtPayment) || 0) + (Number(commissionPayment) || 0) <= 0 ||
+                (Boolean(modalBalance && !modalBalance.commissionComplete) && (
+                  (Number(feePayment) || 0) <= 0 ||
+                  (Number(debtPayment) || 0) > 0 ||
+                  (Number(commissionPayment) || 0) > 0 ||
+                  countsAsSettlement
+                ))
+              }
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               {isSubmitting
                 ? (isEn ? "Recording..." : "جارٍ التسجيل...")
                 : balanceLoading
                 ? (isEn ? "Calculating balance..." : "جارٍ استعلام الرصيد...")
-                : modalBalance !== null && !modalBalance.commissionComplete
-                ? (isEn ? "Commission Incomplete" : "بيانات العمولة غير مكتملة")
+                : modalBalance && !modalBalance.commissionComplete
+                ? (isEn ? "Collect Fees Only" : "تحصيل الرسوم فقط")
                 : (isEn ? "Confirm Collection" : "تأكيد التحصيل")}
             </Button>
           </div>
         </form>
       </Modal>
+
+      {/* Confirm Paid Modal */}
+      <ConfirmPaidModal
+        isOpen={Boolean(confirmPaidBalance)}
+        onClose={() => setConfirmPaidBalance(null)}
+        handover={null}
+        balance={confirmPaidBalance}
+        locale={locale}
+        wasPrecededByCollection={Boolean(lastSettlementId)}
+        onSuccess={() => {
+          setConfirmPaidBalance(null);
+          loadSettlements();
+        }}
+      />
     </div>
   );
 }

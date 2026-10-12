@@ -141,8 +141,8 @@ export function ClearAccountModal({
               </span>
               <p className="text-xs text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
                 {isEn
-                  ? "Commission stops at the original freeze date. Execution time is recorded automatically by the server."
-                  : "يستمر توقف عمولة هذه الفترة عند تاريخ التجميد السابق. يُسجل وقت التصفية تلقائيًا بتوقيت الخادم."}
+                  ? "This action records an external operation and does NOT execute a clearance on the Jahez platform. Commission stops at the original freeze date. Execution time is recorded automatically by the server."
+                  : "هذا الإجراء يسجل عملية خارجية ولا ينفذ تصفية على منصة جاهز. يستمر توقف عمولة هذه الفترة عند تاريخ التجميد السابق، ويُسجل وقت التصفية تلقائيًا بتوقيت الخادم."}
               </p>
             </div>
           </div>

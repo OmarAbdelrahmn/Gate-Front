@@ -5,18 +5,29 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
-import { createSettlement, getJahezDebts, getDebtActionGates } from "@/lib/jahez/api";
+import {
+  closeJahezHandover,
+  createSettlement,
+  generateIdempotencyKey,
+  getDebtActionGates,
+  getJahezDebts,
+  getJahezHandoverBalance,
+  getJahezRiderDebtSummary,
+  validateThroughDate,
+} from "@/lib/jahez/api";
 import {
   JahezDebtStatus,
   JahezPaymentStatus,
 } from "@/lib/jahez/constants";
 import type {
   JahezBalance,
+  JahezRiderDebtSummary,
   PaymentRequest,
 } from "@/lib/jahez/types";
 import { JahezDebtStatusBadge } from "@/components/jahez/JahezDebtStatusBadge";
 import { JahezPaymentStatusBadge } from "@/components/jahez/JahezPaymentStatusBadge";
 import { JahezFinancialCards } from "@/components/jahez/JahezFinancialCards";
+import { JahezRiderDebtSummaryCard } from "@/components/jahez/JahezRiderDebtSummaryCard";
 import { ConfirmPaidModal } from "@/components/jahez/dialogs/ConfirmPaidModal";
 import { FreezeAccountModal } from "@/components/jahez/dialogs/FreezeAccountModal";
 import { Badge } from "@/components/ui/Badge";
@@ -39,6 +50,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  XCircle,
 } from "lucide-react";
 
 export default function JahezDebtsPage() {
@@ -70,6 +82,16 @@ export default function JahezDebtsPage() {
   const [countsAsSettlement, setCountsAsSettlement] = useState(true);
   const [paymentReason, setPaymentReason] = useState("سداد مديونية مستحقة لمندوب جاهز");
   const [isPaying, setIsPaying] = useState(false);
+  const [isBalanceLoading, setIsBalanceLoading] = useState(false);
+  const [dateValidationError, setDateValidationError] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState(() => generateIdempotencyKey("stl"));
+  const [lastSettlementId, setLastSettlementId] = useState<string | null>(null);
+
+  // Close Handover State
+  const [closeHandoverBalance, setCloseHandoverBalance] = useState<JahezBalance | null>(null);
+  const [closeEffectiveAt, setCloseEffectiveAt] = useState(new Date().toISOString().slice(0, 16));
+  const [closeReason, setCloseReason] = useState("إنهاء فترة تشغيل الحساب واستلام العهدة");
+  const [isSubmittingClose, setIsSubmittingClose] = useState(false);
 
   const loadDebts = async (targetPage = page) => {
     setLoading(true);
@@ -106,26 +128,83 @@ export default function JahezDebtsPage() {
 
   const handleOpenSettlement = (b: JahezBalance) => {
     setSelectedBalance(b);
-    setThroughDate(new Date().toISOString().split("T")[0]);
+    const todayStr = new Date().toISOString().split("T")[0];
+    setThroughDate(todayStr);
+    setDateValidationError(null);
+    setIdempotencyKey(generateIdempotencyKey("stl"));
     setFeePayment(b.fees > 0 ? b.fees : "");
-    setDebtPayment(b.platformDebt > 0 ? b.platformDebt : "");
-    const unposted = b.postedCommission + b.unpostedCommission;
-    setCommissionPayment(unposted > 0 ? unposted : "");
-    setCountsAsSettlement(true);
+    if (!b.commissionComplete) {
+      setDebtPayment("");
+      setCommissionPayment(0);
+      setCountsAsSettlement(false);
+    } else {
+      setDebtPayment(b.platformDebt > 0 ? b.platformDebt : "");
+      const unposted = (b.postedCommission ?? 0) + (b.unpostedCommission ?? 0);
+      setCommissionPayment(Number(Math.max(0, unposted).toFixed(2)));
+      setCountsAsSettlement(true);
+    }
     setPaymentReason("سداد مديونية مستحقة لمندوب جاهز");
+  };
+
+  const handleThroughDateChange = async (newDate: string) => {
+    setThroughDate(newDate);
+    setIdempotencyKey(generateIdempotencyKey("stl"));
+    if (!selectedBalance) return;
+    const val = validateThroughDate(newDate, {
+      startedAtUtc: selectedBalance.reminderAnchorAtUtc,
+    }, locale);
+    if (!val.isValid) {
+      setDateValidationError(val.error || (isEn ? "Invalid date" : "تاريخ غير صحيح"));
+      return;
+    }
+    setDateValidationError(null);
+    setIsBalanceLoading(true);
+    try {
+      const fresh = await getJahezHandoverBalance(selectedBalance.handoverId, newDate);
+      setSelectedBalance(fresh);
+      if (!fresh.commissionComplete) {
+        setDebtPayment("");
+        setCommissionPayment(0);
+        setCountsAsSettlement(false);
+      } else {
+        const comm = (fresh.postedCommission ?? 0) + (fresh.unpostedCommission ?? 0);
+        setCommissionPayment(Number(Math.max(0, comm).toFixed(2)));
+        if (Number(debtPayment) > fresh.platformDebt) {
+          setDebtPayment(fresh.platformDebt > 0 ? fresh.platformDebt : "");
+        }
+      }
+    } catch (err: unknown) {
+      console.warn("Could not refetch balance for throughDate:", err);
+    } finally {
+      setIsBalanceLoading(false);
+    }
+  };
+
+  const handlePaymentAmountChange = (
+    field: "fee" | "debt" | "reason" | "counts",
+    val: any
+  ) => {
+    setIdempotencyKey(generateIdempotencyKey("stl"));
+    if (field === "fee") setFeePayment(val);
+    if (field === "debt") setDebtPayment(val);
+    if (field === "reason") setPaymentReason(val);
+    if (field === "counts") setCountsAsSettlement(val);
   };
 
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBalance) return;
 
-    if (!selectedBalance.commissionComplete) {
-      toast.error(
-        "تنبيه",
-        isEn
-          ? "Cannot finalize settlement because commission calculation data is incomplete for this period."
-          : "لا يمكن تسجيل التصفية لأن بيانات احتساب العمولة غير مكتملة لهذه الفترة (يرجى إدخال كشوف الأرباح المعتمدة)."
-      );
+    if (isBalanceLoading) {
+      toast.error("تنبيه", isEn ? "Please wait for balance calculation to complete" : "يرجى الانتظار حتى اكتمال استعلام الرصيد");
+      return;
+    }
+
+    const dateVal = validateThroughDate(throughDate, {
+      startedAtUtc: selectedBalance.reminderAnchorAtUtc,
+    }, locale);
+    if (!dateVal.isValid) {
+      toast.error("خطأ في التاريخ", dateVal.error || "تاريخ غير صحيح");
       return;
     }
 
@@ -136,6 +215,22 @@ export default function JahezDebtsPage() {
     if (fPay + dPay + cPay <= 0) {
       toast.error("خطأ", "يجب أن يكون إجمالي المبلغ المسدد أكبر من صفر");
       return;
+    }
+
+    // When commission is incomplete:
+    // - Prevent any collection that requires countsAsSettlement=true (full or partial).
+    // - Includes platform debt collection even when commissionPayment=0.
+    // - Allow fee payment only with countsAsSettlement=false.
+    if (!selectedBalance.commissionComplete) {
+      if (countsAsSettlement || dPay > 0 || cPay > 0) {
+        toast.error(
+          "خطأ في الشروط",
+          isEn
+            ? "Commission calculation data is incomplete for this period. Settlements and debt/commission payments are blocked until earnings are recorded. You may only collect account fees with countsAsSettlement=false."
+            : "بيانات احتساب العمولة غير مكتملة لهذه الفترة. يُمنع إرسال أي تحصيل يحتاج countsAsSettlement=true (بما في ذلك مديونية جاهز)؛ لأن الباك إند يثبت العمولة حتى نهاية فترة التصفية قبل تسجيل التحصيل. يُسمح فقط بتحصيل الرسوم بدون تسوية (countsAsSettlement=false)."
+        );
+        return;
+      }
     }
 
     // Ceilings per bucket: Cannot pay more than positive outstanding balance
@@ -188,14 +283,51 @@ export default function JahezDebtsPage() {
         countsAsSettlement: finalCountsAsSettlement,
         reason: paymentReason.trim(),
       };
-      await createSettlement(payload);
+
+      const result = await createSettlement(payload, idempotencyKey);
+      setLastSettlementId(result.id);
+
+      // Refresh balance and list
+      const freshBal = await getJahezHandoverBalance(selectedBalance.handoverId, throughDate).catch(() => null);
       setSelectedBalance(null);
-      loadDebts();
+      await loadDebts(page);
+
+      // Check if Confirm Paid conditions are met:
+      const checkBal = freshBal || selectedBalance;
+      const canConfirm =
+        checkBal &&
+        checkBal.debtStatus !== JahezDebtStatus.Active &&
+        (checkBal.outstandingAmount ?? 0) === 0 &&
+        checkBal.commissionComplete &&
+        can("jahez.collections.create");
+
+      if (canConfirm) {
+        setConfirmPaidBalance(checkBal);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "فشلت عملية السداد";
       toast.error("خطأ", msg);
     } finally {
       setIsPaying(false);
+    }
+  };
+
+  const handleCloseHandoverSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!closeHandoverBalance) return;
+    setIsSubmittingClose(true);
+    try {
+      await closeJahezHandover(closeHandoverBalance.handoverId, {
+        effectiveAtUtc: new Date(closeEffectiveAt).toISOString(),
+        reason: closeReason.trim(),
+      });
+      setCloseHandoverBalance(null);
+      loadDebts(page);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "فشل إنهاء فترة الاستخدام";
+      toast.error("خطأ", msg);
+    } finally {
+      setIsSubmittingClose(false);
     }
   };
 
@@ -429,6 +561,13 @@ export default function JahezDebtsPage() {
         </div>
       </div>
 
+      {/* Backend Rider Debt Summary (Unified total liability across periods) */}
+      {riderFilter.trim() && (
+        <div className="transition-all duration-200">
+          <JahezRiderDebtSummaryCard riderId={riderFilter.trim()} locale={locale} />
+        </div>
+      )}
+
       {/* Debts Table */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900">
         <div className="overflow-x-auto">
@@ -603,6 +742,22 @@ export default function JahezDebtsPage() {
                               {isEn ? "Confirm" : "تأكيد"}
                             </Button>
                           )}
+
+                          {gates.closeHandover && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setCloseHandoverBalance(b);
+                                setCloseEffectiveAt(new Date().toISOString().slice(0, 10));
+                                setCloseReason("");
+                              }}
+                              className="text-xs py-1 px-2 h-8 text-amber-700 border-amber-200 hover:bg-amber-50 flex items-center gap-1"
+                              title={isEn ? "End Usage Period (Leaves debt on rider)" : "إنهاء فترة الاستخدام (مع بقاء الدين على المندوب)"}
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              {isEn ? "End Period" : "إنهاء الفترة"}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -698,35 +853,66 @@ export default function JahezDebtsPage() {
               )}
 
               {/* Quick Fill Full Outstanding Amounts */}
-              <div className="flex justify-end pt-1">
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-[11px] text-gray-500">
+                  {!selectedBalance.commissionComplete
+                    ? (isEn ? "Only fees can be collected (countsAsSettlement=false)" : "متاح تحصيل رسوم الحساب فقط بدون تصفية")
+                    : (isEn ? "Select amounts to collect" : "حدد المبالغ المراد تحصيلها")}
+                </span>
                 <Button
                   type="button"
                   variant="secondary"
                   onClick={() => {
-                    setFeePayment(Math.max(0, selectedBalance.fees));
-                    setDebtPayment(Math.max(0, selectedBalance.platformDebt));
-                    const comm = Math.max(0, Number((selectedBalance.postedCommission + selectedBalance.unpostedCommission).toFixed(2)));
-                    setCommissionPayment(comm > 0 ? comm : "");
-                    setCountsAsSettlement(true);
+                    handlePaymentAmountChange("fee", Math.max(0, selectedBalance.fees));
+                    if (selectedBalance.commissionComplete) {
+                      handlePaymentAmountChange("debt", Math.max(0, selectedBalance.platformDebt));
+                      const comm = Math.max(0, Number(((selectedBalance.postedCommission ?? 0) + (selectedBalance.unpostedCommission ?? 0)).toFixed(2)));
+                      setCommissionPayment(comm > 0 ? comm : 0);
+                      handlePaymentAmountChange("counts", true);
+                    } else {
+                      handlePaymentAmountChange("debt", "");
+                      setCommissionPayment(0);
+                      handlePaymentAmountChange("counts", false);
+                    }
                   }}
                   className="text-xs py-1 px-2.5 h-auto font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5 mr-1 inline" />
-                  {isEn ? "Fill Full Outstanding Amounts" : "سداد كامل الأرصدة المستحقة"}
+                  {selectedBalance.commissionComplete
+                    ? (isEn ? "Fill Full Outstanding Amounts" : "سداد كامل الأرصدة المستحقة")
+                    : (isEn ? "Fill Outstanding Fees Only" : "سداد رسوم الحساب فقط")}
                 </Button>
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                {isEn ? "Cutoff Date (throughDate)" : "تاريخ الاستحقاق (حتى تاريخ)"}
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  {isEn ? "Settlement Period End Date (throughDate)" : "نهاية فترة التصفية (حتى تاريخ)"}
+                </label>
+                {isBalanceLoading && (
+                  <span className="text-[11px] text-amber-600 flex items-center gap-1 font-medium">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    {isEn ? "Recalculating balance..." : "جارٍ إعادة احتساب الرصيد..."}
+                  </span>
+                )}
+              </div>
               <Input
                 type="date"
                 value={throughDate}
-                onChange={(e) => setThroughDate(e.target.value)}
+                onChange={(e) => handleThroughDateChange(e.target.value)}
                 required
               />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                {isEn
+                  ? "This cutoff date freezes commission calculation up to this date. It does not alter the actual collection timestamp recorded by the server."
+                  : "تحديد نهاية فترة التصفية يثبت احتساب العمولة حتى هذا التاريخ. الخادم يسجل وقت التحصيل الفعلي آليًا عند الحفظ."}
+              </p>
+              {dateValidationError && (
+                <p className="text-xs text-red-600 font-semibold mt-1">
+                  {dateValidationError}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -746,7 +932,7 @@ export default function JahezDebtsPage() {
                   max={Math.max(0, selectedBalance.fees)}
                   placeholder="0.00"
                   value={feePayment}
-                  onChange={(e) => setFeePayment(e.target.value === "" ? "" : Number(e.target.value))}
+                  onChange={(e) => handlePaymentAmountChange("fee", e.target.value === "" ? "" : Number(e.target.value))}
                 />
               </div>
 
@@ -766,8 +952,17 @@ export default function JahezDebtsPage() {
                   max={Math.max(0, selectedBalance.platformDebt)}
                   placeholder="0.00"
                   value={debtPayment}
-                  onChange={(e) => setDebtPayment(e.target.value === "" ? "" : Number(e.target.value))}
+                  disabled={!selectedBalance.commissionComplete}
+                  onChange={(e) => handlePaymentAmountChange("debt", e.target.value === "" ? "" : Number(e.target.value))}
+                  className={!selectedBalance.commissionComplete ? "bg-gray-100 cursor-not-allowed dark:bg-gray-800" : ""}
                 />
+                {!selectedBalance.commissionComplete && (
+                  <span className="text-[10px] text-amber-600 block mt-0.5">
+                    {isEn
+                      ? "Blocked: commission must be complete first"
+                      : "محظور حتى اكتمال بيانات العمولة"}
+                  </span>
+                )}
               </div>
 
               <div>
@@ -794,31 +989,46 @@ export default function JahezDebtsPage() {
             {/* Counts as settlement */}
             {(() => {
               const mustCountAsSettlement = (Number(debtPayment) > 0) || (Number(commissionPayment) > 0);
+              const isDisabled = !selectedBalance.commissionComplete || mustCountAsSettlement;
+              const isChecked = selectedBalance.commissionComplete && (mustCountAsSettlement || countsAsSettlement);
+
               return (
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                  <label className={`flex items-start gap-2.5 ${mustCountAsSettlement ? "cursor-default" : "cursor-pointer"}`}>
+                <div className={`rounded-lg border p-3 ${
+                  !selectedBalance.commissionComplete
+                    ? "border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/20"
+                    : "border-emerald-100 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20"
+                }`}>
+                  <label className={`flex items-start gap-2.5 ${isDisabled ? "cursor-default" : "cursor-pointer"}`}>
                     <input
                       type="checkbox"
-                      checked={mustCountAsSettlement || countsAsSettlement}
-                      disabled={mustCountAsSettlement}
-                      onChange={(e) => setCountsAsSettlement(e.target.checked)}
+                      checked={isChecked}
+                      disabled={isDisabled}
+                      onChange={(e) => handlePaymentAmountChange("counts", e.target.checked)}
                       className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 mt-0.5"
                     />
                     <div className="text-xs">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-gray-800 dark:text-gray-200">
-                          {isEn ? "Counts as Settlement (Resets 10-day overdue timer)" : "تحتسب كتسوية رسمية (تجدد عداد الـ 10 أيام)"}
+                          {isEn ? "Counts as Settlement (Resets 10-day overdue timer for this period)" : "تحتسب كتسوية رسمية (تجدد عداد الـ 10 أيام لهذه الفترة فقط)"}
                         </span>
-                        {mustCountAsSettlement && (
+                        {!selectedBalance.commissionComplete ? (
+                          <span className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.5 rounded font-medium">
+                            {isEn ? "Blocked (Commission Incomplete)" : "محظور لنقص العمولة"}
+                          </span>
+                        ) : mustCountAsSettlement ? (
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium">
                             {isEn ? "Mandatory for Debt/Commission" : "إلزامي عند سداد مديونية أو عمولة"}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <span className="text-gray-500 dark:text-gray-400 text-[11px] block mt-0.5">
-                        {isEn
-                          ? "Any payment of debt or commission must count as settlement and resets the overdue countdown."
-                          : "سداد مديونية جاهز أو عمولة التشغيل يُحتسب تلقائياً كتسوية رسمية ويعيد ضبط مؤقت المطالبة."}
+                        {!selectedBalance.commissionComplete
+                          ? (isEn
+                              ? "Settlement is blocked because commission data is incomplete. Only fees can be collected without counting as settlement."
+                              : "التسوية محظورة لأن احتساب العمولة غير مكتمل. يُسمح فقط بتحصيل رسوم الحساب دون احتسابها كتسوية.")
+                          : (isEn
+                              ? "Any payment of debt or commission must count as settlement and resets the overdue timer for this specific period only."
+                              : "سداد مديونية جاهز أو عمولة التشغيل يُحتسب تلقائياً كتسوية رسمية ويعيد ضبط مؤقت المطالبة لهذه الفترة المحددة فقط.")}
                       </span>
                     </div>
                   </label>
@@ -833,7 +1043,7 @@ export default function JahezDebtsPage() {
               <Input
                 type="text"
                 value={paymentReason}
-                onChange={(e) => setPaymentReason(e.target.value)}
+                onChange={(e) => handlePaymentAmountChange("reason", e.target.value)}
                 required
               />
             </div>
@@ -850,13 +1060,24 @@ export default function JahezDebtsPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isPaying || !selectedBalance.commissionComplete}
+                disabled={
+                  isPaying ||
+                  isBalanceLoading ||
+                  Boolean(dateValidationError) ||
+                  (Number(feePayment) || 0) + (Number(debtPayment) || 0) + (Number(commissionPayment) || 0) <= 0 ||
+                  (!selectedBalance.commissionComplete && (
+                    (Number(feePayment) || 0) <= 0 ||
+                    (Number(debtPayment) || 0) > 0 ||
+                    (Number(commissionPayment) || 0) > 0 ||
+                    countsAsSettlement
+                  ))
+                }
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
               >
                 {isPaying
                   ? (isEn ? "Saving..." : "جارٍ الحفظ...")
                   : !selectedBalance.commissionComplete
-                  ? (isEn ? "Commission Incomplete" : "بيانات العمولة غير مكتملة")
+                  ? (isEn ? "Collect Fees Only" : "تحصيل الرسوم فقط")
                   : (isEn ? "Confirm Collection" : "تأكيد التحصيل")}
               </Button>
             </div>
@@ -890,11 +1111,80 @@ export default function JahezDebtsPage() {
         handover={null}
         balance={confirmPaidBalance}
         locale={locale}
+        wasPrecededByCollection={Boolean(lastSettlementId)}
         onSuccess={() => {
           setConfirmPaidBalance(null);
           loadDebts(page);
         }}
       />
+
+      {/* End Usage Period Modal */}
+      <Modal
+        isOpen={Boolean(closeHandoverBalance)}
+        onClose={() => setCloseHandoverBalance(null)}
+        title={isEn ? "End Usage Period (Close Handover)" : "إنهاء فترة الاستخدام (إغلاق الإسناد)"}
+      >
+        {closeHandoverBalance && (
+          <form onSubmit={handleCloseHandoverSubmit} className="space-y-4">
+            <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+              <p className="font-semibold">
+                {isEn ? "Notice: Ending usage period leaves existing debt on rider" : "تنبيه: إنهاء فترة الاستخدام يغلق فترة التشغيل مع بقاء الدين بذمة المندوب"}
+              </p>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                {isEn
+                  ? "This closes the active handover period for the open non-frozen account. The account is no longer in use, but outstanding platform debt and fees remain attributed to the rider until settled."
+                  : "هذا الإجراء ينهي فترة الاستخدام للحساب المفتوح غير المجمد دون تجميد أو نقل؛ ويبقى الدين مسجلاً بذمة المندوب لحين تحصيله."}
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                {isEn ? "Effective End Date" : "تاريخ انتهاء الاستخدام الفعلي"}
+              </label>
+              <Input
+                type="date"
+                value={closeEffectiveAt}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setCloseEffectiveAt(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                {isEn ? "Reason for Ending Usage" : "سبب إنهاء فترة الاستخدام"}
+              </label>
+              <Input
+                type="text"
+                placeholder={isEn ? "e.g. Rider stopped working / handover completed" : "مثال: توقف المندوب عن العمل / انتهاء فترة التسليم"}
+                value={closeReason}
+                onChange={(e) => setCloseReason(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setCloseHandoverBalance(null)}
+                disabled={isSubmittingClose}
+              >
+                {isEn ? "Cancel" : "إلغاء"}
+              </Button>
+              <Button
+                type="submit"
+                variant="danger"
+                disabled={isSubmittingClose || !closeReason.trim()}
+              >
+                {isSubmittingClose
+                  ? (isEn ? "Closing..." : "جارٍ الإنهاء...")
+                  : (isEn ? "Confirm End Period" : "تأكيد إنهاء الفترة")}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -126,13 +126,13 @@ export function FreezeAccountModal({
             <div className="space-y-1">
               <span className="font-bold block">
                 {isEn
-                  ? "Account will remain reserved for the rider and cannot be assigned to another rider."
-                  : "سيظل الحساب محجوزًا للمندوب، ولن يمكن إسناده لمندوب آخر."}
+                  ? "Freezing is manual. The account will remain reserved for the rider and cannot be assigned to another rider."
+                  : "التجميد إجراء يدوي؛ ويظل الحساب محجوزًا للمندوب ولا يمكن إسناده لمندوب آخر."}
               </span>
               <p className="text-xs text-rose-800/90 dark:text-rose-300/90 leading-relaxed">
                 {isEn
-                  ? "Commission is calculated up to and including the chosen Riyadh freeze day. Outstanding debt remains payable."
-                  : "تُحسب العمولة حتى يوم التجميد شاملًا هذا اليوم بتوقيت الرياض، وتبقى المديونية مستحقة."}
+                  ? "Commission is calculated up to and including the chosen Riyadh freeze day (inclusive). Outstanding debt remains payable."
+                  : "تُحسب العمولة حتى يوم التجميد شاملًا ذلك اليوم بتوقيت الرياض، وتبقى المديونية مستحقة على المندوب."}
               </p>
             </div>
           </div>

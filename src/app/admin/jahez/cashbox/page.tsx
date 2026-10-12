@@ -243,8 +243,8 @@ export default function JahezCashboxPage() {
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {isEn
-              ? "Reconcile the two independent cashbox sections: Account Fees vs Settlements, with strict 3-party custody handover."
-              : "إدارة صندوق النقد بقسميه المستقلين: رسوم الحساب والتسويات، ودورة تسليم المحاسب ثلاثية الأطراف."}
+              ? "Reconcile the two independent cashbox sections: Account Fees vs Settlements. Note: The cashbox is pooled/consolidated across all collectors (not a personal drawer per user), and handovers include all available entries up to the specified date."
+              : "إدارة صندوق النقد بقسميه المستقلين: رسوم الحساب والتسويات. تنبيه: الصندوق مجمع لجميع المحصلين (وليس صندوقًا شخصيًا مستقلاً لكل محصل)، وتسليم الصندوق يشمل الحركات المتاحة حتى التاريخ المحدد دون اقتصار على من أنشأ التسليم."}
           </p>
         </div>
 
@@ -667,12 +667,12 @@ export default function JahezCashboxPage() {
           <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3.5 dark:border-amber-900/40 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-200 space-y-1">
             <span className="font-bold flex items-center gap-1.5">
               <Lock className="h-4 w-4" />
-              {isEn ? "Reservation Mechanism" : "آلية حجز مبالغ الصندوق"}
+              {isEn ? "Pooled Reservation Mechanism" : "آلية حجز مبالغ الصندوق المجمع"}
             </span>
             <p>
               {isEn
-                ? "Submitting will reserve all unreserved entries received through this business date. Available funds will become reserved until the accountant and final approver decide."
-                : "سيتم حجز جميع المقبوضات غير المحجوزة حتى نهاية تاريخ اليوم المحدد، وتجميدها من المتاح لحين مطابقة واعتماد المحاسب."}
+                ? "Submitting will reserve all unreserved entries received through this business date across all collectors (pooled cashbox, not personal). Available funds will become reserved until the accountant and final approver decide."
+                : "الصندوق مجمع وليس شخصياً؛ عند بدء التسليم سيتم حجز جميع المقبوضات غير المحجوزة حتى نهاية تاريخ اليوم المحدد لجميع المحصلين، وتجميدها من المتاح لحين مطابقة واعتماد المحاسب."}
             </p>
           </div>
 

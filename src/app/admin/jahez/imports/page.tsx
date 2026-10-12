@@ -408,6 +408,11 @@ export default function JahezImportsReportPage() {
                 {isEn ? "2 - Daily Dispatches Workbook (Sheet: Delivery Insights Report)" : "2 - تقرير الطلبات اليومية (Sheet: Delivery Insights Report)"}
               </option>
             </select>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1.5 bg-amber-50 dark:bg-amber-950/20 p-2 rounded border border-amber-200 dark:border-amber-800">
+              {isEn
+                ? "Note: Uploading SDP transactions or daily dispatches imports daily operational activity only; it does NOT automatically complete percentage commission earnings. Percentage earnings must be recorded via /api/jahez/earnings under an approved percentage policy."
+                : "تنبيه: رفع ملف حركات SDP أو الطلبات اليومية مخصص للعمليات اليومية فقط ولا يستكمل أرباح عمولة النسبة تلقائيًا. تفاصيل أرباح النسبة تُسجل عبر /api/jahez/earnings بعد وجود موافقة نسبة معتمدة تغطي الفترة، دون الحاجة لاعتماد مستقل لبيان الأرباح."}
+            </p>
           </div>
 
           <div className="rounded-lg border-2 border-dashed border-gray-300 p-6 text-center hover:border-emerald-500 dark:border-gray-700">

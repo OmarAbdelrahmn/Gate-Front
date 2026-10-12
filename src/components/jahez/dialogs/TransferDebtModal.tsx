@@ -89,8 +89,26 @@ export function TransferDebtModal({
       return;
     }
 
+    if (balance && !balance.commissionComplete) {
+      toast.error(
+        "تنبيه",
+        isEn
+          ? "Cannot transfer debt while commission calculation is incomplete for this period."
+          : "لا يمكن نقل المديونية وبيانات احتساب العمولة غير مكتملة لهذه الفترة. يرجى إدخال كشوف الأرباح المعتمدة أولاً.",
+      );
+      return;
+    }
+
     if (!effectiveAt) {
       toast.error("خطأ", isEn ? "Effective date/time is required" : "يرجى تحديد وقت السريان");
+      return;
+    }
+
+    if (new Date(effectiveAt) > new Date()) {
+      toast.error(
+        "خطأ",
+        isEn ? "Effective date cannot be in the future" : "تاريخ السريان لا يمكن أن يكون في المستقبل",
+      );
       return;
     }
 
@@ -146,12 +164,28 @@ export function TransferDebtModal({
               </span>
               <p className="text-xs text-purple-800/90 dark:text-purple-300/90 leading-relaxed">
                 {isEn
-                  ? "This action does NOT record a cash collection. It separates the account from the rider's financial obligation."
-                  : "لا تسجل هذه العملية تحصيلًا نقديًا، بل تثبت المديونية في سجل المندوب وتتيح إعادة استخدام الحساب."}
+                  ? "This action records an external operation and does NOT execute a clearance on the Jahez platform. It separates the account from the rider's financial obligation."
+                  : "هذا الإجراء يسجل عملية خارجية ولا ينفذ تصفية على منصة جاهز. لا تسجل هذه العملية تحصيلًا نقديًا، بل تثبت المديونية في سجل المندوب وتتيح إعادة استخدام الحساب."}
               </p>
             </div>
           </div>
         </div>
+
+        {balance && !balance.commissionComplete && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200 flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <span className="font-bold block">
+                {isEn ? "Action Blocked: Commission calculation incomplete" : "لا يمكن نقل المديونية: احتساب العمولة غير مكتمل"}
+              </span>
+              <p className="text-[11px] mt-0.5 text-red-700 dark:text-red-300">
+                {isEn
+                  ? "Approved earnings statements covering the period must be recorded before transferring debt."
+                  : "يلزم تسجيل كشوف الأرباح المعتمدة التي تغطي هذه الفترة قبل نقل المديونية."}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Identity & 3 Buckets Preview */}
         <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3.5 dark:border-gray-800 dark:bg-gray-850 text-xs space-y-2">

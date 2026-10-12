@@ -237,6 +237,77 @@ export async function getJahezRiderDebtSummary(riderId: string): Promise<JahezRi
   );
 }
 
+export interface ThroughDateValidation {
+  isValid: boolean;
+  error?: string;
+}
+
+export function validateThroughDate(
+  throughDate: string,
+  context?: {
+    commissionStartsOn?: string | null;
+    startedAtUtc?: string | null;
+    lastSettlementPaymentAtUtc?: string | null;
+    commissionPostedThrough?: string | null;
+  },
+  locale: "ar" | "en" = "ar",
+): ThroughDateValidation {
+  const isEn = locale === "en";
+  if (!throughDate) {
+    return {
+      isValid: false,
+      error: isEn ? "Settlement cutoff date is required" : "يرجى تحديد تاريخ نهاية فترة التصفية",
+    };
+  }
+
+  // 1. Not in the future (today in local/Riyadh)
+  const todayStr = new Date().toISOString().split("T")[0];
+  if (throughDate > todayStr) {
+    return {
+      isValid: false,
+      error: isEn
+        ? "Settlement cutoff date cannot be in the future"
+        : "تاريخ نهاية فترة التصفية لا يمكن أن يكون في المستقبل",
+    };
+  }
+
+  // 2. Does not precede start of usage period
+  const startDateStr =
+    context?.commissionStartsOn?.slice(0, 10) ||
+    context?.startedAtUtc?.slice(0, 10);
+  if (startDateStr && throughDate < startDateStr) {
+    return {
+      isValid: false,
+      error: isEn
+        ? `Settlement cutoff date cannot precede the start of usage period (${startDateStr})`
+        : `تاريخ نهاية فترة التصفية لا يمكن أن يسبق بداية فترة الاستخدام (${startDateStr})`,
+    };
+  }
+
+  // 3. Does not precede last settlement or posted commission
+  const lastSettlementDateStr = context?.lastSettlementPaymentAtUtc?.slice(0, 10);
+  if (lastSettlementDateStr && throughDate < lastSettlementDateStr) {
+    return {
+      isValid: false,
+      error: isEn
+        ? `Settlement cutoff date cannot precede the last settlement payment (${lastSettlementDateStr})`
+        : `تاريخ نهاية فترة التصفية لا يمكن أن يسبق تاريخ آخر تصفية مسجلة (${lastSettlementDateStr})`,
+    };
+  }
+
+  const postedThroughStr = context?.commissionPostedThrough?.slice(0, 10);
+  if (postedThroughStr && throughDate < postedThroughStr) {
+    return {
+      isValid: false,
+      error: isEn
+        ? `Settlement cutoff date cannot precede posted commission cutoff (${postedThroughStr})`
+        : `تاريخ نهاية فترة التصفية لا يمكن أن يسبق تاريخ آخر عمولة مرحلة (${postedThroughStr})`,
+    };
+  }
+
+  return { isValid: true };
+}
+
 export function getDebtActionGates(
   b: JahezBalance,
   can: (key: string) => boolean,
@@ -244,6 +315,7 @@ export function getDebtActionGates(
   const canRead = can("jahez.read");
   const canReset = canRead && can("jahez.resets.approve");
   const canCollect = canRead && can("jahez.collections.create");
+  const canClose = canRead && can("jahez.handovers.delete");
   const outstanding = b.outstandingAmount ?? 0;
   const isComplete = Boolean(b.commissionComplete);
   const status = b.debtStatus;
@@ -268,7 +340,10 @@ export function getDebtActionGates(
       outstanding === 0,
     collect:
       canCollect &&
-      outstanding > 0,
+      (outstanding > 0 || (!isComplete && (b.fees ?? 0) > 0)),
+    closeHandover:
+      canClose &&
+      status === JahezDebtStatus.Active,
   };
 }
 
