@@ -7,6 +7,7 @@ import type {
   ChefzAccountReminder,
   ChefzImportResult,
   ChefzManagementReport,
+  ChefzOrderSettlementImportResponse,
   ChefzPage,
   ChefzPasswordRequest,
   ChefzPerformance,
@@ -18,6 +19,13 @@ import type {
   ChefzStatisticsRequest,
   ChefzStatisticsResponse,
 } from "./types";
+import {
+  chefzPaths,
+  uploadOrderSettlements,
+} from "./chefz-new-endpoints-contracts";
+
+export { chefzPaths, uploadOrderSettlements };
+
 
 export const CHEFZ_PLATFORM_CODES = ["SHIFTZ", "CHEFZ", "THECHEFZ", "CHEFSZ"];
 
@@ -180,6 +188,59 @@ export async function getChefzSettlements(params?: {
     `/api/chefz/settlements${queryString ? `?${queryString}` : ""}`
   );
 }
+
+/**
+ * Preview bulk order settlements from an Excel file (.xlsx).
+ * Uses multipart FormData without extra JSON headers.
+ */
+export async function previewChefzOrderSettlements(
+  file: File,
+  signal?: AbortSignal
+): Promise<ChefzOrderSettlementImportResponse> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return authFetch<ChefzOrderSettlementImportResponse>(chefzPaths.orderSettlementPreview, {
+    method: "POST",
+    body: form,
+    signal,
+    suppressErrorToast: true,
+  });
+}
+
+/**
+ * Atomically save bulk order settlements from an Excel file (.xlsx).
+ * Uses multipart FormData without extra JSON headers.
+ */
+export async function importChefzOrderSettlements(
+  file: File,
+  signal?: AbortSignal
+): Promise<ChefzOrderSettlementImportResponse> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return authFetch<ChefzOrderSettlementImportResponse>(chefzPaths.orderSettlementImport, {
+    method: "POST",
+    body: form,
+    signal,
+    suppressErrorToast: true,
+  });
+}
+
+/**
+ * Reopen a saved order settlement batch by its importId.
+ */
+export async function getChefzOrderSettlementImport(
+  importId: string,
+  signal?: AbortSignal
+): Promise<ChefzOrderSettlementImportResponse> {
+  return authFetch<ChefzOrderSettlementImportResponse>(
+    chefzPaths.orderSettlementGetImport(importId),
+    {
+      method: "GET",
+      signal,
+    }
+  );
+}
+
 
 // -------------------------------------------------------------
 // 4. Chefz Daily Performance & Import

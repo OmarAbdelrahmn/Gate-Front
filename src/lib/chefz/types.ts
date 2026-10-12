@@ -67,7 +67,26 @@ export interface ChefzSettlement {
   dailyFee: number;
   companyAmount: number;
   riderAmount: number;
+  // Order settlement source & financial breakdown fields
+  source?: "Wallet" | "Orders";
+  importId?: Guid | null;
+  sourceRows?: number;
+  deliveryFees?: number;
+  vatAmount?: number;
+  deliveryFeesAfterVat?: number;
+  tips?: number;
+  compensation?: number;
+  bonuses?: number;
+  deductions?: number;
 }
+
+export type {
+  ChefzProblemDetails,
+  ChefzOrderSettlementResponse,
+  ChefzRiderCycleSettlement,
+  ChefzOrderSettlementImportResponse,
+} from "./chefz-new-endpoints-contracts";
+
 
 export interface ChefzPerformance {
   id: Guid;

@@ -35,6 +35,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
+import { ChefzBulkOrderSettlementPanel } from "@/components/chefz/ChefzBulkOrderSettlementPanel";
 import {
   CreditCard,
   Plus,
@@ -51,6 +52,7 @@ import {
   Clock,
   ArrowRight,
   ShieldAlert,
+  Upload,
 } from "lucide-react";
 
 export default function ChefzSettlementsPage() {
@@ -78,7 +80,11 @@ export default function ChefzSettlementsPage() {
   const [filterYear, setFilterYear] = useState<string>("all");
   const [filterMonth, setFilterMonth] = useState<string>("all");
 
-  // New Settlement Modal State
+  // View Mode: History vs Bulk Order Settlements
+  const [viewMode, setViewMode] = useState<"history" | "bulk-orders">("history");
+  const [viewImportId, setViewImportId] = useState<string | null>(null);
+
+  // New Settlement Modal State (Manual Wallet)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalAccountId, setModalAccountId] = useState(preselectedAccountId);
   const [accountAssignments, setAccountAssignments] = useState<AssignmentResponse[]>([]);
@@ -346,6 +352,11 @@ export default function ChefzSettlementsPage() {
       sheetName: "Chefz Settlements",
       data: filteredSettlements,
       columns: [
+        {
+          header: "المصدر",
+          accessor: (s) => (s.source === "Orders" || s.importId ? "ملف الطلبات" : "رصيد المحفظة"),
+          isText: true,
+        },
         { header: "الفترة من", accessor: (s) => s.periodFrom, isText: true },
         { header: "الفترة إلى", accessor: (s) => s.periodTo, isText: true },
         { header: "كود الحساب", accessor: (s) => baseAccountMap.get(s.accountId)?.code || s.accountId, isText: true },
@@ -363,8 +374,15 @@ export default function ChefzSettlementsPage() {
           accessor: (s) => (s.accountType === "Freelancer" ? "فريلانسر" : "دوام كامل"),
         },
         { header: "أيام التكليف المحسوبة", accessor: (s) => s.assignedDays },
-        { header: "رصيد البداية", accessor: (s) => s.startWalletAmount },
-        { header: "رصيد النهاية", accessor: (s) => s.endWalletAmount },
+        { header: "صفوف التقرير", accessor: (s) => s.sourceRows ?? "—" },
+        {
+          header: "رصيد البداية",
+          accessor: (s) => (s.source === "Orders" ? "—" : s.startWalletAmount),
+        },
+        {
+          header: "رصيد النهاية",
+          accessor: (s) => (s.source === "Orders" ? "—" : s.endWalletAmount),
+        },
         { header: "إجمالي الأرباح", accessor: (s) => s.grossEarnings },
         { header: "مستحق الشركة", accessor: (s) => s.companyAmount },
         { header: "مستحق المندوب", accessor: (s) => s.riderAmount },
@@ -386,6 +404,23 @@ export default function ChefzSettlementsPage() {
     );
   }
 
+  // If in Bulk Order Settlements Mode, render the full-width panel
+  if (viewMode === "bulk-orders") {
+    return (
+      <ChefzBulkOrderSettlementPanel
+        viewImportId={viewImportId}
+        onBack={() => {
+          setViewMode("history");
+          setViewImportId(null);
+          loadData();
+        }}
+        onSaveSuccess={() => {
+          loadData();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6" dir="rtl">
       {/* Header */}
@@ -393,12 +428,12 @@ export default function ChefzSettlementsPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
-              تصفيات محفظة شيفز
+              تصفيات شيفز
             </h1>
             <Badge tone="blue">نصف شهرية</Badge>
           </div>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            احتساب وتسجيل تصفيات المحافظ لنصفي الشهر (الأول: 1-15، الثاني: 16-نهاية الشهر) وفق قواعد فريلانسر ودوام كامل.
+            احتساب وتوثيق تصفيات الحسابات لنصفي الشهر (من ملف الطلبات أو المحفظة اليدوية) وفق قواعد فريلانسر ودوام كامل.
           </p>
         </div>
 
@@ -423,6 +458,19 @@ export default function ChefzSettlementsPage() {
             تصدير إكسل
           </Button>
 
+          {/* Action: Bulk Order Settlements */}
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setViewImportId(null);
+              setViewMode("bulk-orders");
+            }}
+            className="gap-2 border-[var(--brand)] text-[var(--brand)] hover:bg-blue-50 dark:hover:bg-blue-950/40"
+          >
+            <Upload className="h-4 w-4" />
+            تصفية من ملف الطلبات
+          </Button>
+
           {can("chefz.settlements.create") && (
             <Button
               onClick={() => {
@@ -432,7 +480,7 @@ export default function ChefzSettlementsPage() {
               className="gap-2 bg-[var(--brand)] text-white hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
-              تصفية جديدة
+              تصفية يدوية
             </Button>
           )}
         </div>
@@ -540,6 +588,7 @@ export default function ChefzSettlementsPage() {
             <thead className="border-b border-[var(--border)] bg-[var(--table-header-bg)] text-xs font-bold text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-3.5">فترة التصفية</th>
+                <th className="px-4 py-3.5">المصدر</th>
                 <th className="px-4 py-3.5">الحساب</th>
                 <th className="px-4 py-3.5">المندوب الفعلي</th>
                 <th className="px-4 py-3.5">النوع</th>
@@ -555,14 +604,14 @@ export default function ChefzSettlementsPage() {
             <tbody className="divide-y divide-[var(--border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-sm text-[var(--muted)]">
+                  <td colSpan={12} className="py-12 text-center text-sm text-[var(--muted)]">
                     <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
                     جارٍ تحميل سجلات التصفيات...
                   </td>
                 </tr>
               ) : filteredSettlements.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-sm text-[var(--muted)]">
+                  <td colSpan={12} className="py-12 text-center text-sm text-[var(--muted)]">
                     لا توجد تصفيات مسجلة مطابقة للبحث.
                   </td>
                 </tr>
@@ -570,6 +619,7 @@ export default function ChefzSettlementsPage() {
                 filteredSettlements.map((s) => {
                   const acc = baseAccountMap.get(s.accountId);
                   const rider = riderMap.get(s.riderProfileId);
+                  const isOrdersSource = s.source === "Orders" || Boolean(s.importId);
 
                   return (
                     <tr
@@ -584,6 +634,23 @@ export default function ChefzSettlementsPage() {
                         <div className="text-xs text-[var(--muted)]">
                           {s.periodFrom.slice(8, 10) === "01" ? "النصف الأول" : "النصف الثاني"}
                         </div>
+                      </td>
+
+                      {/* Source */}
+                      <td className="px-4 py-3">
+                        {isOrdersSource ? (
+                          <Badge tone="blue" className="gap-1">
+                            <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+                            ملف الطلبات
+                          </Badge>
+                        ) : (
+                          <Badge tone="gray">رصيد المحفظة</Badge>
+                        )}
+                        {s.sourceRows ? (
+                          <div className="text-[10px] text-[var(--muted)] mt-0.5">
+                            {s.sourceRows} صف بالتقرير
+                          </div>
+                        ) : null}
                       </td>
 
                       {/* Account */}
@@ -629,12 +696,24 @@ export default function ChefzSettlementsPage() {
 
                       {/* Start Wallet */}
                       <td className="px-4 py-3 font-mono text-xs" dir="ltr">
-                        {s.startWalletAmount.toLocaleString()} ر.س
+                        {isOrdersSource ? (
+                          <span className="text-[var(--muted)]" title="تصفية من ملف الطلبات (لا تعتمد على رصيد المحفظة)">
+                            —
+                          </span>
+                        ) : (
+                          `${s.startWalletAmount.toLocaleString()} ر.س`
+                        )}
                       </td>
 
                       {/* End Wallet */}
                       <td className="px-4 py-3 font-mono text-xs" dir="ltr">
-                        {s.endWalletAmount.toLocaleString()} ر.س
+                        {isOrdersSource ? (
+                          <span className="text-[var(--muted)]" title="تصفية من ملف الطلبات (لا تعتمد على رصيد المحفظة)">
+                            —
+                          </span>
+                        ) : (
+                          `${s.endWalletAmount.toLocaleString()} ر.س`
+                        )}
                       </td>
 
                       {/* Gross Earnings */}
@@ -662,14 +741,31 @@ export default function ChefzSettlementsPage() {
 
                       {/* Actions */}
                       <td className="px-4 py-3 text-center">
-                        <Button
-                          variant="secondary"
-                          onClick={() => setSelectedSettlement(s)}
-                          className="gap-1.5 text-xs"
-                        >
-                          <Printer className="h-3.5 w-3.5" />
-                          عرض الإيصال
-                        </Button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          {s.importId ? (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setViewImportId(s.importId!);
+                                setViewMode("bulk-orders");
+                              }}
+                              className="gap-1.5 text-xs text-[var(--brand)] border-[var(--brand)]"
+                              title="عرض التصفية المحفوظة بالكامل"
+                            >
+                              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                              عرض التصفية المحفوظة
+                            </Button>
+                          ) : null}
+
+                          <Button
+                            variant="secondary"
+                            onClick={() => setSelectedSettlement(s)}
+                            className="gap-1.5 text-xs"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            عرض الإيصال
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1041,32 +1137,84 @@ export default function ChefzSettlementsPage() {
               </div>
             </div>
 
-            <div className="border-t border-dashed border-[var(--border)] pt-3 space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-[var(--muted)]">رصيد بداية المحفظة:</span>
-                <span className="font-mono text-[var(--foreground)]" dir="ltr">
-                  {selectedSettlement.startWalletAmount.toLocaleString()} ر.س
-                </span>
+            {/* Financial Details */}
+            {selectedSettlement.source === "Orders" || selectedSettlement.importId ? (
+              <div className="border-t border-dashed border-[var(--border)] pt-3 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">مصدر التصفية:</span>
+                  <span className="font-bold text-blue-600">ملف الطلبات (.xlsx)</span>
+                </div>
+                {selectedSettlement.importId && (
+                  <div className="flex justify-between">
+                    <span className="text-[var(--muted)]">معرّف الدفعة:</span>
+                    <span className="font-mono text-[10px]" dir="ltr">
+                      {selectedSettlement.importId}
+                    </span>
+                  </div>
+                )}
+                {typeof selectedSettlement.sourceRows === "number" && (
+                  <div className="flex justify-between">
+                    <span className="text-[var(--muted)]">عدد صفوف التقرير:</span>
+                    <span className="font-mono font-bold">{selectedSettlement.sourceRows}</span>
+                  </div>
+                )}
+                {typeof selectedSettlement.deliveryFees === "number" && (
+                  <div className="flex justify-between">
+                    <span className="text-[var(--muted)]">رسوم التوصيل:</span>
+                    <span className="font-mono" dir="ltr">
+                      {selectedSettlement.deliveryFees.toLocaleString()} ر.س
+                    </span>
+                  </div>
+                )}
+                {typeof selectedSettlement.vatAmount === "number" && (
+                  <div className="flex justify-between">
+                    <span className="text-[var(--muted)]">خصم الضريبة:</span>
+                    <span className="font-mono text-red-600" dir="ltr">
+                      -{selectedSettlement.vatAmount.toLocaleString()} ر.س
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold">
+                  <span className="text-[var(--foreground)]">صافي الأرباح:</span>
+                  <span className="font-mono text-[var(--foreground)]" dir="ltr">
+                    {selectedSettlement.grossEarnings.toLocaleString()} ر.س
+                  </span>
+                </div>
+                <div className="flex justify-between font-bold text-blue-600">
+                  <span>مستحق الشركة:</span>
+                  <span className="font-mono" dir="ltr">
+                    {selectedSettlement.companyAmount.toLocaleString()} ر.س
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--muted)]">رصيد نهاية المحفظة:</span>
-                <span className="font-mono text-[var(--foreground)]" dir="ltr">
-                  {selectedSettlement.endWalletAmount.toLocaleString()} ر.س
-                </span>
+            ) : (
+              <div className="border-t border-dashed border-[var(--border)] pt-3 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">رصيد بداية المحفظة:</span>
+                  <span className="font-mono text-[var(--foreground)]" dir="ltr">
+                    {selectedSettlement.startWalletAmount.toLocaleString()} ر.س
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">رصيد نهاية المحفظة:</span>
+                  <span className="font-mono text-[var(--foreground)]" dir="ltr">
+                    {selectedSettlement.endWalletAmount.toLocaleString()} ر.س
+                  </span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span className="text-[var(--foreground)]">إجمالي الأرباح:</span>
+                  <span className="font-mono text-[var(--foreground)]" dir="ltr">
+                    {selectedSettlement.grossEarnings.toLocaleString()} ر.س
+                  </span>
+                </div>
+                <div className="flex justify-between font-bold text-blue-600">
+                  <span>مستحق الشركة:</span>
+                  <span className="font-mono" dir="ltr">
+                    {selectedSettlement.companyAmount.toLocaleString()} ر.س
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between font-bold">
-                <span className="text-[var(--foreground)]">إجمالي الأرباح:</span>
-                <span className="font-mono text-[var(--foreground)]" dir="ltr">
-                  {selectedSettlement.grossEarnings.toLocaleString()} ر.س
-                </span>
-              </div>
-              <div className="flex justify-between font-bold text-blue-600">
-                <span>مستحق الشركة:</span>
-                <span className="font-mono" dir="ltr">
-                  {selectedSettlement.companyAmount.toLocaleString()} ر.س
-                </span>
-              </div>
-            </div>
+            )}
 
             <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 flex justify-between items-center text-sm font-extrabold">
               <span className="text-[var(--foreground)]">
