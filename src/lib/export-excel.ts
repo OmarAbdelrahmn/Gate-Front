@@ -14,14 +14,41 @@ export interface ExportToExcelOptions<T> {
 
 /**
  * Exports data to an Excel (.xlsx) file using the `xlsx` library with proper text formatting and column widths.
+ * Supports both options object and positional arguments:
+ * - exportToExcel({ filename, data, columns, sheetName })
+ * - exportToExcel(data, filename, sheetName)
  */
-export async function exportToExcel<T>({
-  filename,
-  sheetName = "Sheet1",
-  data,
-  columns,
-}: ExportToExcelOptions<T>): Promise<void> {
+export async function exportToExcel<T>(
+  optionsOrData: ExportToExcelOptions<T> | T[],
+  filenameArg?: string,
+  sheetNameArg = "Sheet1"
+): Promise<void> {
   const XLSX = await import("xlsx");
+
+  let filename: string;
+  let sheetName: string;
+  let data: T[];
+  let columns: ExcelColumn<T>[];
+
+  if (Array.isArray(optionsOrData)) {
+    data = optionsOrData;
+    filename = filenameArg || "export";
+    sheetName = sheetNameArg;
+    if (data.length > 0 && typeof data[0] === "object" && data[0] !== null) {
+      columns = Object.keys(data[0] as object).map((key) => ({
+        header: key,
+        accessor: key as keyof T,
+        isText: true,
+      }));
+    } else {
+      columns = [];
+    }
+  } else {
+    filename = optionsOrData.filename;
+    sheetName = optionsOrData.sheetName || "Sheet1";
+    data = optionsOrData.data;
+    columns = optionsOrData.columns;
+  }
 
   const rows = data.map((item, idx) => {
     const row: Record<string, any> = {};

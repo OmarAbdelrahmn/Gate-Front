@@ -332,6 +332,18 @@ export function getFriendlyErrorMessage(
         return rawMessage || "طلب غير صالح أو مدخلات غير صحيحة.";
       case "system.not_found":
         return "العنصر المطلوب غير موجود أو لم يعد متاحاً.";
+      case "ninja.not_found":
+        return "حساب نينجا أو السجل المطلوب غير موجود في النظام.";
+      case "ninja.forbidden":
+        return "عفواً، لا تملك الصلاحية الكافية لتنفيذ هذا الإجراء على منصة نينجا.";
+      case "ninja.invalid":
+        return rawMessage || "بيانات طلب نينجا غير صالحة. يرجى مراجعة المدخلات والشروط.";
+      case "ninja.conflict":
+        return rawMessage || "يوجد تعارض في بيانات نينجا أو تداخل في فترات التعيين.";
+      case "ninja.use_workflow":
+        return "هذا الحساب تابع لمنصة نينجا؛ يرجى استخدام شاشات وإجراءات نينجا المخصصة لإدارته.";
+      case "ninja.password_cooldown":
+        return "لم تتغير كلمة المرور؛ لا يمكن تغييرها قبل انتهاء فترة الانتظار (72 ساعة).";
     }
   }
 

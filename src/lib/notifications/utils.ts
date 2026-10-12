@@ -326,6 +326,15 @@ export const EVENT_TYPE_METADATA: Record<
     categoryAr: "إداري",
     categoryEn: "Admin",
   },
+  "ninja.password_cooldown": {
+    titleAr: "تنبيه فترة انتظار كلمة مرور نينجا",
+    titleEn: "Ninja Password Cooldown Alert",
+    bodyAr: "لم تتغير كلمة المرور؛ يمكن تغييرها بعد انتهاء مهلة الـ 72 ساعة المحددة.",
+    bodyEn: "Password retained. It can be changed after the 72-hour cooldown deadline.",
+    categoryAr: "نينجا",
+    categoryEn: "Ninja",
+    defaultRoute: "/admin/ninja/accounts",
+  },
 };
 
 /**

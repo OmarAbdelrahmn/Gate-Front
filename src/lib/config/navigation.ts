@@ -39,6 +39,7 @@ import {
   ShoppingBag,
   Scale,
   UtensilsCrossed,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -380,6 +381,42 @@ export const navigation: NavItem[] = [
         icon: Building2,
         roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["chefz.read", "chefz.accounts.update"],
+      },
+    ],
+  },
+  {
+    label: "إدارة نينجا",
+    labelKey: "nav.ninja",
+    icon: Zap,
+    roles: ["admin", "manager", "member", "accountant"],
+    permissionsAny: [
+      "platform_accounts.read",
+      "platform_accounts.update",
+    ],
+    children: [
+      {
+        label: "الحسابات",
+        labelKey: "nav.ninjaAccounts",
+        href: "/admin/ninja/accounts",
+        icon: Server,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
+      },
+      {
+        label: "الأداء اليومي",
+        labelKey: "nav.ninjaPerformance",
+        href: "/admin/ninja/performance",
+        icon: BarChart3,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
+      },
+      {
+        label: "الخصومات اليومية",
+        labelKey: "nav.ninjaDeductions",
+        href: "/admin/ninja/deductions",
+        icon: BadgeDollarSign,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
       },
     ],
   },

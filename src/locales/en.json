@@ -140,6 +140,10 @@
     "chefzSettlements": "Settlements",
     "chefzPerformance": "Performance",
     "chefzSponsorStatistics": "Sponsor Statistics",
+    "ninja": "Ninja Management",
+    "ninjaAccounts": "Ninja Accounts",
+    "ninjaPerformance": "Daily Performance",
+    "ninjaDeductions": "Daily Deductions",
     "collapseMenu": "Collapse Menu",
     "expandMenu": "Expand Menu"
   },

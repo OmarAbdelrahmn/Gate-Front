@@ -46,6 +46,7 @@ import {
   Lock,
   UserCheck,
   FileSpreadsheet,
+  Zap,
 } from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
 
@@ -492,6 +493,20 @@ export default function PlatformAccountsPage() {
       );
     }
 
+    const isNinja =
+      acc.platformCode === "NINJA" ||
+      acc.platformNameAr?.includes("نينجا") ||
+      acc.platformNameEn?.toLowerCase().includes("ninja");
+
+    if (isNinja) {
+      toast.warning(
+        "مسار نينجا",
+        isEn
+          ? "Ninja accounts require the dedicated Ninja workflow for assignment and phone/password tracking."
+          : "حسابات نينجا تتطلب استخدام مسار نينجا المخصص لإدارة فترات انتظار كلمة المرور ورقم هاتف المندوب.",
+      );
+    }
+
     setAssigningAccount(acc);
     setAssignFormData({
       actualRiderProfileId: "",
@@ -556,7 +571,14 @@ export default function PlatformAccountsPage() {
         loadData();
       } catch (err: any) {
         console.error("Release error:", err);
-        toast.error("فشل إنهاء التعيين", err?.message || "تعذر إنهاء التعيين للحساب.");
+        if (err?.details?.errorCode === "ninja.use_workflow" || err?.message?.includes("ninja.use_workflow")) {
+          toast.warning(
+            "مسار نينجا المخصص",
+            "هذا الحساب تابع لمنصة نينجا؛ يرجى استخدام شاشة إدارة نينجا لإنهاء التعيين وتدوير كلمة المرور."
+          );
+        } else {
+          toast.error("فشل إنهاء التعيين", err?.message || "تعذر إنهاء التعيين للحساب.");
+        }
       }
     });
   };
@@ -711,7 +733,14 @@ export default function PlatformAccountsPage() {
         loadData();
       } catch (err: any) {
         console.error("Assign error:", err);
-        toast.error("فشل التعيين", err?.message || "تعذر تعيين المندوب للحساب. يرجى مراجعة المدخلات.");
+        if (err?.details?.errorCode === "ninja.use_workflow" || err?.message?.includes("ninja.use_workflow")) {
+          toast.warning(
+            "مسار نينجا المخصص",
+            "هذا الحساب تابع لمنصة نينجا؛ يرجى استخدام شاشة إدارة نينجا لتعيين الحساب وتسجيل الهاتف."
+          );
+        } else {
+          toast.error("فشل التعيين", err?.message || "تعذر تعيين المندوب للحساب. يرجى مراجعة المدخلات.");
+        }
       }
     });
   };
@@ -734,7 +763,16 @@ export default function PlatformAccountsPage() {
           setCredentialHistoryList(data);
         }
         setActiveCredTab("history");
-      } catch (err) { }
+      } catch (err: any) {
+        if (err?.details?.errorCode === "ninja.use_workflow" || err?.message?.includes("ninja.use_workflow")) {
+          toast.warning(
+            "مسار نينجا المخصص",
+            "هذا الحساب تابع لمنصة نينجا؛ يرجى استخدام شاشة إدارة نينجا لتدوير كلمة المرور مع مراعاة مهلة الـ 72 ساعة."
+          );
+        } else {
+          toast.error("فشل تدوير كلمة المرور", err?.message || "تعذر تدوير بيانات الاعتماد.");
+        }
+      }
     });
   };
 
@@ -1130,6 +1168,15 @@ export default function PlatformAccountsPage() {
                               : "الحساب مجمد ومحجوز للمندوب؛ يلزم تصفية الحساب أو تأكيد السداد قبل إسناد جديد."}
                           </span>
                         )}
+                      {(acc.platformCode === "NINJA" || acc.platformNameAr?.includes("نينجا") || acc.platformNameEn?.toLowerCase().includes("ninja")) && (
+                        <Link
+                          href="/admin/ninja/accounts"
+                          className="inline-flex items-center gap-1 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 text-[10px] font-bold mt-1 hover:underline"
+                        >
+                          <Zap className="h-3 w-3" />
+                          {isEn ? "Ninja Workflow" : "مسار نينجا"}
+                        </Link>
+                      )}
                     </td>
 
                     <td className="px-6 py-4 text-center">
@@ -1165,6 +1212,17 @@ export default function PlatformAccountsPage() {
                           >
                             <KeyRound className="h-4 w-4" />
                           </button>
+                        )}
+
+                        {/* Ninja Workflow Button */}
+                        {(acc.platformCode === "NINJA" || acc.platformNameAr?.includes("نينجا") || acc.platformNameEn?.toLowerCase().includes("ninja")) && (
+                          <Link
+                            href="/admin/ninja/accounts"
+                            title="الانتقال إلى شاشة إدارة نينجا"
+                            className="rounded-lg p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                          >
+                            <Zap className="h-4 w-4" />
+                          </Link>
                         )}
 
                         {/* Assignment History Button */}
