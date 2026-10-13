@@ -716,3 +716,110 @@ export function normalizeNotificationDeepLink(
 
   return link;
 }
+
+/**
+ * Checks if a notification represents an action item requiring approval/decision,
+ * such as vacation/leave approvals, status changes, or pending workflow approvals.
+ */
+export function isApprovalNotification(item: any): boolean {
+  if (!item) return false;
+  const eventKey = (typeof item.eventType === "string" ? item.eventType : "").toLowerCase().trim();
+
+  // Terminal / already-actioned events are NOT pending approvals
+  if (
+    eventKey.includes("approved") ||
+    eventKey.includes("rejected") ||
+    eventKey.includes("cancelled") ||
+    eventKey.includes("canceled") ||
+    eventKey.includes("completed") ||
+    eventKey.includes("resolved") ||
+    eventKey.includes("returned")
+  ) {
+    return false;
+  }
+
+  // Known event types that need review/approval
+  if (
+    eventKey === "hr.leave.created" ||
+    eventKey === "hr.leave.submitted" ||
+    eventKey === "hr.leave.date_change_requested" ||
+    eventKey === "hr.status_change.requested" ||
+    eventKey === "inventory.supply_request.submitted" ||
+    eventKey.includes("approval") ||
+    eventKey.endsWith(".requested") ||
+    eventKey.endsWith(".submitted") ||
+    eventKey.endsWith(".pending")
+  ) {
+    return true;
+  }
+
+  // Combined text search in titles, bodies, and entity info
+  const text = (
+    (typeof item.titleAr === "string" ? item.titleAr : "") + " " +
+    (typeof item.titleEn === "string" ? item.titleEn : "") + " " +
+    (typeof item.bodyAr === "string" ? item.bodyAr : "") + " " +
+    (typeof item.bodyEn === "string" ? item.bodyEn : "") + " " +
+    (typeof item.title === "string" ? item.title : "") + " " +
+    (typeof item.body === "string" ? item.body : "") + " " +
+    (typeof item.sourceEntityType === "string" ? item.sourceEntityType : "")
+  ).toLowerCase();
+
+  // If text indicates it has already been approved/rejected/cancelled
+  if (
+    text.includes("تم الاعتماد") ||
+    text.includes("تمت الموافقة") ||
+    text.includes("تم الرفض") ||
+    text.includes("تم الإلغاء") ||
+    text.includes("approved successfully") ||
+    text.includes("was rejected") ||
+    text.includes("has been cancelled")
+  ) {
+    return false;
+  }
+
+  // Leave / vacation keywords requiring action
+  if (
+    text.includes("طلب إجازة") ||
+    text.includes("طلب اجازة") ||
+    text.includes("leave request") ||
+    text.includes("تعديل مواعيد الإجازة")
+  ) {
+    if (
+      text.includes("جديد") ||
+      text.includes("للاعتماد") ||
+      text.includes("مراجعة") ||
+      text.includes("بانتظار") ||
+      text.includes("new") ||
+      text.includes("review") ||
+      text.includes("approval") ||
+      text.includes("submitted") ||
+      text.includes("pending")
+    ) {
+      return true;
+    }
+  }
+
+  // Explicit approval / pending review phrases
+  if (
+    text.includes("بانتظار الاعتماد") ||
+    text.includes("بانتظار الموافقة") ||
+    text.includes("بحاجة لاعتماد") ||
+    text.includes("للموافقة والاعتماد") ||
+    text.includes("pending approval") ||
+    text.includes("awaiting approval") ||
+    text.includes("submitted for approval")
+  ) {
+    return true;
+  }
+
+  // DeepLink check
+  const link = (typeof item.deepLink === "string" ? item.deepLink : "").toLowerCase();
+  if (
+    (link.includes("/hr/leave-requests") || link.includes("/admin/jahez/approvals")) &&
+    (text.includes("طلب") || text.includes("request") || text.includes("pending"))
+  ) {
+    return true;
+  }
+
+  return false;
+}

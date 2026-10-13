@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Clock,
   ExternalLink,
   Eye,
@@ -20,6 +21,7 @@ import {
   Loader2,
   RefreshCw,
   Sparkles,
+  UserCheck,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth/AuthProvider";
@@ -36,6 +38,7 @@ import type {
 } from "../../lib/notifications/types";
 import {
   formatRelativeTime,
+  isApprovalNotification,
   resolveNotificationContent,
   SEVERITY_CONFIG,
 } from "../../lib/notifications/utils";
@@ -63,10 +66,27 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
 
   // Gate the entire center on 'notifications.read'
   const canReadNotifications = can("notifications.read");
-  const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "unread" | "approvals">("all");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+
+  // Computed approvals and displayed items
+  const approvalItems = useMemo(() => {
+    return items.filter(isApprovalNotification);
+  }, [items]);
+
+  const approvalCount = approvalItems.length;
+
+  const displayedItems = useMemo(() => {
+    if (activeTab === "approvals") {
+      return approvalItems;
+    }
+    if (activeTab === "unread") {
+      return items.filter((item) => !item.readAtUtc);
+    }
+    return items;
+  }, [activeTab, items, approvalItems]);
 
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -146,7 +166,7 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
   // Load feed from /query
   const fetchFeed = useCallback(
     async (
-      tab: "all" | "unread" = activeTab,
+      tab: "all" | "unread" | "approvals" = activeTab,
       isInitialOrReset = true,
       cursor: string | null = null
     ) => {
@@ -163,7 +183,7 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
           {
             permissions: permissions !== undefined ? permissions : null, // null fetches all authorized audiences + personal
             unreadOnly: tab === "unread",
-            pageSize: 50,
+            pageSize: tab === "approvals" ? 100 : 50,
             cursor: isInitialOrReset ? null : cursor,
           },
           { suppressErrorToast: true }
@@ -486,12 +506,12 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
           </div>
 
           {/* Filter Tabs & Quick Action Bar */}
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-4 py-2 bg-slate-50 dark:bg-[#1c2d4a] text-xs">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-2 bg-slate-50 dark:bg-[#1c2d4a] text-xs">
             <div className="flex items-center gap-1 p-0.5 rounded-xl bg-slate-200/80 dark:bg-slate-800">
               <button
                 type="button"
                 onClick={() => setActiveTab("all")}
-                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                className={`px-2.5 sm:px-3 py-1 rounded-lg font-bold transition-all ${
                   activeTab === "all"
                     ? "bg-white dark:bg-slate-700 text-[#1167c9] dark:text-blue-300 shadow-sm"
                     : "text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -502,15 +522,40 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
               <button
                 type="button"
                 onClick={() => setActiveTab("unread")}
-                className={`px-3 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 sm:px-3 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
                   activeTab === "unread"
                     ? "bg-white dark:bg-slate-700 text-[#1167c9] dark:text-blue-300 shadow-sm"
                     : "text-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
-                {isAr ? "غير المقروءة" : "Unread"}
+                <span>{isAr ? "غير المقروءة" : "Unread"}</span>
                 {unreadCount > 0 && (
                   <span className="h-1.5 w-1.5 rounded-full bg-[#f28b35]" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("approvals")}
+                className={`px-2.5 sm:px-3 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "approvals"
+                    ? "bg-white dark:bg-slate-700 text-[#1167c9] dark:text-blue-300 shadow-sm"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+                title={isAr ? "إشعارات بانتظار الاعتماد والموافقة" : "Notifications requiring approval"}
+              >
+                <ClipboardCheck
+                  size={13}
+                  className={
+                    activeTab === "approvals"
+                      ? "text-[#1167c9] dark:text-blue-300"
+                      : "text-amber-500"
+                  }
+                />
+                <span>{isAr ? "الموافقات" : "Approvals"}</span>
+                {approvalCount > 0 && (
+                  <span className="inline-flex items-center justify-center px-1.5 py-0.5 min-w-4 rounded-full text-[10px] font-black bg-amber-500 text-white leading-none shadow-xs">
+                    {approvalCount > 99 ? "99+" : approvalCount}
+                  </span>
                 )}
               </button>
             </div>
@@ -521,7 +566,7 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
                 type="button"
                 onClick={handleMarkAllAsRead}
                 disabled={loading || isMarkingAllRead}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1167c9] dark:text-blue-400 hover:underline disabled:opacity-50"
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1167c9] dark:text-blue-400 hover:underline disabled:opacity-50 shrink-0"
               >
                 {isMarkingAllRead ? (
                   <Loader2 size={13} className="animate-spin text-[#1167c9]" />
@@ -541,18 +586,32 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
 
           {/* Notifications List */}
           <div className="flex-1 overflow-y-auto space-y-2 max-h-[420px] p-2.5 bg-slate-50/60 dark:bg-[#111c30]">
-            {loading && items.length === 0 ? (
+            {loading && displayedItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-[var(--muted)]">
                 <Loader2 className="h-6 w-6 animate-spin text-[#1167c9] mb-2" />
                 <p>{isAr ? "جارٍ تحميل الإشعارات..." : "Loading notifications..."}</p>
               </div>
-            ) : items.length === 0 ? (
+            ) : displayedItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-[#1167c9] dark:text-blue-400 mb-3 shadow-inner">
-                  <Sparkles size={22} />
+                <div
+                  className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-3 shadow-inner ${
+                    activeTab === "approvals"
+                      ? "bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400"
+                      : "bg-blue-50 dark:bg-blue-950/50 text-[#1167c9] dark:text-blue-400"
+                  }`}
+                >
+                  {activeTab === "approvals" ? (
+                    <ClipboardCheck size={22} />
+                  ) : (
+                    <Sparkles size={22} />
+                  )}
                 </div>
                 <h5 className="font-bold text-sm text-[var(--foreground)] mb-1">
-                  {activeTab === "unread"
+                  {activeTab === "approvals"
+                    ? isAr
+                      ? "لا توجد طلبات بانتظار الاعتماد"
+                      : "No pending approval requests"
+                    : activeTab === "unread"
                     ? isAr
                       ? "أنت على اطلاع بكل جديد!"
                       : "You're all caught up!"
@@ -561,7 +620,11 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
                     : "No notifications yet"}
                 </h5>
                 <p className="text-xs text-[var(--muted)] max-w-xs">
-                  {activeTab === "unread"
+                  {activeTab === "approvals"
+                    ? isAr
+                      ? "تم اتخاذ الإجراء في جميع طلبات الإجازات ومسارات العمل المعلقة."
+                      : "All leave and workflow approval requests have been addressed."
+                    : activeTab === "unread"
                     ? isAr
                       ? "لا توجد أي إشعارات غير مقروءة في صندوقك."
                       : "There are no unread notifications in your feed."
@@ -571,11 +634,12 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
                 </p>
               </div>
             ) : (
-              items.map((item) => {
+              displayedItems.map((item) => {
                 const isUnread = !item.readAtUtc;
                 const isActing = actionLoadingId === item.id;
                 const sev = SEVERITY_CONFIG[item.severity] || SEVERITY_CONFIG.Information;
                 const content = resolveNotificationContent(item, locale);
+                const isApproval = isApprovalNotification(item);
 
                 return (
                   <div
@@ -583,34 +647,54 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
                     onClick={() => handleItemClick(item, content.deepLink)}
                     className={`group relative flex items-start gap-3 p-3.5 transition-all cursor-pointer rounded-xl border ${
                       isUnread
-                        ? "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800/60 hover:bg-blue-100/70 dark:hover:bg-blue-900/40 shadow-xs"
+                        ? isApproval
+                          ? "bg-amber-50/70 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/60 hover:bg-amber-100/60 dark:hover:bg-amber-900/30 shadow-xs"
+                          : "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800/60 hover:bg-blue-100/70 dark:hover:bg-blue-900/40 shadow-xs"
                         : "bg-white border-slate-200/80 dark:bg-slate-900/40 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 shadow-xs"
                     }`}
                   >
-                    {/* Visual Accent for Unread: A sleek indicator strip */}
+                    {/* Visual Accent for Unread / Approvals: A sleek indicator strip */}
                     {isUnread && (
                       <span
                         className={`absolute ${
                           isAr ? "right-1" : "left-1"
-                        } top-3 bottom-3 w-1 rounded-full bg-[#1167c9] dark:bg-blue-400`}
+                        } top-3 bottom-3 w-1 rounded-full ${
+                          isApproval
+                            ? "bg-amber-500 dark:bg-amber-400"
+                            : "bg-[#1167c9] dark:bg-blue-400"
+                        }`}
                       />
                     )}
 
                     {/* Severity / Status icon badge */}
                     <div
-                      className={`mt-0.5 flex-shrink-0 p-2.5 rounded-xl border ${sev.badgeClass} shadow-xs`}
+                      className={`mt-0.5 flex-shrink-0 p-2.5 rounded-xl border ${
+                        isApproval
+                          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-900/50"
+                          : sev.badgeClass
+                      } shadow-xs`}
                     >
-                      {severityIcon(item.severity)}
+                      {isApproval ? (
+                        <ClipboardCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      ) : (
+                        severityIcon(item.severity)
+                      )}
                     </div>
 
                     {/* Content Details */}
                     <div className="flex-1 min-w-0">
-                      {/* Top meta row: Category pill + Time + Unread indicator */}
+                      {/* Top meta row: Category pill + Time + Approval Badge + Unread indicator */}
                       <div className="flex items-center justify-between gap-2 mb-1.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                             {content.category}
                           </span>
+                          {isApproval && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/80 dark:border-amber-700/60">
+                              <ClipboardCheck size={10} />
+                              {isAr ? "بانتظار الاعتماد" : "Pending Approval"}
+                            </span>
+                          )}
                           <span className="flex items-center gap-1 text-[11px] font-medium text-[var(--muted)]">
                             <Clock size={11} className="shrink-0" />
                             {formatRelativeTime(item.visibleAtUtc, locale)}
@@ -657,7 +741,23 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
                           className="flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {content.deepLink && (
+                          {content.deepLink && isApproval ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isUnread) {
+                                  void handleStateAction(item.id, "read", item.rowVersion);
+                                }
+                                setIsOpen(false);
+                                router.push(content.deepLink!);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-[#1167c9] hover:bg-[#0d52a1] text-white shadow-xs transition-colors"
+                              title={isAr ? "مراجعة واعتماد الطلب" : "Review and approve"}
+                            >
+                              <UserCheck size={12} />
+                              <span>{isAr ? "مراجعة واعتماد" : "Review & Action"}</span>
+                            </button>
+                          ) : content.deepLink ? (
                             <button
                               type="button"
                               onClick={() => {
@@ -673,7 +773,7 @@ export function NotificationBell({ permissions }: NotificationBellProps = {}) {
                               <ExternalLink size={11} />
                               <span>{isAr ? "فتح" : "Open"}</span>
                             </button>
-                          )}
+                          ) : null}
 
                           {/* Toggle read/unread */}
                           <button
