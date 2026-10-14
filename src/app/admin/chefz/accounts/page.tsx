@@ -41,6 +41,11 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
 import {
+  TableHeaderColumnFilter,
+  TableHeaderDualFilter,
+  type FilterOption,
+} from "@/components/ui/TableHeaderFilter";
+import {
   Server,
   Search,
   RefreshCw,
@@ -59,6 +64,9 @@ import {
   Check,
   Info,
   ShieldAlert,
+  Building2,
+  MapPin,
+  X,
 } from "lucide-react";
 
 interface JoinedAccount {
@@ -83,12 +91,21 @@ export default function ChefzAccountsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Filters
+  // Filters (Toolbar)
   const [search, setSearch] = useState("");
   const [filterSetupStatus, setFilterSetupStatus] = useState<string>("all"); // "all" | "configured" | "not_configured"
   const [filterType, setFilterType] = useState<string>("all"); // "all" | "Freelancer" | "FullTime"
   const [filterCityId, setFilterCityId] = useState("");
   const [filterSponsorId, setFilterSponsorId] = useState("");
+
+  // Table Header Column Filters
+  const [colFilterReminders, setColFilterReminders] = useState<string[]>([]);
+  const [colFilterAssignments, setColFilterAssignments] = useState<string[]>([]);
+  const [colFilterCityIds, setColFilterCityIds] = useState<string[]>([]);
+  const [colFilterSponsorIds, setColFilterSponsorIds] = useState<string[]>([]);
+  const [colFilterTypes, setColFilterTypes] = useState<string[]>([]);
+  const [colFilterSetup, setColFilterSetup] = useState<string[]>([]);
+  const [colFilterPassword, setColFilterPassword] = useState<string[]>([]);
 
   // Modals
   // 1. Chefz Setup / Configuration Modal
@@ -199,22 +216,71 @@ export default function ChefzAccountsPage() {
       const { base, chefz } = item;
       const isConfigured = Boolean(chefz && chefz.accountType !== "Unconfigured");
 
-      // Setup filter
+      // 1. Setup filter (Toolbar)
       if (filterSetupStatus === "configured" && !isConfigured) return false;
       if (filterSetupStatus === "not_configured" && isConfigured) return false;
 
-      // Type filter
+      // 2. Type filter (Toolbar)
       if (filterType !== "all") {
         if (!chefz || chefz.accountType !== filterType) return false;
       }
 
-      // City filter
+      // 3. City filter (Toolbar)
       if (filterCityId && base.operatingCityId !== filterCityId) return false;
 
-      // Sponsor filter
+      // 4. Sponsor filter (Toolbar)
       if (filterSponsorId && base.sponsorId !== filterSponsorId) return false;
 
-      // Search query
+      // 5. Column Filter: Reminders & Block Warnings
+      if (colFilterReminders.length > 0) {
+        const rem = reminderMap.get(base.id);
+        const condition = rem?.condition === "FinalExit" ? "FinalExit" : rem ? "NearBlock" : "Clear";
+        if (!colFilterReminders.includes(condition)) return false;
+      }
+
+      // 6. Column Filter: Assignment Status & Actual Rider
+      if (colFilterAssignments.length > 0) {
+        const curr = base.currentAssignment;
+        const isAssigned = Boolean(curr);
+        const riderName = curr?.actualRiderNameAr;
+        const matchesAny = colFilterAssignments.some((f) => {
+          if (f === "STATUS_ASSIGNED") return isAssigned;
+          if (f === "STATUS_UNASSIGNED") return !isAssigned;
+          if (f.startsWith("RIDER_")) return riderName === f.replace("RIDER_", "");
+          return false;
+        });
+        if (!matchesAny) return false;
+      }
+
+      // 7. Column Filter: City
+      if (colFilterCityIds.length > 0) {
+        if (!base.operatingCityId || !colFilterCityIds.includes(base.operatingCityId)) return false;
+      }
+
+      // 8. Column Filter: Sponsor
+      if (colFilterSponsorIds.length > 0) {
+        if (!base.sponsorId || !colFilterSponsorIds.includes(base.sponsorId)) return false;
+      }
+
+      // 9. Column Filter: Account Type
+      if (colFilterTypes.length > 0) {
+        const typeKey = !chefz || chefz.accountType === "Unconfigured" ? "Unconfigured" : chefz.accountType;
+        if (!colFilterTypes.includes(typeKey)) return false;
+      }
+
+      // 10. Column Filter: Setup Status
+      if (colFilterSetup.length > 0) {
+        const statusKey = isConfigured ? "configured" : "not_configured";
+        if (!colFilterSetup.includes(statusKey)) return false;
+      }
+
+      // 11. Column Filter: Password Status
+      if (colFilterPassword.length > 0) {
+        const passKey = chefz?.hasPassword ? "has_password" : "no_password";
+        if (!colFilterPassword.includes(passKey)) return false;
+      }
+
+      // 12. Search query
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const code = (base.code || "").toLowerCase();
@@ -235,16 +301,377 @@ export default function ChefzAccountsPage() {
 
       return true;
     });
-  }, [accounts, filterSetupStatus, filterType, filterCityId, filterSponsorId, search]);
+  }, [
+    accounts,
+    filterSetupStatus,
+    filterType,
+    filterCityId,
+    filterSponsorId,
+    colFilterReminders,
+    colFilterAssignments,
+    colFilterCityIds,
+    colFilterSponsorIds,
+    colFilterTypes,
+    colFilterSetup,
+    colFilterPassword,
+    search,
+    reminderMap,
+  ]);
 
   // Statistics
   const stats = useMemo(() => {
     const total = accounts.length;
-    const configured = accounts.filter((a) => a.chefz !== null).length;
+    let configured = 0;
+    let assigned = 0;
+    let freelancer = 0;
+    let fullTime = 0;
+    let withPassword = 0;
+    let finalExit = 0;
+    let nearBlock = 0;
+
+    for (const a of accounts) {
+      if (a.chefz && a.chefz.accountType !== "Unconfigured") {
+        configured++;
+        if (a.chefz.accountType === "Freelancer") freelancer++;
+        if (a.chefz.accountType === "FullTime") fullTime++;
+      }
+      if (a.base.currentAssignment) assigned++;
+      if (a.chefz?.hasPassword) withPassword++;
+
+      const rem = reminderMap.get(a.base.id);
+      if (rem?.condition === "FinalExit") finalExit++;
+      else if (rem) nearBlock++;
+    }
+
     const pending = total - configured;
-    const assigned = accounts.filter((a) => Boolean(a.base.currentAssignment)).length;
-    return { total, configured, pending, assigned };
+    const atRisk = finalExit + nearBlock;
+    const unassigned = total - assigned;
+
+    return {
+      total,
+      configured,
+      pending,
+      assigned,
+      unassigned,
+      freelancer,
+      fullTime,
+      withPassword,
+      finalExit,
+      nearBlock,
+      atRisk,
+    };
+  }, [accounts, reminderMap]);
+
+  // Sponsor Account Distribution Statistics
+  const sponsorStats = useMemo(() => {
+    if (accounts.length === 0) return [];
+
+    const map = new Map<
+      string,
+      {
+        name: string;
+        total: number;
+        assigned: number;
+        unassigned: number;
+        configured: number;
+        pending: number;
+      }
+    >();
+
+    for (const a of accounts) {
+      const id = a.base.sponsorId || "UNKNOWN";
+      const name = a.base.sponsorNameAr || (id === "UNKNOWN" ? "بدون كفيل مسجل" : "كفيل غير معرف");
+
+      if (!map.has(id)) {
+        map.set(id, {
+          name,
+          total: 0,
+          assigned: 0,
+          unassigned: 0,
+          configured: 0,
+          pending: 0,
+        });
+      }
+
+      const s = map.get(id)!;
+      s.total++;
+      if (a.base.currentAssignment) {
+        s.assigned++;
+      } else {
+        s.unassigned++;
+      }
+      if (a.chefz && a.chefz.accountType !== "Unconfigured") {
+        s.configured++;
+      } else {
+        s.pending++;
+      }
+    }
+
+    const totalAccounts = accounts.length || 1;
+    const list = Array.from(map.entries()).map(([sponsorId, data]) => ({
+      sponsorId,
+      name: data.name,
+      total: data.total,
+      assigned: data.assigned,
+      unassigned: data.unassigned,
+      configured: data.configured,
+      pending: data.pending,
+      percentage: Math.round((data.total / totalAccounts) * 100),
+    }));
+
+    return list.sort((a, b) => b.total - a.total);
   }, [accounts]);
+
+  // -----------------------------------------------------------------
+  // Table Header Filter Options with Live Counts
+  // -----------------------------------------------------------------
+  const reminderFilterOptions: FilterOption[] = useMemo(() => {
+    let finalExitCount = 0;
+    let nearBlockCount = 0;
+    let clearCount = 0;
+    for (const a of accounts) {
+      const rem = reminderMap.get(a.base.id);
+      if (rem?.condition === "FinalExit") finalExitCount++;
+      else if (rem) nearBlockCount++;
+      else clearCount++;
+    }
+    return [
+      {
+        value: "FinalExit",
+        label: "خروج نهائي (معرض للبلوك)",
+        sublabel: "تنبيه أحمر عالي الخطورة",
+        count: finalExitCount,
+      },
+      {
+        value: "NearBlock",
+        label: "اقترب من البلوك",
+        sublabel: "تنبيه أصفر تحذيري",
+        count: nearBlockCount,
+      },
+      {
+        value: "Clear",
+        label: "سليم (بدون تنبيهات)",
+        sublabel: "لا توجد مخاطر بلوك مسجلة",
+        count: clearCount,
+      },
+    ];
+  }, [accounts, reminderMap]);
+
+  const assignmentFilterOptions: FilterOption[] = useMemo(() => {
+    let assignedCount = 0;
+    let unassignedCount = 0;
+    const riderCounts = new Map<string, number>();
+
+    for (const a of accounts) {
+      const curr = a.base.currentAssignment;
+      if (curr) {
+        assignedCount++;
+        const name = curr.actualRiderNameAr || "مندوب نشط";
+        riderCounts.set(name, (riderCounts.get(name) || 0) + 1);
+      } else {
+        unassignedCount++;
+      }
+    }
+
+    const options: FilterOption[] = [
+      {
+        value: "STATUS_ASSIGNED",
+        label: "مخصص لمناديب (الكل)",
+        sublabel: "حسابات لها مندوب نشط حالياً",
+        count: assignedCount,
+      },
+      {
+        value: "STATUS_UNASSIGNED",
+        label: "غير مخصص (شاغر)",
+        sublabel: "حسابات بدون مندوب حالي",
+        count: unassignedCount,
+      },
+    ];
+
+    const sortedRiders = Array.from(riderCounts.entries()).sort((a, b) => b[1] - a[1]);
+    for (const [name, count] of sortedRiders) {
+      options.push({
+        value: `RIDER_${name}`,
+        label: name,
+        sublabel: "مندوب فعلي معين",
+        count,
+      });
+    }
+
+    return options;
+  }, [accounts]);
+
+  const cityFilterOptions: FilterOption[] = useMemo(() => {
+    const cityCounts = new Map<string, number>();
+    for (const a of accounts) {
+      if (a.base.operatingCityId) {
+        cityCounts.set(a.base.operatingCityId, (cityCounts.get(a.base.operatingCityId) || 0) + 1);
+      }
+    }
+    return cities
+      .map((c) => ({
+        value: c.id,
+        label: c.globalCityAr,
+        count: cityCounts.get(c.id) || 0,
+      }))
+      .sort((a, b) => (b.count || 0) - (a.count || 0));
+  }, [accounts, cities]);
+
+  const sponsorFilterOptions: FilterOption[] = useMemo(() => {
+    const sponsorCounts = new Map<string, number>();
+    for (const a of accounts) {
+      if (a.base.sponsorId) {
+        sponsorCounts.set(a.base.sponsorId, (sponsorCounts.get(a.base.sponsorId) || 0) + 1);
+      }
+    }
+    return sponsors
+      .map((s) => ({
+        value: s.id,
+        label: s.registryNameAr,
+        count: sponsorCounts.get(s.id) || 0,
+      }))
+      .sort((a, b) => (b.count || 0) - (a.count || 0));
+  }, [accounts, sponsors]);
+
+  const typeFilterOptions: FilterOption[] = useMemo(() => {
+    let freelancerCount = 0;
+    let fullTimeCount = 0;
+    let unconfiguredCount = 0;
+
+    for (const a of accounts) {
+      if (a.chefz?.accountType === "Freelancer") freelancerCount++;
+      else if (a.chefz?.accountType === "FullTime") fullTimeCount++;
+      else unconfiguredCount++;
+    }
+
+    return [
+      {
+        value: "Freelancer",
+        label: "فريلانسر (15%)",
+        sublabel: "عمولة من الأرباح",
+        count: freelancerCount,
+      },
+      {
+        value: "FullTime",
+        label: "دوام كامل (25 ر.س)",
+        sublabel: "رسوم يومية ثابتة",
+        count: fullTimeCount,
+      },
+      {
+        value: "Unconfigured",
+        label: "غير معد لشيفز",
+        sublabel: "يتطلب تحديد النوع",
+        count: unconfiguredCount,
+      },
+    ];
+  }, [accounts]);
+
+  const setupFilterOptions: FilterOption[] = useMemo(() => {
+    let configuredCount = 0;
+    let notConfiguredCount = 0;
+
+    for (const a of accounts) {
+      if (a.chefz && a.chefz.accountType !== "Unconfigured") {
+        configuredCount++;
+      } else {
+        notConfiguredCount++;
+      }
+    }
+
+    return [
+      {
+        value: "configured",
+        label: "معد لشيفز",
+        sublabel: "تمت تهيئة النوع والهوية",
+        count: configuredCount,
+      },
+      {
+        value: "not_configured",
+        label: "بانتظار الإعداد",
+        sublabel: "غير معد على المنصة",
+        count: notConfiguredCount,
+      },
+    ];
+  }, [accounts]);
+
+  const passwordFilterOptions: FilterOption[] = useMemo(() => {
+    let hasCount = 0;
+    let missingCount = 0;
+
+    for (const a of accounts) {
+      if (a.chefz?.hasPassword) {
+        hasCount++;
+      } else {
+        missingCount++;
+      }
+    }
+
+    return [
+      {
+        value: "has_password",
+        label: "كلمة مرور محفوظة",
+        sublabel: "مسجلة ومحدثة في النظام",
+        count: hasCount,
+      },
+      {
+        value: "no_password",
+        label: "غير محفوظة",
+        sublabel: "بدون كلمة مرور مسجلة",
+        count: missingCount,
+      },
+    ];
+  }, [accounts]);
+
+  const hasAnyFilter = Boolean(
+    search.trim() ||
+    filterSetupStatus !== "all" ||
+    filterType !== "all" ||
+    filterCityId ||
+    filterSponsorId ||
+    colFilterReminders.length > 0 ||
+    colFilterAssignments.length > 0 ||
+    colFilterCityIds.length > 0 ||
+    colFilterSponsorIds.length > 0 ||
+    colFilterTypes.length > 0 ||
+    colFilterSetup.length > 0 ||
+    colFilterPassword.length > 0
+  );
+
+  const resetAllFilters = () => {
+    setSearch("");
+    setFilterSetupStatus("all");
+    setFilterType("all");
+    setFilterCityId("");
+    setFilterSponsorId("");
+    setColFilterReminders([]);
+    setColFilterAssignments([]);
+    setColFilterCityIds([]);
+    setColFilterSponsorIds([]);
+    setColFilterTypes([]);
+    setColFilterSetup([]);
+    setColFilterPassword([]);
+  };
+
+  const resetColumnFilters = () => {
+    setColFilterReminders([]);
+    setColFilterAssignments([]);
+    setColFilterCityIds([]);
+    setColFilterSponsorIds([]);
+    setColFilterTypes([]);
+    setColFilterSetup([]);
+    setColFilterPassword([]);
+  };
+
+  const handleToggleSponsorFilter = (sponsorId: string) => {
+    if (sponsorId === "UNKNOWN") return;
+    if (filterSponsorId === sponsorId || (colFilterSponsorIds.length === 1 && colFilterSponsorIds[0] === sponsorId)) {
+      setFilterSponsorId("");
+      setColFilterSponsorIds([]);
+    } else {
+      setFilterSponsorId(sponsorId);
+      setColFilterSponsorIds([sponsorId]);
+    }
+  };
 
   // -----------------------------------------------------------------
   // Handlers: Setup / Update Chefz Details
@@ -575,10 +1002,10 @@ export default function ChefzAccountsPage() {
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* Expanded Stats Cards */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
-          <p className="text-xs font-semibold text-[var(--muted)]">إجمالي حسابات المنصة</p>
+          <p className="text-xs font-semibold text-[var(--muted)]">إجمالي الحسابات</p>
           <p className="mt-2 text-2xl font-extrabold text-[var(--foreground)]" dir="ltr">
             {stats.total.toLocaleString()}
           </p>
@@ -586,11 +1013,13 @@ export default function ChefzAccountsPage() {
         </div>
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
-          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">حسابات معدة لشيفز</p>
+          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">معدة لشيفز</p>
           <p className="mt-2 text-2xl font-extrabold text-emerald-600 dark:text-emerald-400" dir="ltr">
             {stats.configured.toLocaleString()}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">تم تعيين النوع والهوية</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {stats.total > 0 ? `${Math.round((stats.configured / stats.total) * 100)}% جاهزية` : "—"}
+          </p>
         </div>
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
@@ -598,7 +1027,7 @@ export default function ChefzAccountsPage() {
           <p className="mt-2 text-2xl font-extrabold text-amber-600 dark:text-amber-400" dir="ltr">
             {stats.pending.toLocaleString()}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">تتطلب اختيار النوع والهوية</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">تتطلب النوع والهوية</p>
         </div>
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
@@ -606,9 +1035,135 @@ export default function ChefzAccountsPage() {
           <p className="mt-2 text-2xl font-extrabold text-blue-600 dark:text-blue-400" dir="ltr">
             {stats.assigned.toLocaleString()}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">لها تكليف نشط حالياً</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {stats.unassigned} حساب شاغر
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
+          <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">نوع العمل</p>
+          <div className="mt-2 flex items-baseline gap-1.5" dir="ltr">
+            <span className="text-xl font-extrabold text-blue-600 dark:text-blue-400">{stats.freelancer}</span>
+            <span className="text-[11px] text-[var(--muted)]">حر</span>
+            <span className="text-[11px] text-[var(--muted)]">/</span>
+            <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">{stats.fullTime}</span>
+            <span className="text-[11px] text-[var(--muted)]">كامل</span>
+          </div>
+          <p className="mt-1 text-xs text-[var(--muted)]">15% أرباح / 25 ر.س يومي</p>
+        </div>
+
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
+          <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">تنبيهات البلوك</p>
+          <p className="mt-2 text-2xl font-extrabold text-rose-600 dark:text-rose-400" dir="ltr">
+            {stats.atRisk.toLocaleString()}
+          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {stats.finalExit} خروج نهائي • {stats.nearBlock} تحذيري
+          </p>
         </div>
       </div>
+
+      {/* Sponsor Accounts Breakdown */}
+      {sponsorStats.length > 0 && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand)]/10 text-[var(--brand)]">
+                <Building2 className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-[var(--foreground)]">
+                  توزيع حسابات شيفز حسب الكفلاء
+                </h2>
+                <p className="text-xs text-[var(--muted)]">
+                  إجمالي {sponsorStats.length} كفيل لديهم حسابات — اضغط على الكفيل للتصفية السريعة في الجدول
+                </p>
+              </div>
+            </div>
+
+            {(filterSponsorId || (colFilterSponsorIds.length > 0)) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterSponsorId("");
+                  setColFilterSponsorIds([]);
+                }}
+                className="text-xs font-semibold text-[var(--brand)] hover:underline"
+              >
+                إلغاء تصفية الكفيل (عرض جميع الكفلاء)
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {sponsorStats.map((item) => {
+              const isSelected =
+                filterSponsorId === item.sponsorId ||
+                colFilterSponsorIds.includes(item.sponsorId);
+
+              return (
+                <button
+                  key={item.sponsorId}
+                  type="button"
+                  onClick={() => handleToggleSponsorFilter(item.sponsorId)}
+                  className={`group relative text-right rounded-xl border p-3.5 transition-all flex flex-col justify-between ${
+                    isSelected
+                      ? "border-[var(--brand)] bg-[var(--brand)]/10 ring-2 ring-[var(--brand)]/40 shadow-sm"
+                      : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--brand)]/50 hover:bg-[var(--subtle-bg)]"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-bold text-[var(--foreground)] line-clamp-1 group-hover:text-[var(--brand)] transition-colors">
+                      {item.name}
+                    </p>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                        isSelected
+                          ? "bg-[var(--brand)] text-white"
+                          : "bg-slate-500/10 text-[var(--muted)] group-hover:bg-[var(--brand)]/10 group-hover:text-[var(--brand)]"
+                      }`}
+                    >
+                      {item.percentage}%
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 flex items-baseline justify-between">
+                    <div>
+                      <span className="text-2xl font-black text-[var(--foreground)]" dir="ltr">
+                        {item.total}
+                      </span>
+                      <span className="text-[11px] text-[var(--muted)] me-1"> حساب</span>
+                    </div>
+
+                    <div className="text-[11px] text-[var(--muted)] space-x-1 space-x-reverse">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold" title="مخصص لمناديب">
+                        {item.assigned} مخصص
+                      </span>
+                      <span>•</span>
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold" title="شاغر بدون مندوب">
+                        {item.unassigned} شاغر
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar representing assignment coverage */}
+                  <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                    <div
+                      className={`h-full transition-all rounded-full ${
+                        isSelected ? "bg-[var(--brand)]" : "bg-emerald-500 dark:bg-emerald-400"
+                      }`}
+                      style={{
+                        width: `${item.total > 0 ? (item.assigned / item.total) * 100 : 0}%`,
+                      }}
+                      title={`${item.assigned} من أصل ${item.total} مخصص (${Math.round((item.assigned / item.total) * 100)}%)`}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Filter Toolbar */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-4">
@@ -684,21 +1239,178 @@ export default function ChefzAccountsPage() {
             عرض <strong className="text-[var(--foreground)]">{filteredAccounts.length}</strong> من أصل{" "}
             {accounts.length} حساب
           </span>
-          {(search || filterSetupStatus !== "all" || filterType !== "all" || filterCityId || filterSponsorId) && (
+          {hasAnyFilter && (
             <button
-              onClick={() => {
-                setSearch("");
-                setFilterSetupStatus("all");
-                setFilterType("all");
-                setFilterCityId("");
-                setFilterSponsorId("");
-              }}
+              onClick={resetAllFilters}
               className="text-[var(--brand)] hover:underline font-semibold"
             >
-              إعادة تعيين الفلاتر
+              إعادة تعيين جميع الفلاتر
             </button>
           )}
         </div>
+
+        {/* Active Column Filter Badges */}
+        {(colFilterReminders.length > 0 ||
+          colFilterAssignments.length > 0 ||
+          colFilterCityIds.length > 0 ||
+          colFilterSponsorIds.length > 0 ||
+          colFilterTypes.length > 0 ||
+          colFilterSetup.length > 0 ||
+          colFilterPassword.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-[var(--border)] text-xs">
+            <span className="font-bold text-[var(--muted)]">فلاتر الأعمدة المطبقة:</span>
+
+            {/* Reminders / Alert Chips */}
+            {colFilterReminders.map((val) => {
+              const opt = reminderFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                >
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterReminders((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            {/* Assignments Chips */}
+            {colFilterAssignments.map((val) => {
+              const opt = assignmentFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                >
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterAssignments((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            {/* City Chips */}
+            {colFilterCityIds.map((cityId) => {
+              const opt = cityFilterOptions.find((o) => o.value === cityId);
+              return (
+                <span
+                  key={cityId}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                >
+                  <MapPin size={10} />
+                  <span>{opt?.label || cityId}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterCityIds((prev) => prev.filter((x) => x !== cityId))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            {/* Sponsor Chips */}
+            {colFilterSponsorIds.map((sponsorId) => {
+              const opt = sponsorFilterOptions.find((o) => o.value === sponsorId);
+              return (
+                <span
+                  key={sponsorId}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                >
+                  <Building2 size={10} />
+                  <span>{opt?.label || sponsorId}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterSponsorIds((prev) => prev.filter((x) => x !== sponsorId))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            {/* Type Chips */}
+            {colFilterTypes.map((typeVal) => {
+              const opt = typeFilterOptions.find((o) => o.value === typeVal);
+              return (
+                <span
+                  key={typeVal}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                >
+                  <span>{opt?.label || typeVal}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterTypes((prev) => prev.filter((x) => x !== typeVal))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            {/* Setup Chips */}
+            {colFilterSetup.map((setupVal) => {
+              const opt = setupFilterOptions.find((o) => o.value === setupVal);
+              return (
+                <span
+                  key={setupVal}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800"
+                >
+                  <span>{opt?.label || setupVal}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterSetup((prev) => prev.filter((x) => x !== setupVal))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            {/* Password Chips */}
+            {colFilterPassword.map((passVal) => {
+              const opt = passwordFilterOptions.find((o) => o.value === passVal);
+              return (
+                <span
+                  key={passVal}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800"
+                >
+                  <span>{opt?.label || passVal}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterPassword((prev) => prev.filter((x) => x !== passVal))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={resetColumnFilters}
+              className="text-red-600 dark:text-red-400 hover:underline ms-2 font-bold text-xs"
+            >
+              مسح فلاتر الأعمدة
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Table */}
@@ -707,16 +1419,102 @@ export default function ChefzAccountsPage() {
           <table className="w-full text-right text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--table-header-bg)] text-xs font-bold text-[var(--muted)]">
               <tr>
-                <th className="px-4 py-3.5">كود الحساب / المعرف</th>
-                <th className="px-4 py-3.5">المالك المسجل</th>
-                <th className="px-4 py-3.5">المندوب الفعلي الحالي</th>
-                <th className="px-4 py-3.5">المدينة / الكفيل</th>
-                <th className="px-4 py-3.5">نوع الحساب</th>
-                <th className="px-4 py-3.5">عمولة الشركة</th>
-                <th className="px-4 py-3.5">هوية تقرير شيفز</th>
-                <th className="px-4 py-3.5">حالة الإعداد</th>
-                <th className="px-4 py-3.5">كلمة المرور</th>
-                <th className="px-4 py-3.5 text-center">الإجراءات</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">كود الحساب / المعرف</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>المالك المسجل</span>
+                    <TableHeaderColumnFilter
+                      label="التنبيهات والمخاطر"
+                      value={colFilterReminders}
+                      onChange={setColFilterReminders}
+                      options={reminderFilterOptions}
+                      placeholder="تصفية بالتنبيهات..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>المندوب الفعلي الحالي</span>
+                    <TableHeaderColumnFilter
+                      label="المندوب والتخصيص"
+                      value={colFilterAssignments}
+                      onChange={setColFilterAssignments}
+                      options={assignmentFilterOptions}
+                      placeholder="تصفية بالتعيين أو المندوب..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>المدينة / الكفيل</span>
+                    <TableHeaderDualFilter
+                      label="المدينة والكفيل"
+                      align="right"
+                      tab1={{
+                        id: "city",
+                        label: "المدينة",
+                        icon: <MapPin className="h-3 w-3" />,
+                        values: colFilterCityIds,
+                        onChange: setColFilterCityIds,
+                        options: cityFilterOptions,
+                        placeholder: "تصفية بالمدينة...",
+                      }}
+                      tab2={{
+                        id: "sponsor",
+                        label: "الكفيل",
+                        icon: <Building2 className="h-3 w-3" />,
+                        values: colFilterSponsorIds,
+                        onChange: setColFilterSponsorIds,
+                        options: sponsorFilterOptions,
+                        placeholder: "تصفية بالكفيل...",
+                      }}
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>نوع الحساب</span>
+                    <TableHeaderColumnFilter
+                      label="نوع الحساب"
+                      value={colFilterTypes}
+                      onChange={setColFilterTypes}
+                      options={typeFilterOptions}
+                      placeholder="تصفية بنوع الحساب..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 whitespace-nowrap">عمولة الشركة</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">هوية تقرير شيفز</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>حالة الإعداد</span>
+                    <TableHeaderColumnFilter
+                      label="حالة الإعداد"
+                      value={colFilterSetup}
+                      onChange={setColFilterSetup}
+                      options={setupFilterOptions}
+                      placeholder="تصفية بحالة الإعداد..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>كلمة المرور</span>
+                    <TableHeaderColumnFilter
+                      label="حالة كلمة المرور"
+                      value={colFilterPassword}
+                      onChange={setColFilterPassword}
+                      options={passwordFilterOptions}
+                      placeholder="تصفية بكلمة المرور..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center whitespace-nowrap">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
