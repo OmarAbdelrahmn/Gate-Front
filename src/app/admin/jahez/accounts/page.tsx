@@ -243,6 +243,10 @@ export default function JahezAccountsPage() {
       toast.warning("تنبيه", "يرجى اختيار المندوب الفعلي");
       return;
     }
+    if (handoverInitialFee > 0 && !handoverPaymentRef.trim()) {
+      toast.warning("تنبيه", "يرجى إدخال مرجع الدفع / رقم الإيصال عند تسجيل قبض رسوم أولية");
+      return;
+    }
     setHandoverSubmitting(true);
     try {
       const effectiveAtUtc = new Date(handoverEffectiveAt).toISOString();
@@ -1052,18 +1056,18 @@ export default function JahezAccountsPage() {
                 onChange={(e) => setHandoverInitialFee(Number(e.target.value) || 0)}
               />
               <span className="text-[10px] text-gray-400">
-                يُفضل تركها 0 وقبض الرسوم لاحقاً عبر الخزنة
+                إذا قُبضت 200 ريال الآن ستُسجل فوراً كحركة مالية، أو اتركها 0 للقبض لاحقاً
               </span>
             </div>
 
             <div>
               <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                مرجع الدفع (إن وجد قبض أولي)
+                مرجع الدفع {handoverInitialFee > 0 ? "*" : "(إن وجد)"}
               </label>
               <Input
                 value={handoverPaymentRef}
                 onChange={(e) => setHandoverPaymentRef(e.target.value)}
-                placeholder="رقم إيصال القبض"
+                placeholder="رقم إيصال الخزنة أو الحوالة"
                 disabled={handoverInitialFee <= 0}
               />
             </div>
