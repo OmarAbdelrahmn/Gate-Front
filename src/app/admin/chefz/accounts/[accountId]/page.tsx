@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   getChefzAccount,
   updateChefzAccountDetails,
+  updateChefzAccountStatus,
   setChefzPassword,
   getChefzPassword,
   getChefzSettlements,
@@ -17,6 +18,7 @@ import {
 import type {
   ChefzAccount,
   ChefzAccountType,
+  ChefzAccountStatus,
   ChefzSettlement,
   ChefzPerformance,
 } from "@/lib/chefz/types";
@@ -51,7 +53,24 @@ import {
   Info,
   RefreshCw,
   Plus,
+  Activity,
 } from "lucide-react";
+
+function translateStatusReason(reason?: string | null): string {
+  if (!reason) return "";
+  const trimmed = reason.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("block by chefz")) {
+    return "حظر من منصة شيفز (Block By CHEFZ)";
+  }
+  if (lower.includes("supervisor")) {
+    return "إيقاف من قِبل المشرف (The supervisor suspended)";
+  }
+  if (lower === "active") {
+    return "نشط";
+  }
+  return trimmed;
+}
 
 export default function ChefzAccountDetailPage() {
   const params = useParams();
@@ -72,6 +91,13 @@ export default function ChefzAccountDetailPage() {
   const [reportIdNumber, setReportIdNumber] = useState("");
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [detailsConflict, setDetailsConflict] = useState<string | null>(null);
+
+  // Status Modal / State
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<"Active" | "Suspended" | "Retired" | "Archived">("Suspended");
+  const [statusReason, setStatusReason] = useState("");
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   // Password Modal / State
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -218,6 +244,68 @@ export default function ChefzAccountDetailPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const getStatusBadge = (status?: string) => {
+    switch (status) {
+      case "Available":
+        return <Badge tone="green">متاح (Available)</Badge>;
+      case "Assigned":
+        return <Badge tone="blue">معيّن (Assigned)</Badge>;
+      case "Suspended":
+        return <Badge tone="orange">موقوف (Suspended)</Badge>;
+      case "Retired":
+        return <Badge tone="red">مستبعد (Retired)</Badge>;
+      case "Archived":
+        return <Badge tone="gray">مؤرشف (Archived)</Badge>;
+      default:
+        return <Badge tone="gray">{status || "—"}</Badge>;
+    }
+  };
+
+  const openStatusModal = () => {
+    const current = chefzDetail?.status || baseAccount?.status;
+    if (current === "Suspended" || current === "Retired" || current === "Archived") {
+      setStatusTarget("Active");
+    } else {
+      setStatusTarget("Suspended");
+    }
+    setStatusReason("");
+    setStatusError(null);
+    setIsStatusModalOpen(true);
+  };
+
+  const handleSaveStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accountId || !statusReason.trim()) return;
+
+    setIsSavingStatus(true);
+    setStatusError(null);
+
+    try {
+      const token = chefzDetail?.accountRowVersion || baseAccount?.rowVersion || "";
+      await updateChefzAccountStatus(accountId, {
+        status: statusTarget,
+        reason: statusReason.trim(),
+        rowVersion: token,
+      });
+
+      toast.success("تم تحديث الحالة", "تم تحديث حالة دورة حياة الحساب بنجاح.");
+      setIsStatusModalOpen(false);
+      await loadAccountData();
+    } catch (err: unknown) {
+      const e = err as { status?: number; details?: { detail?: string; message?: string } };
+      if (e?.status === 409) {
+        setStatusError(
+          "تعارض في التحديث بالتزامن: تم تعديل الحساب في الخلفية أو تغيرت نسخته. تم تحديث البيانات، يرجى إعادة المحاولة."
+        );
+        await loadAccountData();
+      } else {
+        setStatusError(e?.details?.detail || e?.details?.message || "فشل تحديث حالة الحساب.");
+      }
+    } finally {
+      setIsSavingStatus(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-3" dir="rtl">
@@ -260,6 +348,10 @@ export default function ChefzAccountDetailPage() {
             <h1 className="text-2xl font-extrabold text-[var(--foreground)]">
               {baseAccount.code}
             </h1>
+            {getStatusBadge(chefzDetail?.status || baseAccount.status)}
+            {chefzDetail?.isOperationallyBlocked && (
+              <Badge tone="red">حظر تشغيلي</Badge>
+            )}
             {chefzDetail && chefzDetail.accountType !== "Unconfigured" ? (
               <Badge tone="green">معد لشيفز</Badge>
             ) : (
@@ -282,6 +374,17 @@ export default function ChefzAccountDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {can("chefz.accounts.update") && (
+            <Button
+              variant="secondary"
+              onClick={openStatusModal}
+              className="gap-2"
+            >
+              <Activity className="h-4 w-4 text-[var(--brand)]" />
+              تغيير حالة الحساب
+            </Button>
+          )}
+
           {can("platform_credentials.rotate") && (
             <Button
               variant="secondary"
@@ -317,6 +420,26 @@ export default function ChefzAccountDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Operational Block Banner */}
+      {chefzDetail?.isOperationallyBlocked && (
+        <div className="rounded-2xl border border-red-300 bg-red-50/80 p-4 text-red-950 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200 shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="font-bold text-sm">الحساب محظور تشغيلياً (Operational Block)</h4>
+              <p className="text-xs text-red-800 dark:text-red-300">
+                {chefzDetail.operationalBlockReason || "الحساب موقوف أو مستبعد أو مؤرشف ولا يمكن إسناد أي طلبات أو تشغيله حالياً."}
+              </p>
+              {chefzDetail.statusReason && (
+                <p className="text-xs text-red-700 dark:text-red-300">
+                  سبب الحالة: <span className="font-semibold">{translateStatusReason(chefzDetail.statusReason)}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Grid: 2 Columns */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -628,10 +751,23 @@ export default function ChefzAccountDetailPage() {
               </div>
 
               <div>
-                <span className="text-[var(--muted)] block">الحالة العامة:</span>
-                <span className="font-semibold text-[var(--foreground)]">
-                  {baseAccount.status}
-                </span>
+                <span className="text-[var(--muted)] block">حالة دورة الحياة:</span>
+                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                  {getStatusBadge(chefzDetail?.status || baseAccount.status)}
+                  {chefzDetail?.isOperationallyBlocked && (
+                    <Badge tone="red">حظر تشغيلي</Badge>
+                  )}
+                </div>
+                {chefzDetail?.statusReason && (
+                  <p className="mt-1 text-[11px] text-[var(--muted)]">
+                    السبب: <span className="font-semibold text-[var(--foreground)]">{translateStatusReason(chefzDetail.statusReason)}</span>
+                  </p>
+                )}
+                {chefzDetail?.accountRowVersion && (
+                  <p className="mt-1 text-[10px] text-[var(--muted)] font-mono" dir="ltr">
+                    RowVersion: {chefzDetail.accountRowVersion.slice(0, 10)}...
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -778,6 +914,180 @@ export default function ChefzAccountDetailPage() {
               className="bg-[var(--brand)] text-white hover:opacity-90"
             >
               {isSavingPassword ? "جارٍ الحفظ..." : "حفظ كلمة المرور"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Lifecycle Status Modal */}
+      <Modal
+        isOpen={isStatusModalOpen}
+        onClose={() => setIsStatusModalOpen(false)}
+        title={`تغيير حالة دورة حياة الحساب — ${baseAccount.code}`}
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={handleSaveStatus} className="space-y-4" dir="rtl">
+          {statusError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <p className="font-semibold">{statusError}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200 space-y-1">
+            <div className="flex items-center gap-2 font-bold">
+              <Info className="h-4 w-4 shrink-0" />
+              <span>ملاحظة حول دورة حياة حسابات شيفز</span>
+            </div>
+            <p className="text-[11px] leading-relaxed">
+              تغيير حالة الحساب (الموقوف، المستبعد، المؤرشف) يتحكم بالحظر التشغيلي دون فك ربط المندوب الحالي.
+              اختيار &quot;Active&quot; يحسب تلقائياً &quot;Assigned&quot; إذا كان هناك مندوب معين، أو &quot;Available&quot; إذا كان شاغراً.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-[var(--foreground)]">
+              الحالة التشغيلية المستهدفة <span className="text-red-500">*</span>
+            </label>
+            <div className="space-y-2">
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                  statusTarget === "Active"
+                    ? "border-[var(--brand)] bg-[var(--brand)]/10 ring-1 ring-[var(--brand)]"
+                    : "border-[var(--border)] hover:bg-[var(--subtle-bg)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="detailAccountStatus"
+                  value="Active"
+                  checked={statusTarget === "Active"}
+                  onChange={() => setStatusTarget("Active")}
+                  className="mt-1 accent-[var(--brand)]"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-[var(--foreground)]">نشط تشغيلياً (Active)</span>
+                    <Badge tone="green">تفعيل</Badge>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-[var(--muted)]">
+                    إعادة التفعيل؛ يصبح معیّن (Assigned) إذا كان هناك مندوب مرتبط، أو متاح (Available) للشواغر.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                  statusTarget === "Suspended"
+                    ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/20 ring-1 ring-amber-500"
+                    : "border-[var(--border)] hover:bg-[var(--subtle-bg)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="detailAccountStatus"
+                  value="Suspended"
+                  checked={statusTarget === "Suspended"}
+                  onChange={() => setStatusTarget("Suspended")}
+                  className="mt-1 accent-amber-500"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-amber-700 dark:text-amber-400">موقوف مؤقتاً (Suspended)</span>
+                    <Badge tone="orange">حظر تشغيلي</Badge>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-[var(--muted)]">
+                    إيقاف إداري يدوي مؤقت مع الحفاظ على سجل المندوب المعين لمنع إسناد طلبات جديدة.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                  statusTarget === "Retired"
+                    ? "border-rose-500 bg-rose-50/60 dark:bg-rose-950/20 ring-1 ring-rose-500"
+                    : "border-[var(--border)] hover:bg-[var(--subtle-bg)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="detailAccountStatus"
+                  value="Retired"
+                  checked={statusTarget === "Retired"}
+                  onChange={() => setStatusTarget("Retired")}
+                  className="mt-1 accent-rose-500"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-rose-700 dark:text-rose-400">مستبعد من التشغيل (Retired)</span>
+                    <Badge tone="red">استبعاد</Badge>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-[var(--muted)]">
+                    استبعاد دائم أو طويل الأمد للحساب من العمليات التشغيلية للمنصة.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                  statusTarget === "Archived"
+                    ? "border-slate-500 bg-slate-500/10 ring-1 ring-slate-500"
+                    : "border-[var(--border)] hover:bg-[var(--subtle-bg)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="detailAccountStatus"
+                  value="Archived"
+                  checked={statusTarget === "Archived"}
+                  onChange={() => setStatusTarget("Archived")}
+                  className="mt-1 accent-slate-500"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-slate-700 dark:text-slate-300">أرشفة الحساب (Archived)</span>
+                    <Badge tone="gray">أرشفة</Badge>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-[var(--muted)]">
+                    نقل الحساب إلى الأرشيف؛ لا يمكن تشغيله إلا بعد استعادته لاحقاً.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[var(--foreground)]">
+              سبب تغيير الحالة <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={statusReason}
+              onChange={(e) => setStatusReason(e.target.value)}
+              required
+              maxLength={1000}
+              placeholder="مثال: إيقاف بناء على طلب الإدارة / استبعاد الحساب القديم"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsStatusModalOpen(false)}
+              disabled={isSavingStatus}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSavingStatus || !statusReason.trim()}
+              className="bg-[var(--brand)] text-white hover:opacity-90"
+            >
+              {isSavingStatus ? "جارٍ التحديث..." : "حفظ الحالة الجديدة"}
             </Button>
           </div>
         </form>

@@ -2,8 +2,11 @@
 
 export type Guid = string;
 export type DateOnly = string; // YYYY-MM-DD
+export type RowVersion = string;
 export type ChefzAccountType = "Freelancer" | "FullTime" | "Unconfigured";
 export type ChefzVehicleType = "Car" | "Motorcycle" | "Unknown";
+export type ChefzAccountStatus = "Available" | "Assigned" | "Suspended" | "Retired" | "Archived";
+export type PlatformPaymentModel = "PayPerOrder" | "Salary";
 
 export interface ChefzPage<T> {
   items: T[];
@@ -12,12 +15,44 @@ export interface ChefzPage<T> {
   totalCount?: number;
 }
 
+export interface ChefzAccountCounts {
+  total: number;
+  /** Accounts with an open rider link, including those in a manual lifecycle status. */
+  taken: number;
+  notTaken: number;
+  available: number;
+  assigned: number;
+  suspended: number;
+  retired: number;
+  archived: number;
+}
+
+export interface ChefzSponsorAccountCounts {
+  sponsorId: Guid | null;
+  sponsorNameAr: string;
+  sponsorNameEn: string | null;
+  counts: ChefzAccountCounts;
+}
+
+export interface ChefzAccountsResponse extends ChefzPage<ChefzAccount> {
+  totalCount: number;
+  summary: ChefzAccountCounts;
+  sponsors: ChefzSponsorAccountCounts[];
+}
+
 export interface ChefzAccountDetailsRequest {
   accountType: "Freelancer" | "FullTime";
   reportIdNumber?: string | null;
   rowVersion?: string | null;
   vehicleType?: "Car" | "Motorcycle";
-  dashboardStatus?: string;
+  dashboardStatus?: string | null;
+}
+
+export interface ChefzAccountStatusRequest {
+  status: "Active" | "Suspended" | "Retired" | "Archived";
+  /** The accountRowVersion from ChefzAccountResponse; not its details rowVersion. */
+  rowVersion: RowVersion;
+  reason?: string | null;
 }
 
 export interface ChefzAccount {
@@ -28,11 +63,16 @@ export interface ChefzAccount {
   commissionRate: number;
   dailyFee: number;
   hasPassword: boolean;
-  rowVersion: string;
+  rowVersion: string; // details rowVersion
   sponsorId?: Guid | null;
   operatingCityId?: Guid | null;
   vehicleType?: ChefzVehicleType;
-  dashboardStatus?: string;
+  dashboardStatus?: string | null;
+  status: ChefzAccountStatus;
+  statusReason: string | null;
+  accountRowVersion: RowVersion;
+  isOperationallyBlocked: boolean;
+  operationalBlockReason: string | null;
 }
 
 export interface ChefzPasswordRequest {
@@ -87,12 +127,13 @@ export type {
   ChefzOrderSettlementImportResponse,
 } from "./chefz-new-endpoints-contracts";
 
-
 export interface ChefzPerformance {
   id: Guid;
   accountId: Guid;
+  externalAccountId?: string;
   assignmentId: Guid;
   riderProfileId: Guid;
+  riderName?: string;
   reportDate: DateOnly;
   reportIdNumber: string;
   totalValidOffers: number;
@@ -100,6 +141,17 @@ export interface ChefzPerformance {
   declinedOffers: number;
   missedOffers: number;
   acceptanceRate: number;
+}
+
+export interface ChefzPerformanceResponse extends ChefzPerformance {
+  externalAccountId: string;
+  riderName: string;
+}
+
+export interface ChefzPerformanceRider {
+  riderProfileId: Guid;
+  riderName: string;
+  accounts: ChefzPerformance[];
 }
 
 export interface ChefzImportIssue {
@@ -114,7 +166,10 @@ export interface ChefzImportResult {
   importedRows: number;
   skippedRows: number;
   issues: ChefzImportIssue[];
+  riders: ChefzPerformanceRider[];
 }
+
+export type ChefzImportResponse = ChefzImportResult;
 
 // -------------------------------------------------------------
 // 1. Performance Settings
@@ -172,6 +227,16 @@ export interface ChefzReportDaily {
   rating: string | null;
 }
 
+export interface ChefzAccountPerformanceReport {
+  accountId: Guid;
+  externalAccountId: string;
+  riderProfileId: Guid;
+  riderName: string;
+  /** Summary for this account/rider in the requested period. */
+  summary: ChefzReportSummary;
+  daily: ChefzPerformance[];
+}
+
 export interface ChefzRiderReport {
   accountId: Guid | null;
   riderId: Guid | null;
@@ -181,6 +246,7 @@ export interface ChefzRiderReport {
   allTimeSummary: ChefzReportSummary;
   daily: ChefzReportDaily[];
   messages: string[];
+  accounts?: ChefzAccountPerformanceReport[];
 }
 
 // -------------------------------------------------------------
@@ -243,14 +309,38 @@ export interface ChefzAccountReminder {
   message: string;
 }
 
+export interface ActivePlatformAccountErrorDetail {
+  assignmentId: Guid;
+  accountId: Guid;
+  platformId: Guid;
+  platformCode: string;
+  platformNameAr: string;
+  platformNameEn: string;
+  externalAccountId: string;
+  paymentModel: PlatformPaymentModel;
+}
+
+export interface PlatformAssignmentLimit {
+  riderProfileId: Guid;
+  requestedAccountId: Guid;
+  requestedPaymentModel: PlatformPaymentModel;
+  maximumActiveAccounts: number;
+  maximumSalaryAccounts: number;
+  activeAccounts: ActivePlatformAccountErrorDetail[];
+  allowedPaymentModels: PlatformPaymentModel[];
+}
+
 export interface ApiProblem {
-  type: string;
-  title: string;
-  status: number;
+  type?: string;
+  title?: string;
+  status?: number;
   detail?: string;
   instance?: string;
   errorCode?: string;
   correlationId?: string;
   field?: string;
   errors?: Record<string, string[]>;
+  assignmentLimit?: PlatformAssignmentLimit;
 }
+
+export type ChefzOperationProblem = ApiProblem;

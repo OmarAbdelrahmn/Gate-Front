@@ -68,8 +68,8 @@ export function ChefzRiderReportView({ accounts, riders }: Props) {
   // Settings modal
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Active view tab inside rider report: Halves vs Daily
-  const [subTab, setSubTab] = useState<"halves" | "daily">("halves");
+  // Active view tab inside rider report: Accounts vs Halves vs Daily
+  const [subTab, setSubTab] = useState<"accounts" | "halves" | "daily">("accounts");
 
   // Map for quick name resolution
   const accountMap = useMemo(() => {
@@ -543,8 +543,20 @@ export function ChefzRiderReportView({ accounts, riders }: Props) {
 
           {/* Sub-tabs: Halves breakdown vs Daily records */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-              <div className="flex gap-2">
+            <div className="flex flex-wrap items-center justify-between border-b border-[var(--border)] pb-2 gap-2">
+              <div className="flex flex-wrap gap-2">
+                {report.accounts && report.accounts.length > 0 && (
+                  <button
+                    onClick={() => setSubTab("accounts")}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                      subTab === "accounts"
+                        ? "bg-[var(--brand)] text-white"
+                        : "bg-[var(--subtle-bg)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    تفصيل حسابات المندوب ({report.accounts.length})
+                  </button>
+                )}
                 <button
                   onClick={() => setSubTab("halves")}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
@@ -563,14 +575,176 @@ export function ChefzRiderReportView({ accounts, riders }: Props) {
                       : "bg-[var(--subtle-bg)] text-[var(--muted)] hover:text-[var(--foreground)]"
                   }`}
                 >
-                  جدول السجلات اليومية المفصلة ({report.daily.length})
+                  جدول السجلات اليومية المدمجة ({report.daily.length})
                 </button>
               </div>
 
               <span className="text-xs text-[var(--muted)]">
-                {subTab === "halves" ? "مرتبة زمنياً من الأقدم للأحدث" : "الأيام المسجلة في النافذة"}
+                {subTab === "accounts"
+                  ? "تفصيل مستقل لكل حساب ومندوب مع السجلات اليومية"
+                  : subTab === "halves"
+                  ? "مرتبة زمنياً من الأقدم للأحدث"
+                  : "الأيام المسجلة في النافذة"}
               </span>
             </div>
+
+            {/* Accounts Breakdown Tab */}
+            {subTab === "accounts" && (
+              <div className="space-y-6">
+                {!report.accounts || report.accounts.length === 0 ? (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-8 text-center text-xs text-[var(--muted)]">
+                    لا تتوفر حسابات مسجلة أو تفصيل حسابات منفصل لهذا المندوب في الفترة المحددة.
+                  </div>
+                ) : (
+                  report.accounts.map((accGroup, idx) => {
+                    const accBase = accountMap.get(accGroup.accountId);
+                    const groupKey = `${accGroup.accountId}_${accGroup.riderProfileId || idx}`;
+
+                    return (
+                      <div
+                        key={groupKey}
+                        className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-5 shadow-sm space-y-4"
+                      >
+                        {/* Header for this Account / Rider Group */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[var(--border)] pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand)]/10 text-[var(--brand)] font-bold">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-sm text-[var(--foreground)]">
+                                  حساب: {accBase?.code || accGroup.accountId.slice(0, 8)}
+                                </h4>
+                                {accGroup.externalAccountId && (
+                                  <span className="font-mono text-xs text-[var(--muted)]" dir="ltr">
+                                    ({accGroup.externalAccountId})
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-[var(--muted)]">
+                                المندوب: <span className="font-semibold text-[var(--foreground)]">{accGroup.riderName || riderMap.get(accGroup.riderProfileId)?.fullNameAr || "مندوب مسجل"}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Badge tone="blue">حساب مستقل</Badge>
+                            {getRatingBadge(accGroup.summary.rating)}
+                          </div>
+                        </div>
+
+                        {/* Summary Metrics for this Account */}
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
+                          <div className="p-2.5 rounded-xl bg-[var(--subtle-bg)]">
+                            <span className="text-[var(--muted)] block text-[11px]">الفترات المسجلة</span>
+                            <span className="font-bold font-mono text-sm text-[var(--foreground)]">
+                              {accGroup.summary.halvesWithData} فترة
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-[var(--subtle-bg)]">
+                            <span className="text-[var(--muted)] block text-[11px]">أيام العمل الفعلية</span>
+                            <span className="font-bold font-mono text-sm text-[var(--foreground)]">
+                              {accGroup.summary.daysWithData} يوم
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-[var(--subtle-bg)]">
+                            <span className="text-[var(--muted)] block text-[11px]">إجمالي الطلبات المقبولة</span>
+                            <span className="font-bold font-mono text-sm text-emerald-600 dark:text-emerald-400">
+                              {accGroup.summary.orders.toLocaleString()}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-[var(--subtle-bg)]">
+                            <span className="text-[var(--muted)] block text-[11px]">معدل الطلبات/فترة</span>
+                            <span className="font-bold font-mono text-sm text-[var(--foreground)]">
+                              {accGroup.summary.averageOrdersPerHalf !== null
+                                ? accGroup.summary.averageOrdersPerHalf.toFixed(1)
+                                : "—"}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-[var(--subtle-bg)]">
+                            <span className="text-[var(--muted)] block text-[11px]">نسبة القبول للحساب</span>
+                            <span className="font-bold font-mono text-sm text-[var(--foreground)]">
+                              {accGroup.summary.acceptanceRate !== null
+                                ? `${accGroup.summary.acceptanceRate}%`
+                                : "—"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Daily Rows Table for this Account */}
+                        <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-right text-xs">
+                              <thead className="bg-[var(--table-header-bg)] border-b border-[var(--border)] font-bold text-[var(--muted)]">
+                                <tr>
+                                  <th className="px-3 py-2.5">تاريخ التقرير</th>
+                                  <th className="px-3 py-2.5">رقم الهوية بالتقرير</th>
+                                  <th className="px-3 py-2.5 text-center">إجمالي الطلبات الصالحة</th>
+                                  <th className="px-3 py-2.5 text-center">الطلبات المقبولة</th>
+                                  <th className="px-3 py-2.5 text-center">الطلبات المرفوضة</th>
+                                  <th className="px-3 py-2.5 text-center">الطلبات الفائتة</th>
+                                  <th className="px-3 py-2.5 text-center">نسبة القبول</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[var(--border)]">
+                                {!accGroup.daily || accGroup.daily.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={7} className="py-6 text-center text-xs text-[var(--muted)]">
+                                      لا توجد سجلات يومية مفصلة لهذا الحساب في الفترة المحددة.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  accGroup.daily.map((d, dIdx) => (
+                                    <tr key={d.id || dIdx} className="hover:bg-[var(--subtle-bg)]">
+                                      <td className="px-3 py-2 font-mono font-semibold" dir="ltr">
+                                        {d.reportDate}
+                                      </td>
+                                      <td className="px-3 py-2 font-mono" dir="ltr">
+                                        {d.reportIdNumber}
+                                      </td>
+                                      <td className="px-3 py-2 text-center font-mono font-bold" dir="ltr">
+                                        {d.totalValidOffers.toLocaleString()}
+                                      </td>
+                                      <td className="px-3 py-2 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400" dir="ltr">
+                                        {d.acceptedOffers.toLocaleString()}
+                                      </td>
+                                      <td className="px-3 py-2 text-center font-mono font-bold text-red-600 dark:text-red-400" dir="ltr">
+                                        {d.declinedOffers.toLocaleString()}
+                                      </td>
+                                      <td className="px-3 py-2 text-center font-mono font-bold text-amber-600 dark:text-amber-400" dir="ltr">
+                                        {d.missedOffers.toLocaleString()}
+                                      </td>
+                                      <td className="px-3 py-2 text-center font-bold" dir="ltr">
+                                        <span
+                                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${
+                                            d.acceptanceRate >= 80
+                                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                              : d.acceptanceRate >= 60
+                                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                              : "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                                          }`}
+                                        >
+                                          {d.acceptanceRate}%
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
 
             {/* Halves Table */}
             {subTab === "halves" && (

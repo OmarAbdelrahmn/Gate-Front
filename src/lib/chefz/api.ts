@@ -3,8 +3,11 @@ import { authFetch } from "../auth/api";
 import { getPlatforms, type PlatformResponse } from "../platforms/api";
 import type {
   ChefzAccount,
+  ChefzAccountCounts,
   ChefzAccountDetailsRequest,
   ChefzAccountReminder,
+  ChefzAccountsResponse,
+  ChefzAccountStatusRequest,
   ChefzImportResult,
   ChefzManagementReport,
   ChefzOrderSettlementImportResponse,
@@ -16,6 +19,7 @@ import type {
   ChefzSettlementRequest,
   ChefzSettingsRequest,
   ChefzSettingsResponse,
+  ChefzSponsorAccountCounts,
   ChefzStatisticsRequest,
   ChefzStatisticsResponse,
 } from "./types";
@@ -64,27 +68,40 @@ export async function getChefzPlatform(): Promise<PlatformResponse | null> {
 export async function getChefzAccounts(params?: {
   page?: number;
   pageSize?: number;
-}): Promise<ChefzPage<ChefzAccount>> {
+}): Promise<ChefzAccountsResponse> {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.pageSize) query.set("pageSize", String(params.pageSize));
   const queryString = query.toString();
-  return authFetch<ChefzPage<ChefzAccount>>(
+  return authFetch<ChefzAccountsResponse>(
     `/api/chefz/accounts${queryString ? `?${queryString}` : ""}`
   );
 }
 
 /**
- * Fetch all configured Chefz accounts across all pages.
+ * Fetch all configured Chefz accounts across all pages alongside live summary and sponsor breakdown.
  */
-export async function getAllChefzAccounts(pageSize = 100): Promise<ChefzAccount[]> {
+export async function getAllChefzAccountsWithSummary(pageSize = 100): Promise<{
+  accounts: ChefzAccount[];
+  totalCount: number;
+  summary: ChefzAccountCounts | null;
+  sponsors: ChefzSponsorAccountCounts[];
+}> {
   const all: ChefzAccount[] = [];
   let page = 1;
   const maxPages = 50; // Safety guard against runaway fetches
+  let summary: ChefzAccountCounts | null = null;
+  let sponsors: ChefzSponsorAccountCounts[] = [];
+  let totalCount = 0;
 
   while (page <= maxPages) {
     const res = await getChefzAccounts({ page, pageSize });
     const items = res?.items || [];
+    if (page === 1) {
+      summary = res?.summary || null;
+      sponsors = res?.sponsors || [];
+      totalCount = res?.totalCount ?? items.length;
+    }
     if (items.length === 0) break;
 
     all.push(...items);
@@ -100,7 +117,15 @@ export async function getAllChefzAccounts(pageSize = 100): Promise<ChefzAccount[
     page++;
   }
 
-  return all;
+  return { accounts: all, totalCount, summary, sponsors };
+}
+
+/**
+ * Fetch all configured Chefz accounts across all pages.
+ */
+export async function getAllChefzAccounts(pageSize = 100): Promise<ChefzAccount[]> {
+  const res = await getAllChefzAccountsWithSummary(pageSize);
+  return res.accounts;
 }
 
 export async function getChefzAccount(accountId: string): Promise<ChefzAccount | null> {
@@ -121,6 +146,21 @@ export async function updateChefzAccountDetails(
     method: "PUT",
     body: JSON.stringify(data),
     notifySuccess: "تم حفظ إعدادات حساب شيفز بنجاح",
+  });
+}
+
+/**
+ * Change lifecycle status: Suspended, Retired, Archived, or Active (to restore automatic status).
+ * Sends latest accountRowVersion as rowVersion in the request body.
+ */
+export async function updateChefzAccountStatus(
+  accountId: string,
+  data: ChefzAccountStatusRequest
+): Promise<ChefzAccount> {
+  return authFetch<ChefzAccount>(`/api/chefz/accounts/${encodeURIComponent(accountId)}/status`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+    notifySuccess: "تم تحديث حالة حساب شيفز بنجاح",
   });
 }
 

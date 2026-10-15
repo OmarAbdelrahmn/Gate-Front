@@ -227,12 +227,12 @@ export default function ChefzPerformancePage() {
         },
         {
           header: "المعرف الخارجي",
-          accessor: (p) => baseAccountMap.get(p.accountId)?.externalAccountId || "—",
+          accessor: (p) => p.externalAccountId || baseAccountMap.get(p.accountId)?.externalAccountId || "—",
           isText: true,
         },
         {
           header: "المندوب الفعلي",
-          accessor: (p) => riderMap.get(p.riderProfileId)?.fullNameAr || "مندوب سابق",
+          accessor: (p) => p.riderName || riderMap.get(p.riderProfileId)?.fullNameAr || "مندوب سابق",
         },
         { header: "رقم الهوية بالتقرير", accessor: (p) => p.reportIdNumber, isText: true },
         { header: "إجمالي الطلبات الصالحة", accessor: (p) => p.totalValidOffers },
@@ -567,15 +567,15 @@ export default function ChefzPerformancePage() {
                             >
                               {acc?.code || p.accountId.slice(0, 8)}
                             </Link>
-                            {acc?.externalAccountId && (
+                            {(p.externalAccountId || acc?.externalAccountId) && (
                               <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
-                                {acc.externalAccountId}
+                                {p.externalAccountId || acc?.externalAccountId}
                               </div>
                             )}
                           </td>
                           <td className="px-4 py-3">
                             <div className="font-semibold text-[var(--foreground)]">
-                              {rider?.fullNameAr || "مندوب سابق"}
+                              {p.riderName || rider?.fullNameAr || "مندوب سابق"}
                             </div>
                           </td>
                           <td className="px-4 py-3 font-mono text-xs font-semibold" dir="ltr">
@@ -649,7 +649,7 @@ export default function ChefzPerformancePage() {
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
         title="استيراد ورفع تقرير أداء شيفز اليومي"
-        maxWidth="max-w-xl"
+        maxWidth="max-w-2xl"
       >
         <form onSubmit={handleUpload} className="space-y-5" dir="rtl">
           {uploadError && (
@@ -739,6 +739,90 @@ export default function ChefzPerformancePage() {
                 </p>
               </div>
             )}
+
+          {/* Breakdown by Rider & Accounts (Section per rider, row per account) */}
+          {uploadResult && uploadResult.issues.length === 0 && uploadResult.riders && uploadResult.riders.length > 0 && (
+            <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-[var(--foreground)]">تفصيل الأداء المستورد حسب المناديب والحسابات</h4>
+                  <p className="text-[11px] text-[var(--muted)]">
+                    إجمالي {uploadResult.riders.length} مندوب — {uploadResult.riders.reduce((acc, r) => acc + r.accounts.length, 0)} حساب شيفز
+                  </p>
+                </div>
+                <Badge tone="blue">قسم مستقل لكل مندوب</Badge>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-3 divide-y divide-[var(--border)] pr-1">
+                {uploadResult.riders.map((r, rIdx) => (
+                  <div key={r.riderProfileId || rIdx} className="pt-3 first:pt-0 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-[var(--brand)]" />
+                        <span className="font-bold text-[var(--foreground)]">{r.riderName || "مندوب مسجل"}</span>
+                      </div>
+                      <Badge tone={r.accounts.length > 1 ? "blue" : "gray"}>
+                        {r.accounts.length} {r.accounts.length > 1 ? "حسابات شيفز" : "حساب شيفز"}
+                      </Badge>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+                      <table className="w-full text-right text-[11px]">
+                        <thead className="bg-[var(--table-header-bg)] border-b border-[var(--border)] font-bold text-[var(--muted)]">
+                          <tr>
+                            <th className="p-2">معرف الحساب</th>
+                            <th className="p-2">رقم الهوية بالتقرير</th>
+                            <th className="p-2 text-center">الصالحة</th>
+                            <th className="p-2 text-center">المقبولة</th>
+                            <th className="p-2 text-center">المرفوضة</th>
+                            <th className="p-2 text-center">الفائتة</th>
+                            <th className="p-2 text-center">نسبة القبول</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border)]">
+                          {r.accounts.map((acc, aIdx) => (
+                            <tr key={acc.id || acc.accountId || aIdx} className="hover:bg-[var(--subtle-bg)]">
+                              <td className="p-2 font-mono font-bold text-[var(--brand)]" dir="ltr">
+                                {acc.externalAccountId || acc.accountId.slice(0, 8)}
+                              </td>
+                              <td className="p-2 font-mono" dir="ltr">
+                                {acc.reportIdNumber}
+                              </td>
+                              <td className="p-2 text-center font-mono font-bold" dir="ltr">
+                                {acc.totalValidOffers.toLocaleString()}
+                              </td>
+                              <td className="p-2 text-center font-mono text-emerald-600 font-bold" dir="ltr">
+                                {acc.acceptedOffers.toLocaleString()}
+                              </td>
+                              <td className="p-2 text-center font-mono text-red-600 font-bold" dir="ltr">
+                                {acc.declinedOffers.toLocaleString()}
+                              </td>
+                              <td className="p-2 text-center font-mono text-amber-600 font-bold" dir="ltr">
+                                {acc.missedOffers.toLocaleString()}
+                              </td>
+                              <td className="p-2 text-center font-bold" dir="ltr">
+                                <span
+                                  className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${
+                                    acc.acceptanceRate >= 80
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                      : acc.acceptanceRate >= 60
+                                      ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                      : "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                                  }`}
+                                >
+                                  {acc.acceptanceRate}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {uploadResult && uploadResult.issues.length > 0 && (
             <div className="rounded-xl border border-red-300 bg-red-50 p-4 space-y-3 dark:border-red-900/50 dark:bg-red-950/40">

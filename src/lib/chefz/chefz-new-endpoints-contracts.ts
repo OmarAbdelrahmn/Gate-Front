@@ -1,12 +1,26 @@
 // src/lib/chefz/chefz-new-endpoints-contracts.ts
 import type { Guid, DateOnly } from "./types";
 
+export const CHEFZ_BASE_PATH = "/api/chefz";
+
 export const chefzPaths = {
-  orderSettlementPreview: "/api/chefz/settlements/orders/preview",
-  orderSettlementImport: "/api/chefz/settlements/orders/import",
+  orderSettlementPreview: `${CHEFZ_BASE_PATH}/settlements/orders/preview`,
+  orderSettlementImport: `${CHEFZ_BASE_PATH}/settlements/orders/import`,
   orderSettlementGetImport: (importId: string) =>
-    `/api/chefz/settlements/orders/imports/${encodeURIComponent(importId)}`,
-  settlements: "/api/chefz/settlements",
+    `${CHEFZ_BASE_PATH}/settlements/orders/imports/${encodeURIComponent(importId)}`,
+  orderSettlementImportById: (importId: string) =>
+    `${CHEFZ_BASE_PATH}/settlements/orders/imports/${encodeURIComponent(importId)}`,
+  settlements: `${CHEFZ_BASE_PATH}/settlements`,
+  accounts: (page = 1, pageSize = 50) =>
+    `${CHEFZ_BASE_PATH}/accounts?${new URLSearchParams({ page: String(page), pageSize: String(pageSize) })}`,
+  account: (accountId: string) => `${CHEFZ_BASE_PATH}/accounts/${encodeURIComponent(accountId)}`,
+  accountStatus: (accountId: string) => `${CHEFZ_BASE_PATH}/accounts/${encodeURIComponent(accountId)}/status`,
+  performanceImport: `${CHEFZ_BASE_PATH}/performance/import`,
+  settings: `${CHEFZ_BASE_PATH}/settings/performance`,
+  reminders: (page = 1, pageSize = 50) =>
+    `${CHEFZ_BASE_PATH}/reminders?${new URLSearchParams({ page: String(page), pageSize: String(pageSize) })}`,
+  walletPreview: `${CHEFZ_BASE_PATH}/settlements/preview`,
+  walletSave: `${CHEFZ_BASE_PATH}/settlements`,
 } as const;
 
 export interface ChefzProblemDetails {
