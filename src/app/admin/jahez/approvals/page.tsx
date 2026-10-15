@@ -1,32 +1,30 @@
 // src/app/admin/jahez/approvals/page.tsx
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, useMemo } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
-  cancelApprovalRequest,
-  createApprovalRequest,
-  createEarnings,
-  decideApprovalRequest,
-  getApprovalRequests,
-  getJahezHandovers,
+  getJahezRequests,
+  getJahezRequestDetails,
+  createJahezRequest,
+  decideJahezRequest,
+  getJahezAccounts,
 } from "@/lib/jahez/api";
 import {
-  JahezApprovalKind,
-  JahezApprovalStatus,
-  type ApprovalCreateRequest,
-  type ApprovalDecisionRequest,
-  type EarningsRequest,
-  type JahezApprovalRequest,
-  type JahezHandover,
+  ApprovalKind,
+  ApprovalStatus,
+  AdjustmentTarget,
+  type ApprovalRequest,
+  type Approval,
+  type Account,
 } from "@/lib/jahez/types";
-import { getPlatformAccounts, type AccountResponse } from "@/lib/platforms/api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Modal } from "@/components/ui/Modal";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import {
   ShieldCheck,
@@ -36,8 +34,16 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Calculator,
-  RotateCcw,
+  Send,
+  AlertTriangle,
+  ArrowRightLeft,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Check,
+  X,
+  FileText,
+  User,
 } from "lucide-react";
 
 export default function JahezApprovalsPage() {
@@ -45,1143 +51,860 @@ export default function JahezApprovalsPage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const [requests, setRequests] = useState<JahezApprovalRequest[]>([]);
-  const [handovers, setHandovers] = useState<JahezHandover[]>([]);
-  const [availableAccounts, setAvailableAccounts] = useState<AccountResponse[]>([]);
+  const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<number | "">("");
   const [page, setPage] = useState(1);
-  const [isPending, startTransition] = useTransition();
-
-  const getDefaultReasonForKind = (kind: JahezApprovalKind) => {
-    switch (kind) {
-      case JahezApprovalKind.FeeException:
-        return isEn ? "Exceptional fee waiver request" : "طلب إعفاء استثنائي من رسوم الحساب";
-      case JahezApprovalKind.FreeSwitch:
-        return isEn ? "Free account switch due to technical issues" : "تبديل حساب بديل لتعطل الحساب الأصلي";
-      case JahezApprovalKind.PercentageCommission:
-        return isEn ? "15% percentage commission policy application" : "تطبيق سياسة العمولة بالنسبة المعتمدة (15%)";
-      case JahezApprovalKind.AccountResetDebtTransfer:
-        return isEn ? "Platform account reset and debt transfer to rider" : "تصفير حساب المنصة وترحيل المديونية للمندوب";
-      default:
-        return isEn ? "Official approval request" : "طلب اعتماد رسمي";
-    }
-  };
+  const [pageSize, setPageSize] = useState(50);
+  const [statusFilter, setStatusFilter] = useState<number | "">("");
+  const [kindFilter, setKindFilter] = useState<number | "">("");
+  const [search, setSearch] = useState("");
 
   // Create Request Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [reqHandoverId, setReqHandoverId] = useState("");
-  const [reqKind, setReqKind] = useState<JahezApprovalKind>(JahezApprovalKind.FeeException);
-  const [reqReason, setReqReason] = useState("طلب إعفاء استثنائي من رسوم الحساب");
-  const [waiverAmount, setWaiverAmount] = useState<number | "">("");
-  const [targetAccountId, setTargetAccountId] = useState("");
-  const [policyFromDate, setPolicyFromDate] = useState("");
-  const [policyToDate, setPolicyToDate] = useState("");
-  const [resetEffectiveAt, setResetEffectiveAt] = useState(new Date().toISOString().slice(0, 16));
-  const [externalResetRef, setExternalResetRef] = useState("");
-  const [submittingReq, setSubmittingReq] = useState(false);
+  const [createKind, setCreateKind] = useState<ApprovalKind>(ApprovalKind.FeeException);
+  const [createHandoverId, setCreateHandoverId] = useState("");
+  const [createReason, setCreateReason] = useState("");
+  const [createWaiverAmount, setCreateWaiverAmount] = useState<number>(200);
+  const [createTargetAccountId, setCreateTargetAccountId] = useState("");
+  const [createFromDate, setCreateFromDate] = useState("");
+  const [createToDate, setCreateToDate] = useState("");
+  const [createOperationId, setCreateOperationId] = useState("");
+  const [createAdjTarget, setCreateAdjTarget] = useState<AdjustmentTarget>(AdjustmentTarget.Settlement);
+  const [createProposedNet, setCreateProposedNet] = useState<number | "">("");
+  const [createProposedComm, setCreateProposedComm] = useState<number | "">("");
+  const [createDebtAdj, setCreateDebtAdj] = useState<number | "">("");
+  const [createSubmitting, setCreateSubmitting] = useState(false);
 
   // Decision Modal State
-  const [decidingRequest, setDecidingRequest] = useState<JahezApprovalRequest | null>(null);
-  const [decisionReason, setDecisionReason] = useState("اعتماد الطلب وفق الضوابط والسياسات المالية");
-  const [isDeciding, setIsDeciding] = useState(false);
+  const [isDecisionOpen, setIsDecisionOpen] = useState(false);
+  const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
+  const [decisionReason, setDecisionReason] = useState("");
+  const [useOriginalValues, setUseOriginalValues] = useState(false);
+  const [approvedNet, setApprovedNet] = useState<number | "">("");
+  const [approvedCommission, setApprovedCommission] = useState<number | "">("");
+  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [manualHandoverMode, setManualHandoverMode] = useState(false);
+  const [manualTargetAccountMode, setManualTargetAccountMode] = useState(false);
 
-  // Manual Earnings Statement Modal State
-  const [isEarningsOpen, setIsEarningsOpen] = useState(false);
-  const [earnHandoverId, setEarnHandoverId] = useState("");
-  const [earnFromDate, setEarnFromDate] = useState("");
-  const [earnToDate, setEarnToDate] = useState("");
-  const [totalDeliveryPrice, setTotalDeliveryPrice] = useState<number>(0);
-  const [totalPenalties, setTotalPenalties] = useState<number>(0);
-  const [totalCashAmount, setTotalCashAmount] = useState<number>(0);
-  const [totalDriverDebit, setTotalDriverDebit] = useState<number>(0);
-  const [totalServiceDeduction, setTotalServiceDeduction] = useState<number>(0);
-  const [totalDriverCredit, setTotalDriverCredit] = useState<number>(0);
-  const [totalBonuses, setTotalBonuses] = useState<number>(0);
-  const [totalTips, setTotalTips] = useState<number>(0);
-  const [totalFreeOrders, setTotalFreeOrders] = useState<number>(0);
-  const [earnReason, setEarnReason] = useState("احتساب بيان أرباح وعمولة بنسبة 15%");
-  const [supersedesId, setSupersedesId] = useState("");
-  const [submittingEarn, setSubmittingEarn] = useState(false);
-
-  const commissionBase =
-    totalDeliveryPrice -
-    totalPenalties -
-    totalCashAmount -
-    totalDriverDebit -
-    totalServiceDeduction +
-    totalDriverCredit +
-    totalBonuses +
-    totalTips +
-    totalFreeOrders;
-  const computedCommission = Math.max(0, commissionBase) * 0.15;
-
-  const loadRequests = async () => {
+  const loadRequests = async (targetPage = page) => {
     setLoading(true);
     try {
-      const res = await getApprovalRequests({
-        status: statusFilter === "" ? undefined : Number(statusFilter),
-        page,
-        pageSize: 50,
-      });
-      setRequests(res.items || []);
+      const [reqRes, accRes] = await Promise.allSettled([
+        getJahezRequests(targetPage, pageSize),
+        getJahezAccounts(1, 100),
+      ]);
+      if (reqRes.status === "fulfilled") setRequests(reqRes.value.items || []);
+      if (accRes.status === "fulfilled") setAccounts(accRes.value.items || []);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "تعذر استعلام طلبات الاعتماد";
-      toast.error("خطأ", msg);
+      toast.error("خطأ", "فشل تحميل طلبات الاعتماد");
     } finally {
       setLoading(false);
     }
   };
 
-  const loadCatalogs = async () => {
-    try {
-      const [hRes, accRes] = await Promise.all([
-        getJahezHandovers({ pageSize: 100 }),
-        getPlatformAccounts({ status: "Available" }),
-      ]);
-      setHandovers(hRes.items || []);
-      setAvailableAccounts(
-        (accRes || []).filter(
-          (a) =>
-            a.platformCode === "JAHEZ" ||
-            a.platformNameAr?.includes("جاهز") ||
-            a.platformNameEn?.toLowerCase().includes("jahez"),
-        ),
-      );
-    } catch {
-      // Ignored
-    }
-  };
+  const handoverOptions = useMemo(() => {
+    return accounts
+      .filter((a) => Boolean(a.currentHandoverId))
+      .map((a) => ({
+        value: a.currentHandoverId!,
+        label: `${a.code} - ${a.actualRider?.nameAr || a.userName || "حساب جاهز"}`,
+        sublabel: `المندوب: ${a.actualRider?.nameAr || "غير مسند"} (إقامة: ${a.actualRider?.iqamaNo || "-"}) • المعرف: #${a.currentHandoverId!.slice(0, 8)}`,
+        keywords: `${a.code} ${a.userName || ""} ${a.actualRider?.nameAr || ""} ${a.actualRider?.iqamaNo || ""} ${a.currentHandoverId}`,
+      }));
+  }, [accounts]);
+
+  const targetAccountOptions = useMemo(() => {
+    return accounts
+      .filter((a) => !a.isAssigned || a.status === "Available")
+      .map((a) => ({
+        value: a.accountId,
+        label: `${a.code} - ${a.cityNameAr} (${a.userName || "حساب"})`,
+        sublabel: `الحالة: ${a.status} • الكفيل: ${a.sponsorNameAr || "بدون"}`,
+        keywords: `${a.code} ${a.userName || ""} ${a.cityNameAr || ""} ${a.accountId}`,
+      }));
+  }, [accounts]);
 
   useEffect(() => {
-    loadCatalogs();
-  }, []);
+    loadRequests(page);
+  }, [page, pageSize]);
 
-  useEffect(() => {
-    startTransition(() => {
-      loadRequests();
-    });
-  }, [statusFilter, page]);
-
-  const handleCreateRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reqHandoverId) {
-      toast.error("تنبيه", "يرجى اختيار حساب التسليم المستهدف");
-      return;
-    }
-    if (!reqReason.trim()) {
-      toast.error("تنبيه", "يرجى كتابة سبب الطلب");
-      return;
-    }
-
-    if (reqKind === JahezApprovalKind.FeeException) {
-      const w = Number(waiverAmount);
-      if (!waiverAmount || w <= 0) {
-        toast.error("خطأ", isEn ? "Please enter a valid waiver amount" : "يرجى إدخال مبلغ إعفاء صحيح أكبر من صفر");
-        return;
-      }
-      if (w > 200) {
-        toast.error("خطأ", isEn ? "Fee waiver cannot exceed maximum account fee (200 SAR)" : "مبلغ الإعفاء لا يمكن أن يتجاوز أصل رسوم الحساب (200 ر.س)");
-        return;
-      }
-    }
-
-    if (reqKind === JahezApprovalKind.PercentageCommission) {
-      if (!policyFromDate || !policyToDate) {
-        toast.error("خطأ", isEn ? "Please select both from and to dates" : "يرجى تحديد تاريخ البداية والنهاية كاملاً");
-        return;
-      }
-      if (new Date(policyToDate) < new Date(policyFromDate)) {
-        toast.error("خطأ", isEn ? "To date cannot be earlier than from date" : "تاريخ النهاية لا يمكن أن يسبق تاريخ البداية");
-        return;
-      }
-      const daysDiff = Math.round((new Date(policyToDate).getTime() - new Date(policyFromDate).getTime()) / (1000 * 60 * 60 * 24));
-      if (daysDiff > 731) {
-        toast.error("خطأ", isEn ? "Policy duration cannot exceed 732 days" : "فترة سياسة النسبة لا يمكن أن تتجاوز 732 يوماً (سنتين)");
-        return;
-      }
-    }
-
-    setSubmittingReq(true);
-    try {
-      const payload: ApprovalCreateRequest = {
-        handoverId: reqHandoverId,
-        kind: reqKind,
-        reason: reqReason.trim(),
-        waiverAmount: reqKind === JahezApprovalKind.FeeException ? Number(waiverAmount) || 0 : undefined,
-        targetAccountId: reqKind === JahezApprovalKind.FreeSwitch ? targetAccountId : undefined,
-        fromDate: reqKind === JahezApprovalKind.PercentageCommission ? policyFromDate : undefined,
-        toDate: reqKind === JahezApprovalKind.PercentageCommission ? policyToDate : undefined,
-        effectiveAtUtc:
-          reqKind === JahezApprovalKind.FreeSwitch || reqKind === JahezApprovalKind.AccountResetDebtTransfer
-            ? new Date(resetEffectiveAt).toISOString()
-            : undefined,
-        externalResetReference:
-          reqKind === JahezApprovalKind.AccountResetDebtTransfer ? externalResetRef.trim() : undefined,
-      };
-
-      await createApprovalRequest(payload);
-      setIsCreateOpen(false);
-      loadRequests();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "فشل إنشاء طلب الاعتماد";
-      toast.error("خطأ", msg);
-    } finally {
-      setSubmittingReq(false);
-    }
-  };
-
-  const handleDecide = async (approve: boolean, overrideReason?: string) => {
-    if (!decidingRequest) return;
-
-    if (user?.id === decidingRequest.requestedByUserId) {
-      toast.error(
-        isEn ? "Action Not Allowed" : "إجراء غير مسموح",
-        isEn
-          ? "You cannot approve or decide your own request."
-          : "لا يمكنك اعتماد أو اتخاذ قرار بشأن طلب قمت بإنشائه بنفسك."
-      );
-      return;
-    }
-
-    const canDecideKind =
-      decidingRequest.kind === JahezApprovalKind.AccountResetDebtTransfer
-        ? can("jahez.resets.approve")
-        : can("jahez.requests.approve");
-
-    if (!can("jahez.read") || !canDecideKind) {
-      toast.error(
-        isEn ? "Permission Denied" : "صلاحية غير كافية",
-        isEn
-          ? "You need jahez.read and the approval permission for this request type."
-          : "تحتاج إلى صلاحية jahez.read بالإضافة إلى صلاحية الاعتماد المخصصة لهذا النوع من الطلبات."
-      );
-      return;
-    }
-
-    const finalReason = (overrideReason ?? decisionReason).trim();
-    if (!finalReason) {
-      toast.error("تنبيه", "يرجى كتابة سبب القرار");
-      return;
-    }
-
-    setIsDeciding(true);
-    try {
-      const payload: ApprovalDecisionRequest = {
-        approve,
-        reason: finalReason,
-      };
-      await decideApprovalRequest(decidingRequest.id, payload);
-      setDecidingRequest(null);
-      setDecisionReason(isEn ? "Approved per financial policies and controls" : "اعتماد الطلب وفق الضوابط والسياسات المالية");
-      loadRequests();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "فشلت عملية اتخاذ القرار";
-      toast.error("خطأ", msg);
-    } finally {
-      setIsDeciding(false);
-    }
-  };
-
-  const handleCancel = async (req: JahezApprovalRequest) => {
-    const reasonPrompt = window.prompt(
-      isEn ? "Please enter reason for cancelling request:" : "يرجى إدخال سبب إلغاء الطلب:",
-      isEn ? "Cancelled per administration decision" : "إلغاء الطلب بناءً على رغبة الإدارة"
+  const filteredRequests = requests.filter((r) => {
+    if (statusFilter !== "" && r.status !== statusFilter) return false;
+    if (kindFilter !== "" && r.kind !== kindFilter) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      r.id.toLowerCase().includes(q) ||
+      r.handoverId.toLowerCase().includes(q) ||
+      r.reason.toLowerCase().includes(q)
     );
-    if (!reasonPrompt) return;
+  });
 
-    try {
-      await cancelApprovalRequest(req.id, { reason: reasonPrompt });
-      loadRequests();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "تعذر إلغاء الطلب";
-      toast.error("خطأ", msg);
-    }
+  // Handle open create modal
+  const openCreateModal = () => {
+    setCreateKind(ApprovalKind.FeeException);
+    setCreateHandoverId("");
+    setCreateReason("");
+    setCreateWaiverAmount(200);
+    setCreateTargetAccountId("");
+    setCreateFromDate("");
+    setCreateToDate("");
+    setCreateOperationId("");
+    setCreateAdjTarget(AdjustmentTarget.Settlement);
+    setCreateProposedNet("");
+    setCreateProposedComm("");
+    setCreateDebtAdj("");
+    setIsCreateOpen(true);
   };
 
-  const handleSubmitEarnings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!earnHandoverId || !earnFromDate || !earnToDate) {
-      toast.error("تنبيه", "يرجى إدخال حساب التسليم ونطاق التواريخ كاملاً");
+  const handleCreateRequest = async () => {
+    if (!createHandoverId.trim()) {
+      toast.warning("تنبيه", "يرجى إدخال معرف فترة التسليم (Handover ID)");
       return;
     }
-    if (!earnReason.trim()) {
-      toast.error("تنبيه", "يرجى إدخال سبب تسجيل بيان الأرباح");
+    if (!createReason.trim()) {
+      toast.warning("تنبيه", "يرجى تسجيل سبب الطلب");
       return;
     }
 
-    setSubmittingEarn(true);
+    setCreateSubmitting(true);
     try {
-      const payload: EarningsRequest = {
-        handoverId: earnHandoverId,
-        fromDate: earnFromDate,
-        toDate: earnToDate,
-        totalDeliveryPrice,
-        totalPenalties,
-        totalCashAmount,
-        totalDriverDebit,
-        totalServiceDeduction,
-        totalDriverCredit,
-        totalBonuses,
-        totalTips,
-        totalFreeOrders,
-        reason: earnReason.trim(),
-        supersedesId: supersedesId.trim() || null,
-      };
+      await createJahezRequest({
+        handoverId: createHandoverId.trim(),
+        kind: createKind,
+        reason: createReason.trim(),
+        waiverAmount:
+          createKind === ApprovalKind.FeeException || createKind === ApprovalKind.AccountSwitch
+            ? Number(createWaiverAmount) || 0
+            : undefined,
+        targetAccountId:
+          createKind === ApprovalKind.AccountSwitch ? createTargetAccountId.trim() : undefined,
+        fromDate: createKind === ApprovalKind.PercentageCommission ? createFromDate : undefined,
+        toDate: createKind === ApprovalKind.PercentageCommission ? createToDate : undefined,
+        operationId:
+          createKind === ApprovalKind.SettlementTransfer ||
+          (createKind === ApprovalKind.Adjustment && createAdjTarget === AdjustmentTarget.Settlement)
+            ? createOperationId.trim()
+            : undefined,
+        adjustmentTarget:
+          createKind === ApprovalKind.Adjustment ? createAdjTarget : undefined,
+        proposedNet:
+          createKind === ApprovalKind.Adjustment && createProposedNet !== ""
+            ? Number(createProposedNet)
+            : undefined,
+        proposedCommission:
+          createKind === ApprovalKind.Adjustment && createProposedComm !== ""
+            ? Number(createProposedComm)
+            : undefined,
+        debtAdjustment:
+          createKind === ApprovalKind.Adjustment && createDebtAdj !== ""
+            ? Number(createDebtAdj)
+            : undefined,
+      });
 
-      await createEarnings(payload);
-      setIsEarningsOpen(false);
-      toast.success("تم بنجاح", `تم حفظ بيان الأرباح واحتساب عمولة ${computedCommission.toFixed(2)} ر.س`);
+      setIsCreateOpen(false);
+      loadRequests(page);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "فشل حفظ بيان الأرباح";
-      toast.error("خطأ", msg);
+      toast.error("فشل تقديم الطلب", err instanceof Error ? err.message : "خطأ أثناء إنشاء الطلب");
     } finally {
-      setSubmittingEarn(false);
+      setCreateSubmitting(false);
     }
   };
 
-  const getHandoverInfo = (r: JahezApprovalRequest) => {
-    const h = handovers.find((item) => item.id === r.handoverId);
-    const extId = r.account?.externalAccountId || r.externalAccountId || h?.account?.externalAccountId || h?.externalAccountId;
-    const code = r.account?.code || h?.account?.code;
-    const ownerName = isEn
-      ? (r.ownerRiderNameEn || r.ownerRiderNameAr || h?.ownerRiderNameEn || h?.ownerRiderNameAr)
-      : (r.ownerRiderNameAr || r.ownerRiderNameEn || h?.ownerRiderNameAr || h?.ownerRiderNameEn);
-    const riderName = isEn
-      ? (r.actualRiderNameEn || r.actualRiderNameAr || h?.actualRiderNameEn || h?.actualRiderNameAr)
-      : (r.actualRiderNameAr || r.actualRiderNameEn || h?.actualRiderNameAr || h?.actualRiderNameEn);
-    return { h, extId, code, ownerName, riderName };
-  };
-
-  const kindBadge = (k: JahezApprovalKind) => {
-    switch (k) {
-      case JahezApprovalKind.FeeException:
-        return (
-          <Badge tone="blue">
-            1 - إعفاء رسوم الحساب
-          </Badge>
-        );
-      case JahezApprovalKind.FreeSwitch:
-        return (
-          <Badge tone="blue">
-            2 - تبديل حساب مجاني
-          </Badge>
-        );
-      case JahezApprovalKind.PercentageCommission:
-        return (
-          <Badge tone="orange">
-            3 - سياسة عمولة بالنسبة (15%)
-          </Badge>
-        );
-      case JahezApprovalKind.AccountResetDebtTransfer:
-        return (
-          <Badge tone="orange">
-            4 - تصفير ونقل مديونية
-          </Badge>
-        );
-      default:
-        return <Badge tone="gray">{String(k)}</Badge>;
+  // Open Decision Modal
+  const openDecisionModal = async (requestId: string) => {
+    try {
+      const app = await getJahezRequestDetails(requestId);
+      setSelectedApproval(app);
+      setDecisionReason("");
+      setUseOriginalValues(false);
+      setApprovedNet(app.request.proposedNet ?? "");
+      setApprovedCommission(app.request.proposedCommission ?? "");
+      setIsDecisionOpen(true);
+    } catch (err: unknown) {
+      toast.error("خطأ", "تعذر جلب تفاصيل الطلب");
     }
   };
 
-  const statusBadge = (s: JahezApprovalStatus) => {
-    switch (s) {
-      case JahezApprovalStatus.Pending:
-        return (
-          <Badge tone="orange">
-            <Clock className="h-3 w-3 mr-1 inline" />
-            قيد المراجعة
-          </Badge>
-        );
-      case JahezApprovalStatus.Approved:
-        return (
-          <Badge tone="green">
-            <CheckCircle className="h-3 w-3 mr-1 inline" />
-            معتمد
-          </Badge>
-        );
-      case JahezApprovalStatus.Rejected:
-        return (
-          <Badge tone="red">
-            <XCircle className="h-3 w-3 mr-1 inline" />
-            مرفوض
-          </Badge>
-        );
-      case JahezApprovalStatus.Cancelled:
-        return (
-          <Badge tone="gray">
-            <RotateCcw className="h-3 w-3 mr-1 inline" />
-            ملغى
-          </Badge>
-        );
+  const submitDecision = async (approve: boolean) => {
+    if (!selectedApproval) return;
+
+    // Self-approval check
+    if (user?.id && selectedApproval.request.requestedByUserId === user.id) {
+      toast.error(
+        "غير مسموح",
+        "النظام يمنع اعتماد المستخدم لطلبه الشخصي. يجب أن يتخذ القرار مدير آخر.",
+      );
+      return;
+    }
+
+    setDecisionSubmitting(true);
+    try {
+      await decideJahezRequest(selectedApproval.request.id, {
+        approve,
+        reason: decisionReason.trim() || (approve ? "اعتماد الطلب" : "رفض الطلب"),
+        useOriginalValues: approve ? useOriginalValues : undefined,
+        approvedNet:
+          approve && !useOriginalValues && approvedNet !== ""
+            ? Number(approvedNet)
+            : undefined,
+        approvedCommission:
+          approve && !useOriginalValues && approvedCommission !== ""
+            ? Number(approvedCommission)
+            : undefined,
+      });
+
+      setIsDecisionOpen(false);
+      loadRequests(page);
+    } catch (err: unknown) {
+      toast.error("فشل تسجيل القرار", err instanceof Error ? err.message : "تعذر تنفيذ القرار");
+    } finally {
+      setDecisionSubmitting(false);
+    }
+  };
+
+  const getKindLabel = (kind: ApprovalKind) => {
+    switch (kind) {
+      case ApprovalKind.FeeException:
+        return "إعفاء رسوم الحساب";
+      case ApprovalKind.AccountSwitch:
+        return "تبديل الحساب";
+      case ApprovalKind.PercentageCommission:
+        return "سياسة عمولة 15%";
+      case ApprovalKind.SettlementTransfer:
+        return "تصفية وسحب وترحيل مديونية";
+      case ApprovalKind.Adjustment:
+        return "تعديل تصفية / مديونية";
       default:
-        return <Badge tone="gray">{String(s)}</Badge>;
+        return `طلب نوع ${kind}`;
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
-            <ShieldCheck className="h-7 w-7 text-purple-600 dark:text-purple-400" />
-            {isEn ? "Jahez Approval Requests & Commission Policies" : "طلبات اعتمادات وسياسات جاهز"}
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {isEn
-              ? "Govern fee exceptions, free account switches, 15% percentage policies, and account resets with separation of duties."
-              : "إدارة طلبات إعفاءات الرسوم، والتبديل المجاني، وسياسات العمولة بالنسبة (15%)، وتصفير ونقل المديونية."}
-          </p>
+    <div className="space-y-6 p-4 md:p-8" dir="rtl">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+            <ShieldCheck className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-gray-900 dark:text-white">
+              طلبات الاعتماد والقرارات
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              إعفاءات الرسوم، تبديل الحسابات، سياسات 15%، الترحيل وتعديل التصفيات
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
-            onClick={loadRequests}
+            size="sm"
+            onClick={() => loadRequests(page)}
             disabled={loading}
-            className="flex items-center gap-1.5"
+            className="gap-2"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {isEn ? "Refresh" : "تحديث"}
+            تحديث
           </Button>
 
-          {can("jahez.earnings.create") && (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setEarnReason(isEn ? "Earnings statement and 15% commission calculation" : "احتساب بيان أرباح وعمولة بنسبة 15%");
-                setIsEarningsOpen(true);
-              }}
-              className="text-purple-700 border-purple-300 hover:bg-purple-50 flex items-center gap-1.5"
-            >
-              <Calculator className="h-4 w-4" />
-              {isEn ? "Manual Earnings Statement" : "تسجيل بيان أرباح ونسبة"}
-            </Button>
-          )}
-
-          {can("jahez.requests.create") && (
-            <Button
-              variant="primary"
-              onClick={() => {
-                setReqKind(JahezApprovalKind.FeeException);
-                setReqReason(getDefaultReasonForKind(JahezApprovalKind.FeeException));
-                setIsCreateOpen(true);
-              }}
-              className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              {isEn ? "New Request" : "إنشاء طلب جديد"}
-            </Button>
-          )}
+          <Button
+            onClick={openCreateModal}
+            size="sm"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            إنشاء طلب جديد
+          </Button>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-            {isEn ? "Filter by Status:" : "تصفية بالحالة:"}
-          </label>
+      {/* Filters */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 md:flex-row md:items-center md:justify-between">
+        <div className="relative flex-1">
+          <Search className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث برقم الطلب، معرف التسليم، أو السبب..."
+            className="pr-10 text-sm"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={kindFilter}
+            onChange={(e) => setKindFilter(e.target.value === "" ? "" : Number(e.target.value))}
+            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+          >
+            <option value="">جميع أنواع الطلبات</option>
+            <option value={ApprovalKind.FeeException}>إعفاء رسوم</option>
+            <option value={ApprovalKind.AccountSwitch}>تبديل حساب</option>
+            <option value={ApprovalKind.PercentageCommission}>عمولة 15%</option>
+            <option value={ApprovalKind.SettlementTransfer}>تصفية وسحب وترحيل</option>
+            <option value={ApprovalKind.Adjustment}>تعديل تصفية أو مديونية</option>
+          </select>
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value === "" ? "" : Number(e.target.value))}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
           >
-            <option value="">الكل</option>
-            <option value="1">قيد المراجعة (Pending)</option>
-            <option value="2">معتمد (Approved)</option>
-            <option value="3">مرفوض (Rejected)</option>
-            <option value="4">ملغى (Cancelled)</option>
+            <option value="">جميع الحالات</option>
+            <option value={ApprovalStatus.Pending}>قيد الانتظار (Pending)</option>
+            <option value={ApprovalStatus.Approved}>معتمد (Approved)</option>
+            <option value={ApprovalStatus.Rejected}>مرفوض (Rejected)</option>
           </select>
-        </div>
-
-        <div className="text-xs text-gray-500">
-          إجمالي الطلبات: {requests.length}
         </div>
       </div>
 
       {/* Requests Table */}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900">
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-right">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/60 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800">
+          <table className="w-full text-right text-xs">
+            <thead className="border-b border-gray-200 bg-gray-50/80 text-[11px] font-bold text-gray-600 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-300">
               <tr>
-                <th className="px-4 py-3">{isEn ? "Created At" : "تاريخ الطلب"}</th>
-                <th className="px-4 py-3">{isEn ? "Kind" : "نوع الاعتماد"}</th>
-                <th className="px-4 py-3">{isEn ? "Account (Driver ID)" : "الحساب (Driver ID)"}</th>
-                <th className="px-4 py-3">{isEn ? "Status" : "الحالة"}</th>
-                <th className="px-4 py-3">{isEn ? "Requested By" : "مقدم الطلب"}</th>
-                <th className="px-4 py-3">{isEn ? "Details" : "تفاصيل القرار"}</th>
-                <th className="px-4 py-3">{isEn ? "Reason" : "السبب"}</th>
-                <th className="px-4 py-3">{isEn ? "Actions" : "الإجراءات"}</th>
+                <th className="py-3 px-3">رقم الطلب</th>
+                <th className="py-3 px-3">نوع الطلب</th>
+                <th className="py-3 px-3">معرف التسليم / العملية</th>
+                <th className="py-3 px-3">البيانات المقترحة</th>
+                <th className="py-3 px-3">السبب</th>
+                <th className="py-3 px-3 text-center">الحالة</th>
+                <th className="py-3 px-3">تاريخ التقديم</th>
+                <th className="py-3 px-3 text-center">الإجراء</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-10 text-gray-500">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto text-purple-600 mb-2" />
-                    جارٍ استعلام طلبات الاعتماد...
+                  <td colSpan={8} className="py-12 text-center text-gray-500">
+                    <RefreshCw className="mx-auto h-6 w-6 animate-spin text-indigo-500 mb-2" />
+                    جارٍ تحميل طلبات الاعتماد...
                   </td>
                 </tr>
-              ) : requests.length === 0 ? (
+              ) : filteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-400">
-                    <ShieldCheck className="h-10 w-10 mx-auto text-gray-300 mb-2" />
-                    <p className="font-medium text-gray-600 dark:text-gray-300">
-                      {isEn ? "No approval requests found" : "لا توجد طلبات اعتماد مسجلة"}
-                    </p>
+                  <td colSpan={8} className="py-12 text-center text-gray-500">
+                    لا توجد طلبات مطابقة للمعايير الحالية
                   </td>
                 </tr>
               ) : (
-                requests.map((r) => {
-                  const isPendingStatus = r.status === JahezApprovalStatus.Pending;
-                  const isCreator = user?.id === r.requestedByUserId;
-                  const canDecideKind =
-                    r.kind === JahezApprovalKind.AccountResetDebtTransfer
-                      ? can("jahez.resets.approve")
-                      : can("jahez.requests.approve");
-
-                  const canDecide = isPendingStatus && can("jahez.read") && canDecideKind && !isCreator;
-                  const canCancel = isPendingStatus && isCreator && can("jahez.requests.create");
-                  const info = getHandoverInfo(r);
-
-                  return (
-                    <tr key={r.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
-                        {new Date(r.createdAtUtc).toLocaleDateString("ar-SA")}
-                      </td>
-
-                      <td className="px-4 py-3">{kindBadge(r.kind)}</td>
-
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-gray-900 dark:text-white block font-mono">
-                          {info.extId ? `[${info.extId}]` : info.code || "-"}
+                filteredRequests.map((req) => (
+                  <tr key={req.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
+                    <td className="py-3 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
+                      #{req.id.slice(0, 8)}
+                    </td>
+                    <td className="py-3 px-3 font-semibold text-indigo-700 dark:text-indigo-400">
+                      {getKindLabel(req.kind)}
+                    </td>
+                    <td className="py-3 px-3 font-mono text-[11px] text-gray-500">
+                      <div>تسليم: {req.handoverId.slice(0, 8)}</div>
+                      {req.operationId && <div>عملية: {req.operationId.slice(0, 8)}</div>}
+                    </td>
+                    <td className="py-3 px-3">
+                      {req.kind === ApprovalKind.FeeException && (
+                        <span>إعفاء: {req.waiverAmount} ريال</span>
+                      )}
+                      {req.kind === ApprovalKind.AccountSwitch && (
+                        <span>
+                          بديل: {req.targetAccountId?.slice(0, 8)} • إعفاء: {req.waiverAmount}
                         </span>
-                        {info.code && info.code !== info.extId && (
-                          <span className="text-xs text-emerald-600 block">
-                            {info.code}
-                          </span>
-                        )}
-                        {info.ownerName && (
-                          <span className="block text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5" title={isEn ? "Account Owner" : "صاحب الحساب"}>
-                            {info.ownerName}
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">{statusBadge(r.status)}</td>
-
-                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 font-medium">
-                        {(isEn
-                          ? r.requestedByUserNameEn || r.requestedByUserNameAr
-                          : r.requestedByUserNameAr || r.requestedByUserNameEn) || (isCreator ? (isEn ? "You" : "أنت") : (isEn ? "User" : "المستخدم"))}
-                        {isCreator && <span className="text-[10px] text-purple-600 block font-normal">(أنت)</span>}
-                      </td>
-
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
-                        {r.kind === JahezApprovalKind.FeeException && (
-                          <span>إعفاء: <strong>{r.waiverAmount} ر.س</strong></span>
-                        )}
-                        {r.kind === JahezApprovalKind.FreeSwitch && (
-                          <span>
-                            {isEn ? "Target Account: " : "حساب بديل: "}
-                            <strong>
-                              {r.targetAccount?.externalAccountId
-                                ? `[${r.targetAccount.externalAccountId}]`
-                                : r.targetAccount?.code || (availableAccounts.find((a) => a.id === r.targetAccountId)?.code) || "-"}
-                            </strong>
-                          </span>
-                        )}
-                        {r.kind === JahezApprovalKind.PercentageCommission && (
-                          <span>فترة: {r.fromDate} → {r.toDate}</span>
-                        )}
-                        {r.kind === JahezApprovalKind.AccountResetDebtTransfer && (
-                          <span>مرجع: {r.externalResetReference || "-"}</span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300 max-w-xs truncate" title={r.reason}>
-                        {r.reason}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {canDecide && (
-                            <Button
-                              variant="primary"
-                              onClick={() => {
-                                setDecidingRequest(r);
-                                setDecisionReason(isEn ? "Approved per financial policies and controls" : "اعتماد الطلب وفق الضوابط والسياسات المالية");
-                              }}
-                              className="bg-purple-600 hover:bg-purple-700 text-white text-xs py-1 px-2.5 h-8 flex items-center gap-1"
-                            >
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              {isEn ? "Decide" : "اتخاذ قرار"}
-                            </Button>
+                      )}
+                      {req.kind === ApprovalKind.PercentageCommission && (
+                        <span>
+                          من: {req.fromDate} إلى: {req.toDate}
+                        </span>
+                      )}
+                      {req.kind === ApprovalKind.SettlementTransfer && (
+                        <span className="text-purple-700 font-bold">ترحيل كامل المستحق وحظر</span>
+                      )}
+                      {req.kind === ApprovalKind.Adjustment && (
+                        <div>
+                          {req.proposedNet !== null && (
+                            <div>صافي مقترح: {req.proposedNet} ر.س</div>
                           )}
-
-                          {canCancel && (
-                            <Button
-                              variant="secondary"
-                              onClick={() => handleCancel(r)}
-                              className="text-xs py-1 px-2.5 h-8 text-red-600 border-red-200 hover:bg-red-50"
-                            >
-                              {isEn ? "Cancel" : "إلغاء"}
-                            </Button>
+                          {req.proposedCommission !== null && (
+                            <div>عمولة مقترحة: {req.proposedCommission} ر.س</div>
+                          )}
+                          {req.debtAdjustment !== null && (
+                            <div>تعديل مديونية: {req.debtAdjustment} ر.س</div>
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate">
+                      {req.reason}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <Badge
+                        tone={
+                          req.status === ApprovalStatus.Approved
+                            ? "green"
+                            : req.status === ApprovalStatus.Rejected
+                            ? "red"
+                            : "orange"
+                        }
+                      >
+                        {req.status === ApprovalStatus.Approved
+                          ? "معتمد"
+                          : req.status === ApprovalStatus.Rejected
+                          ? "مرفوض"
+                          : "قيد الانتظار"}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-3 text-gray-400">
+                      {req.createdAtUtc?.slice(0, 16).replace("T", " ")}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <Button
+                        size="sm"
+                        variant={req.status === ApprovalStatus.Pending ? "primary" : "secondary"}
+                        onClick={() => openDecisionModal(req.id)}
+                        className="h-7 text-xs font-bold"
+                      >
+                        {req.status === ApprovalStatus.Pending ? "فحص واتخاذ قرار" : "عرض القرار"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal 1: Create Approval Request */}
+      {/* ================================================================= */}
+      {/* Create Request Modal                                               */}
+      {/* ================================================================= */}
       <Modal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        title={isEn ? "Create Jahez Approval Request" : "إنشاء طلب اعتماد لجاهز"}
+        title="إنشاء طلب اعتماد جديد — جاهز V2"
+        maxWidth="max-w-lg"
       >
-        <form onSubmit={handleCreateRequest} className="space-y-4">
+        <div className="space-y-4 text-xs" dir="rtl">
           <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              {isEn ? "Target Handover Account" : "حساب التسليم المستهدف"}
-            </label>
-            <SearchableSelect
-              value={reqHandoverId}
-              onChange={(val) => setReqHandoverId(val)}
-              options={handovers.map((h) => {
-                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
-                const rider = isEn
-                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
-                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
-                return {
-                  value: h.id,
-                  label: `${isEn ? "Account" : "حساب"} [${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
-                };
-              })}
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              {isEn ? "Approval Kind" : "نوع طلب الاعتماد"}
+            <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              نوع طلب الاعتماد *
             </label>
             <select
-              value={reqKind}
-              onChange={(e) => {
-                const newKind = Number(e.target.value) as JahezApprovalKind;
-                setReqKind(newKind);
-                setReqReason(getDefaultReasonForKind(newKind));
-              }}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              value={createKind}
+              onChange={(e) => setCreateKind(Number(e.target.value) as ApprovalKind)}
+              className="w-full rounded-xl border border-gray-300 bg-white p-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800"
             >
-              <option value={JahezApprovalKind.FeeException}>1 - إعفاء من رسوم الحساب</option>
-              <option value={JahezApprovalKind.FreeSwitch}>2 - تبديل الحساب مجاناً</option>
-              <option value={JahezApprovalKind.PercentageCommission}>3 - سياسة عمولة بنسبة 15%</option>
-              <option value={JahezApprovalKind.AccountResetDebtTransfer}>4 - تصفير الحساب ونقل المديونية</option>
+              <option value={ApprovalKind.FeeException}>1. إعفاء رسوم فتح الحساب</option>
+              <option value={ApprovalKind.AccountSwitch}>2. تبديل الحساب</option>
+              <option value={ApprovalKind.PercentageCommission}>3. تطبيق سياسة عمولة 15%</option>
+              <option value={ApprovalKind.SettlementTransfer}>
+                4. تصفية وسحب وترحيل مديونية
+              </option>
+              <option value={ApprovalKind.Adjustment}>5. تعديل تصفية / مديونية إدارية</option>
             </select>
-
-            {/* بطاقة توضيحية مختصرة لما يقوم به الإجراء المختار */}
-            <div className="mt-2 rounded-lg bg-purple-50/70 border border-purple-100 p-2.5 text-xs text-purple-900 dark:bg-purple-950/30 dark:border-purple-900/40 dark:text-purple-200 leading-relaxed">
-              {reqKind === JahezApprovalKind.FeeException && (
-                <p>
-                  <strong>ماذا يفعل هذا الإجراء؟</strong> طلب إعفاء المندوب جزئياً أو كلياً من رسوم فتح الحساب (200 ر.س) لظروف استثنائية، وإسقاط المبلغ المعفى من مطالباته المالية.
-                </p>
-              )}
-              {reqKind === JahezApprovalKind.FreeSwitch && (
-                <p>
-                  <strong>ماذا يفعل هذا الإجراء؟</strong> نقل المندوب إلى حساب جاهز بديل دون فرض رسوم فتح حساب جديدة (200 ر.س أخرى) عند تعطل حسابه الحالي أو حظره من المنصة.
-                </p>
-              )}
-              {reqKind === JahezApprovalKind.PercentageCommission && (
-                <p>
-                  <strong>ماذا يفعل هذا الإجراء؟</strong> تطبيق احتساب عمولة المندوب بنسبة 15% من صافي الدخل لفترة محددة بدلاً من الخصم اليومي الثابت (15 ر.س/يوم).
-                </p>
-              )}
-              {reqKind === JahezApprovalKind.AccountResetDebtTransfer && (
-                <p>
-                  <strong>ماذا يفعل هذا الإجراء؟</strong> تصفير مديونية الحساب في منصة جاهز وترحيلها كمديونية شخصية قائمة على المندوب، مع توثيق رقم المرجع الخارجي للتصفير.
-                </p>
-              )}
-            </div>
           </div>
 
-          {reqKind === JahezApprovalKind.FeeException && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block font-semibold text-gray-700 dark:text-gray-300">
+                فترة التسليم النشطة *
+              </label>
+              <button
+                type="button"
+                onClick={() => setManualHandoverMode(!manualHandoverMode)}
+                className="text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
+              >
+                {manualHandoverMode ? "اختر من القائمة المنسدلة" : "إدخال يدوي للمعرف"}
+              </button>
+            </div>
+
+            {!manualHandoverMode ? (
+              <SearchableSelect
+                options={handoverOptions}
+                value={createHandoverId}
+                onChange={setCreateHandoverId}
+                placeholder="اختر فترة التسليم أو ابحث بالحساب أو المندوب..."
+                searchPlaceholder="ابحث برقم الحساب، اسم المندوب، أو رقم الإقامة..."
+                noOptionsText="لا توجد فترات تسليم نشطة حالياً"
+              />
+            ) : (
+              <Input
+                value={createHandoverId}
+                onChange={(e) => setCreateHandoverId(e.target.value)}
+                placeholder="معرف فترة التسليم النشطة..."
+              />
+            )}
+          </div>
+
+          {/* نوع 1: إعفاء رسوم */}
+          {createKind === ApprovalKind.FeeException && (
+            <div>
+              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                قيمة الإعفاء المطلوبة (ريال) *
+              </label>
+              <Input
+                type="number"
+                max={200}
+                value={createWaiverAmount}
+                onChange={(e) => setCreateWaiverAmount(Number(e.target.value) || 0)}
+              />
+              <span className="text-[10px] text-gray-400">
+                200 إعفاء كامل، أو قيمة جزئية لا تتجاوز غير المدفوع
+              </span>
+            </div>
+          )}
+
+          {/* نوع 2: تبديل الحساب */}
+          {createKind === ApprovalKind.AccountSwitch && (
             <div className="space-y-3">
-              <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-2.5 text-blue-900 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300 text-xs">
-                <span className="font-semibold block mb-0.5">
-                  {isEn ? "Account Reception Fee Waiver Only:" : "إعفاء رسوم استلام الحساب فقط:"}
-                </span>
-                <span className="text-[11px] text-blue-700 dark:text-blue-400">
-                  {isEn
-                    ? "This approval applies strictly to account reception fees (max 200 SAR). It cannot be used to waive or reduce operational commission or platform debt."
-                    : "هذا الطلب يخص رسوم استلام الحساب فقط (بحد أقصى 200 ر.س). لا يمكن استخدامه لإعفاء أو تخفيض عمولة التشغيل أو مديونية جاهز."}
-                </span>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300">
+                    الحساب البديل المستهدف *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setManualTargetAccountMode(!manualTargetAccountMode)}
+                    className="text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
+                  >
+                    {manualTargetAccountMode ? "اختر من القائمة المنسدلة" : "إدخال يدوي للمعرف"}
+                  </button>
+                </div>
+
+                {!manualTargetAccountMode ? (
+                  <SearchableSelect
+                    options={targetAccountOptions}
+                    value={createTargetAccountId}
+                    onChange={setCreateTargetAccountId}
+                    placeholder="اختر الحساب البديل المتاح..."
+                    searchPlaceholder="ابحث برقم الحساب أو المدينة..."
+                    noOptionsText="لا توجد حسابات متاحة للتبديل"
+                  />
+                ) : (
+                  <Input
+                    value={createTargetAccountId}
+                    onChange={(e) => setCreateTargetAccountId(e.target.value)}
+                    placeholder="Target Account ID..."
+                  />
+                )}
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  مبلغ الإعفاء المطلوب من الرسوم غير المسددة (ر.س) - الحد الأقصى 200
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  إعفاء رسوم الحساب البديل (200 مجاني، 140 يعني رسوم 60)
                 </label>
                 <Input
                   type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="200"
-                  placeholder="200.00"
-                  value={waiverAmount}
-                  onChange={(e) => setWaiverAmount(e.target.value === "" ? "" : Number(e.target.value))}
-                  required
+                  value={createWaiverAmount}
+                  onChange={(e) => setCreateWaiverAmount(Number(e.target.value) || 0)}
                 />
               </div>
             </div>
           )}
 
-          {reqKind === JahezApprovalKind.FreeSwitch && (
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  الحساب البديل المتاح
-                </label>
-                <SearchableSelect
-                  value={targetAccountId}
-                  onChange={(val) => setTargetAccountId(val)}
-                  options={availableAccounts.map((a) => ({
-                    value: a.id,
-                    label: `حساب [${a.externalAccountId || a.code}] - ${a.status}`,
-                  }))}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  تاريخ ووقت سريان التبديل (ضمن فترة الاستخدام الحالية)
-                </label>
-                <Input
-                  type="datetime-local"
-                  value={resetEffectiveAt}
-                  onChange={(e) => setResetEffectiveAt(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-          )}
-
-          {reqKind === JahezApprovalKind.PercentageCommission && (
+          {/* نوع 3: عمولة 15% */}
+          {createKind === ApprovalKind.PercentageCommission && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  من تاريخ (شامل)
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  من تاريخ (YYYY-MM-DD)
                 </label>
                 <Input
                   type="date"
-                  value={policyFromDate}
-                  onChange={(e) => setPolicyFromDate(e.target.value)}
-                  required
+                  value={createFromDate}
+                  onChange={(e) => setCreateFromDate(e.target.value)}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  إلى تاريخ (شامل)
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  إلى تاريخ (YYYY-MM-DD)
                 </label>
                 <Input
                   type="date"
-                  value={policyToDate}
-                  onChange={(e) => setPolicyToDate(e.target.value)}
-                  required
+                  value={createToDate}
+                  onChange={(e) => setCreateToDate(e.target.value)}
                 />
               </div>
             </div>
           )}
 
-          {reqKind === JahezApprovalKind.AccountResetDebtTransfer && (
+          {/* نوع 4: ترحيل */}
+          {createKind === ApprovalKind.SettlementTransfer && (
+            <div>
+              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                معرف العملية (Operation ID) المسجلة كسحب مع ترحيل *
+              </label>
+              <Input
+                value={createOperationId}
+                onChange={(e) => setCreateOperationId(e.target.value)}
+                placeholder="Operation ID..."
+              />
+            </div>
+          )}
+
+          {/* نوع 5: تعديل */}
+          {createKind === ApprovalKind.Adjustment && (
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  تاريخ ووقت سريان التصفير
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  هدف التعديل *
                 </label>
-                <Input
-                  type="datetime-local"
-                  value={resetEffectiveAt}
-                  onChange={(e) => setResetEffectiveAt(e.target.value)}
-                  required
-                />
+                <select
+                  value={createAdjTarget}
+                  onChange={(e) =>
+                    setCreateAdjTarget(Number(e.target.value) as AdjustmentTarget)
+                  }
+                  className="w-full rounded-xl border border-gray-300 bg-white p-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800"
+                >
+                  <option value={AdjustmentTarget.Settlement}>1. تعديل تصفية جارية</option>
+                  <option value={AdjustmentTarget.AdministrativeDebt}>
+                    2. تعديل رصيد المديونية الإدارية
+                  </option>
+                </select>
               </div>
-              <div>
-                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                  المرجع الخارجي لتصفير لوحة جاهز (External Reset Reference)
-                </label>
-                <Input
-                  type="text"
-                  placeholder="رقم العملية أو التذكرة في لوحة تحكم جاهز..."
-                  value={externalResetRef}
-                  onChange={(e) => setExternalResetRef(e.target.value)}
-                />
-              </div>
+
+              {createAdjTarget === AdjustmentTarget.Settlement ? (
+                <>
+                  <div>
+                    <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      معرف العملية (Operation ID) *
+                    </label>
+                    <Input
+                      value={createOperationId}
+                      onChange={(e) => setCreateOperationId(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        الصافي المقترح
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={createProposedNet}
+                        onChange={(e) =>
+                          setCreateProposedNet(
+                            e.target.value === "" ? "" : Number(e.target.value),
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        العمولة المقترحة
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={createProposedComm}
+                        onChange={(e) =>
+                          setCreateProposedComm(
+                            e.target.value === "" ? "" : Number(e.target.value),
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    قيمة تعديل المديونية (حركة فرق موقعة +/-)
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={createDebtAdj}
+                    onChange={(e) =>
+                      setCreateDebtAdj(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                  />
+                </div>
+              )}
             </div>
           )}
 
           <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              سبب ومبرر الطلب
+            <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              السبب والمبرر الإداري *
             </label>
             <Input
-              type="text"
-              placeholder="مثال: ضعف أداء المندوب أو عدم توفر طلبات على الحساب..."
-              value={reqReason}
-              onChange={(e) => setReqReason(e.target.value)}
-              required
+              value={createReason}
+              onChange={(e) => setCreateReason(e.target.value)}
+              placeholder="اكتب مبرر الطلب..."
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex justify-end gap-2 pt-3 border-t">
             <Button
-              type="button"
               variant="secondary"
               onClick={() => setIsCreateOpen(false)}
-              disabled={submittingReq}
+              disabled={createSubmitting}
             >
               إلغاء
             </Button>
             <Button
-              type="submit"
-              variant="primary"
-              disabled={submittingReq}
-              className="bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={handleCreateRequest}
+              disabled={createSubmitting || !createHandoverId.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
             >
-              {submittingReq ? "جارٍ الإرسال..." : "إرسال الطلب للاعتماد"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Modal 2: Decision Modal */}
-      <Modal
-        isOpen={Boolean(decidingRequest)}
-        onClose={() => setDecidingRequest(null)}
-        title={isEn ? "Approval Request Decision" : "اتخاذ قرار بشأن طلب الاعتماد"}
-      >
-        <div className="space-y-4">
-          <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800 text-xs space-y-1">
-            <div className="flex justify-between">
-              <span className="text-gray-500">نوع الطلب:</span>
-              <span className="font-bold">{decidingRequest && kindBadge(decidingRequest.kind)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">سبب مقدم الطلب:</span>
-              <span>{decidingRequest?.reason}</span>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              سبب ومبرر القرار (إلزامي)
-            </label>
-            <Input
-              type="text"
-              placeholder="اكتب سبب الموافقة أو الرفض..."
-              value={decisionReason}
-              onChange={(e) => setDecisionReason(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setDecidingRequest(null)}
-              disabled={isDeciding}
-            >
-              إلغاء
-            </Button>
-
-            <Button
-              type="button"
-              variant="danger"
-              onClick={() => {
-                const isApprovedDefault =
-                  decisionReason === "اعتماد الطلب وفق الضوابط والسياسات المالية" ||
-                  decisionReason === "Approved per financial policies and controls";
-                const rejectReason = isApprovedDefault
-                  ? (isEn ? "Rejected per administration decision" : "رفض الطلب لعدم استيفاء الشروط")
-                  : decisionReason;
-                handleDecide(false, rejectReason);
-              }}
-              disabled={isDeciding}
-            >
-              {isDeciding ? "جارٍ الحفظ..." : "رفض الطلب"}
-            </Button>
-
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => handleDecide(true)}
-              disabled={isDeciding}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              {isDeciding ? "جارٍ الحفظ..." : "اعتماد الطلب"}
+              {createSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : "إرسال الطلب"}
             </Button>
           </div>
         </div>
       </Modal>
 
-      {/* Modal 3: Manual Percentage Earnings Statement */}
+      {/* ================================================================= */}
+      {/* Decision Modal (فحص واتخاذ القرار)                                */}
+      {/* ================================================================= */}
       <Modal
-        isOpen={isEarningsOpen}
-        onClose={() => setIsEarningsOpen(false)}
-        title={isEn ? "Manual Percentage Earnings Statement" : "تسجيل بيان أرباح العمولة بالنسبة (15%)"}
+        isOpen={isDecisionOpen}
+        onClose={() => setIsDecisionOpen(false)}
+        title="فحص طلب الاعتماد واتخاذ القرار"
+        maxWidth="max-w-xl"
       >
-        <form onSubmit={handleSubmitEarnings} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-          <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-3 text-xs text-purple-900 dark:border-purple-900/40 dark:bg-purple-950/20 dark:text-purple-200 space-y-1">
-            <span className="font-bold block">معادلة احتساب العمولة (15%):</span>
-            <code className="text-[11px] block bg-white dark:bg-gray-900 p-1.5 rounded font-mono">
-              CommissionBase = (DeliveryPrice + DriverCredit + Bonuses + Tips + FreeOrders)
-              - (Penalties + CashAmount + DriverDebit + ServiceDeduction)
-            </code>
-            <p className="text-[11px] text-purple-700 dark:text-purple-300">
-              {isEn
-                ? "Percentage earnings are registered directly via /api/jahez/earnings once an approved percentage policy exists for the period. No separate approval step is needed for the statement."
-                : "تُسجل أرباح النسبة مباشرة عبر /api/jahez/earnings بمجرد وجود موافقة نسبة معتمدة تغطي الفترة، ولا توجد خطوة اعتماد مستقلة لبيان الأرباح."}
-            </p>
-          </div>
+        <div className="space-y-4 text-xs" dir="rtl">
+          {selectedApproval && (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800 space-y-1">
+                <div className="font-bold text-sm">
+                  الطلب #{selectedApproval.request.id.slice(0, 8)} —{" "}
+                  {getKindLabel(selectedApproval.request.kind)}
+                </div>
+                <div className="text-gray-500">
+                  مقدم الطلب: {selectedApproval.request.requestedByUserId.slice(0, 8)} • تاريخ:{" "}
+                  {selectedApproval.request.createdAtUtc.slice(0, 10)}
+                </div>
+                <div className="text-gray-700 dark:text-gray-300 mt-1">
+                  السبب: {selectedApproval.request.reason}
+                </div>
+              </div>
 
-          <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              حساب التسليم
-            </label>
-            <SearchableSelect
-              value={earnHandoverId}
-              onChange={(val) => setEarnHandoverId(val)}
-              options={handovers.map((h) => {
-                const accDisplay = h.account?.externalAccountId || h.externalAccountId || h.account?.code || "-";
-                const rider = isEn
-                  ? (h.actualRiderNameEn || h.actualRiderNameAr || h.ownerRiderNameEn || h.ownerRiderNameAr)
-                  : (h.actualRiderNameAr || h.actualRiderNameEn || h.ownerRiderNameAr || h.ownerRiderNameEn);
-                return {
-                  value: h.id,
-                  label: `${isEn ? "Account" : "حساب"} [${accDisplay}]${rider ? ` - ${rider}` : ""} (${h.commissionStartsOn})`,
-                };
-              })}
-            />
-          </div>
+              {/* التحقق من عدم الاعتماد للنفس */}
+              {user?.id && selectedApproval.request.requestedByUserId === user.id && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  <span>
+                    تنبيه: أنت مقدم هذا الطلب. وفق سياسة التدقيق الصارمة، لا يمكن لمقدم الطلب
+                    اعتماد طلبه الشخصي. يجب أن يعتمده مدير آخر.
+                  </span>
+                </div>
+              )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                من تاريخ
-              </label>
-              <Input
-                type="date"
-                value={earnFromDate}
-                onChange={(e) => setEarnFromDate(e.target.value)}
-                required
-              />
+              {/* سجل القرارات السابقة */}
+              {selectedApproval.decisions.length > 0 && (
+                <div className="border-t pt-2">
+                  <div className="font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    القرارات السابقة:
+                  </div>
+                  {selectedApproval.decisions.map((d) => (
+                    <div key={d.id} className="text-[11px] text-gray-500">
+                      قرار #{d.id.slice(0, 6)}:{" "}
+                      {d.status === ApprovalStatus.Approved ? "معتمد" : "مرفوض"} بواسطة{" "}
+                      {d.actorUserId.slice(0, 8)} في {d.decidedAtUtc.slice(0, 10)} ({d.reason})
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* خيارات القرار إذا كان معلقاً */}
+              {selectedApproval.request.status === ApprovalStatus.Pending && (
+                <div className="space-y-3 pt-2 border-t">
+                  {selectedApproval.request.kind === ApprovalKind.Adjustment && (
+                    <div className="space-y-2 rounded-xl bg-indigo-50/50 p-3 dark:bg-indigo-950/30">
+                      <label className="flex items-center gap-2 font-semibold cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useOriginalValues}
+                          onChange={(e) => setUseOriginalValues(e.target.checked)}
+                          className="rounded text-indigo-600"
+                        />
+                        <span>اعتماد القيم الأصلية وتجاهل القيم المقترحة (useOriginalValues)</span>
+                      </label>
+
+                      {!useOriginalValues && (
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                              الصافي المعتمد
+                            </label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={approvedNet}
+                              onChange={(e) =>
+                                setApprovedNet(
+                                  e.target.value === "" ? "" : Number(e.target.value),
+                                )
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                              العمولة المعتمدة
+                            </label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={approvedCommission}
+                              onChange={(e) =>
+                                setApprovedCommission(
+                                  e.target.value === "" ? "" : Number(e.target.value),
+                                )
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      مبرر / سبب القرار *
+                    </label>
+                    <Input
+                      value={decisionReason}
+                      onChange={(e) => setDecisionReason(e.target.value)}
+                      placeholder="سبب الاعتماد أو الرفض..."
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setIsDecisionOpen(false)}
+                      disabled={decisionSubmitting}
+                    >
+                      إغلاق
+                    </Button>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => submitDecision(false)}
+                        disabled={decisionSubmitting}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1"
+                      >
+                        <X className="h-4 w-4" />
+                        رفض الطلب
+                      </Button>
+
+                      <Button
+                        onClick={() => submitDecision(true)}
+                        disabled={decisionSubmitting}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1"
+                      >
+                        <Check className="h-4 w-4" />
+                        اعتماد الطلب
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                إلى تاريخ
-              </label>
-              <Input
-                type="date"
-                value={earnToDate}
-                onChange={(e) => setEarnToDate(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          {/* 9 Numerical Inputs */}
-          <div className="grid grid-cols-3 gap-2.5 text-xs">
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                سعر التوصيل (+)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalDeliveryPrice}
-                onChange={(e) => setTotalDeliveryPrice(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                الجزاءات (-)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalPenalties}
-                onChange={(e) => setTotalPenalties(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                النقد المستلم (-)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalCashAmount}
-                onChange={(e) => setTotalCashAmount(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                خصم السائق (-)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalDriverDebit}
-                onChange={(e) => setTotalDriverDebit(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                استقطاع الخدمة (-)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalServiceDeduction}
-                onChange={(e) => setTotalServiceDeduction(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                إيداع السائق (+)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalDriverCredit}
-                onChange={(e) => setTotalDriverCredit(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                المكافآت والبوانص (+)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalBonuses}
-                onChange={(e) => setTotalBonuses(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                الإكراميات Tips (+)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalTips}
-                onChange={(e) => setTotalTips(Number(e.target.value))}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 dark:text-gray-300 block mb-0.5">
-                مبلغ الطلبات المجانية (+)
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalFreeOrders}
-                onChange={(e) => setTotalFreeOrders(Number(e.target.value))}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-3.5 dark:border-purple-900/60 dark:bg-purple-950/20 text-center">
-            <span className="text-xs text-purple-700 dark:text-purple-300 block">
-              أساس احتساب العمولة (Commission Base): <strong>{commissionBase.toFixed(2)} ر.س</strong>
-            </span>
-            <span className="text-xl font-bold text-purple-800 dark:text-purple-200 mt-1 block">
-              العمولة المستحقة (15%): {computedCommission.toFixed(2)} ر.س
-            </span>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              معرف كشف أرباح سابق لتصحيحه واستبداله (supersedesId - اختياري)
-            </label>
-            <Input
-              type="text"
-              placeholder="مثال: UUID للكشف السابق المراد استبداله..."
-              value={supersedesId}
-              onChange={(e) => setSupersedesId(e.target.value)}
-            />
-            <span className="text-[11px] text-gray-400 block mt-0.5">
-              يُستخدم فقط عند الحاجة لتصحيح أو تعديل كشف أرباح تم إدخاله مسبقاً لنفس الفترة.
-            </span>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
-              السبب والمصدر
-            </label>
-            <Input
-              type="text"
-              placeholder="مثال: بيان أرباح معتمد من لوحة جاهز..."
-              value={earnReason}
-              onChange={(e) => setEarnReason(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsEarningsOpen(false)}
-              disabled={submittingEarn}
-            >
-              إلغاء
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={submittingEarn}
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-            >
-              {submittingEarn ? "جارٍ الحفظ..." : "حفظ بيان الأرباح واحتساب العمولة"}
-            </Button>
-          </div>
-        </form>
+          )}
+        </div>
       </Modal>
     </div>
   );

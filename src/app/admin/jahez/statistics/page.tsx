@@ -1,0 +1,688 @@
+// src/app/admin/jahez/statistics/page.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { translate } from "@/lib/i18n";
+import {
+  getJahezStatistics,
+  getJahezAdministrativeDebts,
+  getJahezImports,
+  getJahezImportPreview,
+  commitJahezImport,
+  uploadJahezImport,
+  downloadJahezImportFile,
+  getRiyadhTodayDate,
+} from "@/lib/jahez/api";
+import {
+  ImportKind,
+  type Statistics,
+  type AdministrativeDebt,
+  type ImportBatch,
+  type ImportPreview,
+} from "@/lib/jahez/types";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
+import { toast } from "@/components/ui/Toast";
+import { exportToExcel } from "@/lib/export-excel";
+import {
+  FileSpreadsheet,
+  RefreshCw,
+  Search,
+  Building2,
+  Users,
+  Upload,
+  Download,
+  AlertTriangle,
+  CheckCircle2,
+  FileCheck,
+  TrendingUp,
+  Check,
+  Eye,
+  Info,
+} from "lucide-react";
+
+export default function JahezStatisticsAndReportsPage() {
+  const { can, locale } = useAuth();
+  const t = (key: string) => translate(locale, key);
+  const isEn = locale === "en";
+
+  const [activeTab, setActiveTab] = useState<"sponsors" | "adminDebts" | "imports" | "earnings">(
+    "sponsors",
+  );
+
+  // Data states
+  const [statistics, setStatistics] = useState<Statistics | null>(null);
+  const [adminDebts, setAdminDebts] = useState<AdministrativeDebt[]>([]);
+  const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Upload Modal State
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [uploadKind, setUploadKind] = useState<ImportKind>(ImportKind.DailyOrders);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [replacesBatchId, setReplacesBatchId] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [uploadSubmitting, setUploadSubmitting] = useState(false);
+
+  // Preview Modal State
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [selectedPreview, setSelectedPreview] = useState<ImportPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [commitSubmitting, setCommitSubmitting] = useState(false);
+
+  // Search & Filter
+  const [search, setSearch] = useState("");
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [statRes, debtRes, impRes] = await Promise.allSettled([
+        getJahezStatistics(),
+        getJahezAdministrativeDebts(1, 100),
+        getJahezImports(1, 50),
+      ]);
+
+      if (statRes.status === "fulfilled") setStatistics(statRes.value);
+      if (debtRes.status === "fulfilled") setAdminDebts(debtRes.value.items || []);
+      if (impRes.status === "fulfilled") setImportBatches(impRes.value.items || []);
+    } catch {
+      toast.error("خطأ", "تعذر جلب التقارير والإحصائيات");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  // Upload handler
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0) {
+      toast.warning("تنبيه", "يرجى اختيار ملف إكسل واحد على الأقل");
+      return;
+    }
+    setUploadSubmitting(true);
+    try {
+      const preview = await uploadJahezImport(
+        uploadKind,
+        selectedFiles,
+        replacesBatchId.trim() || undefined,
+        correctionReason.trim() || undefined,
+      );
+      toast.success("تم الرفع", `تم رفع الدفعة #${preview.batchId.slice(0, 8)} بنجاح`);
+      setIsUploadOpen(false);
+      setSelectedFiles([]);
+      loadAll();
+
+      // Open preview right away
+      setSelectedPreview(preview);
+      setIsPreviewOpen(true);
+    } catch (err: unknown) {
+      toast.error("فشل الرفع", err instanceof Error ? err.message : "خطأ أثناء رفع الملفات");
+    } finally {
+      setUploadSubmitting(false);
+    }
+  };
+
+  // Preview details handler
+  const openBatchPreview = async (batchId: string) => {
+    setPreviewLoading(true);
+    setIsPreviewOpen(true);
+    try {
+      const p = await getJahezImportPreview(batchId);
+      setSelectedPreview(p);
+    } catch (err: unknown) {
+      toast.error("خطأ", "تعذر جلب تفاصيل المعاينة");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Commit handler
+  const handleCommit = async (batchId: string) => {
+    setCommitSubmitting(true);
+    try {
+      await commitJahezImport(batchId, { allocations: [] });
+      toast.success("تم الاعتماد", "تم اعتماد وتحديث بيانات الدفعة في النظام بنجاح");
+      setIsPreviewOpen(false);
+      loadAll();
+    } catch (err: unknown) {
+      toast.error("فشل الاعتماد", err instanceof Error ? err.message : "تعذر اعتماد الاستيراد");
+    } finally {
+      setCommitSubmitting(false);
+    }
+  };
+
+  // File download handler
+  const handleDownloadFile = async (fileId: string, fileName: string) => {
+    try {
+      const res = await downloadJahezImportFile(fileId);
+      const url = URL.createObjectURL(res.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.fileName || fileName || "jahez-file.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      toast.error("خطأ", "تعذر تحميل الملف الأصلي");
+    }
+  };
+
+  // Filtered lists
+  const filteredSponsors = (statistics?.sponsors || []).filter((s) => {
+    if (!search.trim()) return true;
+    return s.nameAr?.toLowerCase().includes(search.trim().toLowerCase());
+  });
+
+  const filteredAdminDebts = adminDebts.filter((d) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      d.externalAccountId?.toLowerCase().includes(q) ||
+      d.riderNameAr?.toLowerCase().includes(q) ||
+      d.handoverId.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="space-y-6 p-4 md:p-8" dir="rtl">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
+            <FileSpreadsheet className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-gray-900 dark:text-white">
+              الإحصائيات والتقارير والاستيراد
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              إحصائيات الكفلاء، المديونية الإدارية للرقابة، ورفع ومعاينة ملفات الاستيراد
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={loadAll}
+            disabled={loading}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            تحديث
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => setIsUploadOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            رفع ملفات XLSX
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 overflow-x-auto text-xs font-bold">
+        <button
+          onClick={() => setActiveTab("sponsors")}
+          className={`px-4 py-2 rounded-xl transition-all ${
+            activeTab === "sponsors"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400"
+          }`}
+        >
+          إحصائيات الكفلاء ({statistics?.sponsors?.length || 0})
+        </button>
+        <button
+          onClick={() => setActiveTab("adminDebts")}
+          className={`px-4 py-2 rounded-xl transition-all ${
+            activeTab === "adminDebts"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400"
+          }`}
+        >
+          المديونية الإدارية للمتابعة ({adminDebts.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("imports")}
+          className={`px-4 py-2 rounded-xl transition-all ${
+            activeTab === "imports"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400"
+          }`}
+        >
+          سجل استيراد الملفات ({importBatches.length})
+        </button>
+      </div>
+
+      {/* Tab 1: Sponsors Breakdown Table */}
+      {activeTab === "sponsors" && (
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
+                  <tr>
+                    <th className="py-3 px-3">اسم الكفيل</th>
+                    <th className="py-3 px-3 text-center">إجمالي الحسابات</th>
+                    <th className="py-3 px-3 text-center">الحسابات المسندة</th>
+                    <th className="py-3 px-3 text-center">المناديب الفعليون</th>
+                    <th className="py-3 px-3 text-center">المناديب المكفولون</th>
+                    <th className="py-3 px-3 text-center">
+                      مكفولون بحسابات كفلاء آخرين
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-gray-500">
+                        <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-500 mb-2" />
+                        جارٍ تحميل إحصائيات الكفلاء...
+                      </td>
+                    </tr>
+                  ) : filteredSponsors.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-gray-500">
+                        لا توجد بيانات كفلاء مسجلة
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSponsors.map((s) => (
+                      <tr key={s.sponsorId} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
+                        <td className="py-3 px-3 font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5 text-gray-400" />
+                          <span>{s.nameAr || "بدون اسم"}</span>
+                        </td>
+                        <td className="py-3 px-3 text-center font-bold">{s.accounts}</td>
+                        <td className="py-3 px-3 text-center font-bold text-indigo-700">
+                          {s.assignedAccounts}
+                        </td>
+                        <td className="py-3 px-3 text-center font-bold text-emerald-700">
+                          {s.actualRiders}
+                        </td>
+                        <td className="py-3 px-3 text-center font-bold text-gray-700">
+                          {s.sponsoredRiders}
+                        </td>
+                        <td className="py-3 px-3 text-center font-bold text-amber-700">
+                          {s.sponsoredRidersUsingOtherSponsorsAccounts}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Administrative Debts */}
+      {activeTab === "adminDebts" && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 flex items-start gap-2">
+            <Info className="h-4 w-4 mt-0.5 text-blue-600 flex-shrink-0" />
+            <div>
+              <span className="font-bold">قاعدة تشغيلية صارمة:</span> المديونية الإدارية للمتابعة
+              والرقابة فقط. لا تدخل هذه القيمة في معادلة التصفية المالية اليومية، ولا تنتج بلوكاً
+              تلقائياً على المندوب.
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
+                  <tr>
+                    <th className="py-3 px-3">رقم الحساب</th>
+                    <th className="py-3 px-3">معرف فترة التسليم</th>
+                    <th className="py-3 px-3">المندوب الفعلي</th>
+                    <th className="py-3 px-3 text-center">مديونية المنصة (Platform Debt)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-gray-500">
+                        <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-500 mb-2" />
+                        جارٍ تحميل المديونية الإدارية...
+                      </td>
+                    </tr>
+                  ) : filteredAdminDebts.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-gray-500">
+                        لا توجد مديونيات إدارية مسجلة
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAdminDebts.map((d) => (
+                      <tr
+                        key={d.handoverId}
+                        className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40"
+                      >
+                        <td className="py-3 px-3 font-mono font-bold">
+                          {d.externalAccountId || "-"}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-gray-500 text-[11px]">
+                          {d.handoverId.slice(0, 8)}
+                        </td>
+                        <td className="py-3 px-3 font-semibold text-gray-900 dark:text-gray-100">
+                          {d.riderNameAr || "مندوب"}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-bold text-sm text-gray-900 dark:text-white">
+                          {d.platformDebt.toFixed(2)} ر.س
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 3: Import Batches */}
+      {activeTab === "imports" && (
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
+                  <tr>
+                    <th className="py-3 px-3">رقم الدفعة</th>
+                    <th className="py-3 px-3">النوع</th>
+                    <th className="py-3 px-3 text-center">حالة الاعتماد</th>
+                    <th className="py-3 px-3">تاريخ الرفع</th>
+                    <th className="py-3 px-3">وقت الاعتماد</th>
+                    <th className="py-3 px-3">الدفعة المستبدلة</th>
+                    <th className="py-3 px-3 text-center">الإجراء</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-gray-500">
+                        <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-500 mb-2" />
+                        جارٍ تحميل دفعات الاستيراد...
+                      </td>
+                    </tr>
+                  ) : importBatches.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-gray-500">
+                        لا توجد دفعات استيراد مرفوعة بعد
+                      </td>
+                    </tr>
+                  ) : (
+                    importBatches.map((b) => (
+                      <tr key={b.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
+                        <td className="py-3 px-3 font-mono font-bold">#{b.id.slice(0, 8)}</td>
+                        <td className="py-3 px-3 font-semibold">
+                          {b.kind === ImportKind.DailyOrders ? "طلبات يومية" : "معاملات منصة"}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          {b.committedAtUtc ? (
+                            <Badge tone="green">معتمدة</Badge>
+                          ) : (
+                            <Badge tone="orange">قيد المعاينة</Badge>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-gray-400">
+                          {b.createdAtUtc?.slice(0, 16).replace("T", " ")}
+                        </td>
+                        <td className="py-3 px-3 text-gray-400">
+                          {b.committedAtUtc ? b.committedAtUtc.slice(0, 16).replace("T", " ") : "-"}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-gray-500">
+                          {b.replacesBatchId ? `#${b.replacesBatchId.slice(0, 8)}` : "-"}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => openBatchPreview(b.id)}
+                            className="h-7 text-xs font-bold gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة الدفعة
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* Upload Modal                                                       */}
+      {/* ================================================================= */}
+      <Modal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        title="رفع ملفات إكسل جديدة (XLSX) — جاهز V2"
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-4 text-xs" dir="rtl">
+          <div>
+            <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              نوع الملفات المرفوعة *
+            </label>
+            <select
+              value={uploadKind}
+              onChange={(e) => setUploadKind(Number(e.target.value) as ImportKind)}
+              className="w-full rounded-xl border border-gray-300 bg-white p-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800"
+            >
+              <option value={ImportKind.DailyOrders}>2. تقرير الطلبات اليومية (DailyOrders)</option>
+              <option value={ImportKind.Transactions}>1. تقرير المعاملات (Transactions)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              اختر ملفات XLSX (من 1 إلى 10 ملفات بحد أقصى 10MB لكل ملف) *
+            </label>
+            <input
+              type="file"
+              multiple
+              accept=".xlsx,.xls"
+              onChange={(e) => {
+                if (e.target.files) {
+                  setSelectedFiles(Array.from(e.target.files));
+                }
+              }}
+              className="w-full rounded-xl border border-gray-300 p-2 text-xs"
+            />
+            {selectedFiles.length > 0 && (
+              <div className="mt-1 text-[11px] text-gray-500">
+                تم اختيار {selectedFiles.length} ملف:{" "}
+                {selectedFiles.map((f) => f.name).join(", ")}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+            <div>
+              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                معرف الدفعة السابقة (في حال التصحيح)
+              </label>
+              <Input
+                value={replacesBatchId}
+                onChange={(e) => setReplacesBatchId(e.target.value)}
+                placeholder="replacesBatchId..."
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                سبب التصحيح والاستبدال
+              </label>
+              <Input
+                value={correctionReason}
+                onChange={(e) => setCorrectionReason(e.target.value)}
+                placeholder="تصحيح بيانات دفعة سابقة..."
+                disabled={!replacesBatchId.trim()}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button
+              variant="secondary"
+              onClick={() => setIsUploadOpen(false)}
+              disabled={uploadSubmitting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={handleUpload}
+              disabled={uploadSubmitting || selectedFiles.length === 0}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+            >
+              {uploadSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : "بدء الرفع"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ================================================================= */}
+      {/* Preview Modal                                                      */}
+      {/* ================================================================= */}
+      <Modal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        title="معاينة دفعة الاستيراد"
+        maxWidth="max-w-3xl"
+      >
+        <div className="space-y-4 text-xs" dir="rtl">
+          {previewLoading ? (
+            <div className="py-12 text-center text-gray-500">
+              <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-500 mb-2" />
+              جارٍ تحميل تفاصيل المعاينة...
+            </div>
+          ) : selectedPreview ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
+                <div>
+                  <span className="font-bold text-sm">
+                    الدفعة #{selectedPreview.batchId.slice(0, 8)}
+                  </span>
+                  <div className="text-gray-500">
+                    النوع:{" "}
+                    {selectedPreview.kind === ImportKind.DailyOrders
+                      ? "طلبات يومية"
+                      : "معاملات منصة"}
+                  </div>
+                </div>
+                <Badge tone={selectedPreview.committed ? "green" : "orange"}>
+                  {selectedPreview.committed ? "معتمدة" : "غير معتمدة بعد"}
+                </Badge>
+              </div>
+
+              {/* الملفات المرفقة */}
+              {selectedPreview.files && selectedPreview.files.length > 0 && (
+                <div>
+                  <div className="font-bold mb-1">الملفات الأصلية:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPreview.files.map((f) => (
+                      <Button
+                        key={f.id}
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleDownloadFile(f.id, f.fileName)}
+                        className="gap-1.5 h-7 text-xs"
+                      >
+                        <Download className="h-3 w-3" />
+                        {f.fileName}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* المشاكل أو الأخطاء إن وجدت */}
+              {selectedPreview.issues && selectedPreview.issues.length > 0 && (
+                <div className="rounded-xl border border-rose-300 bg-rose-50 p-3 dark:bg-rose-950/30">
+                  <div className="font-bold text-rose-800 dark:text-rose-200 mb-1 flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4" />
+                    تنبيهات وأخطاء المعاينة ({selectedPreview.issues.length}):
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1 text-rose-700 dark:text-rose-300 text-[11px]">
+                    {selectedPreview.issues.map((issue, idx) => (
+                      <div key={idx}>
+                        الملف: {issue.fileName} • صف {issue.rowNumber}: {issue.description} (
+                        {issue.code})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ملخص الحسابات إن وجد */}
+              {selectedPreview.accounts && selectedPreview.accounts.length > 0 && (
+                <div>
+                  <div className="font-bold mb-1">ملخص الحسابات في الدفعة:</div>
+                  <div className="max-h-48 overflow-y-auto rounded-xl border">
+                    <table className="w-full text-right text-xs">
+                      <thead className="bg-gray-50 border-b font-bold">
+                        <tr>
+                          <th className="py-1.5 px-2">معرف السائق</th>
+                          <th className="py-1.5 px-2 text-center">الصفوف الصالحة</th>
+                          <th className="py-1.5 px-2 text-center">الصافي / الطلبات</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {selectedPreview.accounts.map((acc, i) => (
+                          <tr key={i}>
+                            <td className="py-1.5 px-2 font-mono">{acc.driverId}</td>
+                            <td className="py-1.5 px-2 text-center">{acc.validRowCount}</td>
+                            <td className="py-1.5 px-2 text-center font-bold">
+                              {acc.netAmount ? `${acc.netAmount} ر.س` : `${acc.dispatches} طلب`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-3 border-t">
+                <Button variant="secondary" onClick={() => setIsPreviewOpen(false)}>
+                  إغلاق
+                </Button>
+                {!selectedPreview.committed && (
+                  <Button
+                    onClick={() => handleCommit(selectedPreview.batchId)}
+                    disabled={commitSubmitting}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5"
+                  >
+                    {commitSubmitting ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    اعتماد بيانات الدفعة (Commit)
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
+    </div>
+  );
+}

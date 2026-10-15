@@ -1,78 +1,82 @@
 // src/lib/jahez/constants.ts
 
-export const JahezDebtStatus = {
-  Active: 1,
-  Closed: 2,
-  TransferredToRider: 3,
-  Frozen: 4,
-  AccountCleared: 5,
+export const OperationMode = {
+  Settle: 1,
+  SettleAndWithdraw: 2,
+  Withdraw: 3,
 } as const;
+export type OperationMode = (typeof OperationMode)[keyof typeof OperationMode];
 
-export type JahezDebtStatus = (typeof JahezDebtStatus)[keyof typeof JahezDebtStatus];
+export const OperationStatus = {
+  Ready: 1,
+  UnderReview: 2,
+  Executed: 3,
+} as const;
+export type OperationStatus = (typeof OperationStatus)[keyof typeof OperationStatus];
 
-export const JahezPaymentStatus = {
-  Outstanding: 1,
+export const PaymentStatus = {
+  None: 1,
   Paid: 2,
+  Transferred: 3,
+  Deferred: 4,
 } as const;
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
 
-export type JahezPaymentStatus = (typeof JahezPaymentStatus)[keyof typeof JahezPaymentStatus];
-
-export const JahezLedgerKind = {
-  Charge: 1,
-  Payment: 2,
-  Adjustment: 3,
-  Transfer: 4,
-  OpeningBalance: 5,
-  StatusChange: 6,
+export const Direction = {
+  None: 0,
+  Receipt: 1,
+  Disbursement: 2,
 } as const;
+export type Direction = (typeof Direction)[keyof typeof Direction];
 
-export type JahezLedgerKind = (typeof JahezLedgerKind)[keyof typeof JahezLedgerKind];
-
-export const JahezLedgerBucket = {
-  AccountFee: 1,
-  PlatformDebt: 2,
-  Commission: 3,
+export const Fund = {
+  Cashbox: 1,
+  PetroApp: 2,
+  Bank: 3,
 } as const;
+export type Fund = (typeof Fund)[keyof typeof Fund];
 
-export type JahezLedgerBucket = (typeof JahezLedgerBucket)[keyof typeof JahezLedgerBucket];
+export const Purpose = {
+  Settlement: 1,
+  Fuel: 2,
+  AccountFee: 3,
+  TransferredDebtRepayment: 4,
+} as const;
+export type Purpose = (typeof Purpose)[keyof typeof Purpose];
 
-export const JahezApprovalKind = {
+export const ApprovalKind = {
   FeeException: 1,
-  FreeSwitch: 2,
+  AccountSwitch: 2,
   PercentageCommission: 3,
-  AccountResetDebtTransfer: 4,
+  SettlementTransfer: 4,
+  Adjustment: 5,
 } as const;
+export type ApprovalKind = (typeof ApprovalKind)[keyof typeof ApprovalKind];
 
-export type JahezApprovalKind = (typeof JahezApprovalKind)[keyof typeof JahezApprovalKind];
-
-export const JahezApprovalStatus = {
+export const ApprovalStatus = {
   Pending: 1,
   Approved: 2,
   Rejected: 3,
   Cancelled: 4,
 } as const;
+export type ApprovalStatus = (typeof ApprovalStatus)[keyof typeof ApprovalStatus];
 
-export type JahezApprovalStatus = (typeof JahezApprovalStatus)[keyof typeof JahezApprovalStatus];
-
-export const JahezCashboxSection = {
-  AccountFees: 1,
-  Settlements: 2,
+export const AdjustmentTarget = {
+  Settlement: 1,
+  AdministrativeDebt: 2,
 } as const;
+export type AdjustmentTarget = (typeof AdjustmentTarget)[keyof typeof AdjustmentTarget];
 
-export type JahezCashboxSection = (typeof JahezCashboxSection)[keyof typeof JahezCashboxSection];
-
-export const JahezCashboxHandoffStatus = {
-  Pending: 1,
-  AccountantConfirmed: 2,
-  Approved: 3,
-  Rejected: 4,
-} as const;
-
-export type JahezCashboxHandoffStatus = (typeof JahezCashboxHandoffStatus)[keyof typeof JahezCashboxHandoffStatus];
-
-export const JahezImportKind = {
+export const ImportKind = {
   Transactions: 1,
-  DailyDispatches: 2,
+  DailyOrders: 2,
 } as const;
+export type ImportKind = (typeof ImportKind)[keyof typeof ImportKind];
 
-export type JahezImportKind = (typeof JahezImportKind)[keyof typeof JahezImportKind];
+// Aliases for legacy component compatibility during migration
+export const JahezApprovalKind = ApprovalKind;
+export type JahezApprovalKind = ApprovalKind;
+export const JahezApprovalStatus = ApprovalStatus;
+export type JahezApprovalStatus = ApprovalStatus;
+export const JahezImportKind = ImportKind;
+export type JahezImportKind = ImportKind;

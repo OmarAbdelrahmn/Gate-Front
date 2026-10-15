@@ -1,177 +1,307 @@
 // src/lib/jahez/types.ts
+// Jahez V2 contracts. JSON enum values are numeric; dates are ISO strings; rowversions are Base64.
 
-// --- Enums and Constants ---
-import type {
-  JahezDebtStatus,
-  JahezPaymentStatus,
-  JahezApprovalKind,
-  JahezApprovalStatus,
-  JahezLedgerBucket,
-  JahezLedgerKind,
-  JahezCashboxSection,
-  JahezCashboxHandoffStatus,
-  JahezImportKind,
+import {
+  OperationMode,
+  OperationStatus,
+  PaymentStatus,
+  Direction,
+  Fund,
+  Purpose,
+  ApprovalKind,
+  ApprovalStatus,
+  AdjustmentTarget,
+  ImportKind,
 } from "./constants";
 
 export * from "./constants";
 
-// --- Display companions & Identity shapes ---
-export interface JahezAccountReference {
-  id: string;
-  code: string;
-  externalAccountId?: string | null;
+export type Id = string;
+export type DateOnly = string; // YYYY-MM-DD
+export type Instant = string;  // ISO 8601 with offset/UTC
+
+export interface Page<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
 }
 
-export interface JahezDisplayIdentity {
-  externalAccountId?: string | null;
-  account?: JahezAccountReference | null;
-  ownerRiderProfileId?: string | null;
-  ownerEmployeeId?: string | null;
-  ownerRiderNameAr?: string | null;
-  ownerRiderNameEn?: string | null;
-  actualRiderProfileId?: string | null;
-  actualEmployeeId?: string | null;
-  actualRiderNameAr?: string | null;
-  actualRiderNameEn?: string | null;
-}
-
-// --- Base metadata shapes ---
-export interface JahezHistoryMetadata {
-  id: string;
-  createdAtUtc: string;
-  createdByUserId: string;
-  createdByUserNameAr?: string | null;
-  createdByUserNameEn?: string | null;
-}
-
-export interface JahezAuditableMetadata extends JahezHistoryMetadata {
-  updatedAtUtc?: string | null;
-  updatedByUserId?: string | null;
-  updatedByUserNameAr?: string | null;
-  updatedByUserNameEn?: string | null;
+export interface Audit {
+  id: Id;
+  createdAtUtc: Instant;
+  createdByUserId: Id | null;
+  updatedAtUtc: Instant | null;
+  updatedByUserId: Id | null;
   rowVersion: string;
   isDeleted: boolean;
-  deletedAtUtc?: string | null;
-  deletedByUserId?: string | null;
-  deletedByUserNameAr?: string | null;
-  deletedByUserNameEn?: string | null;
-  deletionReason?: string | null;
+  deletedAtUtc: Instant | null;
+  deletedByUserId: Id | null;
+  deletionReason: string | null;
 }
 
-// --- Domain Models ---
-export interface JahezHandover extends JahezDisplayIdentity {
-  id: string;
-  accountId: string;
-  externalAccountId: string | null;
-  riderProfileId: string;
-  assignmentId: string;
-  startedAtUtc: string;
-  endedAtUtc: string | null;
-  commissionStartsOn: string;
-  commissionPostedThrough: string | null;
-  lastSettlementPaymentAtUtc: string | null;
-  isLegacy: boolean;
-  debtTransferred: boolean;
-  debtStatus?: JahezDebtStatus;
-  frozenAtUtc?: string | null;
-  accountClearedAtUtc?: string | null;
-  debtPaidAtUtc?: string | null;
-  externalClearanceReference?: string | null;
+export interface Person {
+  employeeId: Id;
+  riderProfileId: Id | null;
+  nameAr: string;
+  nameEn: string | null;
+  iqamaNo: string | null;
+  mobile: string | null;
+  sponsorId: Id | null;
 }
 
-export interface JahezBalance extends JahezDisplayIdentity {
-  handoverId: string;
-  accountId: string;
-  externalAccountId: string | null;
-  riderProfileId: string;
-  throughDate: string;
-  fees: number;
-  platformDebt: number; // positive = receivable, negative = rider credit
-  postedCommission: number;
-  unpostedCommission: number;
-  totalReceivable: number;
+export interface Account {
+  accountId: Id;
+  code: string;
+  externalAccountId: string;
+  userName: string | null;
+  operatingCityId: Id;
+  cityNameAr: string;
+  sponsorId: Id | null;
+  sponsorNameAr: string | null;
+  status: "Available" | "Assigned" | "Suspended" | "Retired" | "Archived";
+  statusReason: string | null;
+  isAssigned: boolean;
+  hasPassword: boolean;
+  owner: Person | null;
+  actualRider: Person | null;
+  currentAssignmentId: Id | null;
+  currentHandoverId: Id | null;
+  acquisitionDate: DateOnly | null;
+  startDate: DateOnly | null;
+  endDate: DateOnly | null;
+  ownershipNotes: string | null;
+  operationalNotes: string | null;
+  yesterdayOrders: number | null;
+  lastOrderDate: DateOnly | null;
+  lastOrderCount: number | null;
+  rowVersion: string;
+}
+
+export interface AccountsPage extends Page<Account> {
+  totalCount: number;
+}
+
+export interface SponsorStatistics {
+  sponsorId: Id;
+  nameAr: string;
+  accounts: number;
+  assignedAccounts: number;
+  actualRiders: number;
+  sponsoredRiders: number;
+  sponsoredRidersUsingOtherSponsorsAccounts: number;
+}
+
+export interface Statistics {
+  yesterday: DateOnly;
+  totalAccounts: number;
+  activeAccounts: number;
+  unassignedAccounts: number;
+  blockedAccounts: number;
+  missingPasswordAccounts: number;
+  yesterdayOrders: number | null;
+  accountsWithYesterdayData: number;
+  sponsors: SponsorStatistics[];
+}
+
+export interface OperationCreate {
+  handoverId: Id;
+  mode: OperationMode;
+  throughDate: DateOnly;
+  effectiveAtUtc: Instant;
+  net: number;
+  reason: string;
+  fund?: Fund | null;
+  purpose?: Purpose;
+  transferToRider?: boolean;
+  paymentReference?: string | null;
+}
+
+export interface Preview {
+  net: number;
+  commission: number;
+  remaining: number;
+  direction: Direction;
+  allowedFunds: Fund[];
+  withdrawsAccount: boolean;
   commissionComplete: boolean;
   problems: string[];
-  reminderAnchorAtUtc: string;
-  daysSinceSettlementPayment: number;
-  isOverdue: boolean;
-  debtTransferred: boolean;
-  latestTransactionAtUtc: string | null;
-  debtStatus: JahezDebtStatus;
-  paymentStatus: JahezPaymentStatus;
-  frozenAtUtc: string | null;
-  accountClearedAtUtc: string | null;
-  debtPaidAtUtc: string | null;
-  outstandingAmount: number;
-  accountReceivable: number;
-  isAccountFrozen: boolean;
-  isAccountReady: boolean;
+  calculationJson: string;
 }
 
-export interface JahezRiderDebtSummary {
-  riderProfileId: string;
-  fees: number;
-  platformDebt: number;
-  postedCommission: number;
-  unpostedCommission: number;
-  totalReceivable: number;
-  outstandingAmount: number;
-  paymentStatus: JahezPaymentStatus;
-  frozenAccountCount: number;
-  trackedHandoversCount?: number;
+export interface Operation extends Audit {
+  handoverId: Id;
+  mode: OperationMode;
+  status: OperationStatus;
+  paymentStatus: PaymentStatus;
+  throughDate: DateOnly;
+  effectiveAtUtc: Instant;
+  net: number;
+  commission: number;
+  calculatedCommission: number;
+  remaining: number;
+  calculationJson: string;
+  fund: Fund | null;
+  purpose: Purpose;
+  transferToRider: boolean;
+  paymentReference: string | null;
+  reason: string;
+  approvedRequestId: Id | null;
+  executedAtUtc: Instant | null;
+  executedByUserId: Id | null;
 }
 
-export interface JahezFee extends JahezAuditableMetadata, JahezDisplayIdentity {
-  handoverId: string;
+export interface OperationUpdate {
+  values: OperationCreate;
+  rowVersion: string;
+}
+
+export interface RequestCreate {
+  handoverId: Id;
+  kind: ApprovalKind;
+  reason: string;
+  operationId?: Id | null;
+  targetAccountId?: Id | null;
+  waiverAmount?: number;
+  fromDate?: DateOnly | null;
+  toDate?: DateOnly | null;
+  effectiveAtUtc?: Instant | null;
+  adjustmentTarget?: AdjustmentTarget | null;
+  proposedNet?: number | null;
+  proposedCommission?: number | null;
+  debtAdjustment?: number | null;
+}
+
+export interface ApprovalRequest extends Audit {
+  handoverId: Id;
+  kind: ApprovalKind;
+  status: ApprovalStatus;
+  requestedByUserId: Id;
+  operationId: Id | null;
+  targetAccountId: Id | null;
+  waiverAmount: number;
+  fromDate: DateOnly | null;
+  toDate: DateOnly | null;
+  effectiveAtUtc: Instant | null;
+  reason: string;
+  adjustmentTarget: AdjustmentTarget | null;
+  proposedNet: number | null;
+  proposedCommission: number | null;
+  debtAdjustment: number | null;
+}
+
+export interface DecisionRequest {
+  approve: boolean;
+  reason: string;
+  approvedNet?: number | null;
+  approvedCommission?: number | null;
+  approvedDebtAdjustment?: number | null;
+  useOriginalValues?: boolean;
+}
+
+export interface Decision {
+  id: Id;
+  requestId: Id;
+  actorUserId: Id;
+  status: ApprovalStatus;
+  decidedAtUtc: Instant;
+  reason: string;
+  decisionJson: string | null;
+  createdAtUtc: Instant;
+  createdByUserId: Id | null;
+}
+
+export interface Approval {
+  request: ApprovalRequest;
+  decisions: Decision[];
+}
+
+export interface MoneyRecord {
+  fund: Fund;
+  reference: string;
+  reason: string;
+  purpose?: Purpose;
+}
+
+export interface FeeReceipt {
+  handoverId: Id;
+  amount: number;
+  fund: Fund;
+  reference: string;
+  reason: string;
+}
+
+export interface TransferredDebt extends Audit {
+  operationId: Id;
+  riderProfileId: Id;
+  amount: number;
+  paidAtUtc: Instant | null;
+  paidByUserId: Id | null;
+}
+
+export interface Movement {
+  id: Id;
+  handoverId: Id;
+  riderProfileId: Id;
+  operationId: Id | null;
+  transferredDebtId: Id | null;
+  fund: Fund;
+  direction: Direction;
+  purpose: Purpose;
+  amount: number;
+  actorUserId: Id;
+  occurredAtUtc: Instant;
+  reference: string;
+  reason: string;
+  createdAtUtc: Instant;
+  createdByUserId: Id | null;
+}
+
+export interface FundBalance {
+  fund: Fund;
+  receipts: number;
+  disbursements: number;
+  balance: number;
+}
+
+export interface AccountStatusUpdate {
+  status: Account["status"];
+  reason: string;
+  rowVersion: string;
+}
+
+export interface AccountFee extends Audit {
+  handoverId: Id;
   amount: number;
   waivedAmount: number;
-  approvalRequestId: string | null;
+  approvalRequestId: Id | null;
 }
 
-export interface JahezApprovalRequest extends JahezAuditableMetadata, JahezDisplayIdentity {
-  handoverId: string;
-  kind: JahezApprovalKind;
-  status: JahezApprovalStatus;
-  requestedByUserId: string;
-  requestedByUserNameAr?: string | null;
-  requestedByUserNameEn?: string | null;
-  targetAccountId: string | null;
-  targetAccount?: JahezAccountReference | null;
-  waiverAmount: number | null;
-  fromDate: string | null;
-  toDate: string | null;
-  effectiveAtUtc: string | null;
+export interface HandoverCreate {
+  accountId: Id;
+  riderProfileId: Id;
+  effectiveAtUtc: Instant;
   reason: string;
-  externalResetReference: string | null;
+  initialFeePayment?: number;
+  paymentReference?: string | null;
 }
 
-export interface JahezDecision extends JahezHistoryMetadata {
-  requestId: string;
-  actorUserId: string;
-  actorUserNameAr?: string | null;
-  actorUserNameEn?: string | null;
-  status: JahezApprovalStatus;
-  decidedAtUtc: string;
-  reason: string;
+export interface Handover {
+  id: Id;
+  accountId: Id;
+  externalAccountId: string;
+  riderProfileId: Id;
+  assignmentId: Id;
+  startedAtUtc: Instant;
+  endedAtUtc: Instant | null;
+  commissionStartsOn: DateOnly;
+  commissionPostedThrough: DateOnly | null;
+  lastSettlementPaymentAtUtc: Instant | null;
 }
 
-export interface JahezApprovalResponse {
-  request: JahezApprovalRequest;
-  decisions: JahezDecision[];
-}
-
-export interface JahezCommissionPolicy extends JahezHistoryMetadata, JahezDisplayIdentity {
-  handoverId: string;
-  approvalRequestId: string;
-  fromDate: string;
-  toDate: string;
-  rate: number; // 0.15
-}
-
-export interface JahezEarnings extends JahezHistoryMetadata, JahezDisplayIdentity {
-  handoverId: string;
-  fromDate: string;
-  toDate: string;
+export interface EarningsRequest {
+  handoverId: Id;
+  fromDate: DateOnly;
+  toDate: DateOnly;
   totalDeliveryPrice: number;
   totalPenalties: number;
   totalCashAmount: number;
@@ -181,301 +311,131 @@ export interface JahezEarnings extends JahezHistoryMetadata, JahezDisplayIdentit
   totalBonuses: number;
   totalTips: number;
   totalFreeOrders: number;
-  supersedesId: string | null;
   reason: string;
+  supersedesId?: Id | null;
 }
 
-export interface JahezSettlement extends JahezHistoryMetadata, JahezDisplayIdentity {
-  handoverId: string;
-  throughDate: string;
-  recordedAtUtc: string;
-  collectedByUserId: string;
-  collectedByUserNameAr?: string | null;
-  collectedByUserNameEn?: string | null;
-  feePayment: number;
-  debtPayment: number;
-  commissionPayment: number;
-  countsAsSettlement: boolean;
-  reason: string;
+export interface EarningsStatement extends EarningsRequest {
+  id: Id;
+  createdAtUtc: Instant;
+  createdByUserId: Id | null;
 }
 
-export interface JahezLedgerEntry extends JahezHistoryMetadata, JahezDisplayIdentity {
-  handoverId: string;
-  bucket: JahezLedgerBucket;
-  kind: JahezLedgerKind;
-  amount: number;
-  sourceId: string | null;
-  reversesEntryId: string | null;
-  occurredAtUtc: string;
-  reason: string;
-  fromDate: string | null;
-  throughDate: string | null;
-  calculationJson: string | null;
+export interface AdministrativeDebt {
+  handoverId: Id;
+  accountId: Id;
+  externalAccountId: string;
+  riderProfileId: Id;
+  riderNameAr: string;
+  platformDebt: number;
 }
 
-export interface JahezLedgerStatusChangeDetails {
-  Action?: string;
-  action?: string;
-  FromStatus?: JahezDebtStatus | number;
-  fromStatus?: JahezDebtStatus | number;
-  ToStatus?: JahezDebtStatus | number;
-  toStatus?: JahezDebtStatus | number;
-  EffectiveAtUtc?: string | null;
-  effectiveAtUtc?: string | null;
-  ExternalClearanceReference?: string | null;
-  externalClearanceReference?: string | null;
-  [key: string]: unknown;
-}
-
-export interface JahezImportBatch extends JahezAuditableMetadata {
-  kind: JahezImportKind;
-  contentHash: string;
-  uploadedByUserId: string;
-  uploadedByUserNameAr?: string | null;
-  uploadedByUserNameEn?: string | null;
-  committedAtUtc: string | null;
-  replacesBatchId: string | null;
-  correctionReason: string | null;
-}
-
-export interface JahezImportFile {
-  id: string;
-  fileName: string;
-}
-
-export interface JahezImportRow extends JahezDisplayIdentity {
-  rowId: string;
+export interface ImportIssue {
+  rowId: Id;
   fileName: string;
   rowNumber: number;
-  driverId: string;
-  occurredAtUtc: string;
-  accountId: string | null;
-  handoverId: string | null;
-  riderProfileId: string | null;
-  netAmount: number | null;
-  dispatches: number | null;
-}
-
-export interface JahezImportIssue {
-  rowId: string | null;
-  fileName: string;
-  rowNumber: number | null;
   code: string;
   description: string;
 }
 
-export interface JahezImportAccountSummary extends JahezDisplayIdentity {
-  accountId: string | null;
+export interface ImportRow {
+  rowId: Id;
+  fileName: string;
+  rowNumber: number;
   driverId: string;
-  fromDate: string;
-  toDate: string;
+  occurredAtUtc: Instant;
+  accountId: Id | null;
+  handoverId: Id | null;
+  riderProfileId: Id | null;
+  netAmount: number;
+  dispatches: number | null;
+}
+
+export interface ImportAccountSummary {
+  accountId: Id | null;
+  driverId: string;
+  fromDate: DateOnly;
+  toDate: DateOnly;
   validRowCount: number;
-  netAmount: number | null;
-  platformDebtChange: number | null;
+  netAmount: number;
+  platformDebtChange: number;
   dispatches: number | null;
   hasIssues: boolean;
 }
 
-export interface JahezImportPreview {
-  batchId: string;
-  kind: JahezImportKind;
+export interface ImportBatch extends Audit {
+  kind: ImportKind;
+  contentHash: string;
+  uploadedByUserId: Id;
+  committedAtUtc: Instant | null;
+  replacesBatchId: Id | null;
+  correctionReason: string | null;
+}
+
+export interface ImportPreview {
+  batchId: Id;
+  kind: ImportKind;
   committed: boolean;
-  rows: JahezImportRow[];
-  issues: JahezImportIssue[];
-  files: JahezImportFile[];
-  accounts: JahezImportAccountSummary[];
+  rows: ImportRow[];
+  issues: ImportIssue[];
+  files: { id: Id; fileName: string }[] | null;
+  accounts: ImportAccountSummary[] | null;
 }
 
-export interface JahezDispatch extends JahezDisplayIdentity {
-  accountId: string;
-  externalAccountId: string | null;
-  riderProfileId: string;
-  handoverId: string;
-  date: string;
+export interface ImportCommit {
+  allocations?: { rowId: Id; handoverId: Id; count: number; reason: string }[] | null;
+}
+
+export interface OrderRow {
+  accountId: Id;
+  externalAccountId: string;
+  riderProfileId: Id;
+  handoverId: Id;
+  date: DateOnly;
   count: number;
 }
 
-export interface JahezCashboxBalance {
-  fees: number;
-  settlements: number;
-  reservedFees: number;
-  reservedSettlements: number;
-  availableFees: number;
-  availableSettlements: number;
-}
-
-export interface JahezCashboxEntry extends JahezAuditableMetadata, JahezDisplayIdentity {
-  settlementId: string;
-  handoverId: string;
-  section: JahezCashboxSection;
+export interface LedgerEntry {
+  id: Id;
+  handoverId: Id;
+  bucket: number;
+  kind: number;
   amount: number;
-  collectedByUserId: string;
-  collectedByUserNameAr?: string | null;
-  collectedByUserNameEn?: string | null;
-  receivedAtUtc: string;
-  cashboxHandoverId: string | null;
-}
-
-export interface JahezCashboxHandover extends JahezAuditableMetadata {
-  businessDate: string;
-  status: JahezCashboxHandoffStatus;
-  feeAmount: number;
-  settlementAmount: number;
-  accountantFeeAmount: number | null;
-  accountantSettlementAmount: number | null;
-  requestedByUserId: string;
-  requestedByUserNameAr?: string | null;
-  requestedByUserNameEn?: string | null;
-  accountantUserId: string | null;
-  accountantUserNameAr?: string | null;
-  accountantUserNameEn?: string | null;
-  approvedByUserId: string | null;
-  approvedByUserNameAr?: string | null;
-  approvedByUserNameEn?: string | null;
-  confirmedAtUtc: string | null;
-  decidedAtUtc: string | null;
+  sourceId: Id;
+  reversesEntryId: Id | null;
+  occurredAtUtc: Instant;
   reason: string;
-  confirmationReason: string | null;
-  decisionReason: string | null;
+  fromDate: DateOnly | null;
+  throughDate: DateOnly | null;
+  calculationJson: string | null;
+  createdAtUtc: Instant;
+  createdByUserId: Id | null;
 }
 
-// --- Paginated Wrapper ---
-export interface JahezPage<T> {
-  items: T[];
-  page: number;
-  pageSize: number;
-  totalCount?: number;
-  totalPages?: number;
-  total?: number;
-  count?: number;
-  hasNextPage?: boolean;
-  hasPreviousPage?: boolean;
+export interface AccountDetails {
+  account: Account;
+  handovers: Page<Handover>;
+  operations: Page<Operation>;
+  requests: Page<ApprovalRequest>;
+  fees: Page<AccountFee>;
+  orders: Page<OrderRow>;
+  ledger: Page<LedgerEntry>;
 }
 
-// --- Request DTOs ---
-export interface CreateJahezHandoverRequest {
-  accountId: string;
-  riderProfileId: string;
-  effectiveAtUtc: string;
-  reason: string;
-  initialFeePayment: number;
-  feeApprovalRequestId: null;
+export interface Problem {
+  type?: string;
+  title?: string;
+  status: number;
+  detail?: string;
+  errorCode?: string;
+  correlationId?: string;
 }
 
-export interface LegacyAdoptionRequest {
-  assignmentId: string;
-  financialStartOn: string;
-  openingDebt: number;
-  openingFees: number;
-  openingCommission: number;
-  reason: string;
-}
-
-export interface CloseJahezHandoverRequest {
-  effectiveAtUtc: string;
-  reason: string;
-}
-
-export interface ApprovalCreateRequest {
-  handoverId: string;
-  kind: JahezApprovalKind;
-  reason: string;
-  waiverAmount?: number | null;
-  targetAccountId?: string | null;
-  fromDate?: string | null;
-  toDate?: string | null;
-  effectiveAtUtc?: string | null;
-  externalResetReference?: string | null;
-}
-
-export interface ApprovalDecisionRequest {
-  approve: boolean;
-  reason: string;
-}
-
-export interface ApprovalCancelRequest {
-  reason: string;
-}
-
-export interface EarningsRequest {
-  handoverId: string;
-  fromDate: string;
-  toDate: string;
-  totalDeliveryPrice: number;
-  totalPenalties: number;
-  totalCashAmount: number;
-  totalDriverDebit: number;
-  totalServiceDeduction: number;
-  totalDriverCredit: number;
-  totalBonuses: number;
-  totalTips: number;
-  totalFreeOrders: number;
-  reason: string;
-  supersedesId?: string | null;
-}
-
-export interface PaymentRequest {
-  handoverId: string;
-  throughDate: string;
-  feePayment: number;
-  debtPayment: number;
-  commissionPayment: number;
-  countsAsSettlement: boolean;
-  reason: string;
-}
-
-export interface LedgerAdjustmentRequest {
-  handoverId: string;
-  bucket: JahezLedgerBucket;
-  amount: number;
-  reason: string;
-  reversesEntryId?: string | null;
-}
-
-export interface DispatchAllocationItem {
-  rowId: string;
-  handoverId: string;
-  count: number;
-  reason: string;
-}
-
-export interface ImportCommitRequest {
-  allocations?: DispatchAllocationItem[];
-}
-
-export interface CashboxCreateRequest {
-  businessDate: string;
-  reason: string;
-}
-
-export interface AccountantConfirmRequest {
-  feeAmount: number;
-  settlementAmount: number;
-  reason: string;
-}
-
-export interface CashboxDecisionRequest {
-  approve: boolean;
-  reason: string;
-}
-
-export interface FreezeHandoverRequest {
-  effectiveAtUtc: string;
-  reason: string;
-}
-
-export interface TransferDebtRequest {
-  effectiveAtUtc: string;
-  reason: string;
-  externalClearanceReference: string;
-}
-
-export interface ClearAccountRequest {
-  externalClearanceReference: string;
-  reason: string;
-}
-
-export interface ConfirmPaidRequest {
-  reason: string;
-}
-
+// Backward compatibility types for any legacy UI components during migration
+export type JahezAccount = Account;
+export type JahezHandover = Handover;
+export type JahezApprovalRequest = ApprovalRequest;
+export type JahezOperation = Operation;
+export type JahezImportBatch = ImportBatch;
+export type JahezImportPreview = ImportPreview;
+export type JahezLedgerEntry = LedgerEntry;

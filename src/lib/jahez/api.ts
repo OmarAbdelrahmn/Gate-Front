@@ -1,764 +1,497 @@
 // src/lib/jahez/api.ts
-export * from "./constants";
-import { authDownload, authFetch, type CustomRequestInit } from "../auth/api";
-import { JahezDebtStatus, JahezPaymentStatus } from "./constants";
+// Comprehensive Jahez V2 Client API implementation
+
+import { authFetch, authDownload, type CustomRequestInit } from "../auth/api";
+import { readAuth } from "../auth/token-store";
 import type {
-  AccountantConfirmRequest,
-  ApprovalCancelRequest,
-  ApprovalCreateRequest,
-  ApprovalDecisionRequest,
-  CashboxCreateRequest,
-  CashboxDecisionRequest,
-  ClearAccountRequest,
-  CloseJahezHandoverRequest,
-  ConfirmPaidRequest,
-  CreateJahezHandoverRequest,
+  Account,
+  AccountDetails,
+  AccountsPage,
+  AccountStatusUpdate,
+  AdministrativeDebt,
+  Approval,
+  ApprovalRequest,
+  DecisionRequest,
   EarningsRequest,
-  FreezeHandoverRequest,
-  ImportCommitRequest,
-  JahezApprovalRequest,
-  JahezApprovalResponse,
-  JahezBalance,
-  JahezCashboxBalance,
-  JahezCashboxEntry,
-  JahezCashboxHandover,
-  JahezCommissionPolicy,
-  JahezDispatch,
-  JahezEarnings,
-  JahezFee,
-  JahezHandover,
-  JahezImportBatch,
-  JahezImportPreview,
-  JahezLedgerEntry,
-  JahezPage,
-  JahezRiderDebtSummary,
-  JahezSettlement,
-  LedgerAdjustmentRequest,
-  LegacyAdoptionRequest,
-  PaymentRequest,
-  TransferDebtRequest,
+  EarningsStatement,
+  FeeReceipt,
+  FundBalance,
+  Handover,
+  HandoverCreate,
+  ImportBatch,
+  ImportCommit,
+  ImportKind,
+  ImportPreview,
+  MoneyRecord,
+  Movement,
+  Operation,
+  OperationCreate,
+  OperationUpdate,
+  Page,
+  Preview,
+  RequestCreate,
+  Statistics,
+  TransferredDebt,
 } from "./types";
 
-export function generateIdempotencyKey(prefix = "jhz"): string {
+export * from "./constants";
+export * from "./types";
+
+/**
+ * Generate a unique idempotency key for safe mutating requests.
+ */
+export function generateIdempotencyKey(prefix = "jhz2"): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return `${prefix}-${crypto.randomUUID()}`.slice(0, 150);
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`.slice(0, 150);
 }
 
-function buildQuery(params?: Record<string, string | number | boolean | null | undefined>): string {
-  if (!params) return "";
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== null && value !== undefined && value !== "") {
-      searchParams.append(key, String(value));
-    }
-  }
-  const query = searchParams.toString();
-  return query ? `?${query}` : "";
-}
-
-function jahezPostFetch<T>(
-  path: string,
-  body: unknown,
-  idempotencyKey?: string,
-  init?: CustomRequestInit,
-): Promise<T> {
-  const key = idempotencyKey?.trim() || generateIdempotencyKey();
-  const headers = new Headers(init?.headers);
-  headers.set("Idempotency-Key", key);
-
-  const isFormData = body instanceof FormData;
-  if (!isFormData && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  return authFetch<T>(path, {
-    ...init,
-    method: "POST",
-    headers,
-    body: isFormData ? (body as FormData) : JSON.stringify(body),
-  });
-}
-
-// -------------------------------------------------------------
-// 1. Handovers, Balances, & History
-// -------------------------------------------------------------
-
-export async function createJahezHandover(
-  data: CreateJahezHandoverRequest,
-  idempotencyKey?: string,
-): Promise<JahezHandover> {
-  return jahezPostFetch<JahezHandover>("/api/jahez/handovers", data, idempotencyKey, {
-    notifySuccess: "تم تسليم الحساب للمندوب بنجاح",
-  });
-}
-
-export async function createLegacyAdoption(
-  data: LegacyAdoptionRequest,
-  idempotencyKey?: string,
-): Promise<JahezHandover> {
-  return jahezPostFetch<JahezHandover>("/api/jahez/legacy-adoptions", data, idempotencyKey, {
-    notifySuccess: "تم اعتماد الحساب السابق (Legacy) بنجاح",
-  });
-}
-
-export async function closeJahezHandover(
-  handoverId: string,
-  data: CloseJahezHandoverRequest,
-  idempotencyKey?: string,
-): Promise<JahezHandover> {
-  return jahezPostFetch<JahezHandover>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/close`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم إنهاء فترة استخدام الحساب بنجاح" },
-  );
-}
-
-export async function freezeJahezHandover(
-  handoverId: string,
-  data: FreezeHandoverRequest,
-  idempotencyKey?: string,
-): Promise<JahezBalance> {
-  return jahezPostFetch<JahezBalance>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/freeze`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم تجميد حساب جاهز وحجز العهدة بنجاح" },
-  );
-}
-
-export async function transferJahezDebt(
-  handoverId: string,
-  data: TransferDebtRequest,
-  idempotencyKey?: string,
-): Promise<JahezHandover> {
-  return jahezPostFetch<JahezHandover>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/transfer-debt`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم نقل المديونية للمندوب وتحرير الحساب بنجاح" },
-  );
-}
-
-export async function clearJahezAccount(
-  handoverId: string,
-  data: ClearAccountRequest,
-  idempotencyKey?: string,
-): Promise<JahezHandover> {
-  return jahezPostFetch<JahezHandover>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/clear-account`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم تأكيد تصفية الحساب مع جاهز وتحرير الحساب بنجاح" },
-  );
-}
-
-export async function confirmJahezPaid(
-  handoverId: string,
-  data: ConfirmPaidRequest,
-  idempotencyKey?: string,
-): Promise<JahezBalance> {
-  return jahezPostFetch<JahezBalance>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/confirm-paid`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم تأكيد اكتمال سداد المندوب بنجاح" },
-  );
-}
-
-export async function getJahezHandovers(params?: {
-  accountId?: string;
-  riderId?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezHandover>> {
-  const safeParams = {
-    ...params,
-    pageSize: params?.pageSize ? Math.min(Math.max(1, params.pageSize), 100) : undefined,
-  };
-  return authFetch<JahezPage<JahezHandover>>(`/api/jahez/handovers${buildQuery(safeParams)}`);
+/**
+ * Returns today's date formatted as YYYY-MM-DD in Asia/Riyadh time.
+ */
+export function getRiyadhTodayDate(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 /**
- * Fetch all Jahez handovers across all pages.
+ * Returns current timestamp formatted as ISO string with Asia/Riyadh offset (+03:00).
  */
-export async function getAllJahezHandovers(params?: {
-  accountId?: string;
-  riderId?: string;
-}): Promise<JahezHandover[]> {
-  const all: JahezHandover[] = [];
-  let page = 1;
-  const pageSize = 100;
-  const maxPages = 50;
-
-  while (page <= maxPages) {
-    const res = await getJahezHandovers({ ...params, page, pageSize });
-    const items = res?.items || [];
-    if (items.length === 0) break;
-
-    all.push(...items);
-
-    if (typeof res?.totalCount === "number" && all.length >= res.totalCount) {
-      break;
-    }
-    const actualPageSize = res?.pageSize || pageSize;
-    if (items.length < actualPageSize) {
-      break;
-    }
-    page++;
-  }
-
-  return all;
+export function getRiyadhNowIso(): string {
+  const d = new Date();
+  const riyadhOffsetMs = 3 * 60 * 60 * 1000;
+  const riyadhDate = new Date(d.getTime() + riyadhOffsetMs);
+  const iso = riyadhDate.toISOString().replace("Z", "+03:00");
+  return iso;
 }
 
-export async function getJahezHandoverBalance(
-  handoverId: string,
-  throughDate: string,
-): Promise<JahezBalance> {
-  return authFetch<JahezBalance>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/balance?through=${encodeURIComponent(throughDate)}`,
-  );
+const ROOT = "/api/jahez/v2";
+
+function pageQuery(page: number, pageSize: number): string {
+  return `page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
 }
 
-export async function getJahezDebts(params?: {
-  riderId?: string;
-  overdueOnly?: boolean;
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezBalance>> {
-  return authFetch<JahezPage<JahezBalance>>(`/api/jahez/debts${buildQuery(params)}`);
-}
+// ----------------------------------------------------------------------
+// 1. Accounts & Details & Statistics
+// ----------------------------------------------------------------------
 
-export async function getJahezRiderDebtSummary(riderId: string): Promise<JahezRiderDebtSummary> {
-  return authFetch<JahezRiderDebtSummary>(
-    `/api/jahez/riders/${encodeURIComponent(riderId)}/debt-summary`,
-  );
-}
-
-export interface JahezRiderPeriodDetail {
-  handover: JahezHandover;
-  balance: JahezBalance;
-}
-
-export interface JahezRiderFullDebtData {
-  summary: JahezRiderDebtSummary | null;
-  periods: JahezRiderPeriodDetail[];
-}
-
-export async function getJahezRiderAllPeriods(
-  riderId: string,
-  throughDate: string,
-): Promise<JahezRiderFullDebtData> {
-  // 1. Fetch rider debt summary
-  const summaryPromise = getJahezRiderDebtSummary(riderId).catch(() => null);
-
-  // 2. Fetch all handovers for this rider (checking both riderId and riderProfileId)
-  const handoversPromise = getAllJahezHandovers({
-    riderId,
-    riderProfileId: riderId,
-  } as any).catch(() => [] as JahezHandover[]);
-
-  // 3. Fetch all debts across all pages for this rider
-  const debtsPromise = (async () => {
-    const allDebts: JahezBalance[] = [];
-    let p = 1;
-    while (p <= 20) {
-      const res = await getJahezDebts({
-        riderId,
-        riderProfileId: riderId,
-        page: p,
-        pageSize: 50,
-      } as any).catch(() => null);
-      if (!res || !res.items || res.items.length === 0) break;
-      allDebts.push(...res.items);
-      if (typeof res.totalCount === "number" && allDebts.length >= res.totalCount) break;
-      if (res.items.length < (res.pageSize || 50)) break;
-      p++;
-    }
-    return allDebts;
-  })();
-
-  const [summary, handovers, debts] = await Promise.all([
-    summaryPromise,
-    handoversPromise,
-    debtsPromise,
-  ]);
-
-  const handoverMap = new Map<string, JahezHandover>();
-  for (const h of handovers) {
-    handoverMap.set(h.id, h);
-  }
-
-  for (const d of debts) {
-    if (!handoverMap.has(d.handoverId)) {
-      handoverMap.set(d.handoverId, {
-        id: d.handoverId,
-        accountId: d.accountId,
-        externalAccountId: d.externalAccountId,
-        riderProfileId: d.riderProfileId,
-        assignmentId: "",
-        startedAtUtc: d.latestTransactionAtUtc || new Date().toISOString(),
-        endedAtUtc: null,
-        commissionStartsOn: d.throughDate || new Date().toISOString().split("T")[0],
-        commissionPostedThrough: null,
-        lastSettlementPaymentAtUtc: null,
-        isLegacy: false,
-        debtTransferred: d.debtTransferred,
-        debtStatus: d.debtStatus,
-        frozenAtUtc: d.frozenAtUtc,
-        accountClearedAtUtc: d.accountClearedAtUtc,
-        debtPaidAtUtc: d.debtPaidAtUtc,
-        externalClearanceReference: null,
-        account: d.account,
-        actualRiderNameAr: d.actualRiderNameAr,
-        actualRiderNameEn: d.actualRiderNameEn,
-        ownerRiderNameAr: d.ownerRiderNameAr,
-        ownerRiderNameEn: d.ownerRiderNameEn,
-      });
-    }
-  }
-
-  const allHandoversList = Array.from(handoverMap.values());
-  const balancePromises = allHandoversList.map(async (h) => {
-    try {
-      const bal = await getJahezHandoverBalance(h.id, throughDate);
-      return { handover: h, balance: bal };
-    } catch {
-      const existingDebt = debts.find((d) => d.handoverId === h.id);
-      if (existingDebt) {
-        return { handover: h, balance: existingDebt };
-      }
-      return null;
-    }
-  });
-
-  const periodResults = (await Promise.all(balancePromises)).filter(
-    (item): item is JahezRiderPeriodDetail => item !== null,
-  );
-
-  periodResults.sort((a, b) => {
-    const dateA = a.handover.commissionStartsOn || a.handover.startedAtUtc || "";
-    const dateB = b.handover.commissionStartsOn || b.handover.startedAtUtc || "";
-    return dateA.localeCompare(dateB);
-  });
-
-  // Calculate accurate aggregations across all real-time periods
-  const totalPostedCommission = Number(
-    periodResults.reduce((acc, p) => acc + (p.balance.postedCommission || 0), 0).toFixed(2)
-  );
-  const totalUnpostedCommission = Number(
-    periodResults.reduce((acc, p) => acc + (p.balance.unpostedCommission || 0), 0).toFixed(2)
-  );
-  const totalCommission = Number((totalPostedCommission + totalUnpostedCommission).toFixed(2));
-  const totalPlatformDebt = Number(
-    periodResults.reduce((acc, p) => acc + (p.balance.platformDebt || 0), 0).toFixed(2)
-  );
-  const totalFees = Number(
-    periodResults.reduce((acc, p) => acc + (p.balance.fees || 0), 0).toFixed(2)
-  );
-  const totalReceivable = Number(
-    periodResults.reduce((acc, p) => acc + (p.balance.totalReceivable || 0), 0).toFixed(2)
-  );
-
-  const calculatedOutstanding = Number((
-    Math.max(0, totalPlatformDebt) +
-    Math.max(0, totalFees) +
-    Math.max(0, totalCommission)
-  ).toFixed(2));
-
-  // Enrich summary so that commission or debts are never zero when period data exists
-  const finalSummary: JahezRiderDebtSummary = summary
-    ? {
-        ...summary,
-        postedCommission: summary.postedCommission || totalPostedCommission,
-        unpostedCommission: summary.unpostedCommission || totalUnpostedCommission,
-        platformDebt: summary.platformDebt || totalPlatformDebt,
-        fees: summary.fees || totalFees,
-        totalReceivable: summary.totalReceivable || totalReceivable,
-        outstandingAmount: summary.outstandingAmount || calculatedOutstanding,
-      }
-    : {
-        riderProfileId: riderId,
-        fees: totalFees,
-        platformDebt: totalPlatformDebt,
-        postedCommission: totalPostedCommission,
-        unpostedCommission: totalUnpostedCommission,
-        totalReceivable,
-        outstandingAmount: calculatedOutstanding,
-        paymentStatus: calculatedOutstanding > 0 ? JahezPaymentStatus.Outstanding : JahezPaymentStatus.Paid,
-        frozenAccountCount: periodResults.filter((p) => p.balance.isAccountFrozen).length,
-        trackedHandoversCount: periodResults.length,
-      };
-
-  return {
-    summary: finalSummary,
-    periods: periodResults,
-  };
-}
-
-export interface ThroughDateValidation {
-  isValid: boolean;
-  error?: string;
-}
-
-export function validateThroughDate(
-  throughDate: string,
-  context?: {
-    commissionStartsOn?: string | null;
-    startedAtUtc?: string | null;
-    lastSettlementPaymentAtUtc?: string | null;
-    commissionPostedThrough?: string | null;
-  },
-  locale: "ar" | "en" = "ar",
-): ThroughDateValidation {
-  const isEn = locale === "en";
-  if (!throughDate) {
-    return {
-      isValid: false,
-      error: isEn ? "Settlement cutoff date is required" : "يرجى تحديد تاريخ نهاية فترة التصفية",
-    };
-  }
-
-  // 1. Not in the future (today in local/Riyadh)
-  const todayStr = new Date().toISOString().split("T")[0];
-  if (throughDate > todayStr) {
-    return {
-      isValid: false,
-      error: isEn
-        ? "Settlement cutoff date cannot be in the future"
-        : "تاريخ نهاية فترة التصفية لا يمكن أن يكون في المستقبل",
-    };
-  }
-
-  // 2. Does not precede start of usage period
-  const startDateStr =
-    context?.commissionStartsOn?.slice(0, 10) ||
-    context?.startedAtUtc?.slice(0, 10);
-  if (startDateStr && throughDate < startDateStr) {
-    return {
-      isValid: false,
-      error: isEn
-        ? `Settlement cutoff date cannot precede the start of usage period (${startDateStr})`
-        : `تاريخ نهاية فترة التصفية لا يمكن أن يسبق بداية فترة الاستخدام (${startDateStr})`,
-    };
-  }
-
-  // 3. Does not precede last settlement or posted commission
-  const lastSettlementDateStr = context?.lastSettlementPaymentAtUtc?.slice(0, 10);
-  if (lastSettlementDateStr && throughDate < lastSettlementDateStr) {
-    return {
-      isValid: false,
-      error: isEn
-        ? `Settlement cutoff date cannot precede the last settlement payment (${lastSettlementDateStr})`
-        : `تاريخ نهاية فترة التصفية لا يمكن أن يسبق تاريخ آخر تصفية مسجلة (${lastSettlementDateStr})`,
-    };
-  }
-
-  const postedThroughStr = context?.commissionPostedThrough?.slice(0, 10);
-  if (postedThroughStr && throughDate < postedThroughStr) {
-    return {
-      isValid: false,
-      error: isEn
-        ? `Settlement cutoff date cannot precede posted commission cutoff (${postedThroughStr})`
-        : `تاريخ نهاية فترة التصفية لا يمكن أن يسبق تاريخ آخر عمولة مرحلة (${postedThroughStr})`,
-    };
-  }
-
-  return { isValid: true };
-}
-
-export function getDebtActionGates(
-  b: JahezBalance,
-  can: (key: string) => boolean,
-) {
-  const canRead = can("jahez.read");
-  const canReset = canRead && can("jahez.resets.approve");
-  const canCollect = canRead && can("jahez.collections.create");
-  const canClose = canRead && can("jahez.handovers.delete");
-  const outstanding = b.outstandingAmount ?? 0;
-  const isComplete = Boolean(b.commissionComplete);
-  const status = b.debtStatus;
-
-  return {
-    freeze:
-      canReset &&
-      status === JahezDebtStatus.Active &&
-      (outstanding > 0 || !isComplete),
-    transfer:
-      canReset &&
-      status === JahezDebtStatus.Active &&
-      isComplete,
-    clear:
-      canReset &&
-      status === JahezDebtStatus.Frozen &&
-      isComplete,
-    confirmPaid:
-      canCollect &&
-      status !== JahezDebtStatus.Active &&
-      isComplete &&
-      outstanding === 0,
-    collect:
-      canCollect &&
-      (outstanding > 0 || (!isComplete && (b.fees ?? 0) > 0)),
-    closeHandover:
-      canClose &&
-      status === JahezDebtStatus.Active,
-  };
-}
-
-export async function getJahezLedger(params?: {
-  riderId?: string;
-  handoverId?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezLedgerEntry>> {
-  return authFetch<JahezPage<JahezLedgerEntry>>(`/api/jahez/ledger${buildQuery(params)}`);
-}
-
-export async function getJahezHandoverFee(handoverId: string): Promise<JahezFee> {
-  return authFetch<JahezFee>(`/api/jahez/handovers/${encodeURIComponent(handoverId)}/fee`);
-}
-
-export async function getJahezHandoverSettlements(
-  handoverId: string,
-  params?: { page?: number; pageSize?: number },
-): Promise<JahezPage<JahezSettlement>> {
-  return authFetch<JahezPage<JahezSettlement>>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/settlements${buildQuery(params)}`,
-  );
-}
-
-export async function getJahezHandoverEarnings(
-  handoverId: string,
-  params?: { page?: number; pageSize?: number },
-): Promise<JahezPage<JahezEarnings>> {
-  return authFetch<JahezPage<JahezEarnings>>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/earnings${buildQuery(params)}`,
-  );
-}
-
-export async function getJahezHandoverCommissionPolicies(
-  handoverId: string,
-  params?: { page?: number; pageSize?: number },
-): Promise<JahezPage<JahezCommissionPolicy>> {
-  return authFetch<JahezPage<JahezCommissionPolicy>>(
-    `/api/jahez/handovers/${encodeURIComponent(handoverId)}/commission-policies${buildQuery(params)}`,
-  );
-}
-
-// -------------------------------------------------------------
-// 2. Approval Requests & Decisions
-// -------------------------------------------------------------
-
-export async function createApprovalRequest(
-  data: ApprovalCreateRequest,
-  idempotencyKey?: string,
-): Promise<JahezApprovalResponse> {
-  return jahezPostFetch<JahezApprovalResponse>("/api/jahez/requests", data, idempotencyKey, {
-    notifySuccess: "تم إنشاء طلب الاعتماد بنجاح",
+export async function getJahezAccounts(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<AccountsPage> {
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+  return authFetch<AccountsPage>(`${ROOT}/accounts?${pageQuery(page, safePageSize)}`, {
+    ...init,
+    method: "GET",
   });
 }
 
-export async function getApprovalRequests(params?: {
-  status?: number;
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezApprovalRequest>> {
-  return authFetch<JahezPage<JahezApprovalRequest>>(`/api/jahez/requests${buildQuery(params)}`);
-}
-
-export async function getApprovalRequest(requestId: string): Promise<JahezApprovalResponse> {
-  return authFetch<JahezApprovalResponse>(`/api/jahez/requests/${encodeURIComponent(requestId)}`);
-}
-
-export async function decideApprovalRequest(
-  requestId: string,
-  data: ApprovalDecisionRequest,
-  idempotencyKey?: string,
-): Promise<JahezApprovalResponse> {
-  return jahezPostFetch<JahezApprovalResponse>(
-    `/api/jahez/requests/${encodeURIComponent(requestId)}/decision`,
-    data,
-    idempotencyKey,
+export async function getJahezAccountDetails(
+  accountId: string,
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<AccountDetails> {
+  return authFetch<AccountDetails>(
+    `${ROOT}/accounts/${encodeURIComponent(accountId)}?${pageQuery(page, pageSize)}`,
     {
-      notifySuccess: data.approve ? "تم اعتماد الطلب بنجاح" : "تم رفض الطلب بنجاح",
+      ...init,
+      method: "GET",
     },
   );
 }
 
-export async function cancelApprovalRequest(
-  requestId: string,
-  data: ApprovalCancelRequest,
+export async function getJahezStatistics(init?: CustomRequestInit): Promise<Statistics> {
+  return authFetch<Statistics>(`${ROOT}/statistics`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+export async function updateJahezAccountStatus(
+  accountId: string,
+  data: AccountStatusUpdate,
   idempotencyKey?: string,
-): Promise<JahezApprovalResponse> {
-  return jahezPostFetch<JahezApprovalResponse>(
-    `/api/jahez/requests/${encodeURIComponent(requestId)}/cancel`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم إلغاء الطلب بنجاح" },
+  init?: CustomRequestInit,
+): Promise<Account> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("acc-status");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Account>(`${ROOT}/accounts/${encodeURIComponent(accountId)}/status`, {
+    ...init,
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تحديث حالة الحساب بنجاح",
+  });
+}
+
+// ----------------------------------------------------------------------
+// 2. Handovers
+// ----------------------------------------------------------------------
+
+export async function createJahezHandover(
+  data: HandoverCreate,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Handover> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("handover");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Handover>(`${ROOT}/handovers`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تسليم الحساب للمندوب بنجاح",
+  });
+}
+
+// ----------------------------------------------------------------------
+// 3. Operations (Preview, Draft, Update, Execute, List)
+// ----------------------------------------------------------------------
+
+export async function previewJahezOperation(
+  data: OperationCreate,
+  init?: CustomRequestInit,
+): Promise<Preview> {
+  return authFetch<Preview>(`${ROOT}/operations/preview`, {
+    ...init,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createJahezOperation(
+  data: OperationCreate,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Operation> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("op-create");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Operation>(`${ROOT}/operations`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم حفظ مسودة العملية بنجاح",
+  });
+}
+
+export async function updateJahezOperation(
+  operationId: string,
+  data: OperationUpdate,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Operation> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("op-update");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Operation>(`${ROOT}/operations/${encodeURIComponent(operationId)}`, {
+    ...init,
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تحديث مسودة العملية وإعادة الحساب بنجاح",
+  });
+}
+
+export async function executeJahezOperation(
+  operationId: string,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Operation> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("op-exec");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Operation>(`${ROOT}/operations/${encodeURIComponent(operationId)}/execute`, {
+    ...init,
+    method: "POST",
+    headers,
+    notifySuccess: init?.notifySuccess ?? "تم تنفيذ العملية المالية بنجاح",
+  });
+}
+
+export async function getJahezOperations(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<Operation>> {
+  return authFetch<Page<Operation>>(`${ROOT}/operations?${pageQuery(page, pageSize)}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+// ----------------------------------------------------------------------
+// 4. Approval Requests & Decisions
+// ----------------------------------------------------------------------
+
+export async function getJahezRequests(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<ApprovalRequest>> {
+  return authFetch<Page<ApprovalRequest>>(`${ROOT}/requests?${pageQuery(page, pageSize)}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+export async function getJahezRequestDetails(
+  requestId: string,
+  init?: CustomRequestInit,
+): Promise<Approval> {
+  return authFetch<Approval>(`${ROOT}/requests/${encodeURIComponent(requestId)}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+export async function createJahezRequest(
+  data: RequestCreate,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Approval> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("req-create");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Approval>(`${ROOT}/requests`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تقديم طلب الاعتماد بنجاح",
+  });
+}
+
+export async function decideJahezRequest(
+  requestId: string,
+  data: DecisionRequest,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Approval> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("req-decide");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Approval>(`${ROOT}/requests/${encodeURIComponent(requestId)}/decision`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تسجيل قرار الطلب بنجاح",
+  });
+}
+
+// ----------------------------------------------------------------------
+// 5. Money, Funds & Fees & Transferred Debts
+// ----------------------------------------------------------------------
+
+export async function getJahezFunds(init?: CustomRequestInit): Promise<FundBalance[]> {
+  return authFetch<FundBalance[]>(`${ROOT}/funds`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+export async function getJahezMoneyMovements(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<Movement>> {
+  return authFetch<Page<Movement>>(`${ROOT}/money-movements?${pageQuery(page, pageSize)}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+export async function recordJahezFeeReceipt(
+  data: FeeReceipt,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Movement> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("fee-receipt");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Movement>(`${ROOT}/fees/receipts`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تسجيل قبض رسوم فتح الحساب بنجاح",
+  });
+}
+
+export async function getJahezTransferredDebts(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<TransferredDebt>> {
+  return authFetch<Page<TransferredDebt>>(`${ROOT}/transferred-debts?${pageQuery(page, pageSize)}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+export async function repayJahezTransferredDebt(
+  debtId: string,
+  data: MoneyRecord,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<TransferredDebt> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("debt-repay");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<TransferredDebt>(
+    `${ROOT}/transferred-debts/${encodeURIComponent(debtId)}/repayment`,
+    {
+      ...init,
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+      notifySuccess: init?.notifySuccess ?? "تم سداد كامل المستحق بنجاح",
+    },
   );
 }
 
-// -------------------------------------------------------------
-// 3. Earnings, Rider Collections, & Adjustments
-// -------------------------------------------------------------
+// ----------------------------------------------------------------------
+// 6. Administrative Debts & Earnings Statement
+// ----------------------------------------------------------------------
 
-export async function createEarnings(
+export async function getJahezAdministrativeDebts(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<AdministrativeDebt>> {
+  return authFetch<Page<AdministrativeDebt>>(
+    `${ROOT}/administrative-debts?${pageQuery(page, pageSize)}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+}
+
+export async function recordJahezEarnings(
   data: EarningsRequest,
   idempotencyKey?: string,
-): Promise<JahezEarnings> {
-  return jahezPostFetch<JahezEarnings>("/api/jahez/earnings", data, idempotencyKey, {
-    notifySuccess: "تم حفظ بيان الأرباح واحتساب العمولة بنجاح",
+  init?: CustomRequestInit,
+): Promise<EarningsStatement> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("earnings");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<EarningsStatement>(`${ROOT}/earnings`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تسجيل بيان الأرباح بنجاح",
   });
 }
 
-export async function createSettlement(
-  data: PaymentRequest,
-  idempotencyKey?: string,
-): Promise<JahezSettlement> {
-  return jahezPostFetch<JahezSettlement>("/api/jahez/settlements", data, idempotencyKey, {
-    notifySuccess: "تم تسجيل التحصيل المالي والتسوية بنجاح",
+// ----------------------------------------------------------------------
+// 7. Imports
+// ----------------------------------------------------------------------
+
+export async function getJahezImports(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<ImportBatch>> {
+  return authFetch<Page<ImportBatch>>(`${ROOT}/imports?${pageQuery(page, pageSize)}`, {
+    ...init,
+    method: "GET",
   });
 }
 
-export async function createAdjustment(
-  data: LedgerAdjustmentRequest,
-  idempotencyKey?: string,
-): Promise<JahezLedgerEntry> {
-  return jahezPostFetch<JahezLedgerEntry>("/api/jahez/adjustments", data, idempotencyKey, {
-    notifySuccess: "تم تسجيل قيد التسوية في السجل المالي بنجاح",
-  });
-}
-
-// -------------------------------------------------------------
-// 4. Imports & Dispatches
-// -------------------------------------------------------------
-
-export async function uploadImportBatch(
-  kind: number,
-  files: File[],
-  options?: { replacesBatchId?: string; correctionReason?: string; idempotencyKey?: string },
-): Promise<JahezImportPreview> {
-  const formData = new FormData();
-  formData.append("kind", String(kind));
-  for (const file of files) {
-    formData.append("files", file);
-  }
-  if (options?.replacesBatchId) {
-    formData.append("replacesBatchId", options.replacesBatchId);
-  }
-  if (options?.correctionReason) {
-    formData.append("correctionReason", options.correctionReason);
-  }
-
-  return jahezPostFetch<JahezImportPreview>(
-    "/api/jahez/imports",
-    formData,
-    options?.idempotencyKey,
-    {
-      notifySuccess: "تم رفع الملفات وإعداد المعاينة بنجاح",
-    },
-  );
-}
-
-export async function getImportBatches(params?: {
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezImportBatch>> {
-  return authFetch<JahezPage<JahezImportBatch>>(`/api/jahez/imports${buildQuery(params)}`);
-}
-
-export async function getImportPreview(batchId: string): Promise<JahezImportPreview> {
-  return authFetch<JahezImportPreview>(`/api/jahez/imports/${encodeURIComponent(batchId)}`);
-}
-
-export async function commitImportBatch(
+export async function getJahezImportPreview(
   batchId: string,
-  data: ImportCommitRequest = {},
-  idempotencyKey?: string,
-): Promise<JahezImportPreview> {
-  return jahezPostFetch<JahezImportPreview>(
-    `/api/jahez/imports/${encodeURIComponent(batchId)}/commit`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم ترحيل واعتماد دفعة الاستيراد بنجاح" },
-  );
-}
-
-export async function downloadImportFile(fileId: string): Promise<{ blob: Blob; fileName: string }> {
-  return authDownload(`/api/jahez/import-files/${encodeURIComponent(fileId)}`);
-}
-
-export async function getJahezDispatches(params: {
-  from: string;
-  to: string;
-  riderId?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezDispatch>> {
-  return authFetch<JahezPage<JahezDispatch>>(`/api/jahez/dispatches${buildQuery(params)}`);
-}
-
-// -------------------------------------------------------------
-// 5. Cashbox & Accountant Handoffs
-// -------------------------------------------------------------
-
-export async function getCashboxBalance(): Promise<JahezCashboxBalance> {
-  return authFetch<JahezCashboxBalance>("/api/jahez/cashbox");
-}
-
-export async function getCashboxEntries(params?: {
-  cashboxHandoverId?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezCashboxEntry>> {
-  return authFetch<JahezPage<JahezCashboxEntry>>(`/api/jahez/cashbox/entries${buildQuery(params)}`);
-}
-
-export async function getCashboxHandovers(params?: {
-  page?: number;
-  pageSize?: number;
-}): Promise<JahezPage<JahezCashboxHandover>> {
-  return authFetch<JahezPage<JahezCashboxHandover>>(`/api/jahez/cashbox/handovers${buildQuery(params)}`);
-}
-
-export async function createCashboxHandover(
-  data: CashboxCreateRequest,
-  idempotencyKey?: string,
-): Promise<JahezCashboxHandover> {
-  return jahezPostFetch<JahezCashboxHandover>("/api/jahez/cashbox/handovers", data, idempotencyKey, {
-    notifySuccess: "تم بدء تسليم الصندوق للمحاسب وحجز المبالغ بنجاح",
+  init?: CustomRequestInit,
+): Promise<ImportPreview> {
+  return authFetch<ImportPreview>(`${ROOT}/imports/${encodeURIComponent(batchId)}`, {
+    ...init,
+    method: "GET",
   });
 }
 
-export async function confirmCashboxHandover(
-  handoffId: string,
-  data: AccountantConfirmRequest,
+export async function commitJahezImport(
+  batchId: string,
+  data: ImportCommit,
   idempotencyKey?: string,
-): Promise<JahezCashboxHandover> {
-  return jahezPostFetch<JahezCashboxHandover>(
-    `/api/jahez/cashbox/handovers/${encodeURIComponent(handoffId)}/confirm`,
-    data,
-    idempotencyKey,
-    { notifySuccess: "تم تأكيد استلام ومطابقة الصندوق بواسطة المحاسب بنجاح" },
-  );
+  init?: CustomRequestInit,
+): Promise<ImportPreview> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("import-commit");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<ImportPreview>(`${ROOT}/imports/${encodeURIComponent(batchId)}/commit`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم اعتماد بيانات الاستيراد بنجاح",
+  });
 }
 
-export async function decideCashboxHandover(
-  handoffId: string,
-  data: CashboxDecisionRequest,
+export async function uploadJahezImport(
+  kind: ImportKind,
+  files: File[],
+  replacesBatchId?: string,
+  correctionReason?: string,
   idempotencyKey?: string,
-): Promise<JahezCashboxHandover> {
-  return jahezPostFetch<JahezCashboxHandover>(
-    `/api/jahez/cashbox/handovers/${encodeURIComponent(handoffId)}/decision`,
-    data,
-    idempotencyKey,
-    {
-      notifySuccess: data.approve
-        ? "تم الاعتماد النهائي لتسليم الصندوق بنجاح"
-        : "تم رفض تسليم الصندوق وإعادة المبالغ للحالة المتاحة",
-    },
+): Promise<ImportPreview> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("import-upload");
+  const form = new FormData();
+  form.append("kind", String(kind));
+  files.forEach((file) => form.append("files", file));
+  if (replacesBatchId) form.append("replacesBatchId", replacesBatchId);
+  if (correctionReason) form.append("correctionReason", correctionReason);
+
+  const auth = readAuth();
+  const token = auth?.accessToken ?? "";
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "https://gat.premiumasp.net").replace(
+    /\/$/,
+    "",
   );
+
+  const response = await fetch(`${apiBase}${ROOT}/imports`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Idempotency-Key": key,
+    },
+    body: form,
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    const errorMsg =
+      payload?.detail || payload?.title || `فشل رفع الملفات (رمز ${response.status})`;
+    throw new Error(errorMsg);
+  }
+
+  return payload as ImportPreview;
+}
+
+export async function downloadJahezImportFile(
+  fileId: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  return authDownload(`${ROOT}/import-files/${encodeURIComponent(fileId)}`);
 }
