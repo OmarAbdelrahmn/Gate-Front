@@ -184,8 +184,170 @@ export function archiveRole(
     { method: "PATCH", body: JSON.stringify({ reason, rowVersion }) },
   );
 }
-export function getPermissionCatalogue() {
-  return authFetch<PermissionCatalogItem[]>("/api/users/permissions");
+export const NINJA_PERMISSION_CATALOG_ITEMS: PermissionCatalogItem[] = [
+  {
+    key: "ninja.read",
+    module: "Ninja",
+    nameAr: "عرض منصة نينجا",
+    nameEn: "View Ninja Platform",
+    descriptionAr: "عرض حسابات وعمليات وتقارير وخصومات منصة نينجا",
+    descriptionEn: "View Ninja accounts, operations, reports, and deductions",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "ninja.accounts.update",
+    module: "Ninja",
+    nameAr: "تعديل وإعداد حسابات وشيتات نينجا",
+    nameEn: "Update Ninja Accounts & Sheets",
+    descriptionAr: "تعديل بيانات الحسابات وإدارة شيتات المراجعة وتحديثات نينجا",
+    descriptionEn: "Configure accounts, manage sheet checkups and Ninja updates",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "ninja.assignments.create",
+    module: "Ninja",
+    nameAr: "إسناد وتسليم حسابات نينجا للمناديب",
+    nameEn: "Assign Ninja Accounts",
+    descriptionAr: "إسناد وتسليم حسابات نينجا المتاحة للمناديب",
+    descriptionEn: "Assign and deliver available Ninja accounts to riders",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "ninja.assignments.delete",
+    module: "Ninja",
+    nameAr: "سحب وإلغاء إسناد حسابات نينجا",
+    nameEn: "Release Ninja Accounts",
+    descriptionAr: "سحب حسابات نينجا من المناديب وإلغاء التعيين",
+    descriptionEn: "Release and unassign Ninja accounts from riders",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "ninja.credentials.rotate",
+    module: "Ninja",
+    nameAr: "تدوير كلمات مرور حسابات نينجا",
+    nameEn: "Rotate Ninja Credentials",
+    descriptionAr: "تحديث وتدوير كلمات المرور لحسابات نينجا وتجاوز فترة الانتظار",
+    descriptionEn: "Update and rotate Ninja passwords and handle cooldowns",
+    isSensitive: true,
+    isHighTrust: true,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "ninja.performance.import",
+    module: "Ninja",
+    nameAr: "استيراد تقارير أداء نينجا",
+    nameEn: "Import Ninja Performance",
+    descriptionAr: "رفع واستيراد شيتات الأداء اليومي لمنصة نينجا",
+    descriptionEn: "Upload and import daily Ninja performance sheets",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "ninja.deductions.import",
+    module: "Ninja",
+    nameAr: "استيراد خصومات نينجا",
+    nameEn: "Import Ninja Deductions",
+    descriptionAr: "رفع واستيراد شيتات الخصومات اليومية لمنصة نينجا",
+    descriptionEn: "Upload and import daily Ninja deductions sheets",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+];
+
+export const CHEFZ_PERMISSION_CATALOG_ITEMS: PermissionCatalogItem[] = [
+  {
+    key: "chefz.read",
+    module: "Chefz",
+    nameAr: "عرض منصة شيفز",
+    nameEn: "View Chefz Platform",
+    descriptionAr: "عرض حسابات وعمليات وتصفيات وتقارير شيفز",
+    descriptionEn: "View Chefz accounts, operations, settlements, and reports",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "chefz.accounts.update",
+    module: "Chefz",
+    nameAr: "تعديل وإعداد حسابات شيفز",
+    nameEn: "Update Chefz Accounts",
+    descriptionAr: "تعديل بيانات وإعدادات حسابات شيفز",
+    descriptionEn: "Configure and update Chefz account details",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "chefz.settlements.create",
+    module: "Chefz",
+    nameAr: "إنشاء تصفيات شيفز",
+    nameEn: "Create Chefz Settlements",
+    descriptionAr: "إنشاء وتوثيق تصفيات المحافظ المالية لشيفز",
+    descriptionEn: "Create and record Chefz wallet settlements",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "chefz.performance.import",
+    module: "Chefz",
+    nameAr: "استيراد تقارير أداء شيفز",
+    nameEn: "Import Chefz Performance",
+    descriptionAr: "رفع واستيراد تقارير الأداء اليومي لشيفز",
+    descriptionEn: "Import Chefz daily performance reports",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+];
+
+export async function getPermissionCatalogue(): Promise<PermissionCatalogItem[]> {
+  try {
+    const serverItems = await authFetch<PermissionCatalogItem[]>("/api/users/permissions");
+    const existingKeys = new Set(serverItems.map((item) => item.key));
+    const merged = [...serverItems];
+
+    // Ensure Ninja permissions are always present as choices in the catalogue
+    for (const ninjaItem of NINJA_PERMISSION_CATALOG_ITEMS) {
+      if (!existingKeys.has(ninjaItem.key)) {
+        merged.push(ninjaItem);
+        existingKeys.add(ninjaItem.key);
+      }
+    }
+
+    // Ensure Chefz permissions are always present as choices in the catalogue
+    for (const chefzItem of CHEFZ_PERMISSION_CATALOG_ITEMS) {
+      if (!existingKeys.has(chefzItem.key)) {
+        merged.push(chefzItem);
+        existingKeys.add(chefzItem.key);
+      }
+    }
+
+    return merged;
+  } catch {
+    return [...NINJA_PERMISSION_CATALOG_ITEMS, ...CHEFZ_PERMISSION_CATALOG_ITEMS];
+  }
 }
 export function replaceUserRoles(
   userId: string,
