@@ -8,6 +8,7 @@ import { translate } from "@/lib/i18n";
 import {
   getChefzPlatform,
   getChefzPerformance,
+  getAllChefzPerformance,
   uploadChefzPerformance,
   getRiyadhTodayDate,
 } from "@/lib/chefz/api";
@@ -54,6 +55,8 @@ import {
   SlidersHorizontal,
   Layers,
   Clock,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 
 type PerformanceTab = "riderReport" | "managementReport" | "dailyRecords" | "settings";
@@ -81,8 +84,9 @@ export default function ChefzPerformancePage() {
   // -----------------------------------------------------------------
   const [performanceRecords, setPerformanceRecords] = useState<ChefzPerformance[]>([]);
   const [dailyLoading, setDailyLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const pageSize = 50;
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"matrix" | "flat">("matrix");
+  const [matrixMetric, setMatrixMetric] = useState<"accepted" | "valid" | "rate">("accepted");
 
   const todayStr = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFromStr = useMemo(() => {
@@ -131,20 +135,18 @@ export default function ChefzPerformancePage() {
     loadLookups();
   }, []);
 
-  // Load Daily Performance records
+  // Load ALL Daily Performance records (fetches all pages, not just 50)
   const loadDailyPerformance = async () => {
     if (!filterFrom || !filterTo) return;
     setDailyLoading(true);
     try {
-      const res = await getChefzPerformance({
+      const allRecords = await getAllChefzPerformance({
         from: filterFrom,
         to: filterTo,
         accountId: filterAccountId || undefined,
         riderId: filterRiderId || undefined,
-        page,
-        pageSize,
       });
-      setPerformanceRecords(res.items || []);
+      setPerformanceRecords(allRecords || []);
     } catch (err: unknown) {
       toast.error("خطأ", "تعذر تحميل بيانات الأداء اليومي.");
     } finally {
@@ -156,7 +158,7 @@ export default function ChefzPerformancePage() {
     if (activeTab === "dailyRecords") {
       loadDailyPerformance();
     }
-  }, [activeTab, filterFrom, filterTo, filterAccountId, filterRiderId, page]);
+  }, [activeTab, filterFrom, filterTo, filterAccountId, filterRiderId]);
 
   // Lookup maps
   const baseAccountMap = useMemo(() => {
@@ -170,6 +172,203 @@ export default function ChefzPerformancePage() {
     for (const r of riders) map.set(r.id, r);
     return map;
   }, [riders]);
+
+  // Generate day list between filterFrom and filterTo (Inclusive)
+  const daysList = useMemo(() => {
+    if (!filterFrom || !filterTo) return [];
+    const [startY, startM, startD] = filterFrom.split("-").map(Number);
+    const [endY, endM, endD] = filterTo.split("-").map(Number);
+    if (!startY || !startM || !startD || !endY || !endM || !endD) return [];
+
+    const start = new Date(startY, startM - 1, startD);
+    const end = new Date(endY, endM - 1, endD);
+    if (start > end) return [];
+
+    const days: {
+      dateStr: string;
+      dayNumber: number;
+      dayNameAr: string;
+      dayFormatted: string;
+    }[] = [];
+
+    const curr = new Date(start);
+    let count = 0;
+    while (curr <= end && count <= 90) {
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, "0");
+      const d = String(curr.getDate()).padStart(2, "0");
+      const dateStr = `${y}-${m}-${d}`;
+      const dayNumber = curr.getDate();
+      const dayNameAr = curr.toLocaleDateString("ar-SA", { weekday: "short" });
+      days.push({
+        dateStr,
+        dayNumber,
+        dayNameAr,
+        dayFormatted: `${d}/${m}`,
+      });
+      curr.setDate(curr.getDate() + 1);
+      count++;
+    }
+    return days;
+  }, [filterFrom, filterTo]);
+
+  // Group records by Rider into Matrix Rows
+  const matrixRiderRows = useMemo(() => {
+    if (performanceRecords.length === 0) return [];
+
+    const groupMap = new Map<
+      string,
+      {
+        riderKey: string;
+        riderId: string;
+        riderName: string;
+        idNumber: string;
+        accountCodesSet: Set<string>;
+        daysMap: Map<
+          string,
+          {
+            acceptedOffers: number;
+            totalValidOffers: number;
+            declinedOffers: number;
+            missedOffers: number;
+            acceptanceRate: number;
+            accountCodes: string[];
+          }
+        >;
+      }
+    >();
+
+    for (const p of performanceRecords) {
+      const effectiveRiderId =
+        p.riderProfileId && p.riderProfileId !== "00000000-0000-0000-0000-000000000000"
+          ? p.riderProfileId
+          : "";
+      const riderLookup = effectiveRiderId ? riderMap.get(effectiveRiderId) : undefined;
+      const name = p.riderName || riderLookup?.fullNameAr || "مندوب غير محدد";
+      const idNo = p.reportIdNumber || riderLookup?.iqamaNo || "—";
+
+      const key = effectiveRiderId || (idNo !== "—" ? idNo : name);
+
+      let group = groupMap.get(key);
+      if (!group) {
+        group = {
+          riderKey: key,
+          riderId: effectiveRiderId,
+          riderName: name,
+          idNumber: idNo,
+          accountCodesSet: new Set<string>(),
+          daysMap: new Map(),
+        };
+        groupMap.set(key, group);
+      }
+
+      const acc = baseAccountMap.get(p.accountId);
+      const code = acc?.code || p.externalAccountId || "";
+      if (code) group.accountCodesSet.add(code);
+
+      const dStr = p.reportDate;
+      const existing = group.daysMap.get(dStr);
+      if (existing) {
+        existing.acceptedOffers += p.acceptedOffers || 0;
+        existing.totalValidOffers += p.totalValidOffers || 0;
+        existing.declinedOffers += p.declinedOffers || 0;
+        existing.missedOffers += p.missedOffers || 0;
+        if (code && !existing.accountCodes.includes(code)) {
+          existing.accountCodes.push(code);
+        }
+        existing.acceptanceRate =
+          existing.totalValidOffers > 0
+            ? Math.round((existing.acceptedOffers / existing.totalValidOffers) * 100)
+            : 0;
+      } else {
+        group.daysMap.set(dStr, {
+          acceptedOffers: p.acceptedOffers || 0,
+          totalValidOffers: p.totalValidOffers || 0,
+          declinedOffers: p.declinedOffers || 0,
+          missedOffers: p.missedOffers || 0,
+          acceptanceRate: p.acceptanceRate || 0,
+          accountCodes: code ? [code] : [],
+        });
+      }
+    }
+
+    const rows = Array.from(groupMap.values()).map((g) => {
+      let totalAccepted = 0;
+      let totalValid = 0;
+      let totalDeclined = 0;
+      let totalMissed = 0;
+      let activeDaysCount = 0;
+
+      for (const d of g.daysMap.values()) {
+        totalAccepted += d.acceptedOffers;
+        totalValid += d.totalValidOffers;
+        totalDeclined += d.declinedOffers;
+        totalMissed += d.missedOffers;
+        if (d.acceptedOffers > 0 || d.totalValidOffers > 0) {
+          activeDaysCount++;
+        }
+      }
+
+      const avgAcceptanceRate =
+        totalValid > 0 ? Math.round((totalAccepted / totalValid) * 100) : 0;
+
+      return {
+        riderKey: g.riderKey,
+        riderId: g.riderId,
+        riderName: g.riderName,
+        idNumber: g.idNumber,
+        accountCodes: Array.from(g.accountCodesSet),
+        daysData: g.daysMap,
+        totalAccepted,
+        totalValid,
+        totalDeclined,
+        totalMissed,
+        activeDaysCount,
+        avgAcceptanceRate,
+      };
+    });
+
+    // Sort by total accepted offers descending
+    rows.sort((a, b) => b.totalAccepted - a.totalAccepted || a.riderName.localeCompare(b.riderName));
+    return rows;
+  }, [performanceRecords, riderMap, baseAccountMap]);
+
+  // Quick filter on rider matrix rows
+  const filteredMatrixRows = useMemo(() => {
+    if (!searchQuery.trim()) return matrixRiderRows;
+    const q = searchQuery.trim().toLowerCase();
+    return matrixRiderRows.filter(
+      (r) =>
+        r.riderName.toLowerCase().includes(q) ||
+        r.idNumber.toLowerCase().includes(q) ||
+        r.accountCodes.some((c) => c.toLowerCase().includes(q))
+    );
+  }, [matrixRiderRows, searchQuery]);
+
+  // Day totals for the matrix footer
+  const dayTotals = useMemo(() => {
+    const totals: Record<string, { accepted: number; valid: number; activeRiders: number }> = {};
+    for (const d of daysList) {
+      totals[d.dateStr] = { accepted: 0, valid: 0, activeRiders: 0 };
+    }
+    for (const row of filteredMatrixRows) {
+      for (const d of daysList) {
+        const cell = row.daysData.get(d.dateStr);
+        if (cell) {
+          totals[d.dateStr].accepted += cell.acceptedOffers;
+          totals[d.dateStr].valid += cell.totalValidOffers;
+          if (cell.acceptedOffers > 0 || cell.totalValidOffers > 0) {
+            totals[d.dateStr].activeRiders++;
+          }
+        }
+      }
+    }
+    return totals;
+  }, [daysList, filteredMatrixRows]);
+
+  const grandTotalAccepted = useMemo(() => {
+    return filteredMatrixRows.reduce((sum, r) => sum + r.totalAccepted, 0);
+  }, [filteredMatrixRows]);
 
   // Handle Upload
   const handleUpload = async (e: React.FormEvent) => {
@@ -212,36 +411,70 @@ export default function ChefzPerformancePage() {
     }
   };
 
-  // Export Daily Performance to Excel
+  // Export Daily Performance to Excel (Supports Matrix with day columns or Raw list)
   const handleExportDailyExcel = () => {
-    exportToExcel({
-      filename: `سجلات-الأداء-اليومي-شيفز-${filterFrom}-إلى-${filterTo}`,
-      sheetName: "Daily Performance Records",
-      data: performanceRecords,
-      columns: [
-        { header: "التاريخ", accessor: (p) => p.reportDate, isText: true },
-        {
-          header: "كود الحساب",
-          accessor: (p) => baseAccountMap.get(p.accountId)?.code || p.accountId,
-          isText: true,
-        },
-        {
-          header: "المعرف الخارجي",
-          accessor: (p) => p.externalAccountId || baseAccountMap.get(p.accountId)?.externalAccountId || "—",
-          isText: true,
-        },
-        {
-          header: "المندوب الفعلي",
-          accessor: (p) => p.riderName || riderMap.get(p.riderProfileId)?.fullNameAr || "مندوب سابق",
-        },
-        { header: "رقم الهوية بالتقرير", accessor: (p) => p.reportIdNumber, isText: true },
-        { header: "إجمالي الطلبات الصالحة", accessor: (p) => p.totalValidOffers },
-        { header: "الطلبات المقبولة", accessor: (p) => p.acceptedOffers },
-        { header: "الطلبات المرفوضة", accessor: (p) => p.declinedOffers },
-        { header: "الطلبات الفائتة", accessor: (p) => p.missedOffers },
-        { header: "نسبة القبول (%)", accessor: (p) => `${p.acceptanceRate}%` },
-      ],
-    });
+    if (viewMode === "matrix") {
+      exportToExcel({
+        filename: `مصفوفة-الأداء-اليومي-شيفز-${filterFrom}-إلى-${filterTo}`,
+        sheetName: "Daily Performance Matrix",
+        data: filteredMatrixRows,
+        columns: [
+          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+          { header: "المندوب", accessor: (r) => r.riderName, width: 25 },
+          { header: "رقم الهوية / الإقامة", accessor: (r) => r.idNumber, isText: true, width: 16 },
+          {
+            header: "الحسابات",
+            accessor: (r) => r.accountCodes.join(" / ") || "—",
+            isText: true,
+            width: 18,
+          },
+          { header: "إجمالي الطلبات المقبولة", accessor: (r) => r.totalAccepted, width: 14 },
+          { header: "أيام العمل", accessor: (r) => r.activeDaysCount, width: 12 },
+          {
+            header: "متوسط نسبة القبول",
+            accessor: (r) => `${r.avgAcceptanceRate}%`,
+            isText: true,
+            width: 14,
+          },
+          ...daysList.map((d) => ({
+            header: `يوم ${d.dayNumber} (${d.dayFormatted})`,
+            accessor: (r: (typeof filteredMatrixRows)[0]) =>
+              r.daysData.get(d.dateStr)?.acceptedOffers ?? 0,
+            width: 12,
+          })),
+        ],
+      });
+    } else {
+      exportToExcel({
+        filename: `سجلات-الأداء-اليومي-شيفز-${filterFrom}-إلى-${filterTo}`,
+        sheetName: "Daily Performance Records",
+        data: performanceRecords,
+        columns: [
+          { header: "التاريخ", accessor: (p) => p.reportDate, isText: true },
+          {
+            header: "كود الحساب",
+            accessor: (p) => baseAccountMap.get(p.accountId)?.code || p.accountId,
+            isText: true,
+          },
+          {
+            header: "المعرف الخارجي",
+            accessor: (p) =>
+              p.externalAccountId || baseAccountMap.get(p.accountId)?.externalAccountId || "—",
+            isText: true,
+          },
+          {
+            header: "المندوب الفعلي",
+            accessor: (p) => p.riderName || riderMap.get(p.riderProfileId)?.fullNameAr || "مندوب سابق",
+          },
+          { header: "رقم الهوية بالتقرير", accessor: (p) => p.reportIdNumber, isText: true },
+          { header: "إجمالي الطلبات الصالحة", accessor: (p) => p.totalValidOffers },
+          { header: "الطلبات المقبولة", accessor: (p) => p.acceptedOffers },
+          { header: "الطلبات المرفوضة", accessor: (p) => p.declinedOffers },
+          { header: "الطلبات الفائتة", accessor: (p) => p.missedOffers },
+          { header: "نسبة القبول (%)", accessor: (p) => `${p.acceptanceRate}%` },
+        ],
+      });
+    }
   };
 
   if (!can("chefz.read")) {
@@ -373,12 +606,42 @@ export default function ChefzPerformancePage() {
                 سجلات الأداء اليومي المستوردة
               </h2>
               <p className="mt-0.5 text-xs text-[var(--muted)]">
-                استعراض وتصدير بيانات الطلبات اليومية المستوردة من ملفات إكسل شيفز.
+                استعراض مصفوفة الأداء اليومي بالأيام لكل مندوب من {filterFrom} إلى {filterTo}، وتحميل كافة البيانات دون اقتطاع.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Report settings button on this tab! */}
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("matrix")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
+                    viewMode === "matrix"
+                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                  title="عرض مصفوفة الأيام لكل مندوب"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  مصفوفة الأيام
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("flat")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
+                    viewMode === "flat"
+                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                  title="عرض السجلات الفردية المستوردة"
+                >
+                  <List className="h-3.5 w-3.5" />
+                  قائمة السجلات
+                </button>
+              </div>
+
+              {/* Report settings button */}
               <Button
                 variant="secondary"
                 onClick={() => setIsSettingsModalOpen(true)}
@@ -406,7 +669,7 @@ export default function ChefzPerformancePage() {
                 className="gap-2 text-xs font-semibold"
               >
                 <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-                استخراج إكسل
+                استخراج إكسل {viewMode === "matrix" ? "(المصفوفة)" : "(السجلات)"}
               </Button>
 
               {can("chefz.performance.import") && (
@@ -426,9 +689,46 @@ export default function ChefzPerformancePage() {
             </div>
           </div>
 
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-3.5 shadow-sm">
+              <div className="text-[11px] font-semibold text-[var(--muted)]">إجمالي المناديب</div>
+              <div className="mt-1 font-mono text-xl font-black text-[var(--foreground)]">
+                {filteredMatrixRows.length.toLocaleString()}
+              </div>
+              <div className="mt-0.5 text-[10px] text-[var(--muted)]">مندوب لديهم سجلات أداء</div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-3.5 shadow-sm">
+              <div className="text-[11px] font-semibold text-[var(--muted)]">إجمالي الطلبات المقبولة</div>
+              <div className="mt-1 font-mono text-xl font-black text-emerald-600 dark:text-emerald-400">
+                {grandTotalAccepted.toLocaleString()}
+              </div>
+              <div className="mt-0.5 text-[10px] text-[var(--muted)]">في كامل الفترة المحددة</div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-3.5 shadow-sm">
+              <div className="text-[11px] font-semibold text-[var(--muted)]">متوسط الطلبات اليومي</div>
+              <div className="mt-1 font-mono text-xl font-black text-purple-600 dark:text-purple-400">
+                {daysList.length > 0 ? (grandTotalAccepted / daysList.length).toFixed(1) : 0}
+              </div>
+              <div className="mt-0.5 text-[10px] text-[var(--muted)]">طلب / يوم إجمالي</div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-3.5 shadow-sm">
+              <div className="text-[11px] font-semibold text-[var(--muted)]">نطاق الأيام</div>
+              <div className="mt-1 font-mono text-xl font-black text-[var(--brand)]">
+                {daysList.length} <span className="text-xs font-normal">أيام</span>
+              </div>
+              <div className="mt-0.5 text-[10px] text-[var(--muted)]" dir="ltr">
+                {filterFrom} → {filterTo}
+              </div>
+            </div>
+          </div>
+
           {/* Filter Toolbar */}
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {/* From Date */}
               <div>
                 <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
@@ -492,19 +792,82 @@ export default function ChefzPerformancePage() {
                   placeholder="اختر المندوب..."
                 />
               </div>
+
+              {/* Search Query */}
+              <div>
+                <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">بحث سريع</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="اسم المندوب، الهوية، كود الحساب..."
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pr-9 pl-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
+                  />
+                  <Search className="absolute right-3 top-2.5 h-4 w-4 text-[var(--muted)]" />
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-[var(--muted)] border-t border-[var(--border)] pt-3">
-              <span>
-                سجلات الأداء في الفترة المحددة:{" "}
-                <strong className="text-[var(--foreground)]">{performanceRecords.length}</strong>
-              </span>
-              {(filterAccountId || filterRiderId || filterFrom !== defaultFromStr || filterTo !== todayStr) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--muted)] border-t border-[var(--border)] pt-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span>
+                  سجلات الأداء المحملة:{" "}
+                  <strong className="text-[var(--foreground)]">{performanceRecords.length}</strong> سجل
+                  (تم جلب كافة الصفحات من {filterFrom} إلى {filterTo})
+                </span>
+
+                {viewMode === "matrix" && (
+                  <div className="flex items-center gap-1.5 bg-[var(--subtle-bg)] px-2.5 py-1 rounded-lg border border-[var(--border)]">
+                    <span className="font-semibold text-[var(--muted)]">المعيار بالأعمدة:</span>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("accepted")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        matrixMetric === "accepted"
+                          ? "bg-[var(--brand)] text-white"
+                          : "text-[var(--foreground)] hover:bg-[var(--card-bg)]"
+                      }`}
+                    >
+                      الطلبات المقبولة
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("valid")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        matrixMetric === "valid"
+                          ? "bg-[var(--brand)] text-white"
+                          : "text-[var(--foreground)] hover:bg-[var(--card-bg)]"
+                      }`}
+                    >
+                      إجمالي العروض
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("rate")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        matrixMetric === "rate"
+                          ? "bg-[var(--brand)] text-white"
+                          : "text-[var(--foreground)] hover:bg-[var(--card-bg)]"
+                      }`}
+                    >
+                      نسبة القبول %
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {(filterAccountId ||
+                filterRiderId ||
+                searchQuery ||
+                filterFrom !== defaultFromStr ||
+                filterTo !== todayStr) && (
                 <button
                   type="button"
                   onClick={() => {
                     setFilterAccountId("");
                     setFilterRiderId("");
+                    setSearchQuery("");
                     setFilterFrom(defaultFromStr);
                     setFilterTo(todayStr);
                   }}
@@ -516,104 +879,340 @@ export default function ChefzPerformancePage() {
             </div>
           </div>
 
-          {/* Performance Records Table */}
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
-                <thead className="border-b border-[var(--border)] bg-[var(--table-header-bg)] text-xs font-bold text-[var(--muted)]">
-                  <tr>
-                    <th className="px-4 py-3.5">تاريخ التقرير</th>
-                    <th className="px-4 py-3.5">الحساب</th>
-                    <th className="px-4 py-3.5">المندوب الفعلي التاريخي</th>
-                    <th className="px-4 py-3.5">رقم الهوية بالتقرير</th>
-                    <th className="px-4 py-3.5 text-center">إجمالي الطلبات الصالحة</th>
-                    <th className="px-4 py-3.5 text-center">الطلبات المقبولة</th>
-                    <th className="px-4 py-3.5 text-center">الطلبات المرفوضة</th>
-                    <th className="px-4 py-3.5 text-center">الطلبات الفائتة</th>
-                    <th className="px-4 py-3.5 text-center">نسبة القبول</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border)]">
-                  {dailyLoading ? (
+          {/* VIEW 1: MATRIX TABLE (Each Rider One Row, Columns are Days) */}
+          {viewMode === "matrix" && (
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="border-b border-[var(--border)] bg-[var(--table-header-bg)] text-xs font-bold text-[var(--muted)]">
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-sm text-[var(--muted)]">
-                        <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
-                        جارٍ تحميل سجلات الأداء اليومي...
-                      </td>
-                    </tr>
-                  ) : performanceRecords.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-12 text-center text-sm text-[var(--muted)]">
-                        لا توجد بيانات أداء مستوردة في نطاق التواريخ المحدد.
-                      </td>
-                    </tr>
-                  ) : (
-                    performanceRecords.map((p) => {
-                      const acc = baseAccountMap.get(p.accountId);
-                      const rider = riderMap.get(p.riderProfileId);
+                      <th className="px-3 py-3.5 text-center w-10">#</th>
+                      <th className="px-4 py-3.5 min-w-[170px]">المندوب</th>
+                      <th className="px-3 py-3.5 min-w-[110px] text-center font-mono">الهوية / الإقامة</th>
+                      <th className="px-3 py-3.5 min-w-[110px] text-center">كود الحساب</th>
+                      <th className="px-3 py-3.5 text-center min-w-[90px] bg-[var(--brand)]/5 text-[var(--brand)] font-black">
+                        المجموع
+                      </th>
+                      <th className="px-3 py-3.5 text-center min-w-[80px]">أيام العمل</th>
+                      <th className="px-3 py-3.5 text-center min-w-[90px]">متوسط القبول</th>
 
-                      return (
+                      {/* Day Columns from filterFrom to filterTo */}
+                      {daysList.map((d) => (
+                        <th
+                          key={d.dateStr}
+                          className="px-2 py-2 text-center min-w-[56px] border-r border-[var(--border)]/40"
+                          title={`${d.dateStr} (${d.dayNameAr})`}
+                        >
+                          <div className="font-mono text-xs font-black text-[var(--foreground)]">
+                            يوم {d.dayNumber}
+                          </div>
+                          <div className="text-[10px] text-[var(--muted)] font-normal whitespace-nowrap">
+                            {d.dayFormatted}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {dailyLoading ? (
+                      <tr>
+                        <td
+                          colSpan={7 + daysList.length}
+                          className="py-16 text-center text-sm text-[var(--muted)]"
+                        >
+                          <RefreshCw className="mx-auto mb-2 h-7 w-7 animate-spin text-[var(--brand)]" />
+                          جارٍ تحميل كافة سجلات الأداء اليومي المستوردة لجميع المناديب...
+                        </td>
+                      </tr>
+                    ) : filteredMatrixRows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={7 + daysList.length}
+                          className="py-16 text-center text-sm text-[var(--muted)]"
+                        >
+                          لا توجد بيانات أداء مستوردة تطابق معايير البحث في الفترة المحددة.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredMatrixRows.map((r, rIdx) => (
                         <tr
-                          key={p.id}
+                          key={r.riderKey}
                           className="transition-colors hover:bg-[var(--table-row-hover)]"
                         >
-                          <td className="px-4 py-3 font-semibold font-mono text-[var(--foreground)]" dir="ltr">
-                            {p.reportDate}
+                          {/* Row Index */}
+                          <td className="px-3 py-2.5 text-center font-mono text-[var(--muted)]">
+                            {rIdx + 1}
                           </td>
-                          <td className="px-4 py-3">
-                            <Link
-                              href={`/admin/chefz/accounts/${p.accountId}`}
-                              className="font-bold text-[var(--brand)] hover:underline"
-                            >
-                              {acc?.code || p.accountId.slice(0, 8)}
-                            </Link>
-                            {(p.externalAccountId || acc?.externalAccountId) && (
-                              <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
-                                {p.externalAccountId || acc?.externalAccountId}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-[var(--foreground)]">
-                              {p.riderName || rider?.fullNameAr || "مندوب سابق"}
+
+                          {/* Rider Name */}
+                          <td className="px-4 py-2.5 font-bold text-[var(--foreground)]">
+                            <div className="truncate max-w-[200px]" title={r.riderName}>
+                              {r.riderName}
                             </div>
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs font-semibold" dir="ltr">
-                            {p.reportIdNumber}
+
+                          {/* Iqama / Report ID */}
+                          <td className="px-3 py-2.5 text-center font-mono text-xs text-[var(--muted)]" dir="ltr">
+                            {r.idNumber}
                           </td>
-                          <td className="px-4 py-3 text-center font-bold font-mono" dir="ltr">
-                            {p.totalValidOffers.toLocaleString()}
+
+                          {/* Account Codes */}
+                          <td className="px-3 py-2.5 text-center">
+                            {r.accountCodes.length > 0 ? (
+                              <div className="flex flex-wrap items-center justify-center gap-1 font-mono text-xs font-semibold text-[var(--brand)]">
+                                {r.accountCodes.map((code) => (
+                                  <span
+                                    key={code}
+                                    className="rounded bg-[var(--subtle-bg)] px-1.5 py-0.5 border border-[var(--border)]"
+                                  >
+                                    {code}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[var(--muted)]">—</span>
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-center font-bold font-mono text-emerald-600 dark:text-emerald-400" dir="ltr">
-                            {p.acceptedOffers.toLocaleString()}
+
+                          {/* Total Accepted Offers */}
+                          <td className="px-3 py-2.5 text-center font-black font-mono text-sm bg-[var(--brand)]/5 text-[var(--brand)]">
+                            {r.totalAccepted.toLocaleString()}
                           </td>
-                          <td className="px-4 py-3 text-center font-bold font-mono text-red-600 dark:text-red-400" dir="ltr">
-                            {p.declinedOffers.toLocaleString()}
+
+                          {/* Active Days */}
+                          <td className="px-3 py-2.5 text-center font-mono font-semibold">
+                            <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                              {r.activeDaysCount}
+                            </span>
+                            <span className="text-[var(--muted)] font-normal text-[10px]">
+                              {" "}
+                              / {daysList.length}
+                            </span>
                           </td>
-                          <td className="px-4 py-3 text-center font-bold font-mono text-amber-600 dark:text-amber-400" dir="ltr">
-                            {p.missedOffers.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-center font-extrabold" dir="ltr">
+
+                          {/* Average Acceptance Rate */}
+                          <td className="px-3 py-2.5 text-center">
                             <span
-                              className={`inline-block rounded-lg px-2 py-1 text-xs ${
-                                p.acceptanceRate >= 80
+                              className={`inline-block rounded px-2 py-0.5 font-bold text-[11px] ${
+                                r.avgAcceptanceRate >= 80
                                   ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                  : p.acceptanceRate >= 60
+                                  : r.avgAcceptanceRate >= 60
                                   ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
                                   : "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300"
                               }`}
                             >
-                              {p.acceptanceRate}%
+                              {r.avgAcceptanceRate}%
                             </span>
                           </td>
+
+                          {/* Days Columns */}
+                          {daysList.map((d) => {
+                            const cell = r.daysData.get(d.dateStr);
+
+                            let cellValue: number | string = 0;
+                            let hasData = false;
+
+                            if (cell) {
+                              if (matrixMetric === "accepted") {
+                                cellValue = cell.acceptedOffers;
+                                hasData = cell.acceptedOffers > 0;
+                              } else if (matrixMetric === "valid") {
+                                cellValue = cell.totalValidOffers;
+                                hasData = cell.totalValidOffers > 0;
+                              } else {
+                                cellValue = `${cell.acceptanceRate}%`;
+                                hasData = cell.totalValidOffers > 0;
+                              }
+                            }
+
+                            return (
+                              <td
+                                key={d.dateStr}
+                                className={`px-1.5 py-2 text-center border-r border-[var(--border)]/40 ${
+                                  hasData ? "bg-emerald-500/5" : ""
+                                }`}
+                                title={
+                                  cell
+                                    ? `التاريخ: ${d.dateStr} (${d.dayNameAr})\nالمندوب: ${r.riderName}\nالطلبات المقبولة: ${cell.acceptedOffers}\nإجمالي العروض: ${cell.totalValidOffers}\nالمرفوضة: ${cell.declinedOffers}\nالفائتة: ${cell.missedOffers}\nنسبة القبول: ${cell.acceptanceRate}%\nالحسابات: ${cell.accountCodes.join(" / ") || "—"}`
+                                    : `التاريخ: ${d.dateStr} (${d.dayNameAr})\nلا توجد بيانات مسجلة لهذا المندوب (0)`
+                                }
+                              >
+                                {hasData ? (
+                                  <span className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                                    {cellValue}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-xs text-gray-300 dark:text-gray-600">
+                                    0
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
                         </tr>
-                      );
-                    })
+                      ))
+                    )}
+                  </tbody>
+
+                  {/* Matrix Table Footer with Day Totals */}
+                  {filteredMatrixRows.length > 0 && !dailyLoading && (
+                    <tfoot className="border-t-2 border-[var(--border)] bg-[var(--table-header-bg)] font-bold">
+                      <tr>
+                        <td className="px-3 py-3 text-center font-mono">∑</td>
+                        <td className="px-4 py-3 font-bold text-[var(--foreground)]" colSpan={3}>
+                          إجمالي اليوم (لكافة المناديب في الجدول)
+                        </td>
+                        <td className="px-3 py-3 text-center font-black font-mono text-sm bg-[var(--brand)]/10 text-[var(--brand)]">
+                          {grandTotalAccepted.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-3 text-center font-mono text-xs">
+                          {filteredMatrixRows.filter((r) => r.totalAccepted > 0).length} نشط
+                        </td>
+                        <td className="px-3 py-3 text-center font-mono text-xs">
+                          {filteredMatrixRows.length > 0
+                            ? Math.round(
+                                filteredMatrixRows.reduce((acc, r) => acc + r.avgAcceptanceRate, 0) /
+                                  filteredMatrixRows.length
+                              )
+                            : 0}
+                          %
+                        </td>
+
+                        {/* Day Totals */}
+                        {daysList.map((d) => {
+                          const tot = dayTotals[d.dateStr];
+                          const val =
+                            matrixMetric === "valid" ? tot?.valid || 0 : tot?.accepted || 0;
+                          return (
+                            <td
+                              key={d.dateStr}
+                              className="px-1.5 py-2 text-center border-r border-[var(--border)]/40 font-mono text-xs font-black text-[var(--foreground)]"
+                              title={`إجمالي ${d.dateStr}: ${val.toLocaleString()} (${tot?.activeRiders || 0} مندوب نشط)`}
+                            >
+                              <div className="leading-tight">{val > 0 ? val.toLocaleString() : "0"}</div>
+                              <div className="text-[9px] text-[var(--muted)] font-normal">
+                                {tot?.activeRiders || 0} م
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tfoot>
                   )}
-                </tbody>
-              </table>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* VIEW 2: FLAT RECORDS TABLE (Original Raw Records View) */}
+          {viewMode === "flat" && (
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-sm">
+                  <thead className="border-b border-[var(--border)] bg-[var(--table-header-bg)] text-xs font-bold text-[var(--muted)]">
+                    <tr>
+                      <th className="px-4 py-3.5">تاريخ التقرير</th>
+                      <th className="px-4 py-3.5">الحساب</th>
+                      <th className="px-4 py-3.5">المندوب الفعلي التاريخي</th>
+                      <th className="px-4 py-3.5">رقم الهوية بالتقرير</th>
+                      <th className="px-4 py-3.5 text-center">إجمالي الطلبات الصالحة</th>
+                      <th className="px-4 py-3.5 text-center">الطلبات المقبولة</th>
+                      <th className="px-4 py-3.5 text-center">الطلبات المرفوضة</th>
+                      <th className="px-4 py-3.5 text-center">الطلبات الفائتة</th>
+                      <th className="px-4 py-3.5 text-center">نسبة القبول</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {dailyLoading ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-sm text-[var(--muted)]">
+                          <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
+                          جارٍ تحميل سجلات الأداء اليومي...
+                        </td>
+                      </tr>
+                    ) : performanceRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-sm text-[var(--muted)]">
+                          لا توجد بيانات أداء مستوردة في نطاق التواريخ المحدد.
+                        </td>
+                      </tr>
+                    ) : (
+                      performanceRecords.map((p) => {
+                        const acc = baseAccountMap.get(p.accountId);
+                        const rider = riderMap.get(p.riderProfileId);
+
+                        return (
+                          <tr
+                            key={p.id}
+                            className="transition-colors hover:bg-[var(--table-row-hover)]"
+                          >
+                            <td className="px-4 py-3 font-semibold font-mono text-[var(--foreground)]" dir="ltr">
+                              {p.reportDate}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Link
+                                href={`/admin/chefz/accounts/${p.accountId}`}
+                                className="font-bold text-[var(--brand)] hover:underline"
+                              >
+                                {acc?.code || p.accountId.slice(0, 8)}
+                              </Link>
+                              {(p.externalAccountId || acc?.externalAccountId) && (
+                                <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
+                                  {p.externalAccountId || acc?.externalAccountId}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-[var(--foreground)]">
+                                {p.riderName || rider?.fullNameAr || "مندوب سابق"}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs font-semibold" dir="ltr">
+                              {p.reportIdNumber}
+                            </td>
+                            <td className="px-4 py-3 text-center font-bold font-mono" dir="ltr">
+                              {p.totalValidOffers.toLocaleString()}
+                            </td>
+                            <td
+                              className="px-4 py-3 text-center font-bold font-mono text-emerald-600 dark:text-emerald-400"
+                              dir="ltr"
+                            >
+                              {p.acceptedOffers.toLocaleString()}
+                            </td>
+                            <td
+                              className="px-4 py-3 text-center font-bold font-mono text-red-600 dark:text-red-400"
+                              dir="ltr"
+                            >
+                              {p.declinedOffers.toLocaleString()}
+                            </td>
+                            <td
+                              className="px-4 py-3 text-center font-bold font-mono text-amber-600 dark:text-amber-400"
+                              dir="ltr"
+                            >
+                              {p.missedOffers.toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-center font-extrabold" dir="ltr">
+                              <span
+                                className={`inline-block rounded-lg px-2 py-1 text-xs ${
+                                  p.acceptanceRate >= 80
+                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                    : p.acceptanceRate >= 60
+                                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                    : "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                                }`}
+                              >
+                                {p.acceptanceRate}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

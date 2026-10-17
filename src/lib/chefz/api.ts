@@ -439,6 +439,90 @@ export async function getChefzPerformance(params: {
   );
 }
 
+/**
+ * Fetch all Chefz daily performance records across all pages.
+ */
+export async function getAllChefzPerformance(params: {
+  from: string;
+  to: string;
+  accountId?: string;
+  riderId?: string;
+  pageSize?: number;
+}): Promise<ChefzPerformance[]> {
+  const pageSize = params?.pageSize || 100;
+  const firstPage = await getChefzPerformance({
+    ...params,
+    page: 1,
+    pageSize,
+  });
+  const items = firstPage?.items || [];
+  const totalCount = firstPage?.totalCount;
+
+  if (items.length === 0 || items.length < pageSize) {
+    return items;
+  }
+
+  if (typeof totalCount === "number" && items.length >= totalCount) {
+    return items;
+  }
+
+  const all = [...items];
+  const seenIds = new Set(items.map((x) => x.id).filter(Boolean));
+
+  if (typeof totalCount === "number" && totalCount > pageSize) {
+    const totalPages = Math.min(Math.ceil(totalCount / pageSize), 100);
+    const pagePromises: Promise<ChefzPage<ChefzPerformance>>[] = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getChefzPerformance({
+          ...params,
+          page: p,
+          pageSize,
+        })
+      );
+    }
+    const otherPages = await Promise.allSettled(pagePromises);
+    for (const res of otherPages) {
+      if (res.status === "fulfilled" && res.value?.items) {
+        for (const item of res.value.items) {
+          if (!item?.id || !seenIds.has(item.id)) {
+            if (item?.id) seenIds.add(item.id);
+            all.push(item);
+          }
+        }
+      }
+    }
+    return all;
+  }
+
+  // Fallback sequential
+  let page = 2;
+  const maxPages = 50;
+  while (page <= maxPages) {
+    try {
+      const pageRes = await getChefzPerformance({
+        ...params,
+        page,
+        pageSize,
+      });
+      const newItems = pageRes?.items || [];
+      if (newItems.length === 0) break;
+      for (const item of newItems) {
+        if (!item?.id || !seenIds.has(item.id)) {
+          if (item?.id) seenIds.add(item.id);
+          all.push(item);
+        }
+      }
+      if (newItems.length < pageSize) break;
+      page++;
+    } catch {
+      break;
+    }
+  }
+
+  return all;
+}
+
 // -------------------------------------------------------------
 // 5. Performance Settings
 // -------------------------------------------------------------
