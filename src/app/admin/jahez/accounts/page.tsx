@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
   getJahezAccounts,
+  getAllJahezAccounts,
   getJahezAccountDetails,
   getJahezStatistics,
   updateJahezAccountStatus,
@@ -73,6 +74,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  X,
 } from "lucide-react";
 
 export default function JahezAccountsPage() {
@@ -90,10 +92,12 @@ export default function JahezAccountsPage() {
   // Pagination & Filtering
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [assignedFilter, setAssignedFilter] = useState<string>("ALL");
+  const [cityFilter, setCityFilter] = useState<string>("ALL");
+  const [sponsorFilter, setSponsorFilter] = useState<string>("ALL");
+  const [passwordFilter, setPasswordFilter] = useState<string>("ALL");
 
   // -----------------------------------------------------------------
   // Modals States
@@ -156,20 +160,19 @@ export default function JahezAccountsPage() {
   const [feeSubmitting, setFeeSubmitting] = useState(false);
 
   // -----------------------------------------------------------------
-  // Load data
+  // Load data - fetch ALL accounts across all pages
   // -----------------------------------------------------------------
-  const loadData = async (targetPage = page) => {
+  const loadData = async () => {
     setLoading(true);
     try {
       const [accRes, statRes, ridersRes] = await Promise.allSettled([
-        getJahezAccounts(targetPage, pageSize),
+        getAllJahezAccounts(100),
         getJahezStatistics(),
         listRiders(),
       ]);
 
       if (accRes.status === "fulfilled") {
         setAccounts(accRes.value.items || []);
-        setTotalCount(accRes.value.totalCount || 0);
       } else {
         toast.error("خطأ", "فشل جلب قائمة حسابات جاهز");
       }
@@ -187,15 +190,40 @@ export default function JahezAccountsPage() {
   };
 
   useEffect(() => {
-    loadData(page);
-  }, [page, pageSize]);
+    loadData();
+  }, []);
 
-  // Client search & filter over loaded accounts
+  // Extract unique cities & sponsors from loaded accounts for dropdown filters
+  const availableCities = useMemo(() => {
+    const set = new Set<string>();
+    accounts.forEach((a) => {
+      if (a.cityNameAr?.trim()) {
+        set.add(a.cityNameAr.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [accounts]);
+
+  const availableSponsors = useMemo(() => {
+    const set = new Set<string>();
+    accounts.forEach((a) => {
+      if (a.sponsorNameAr?.trim()) {
+        set.add(a.sponsorNameAr.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [accounts]);
+
+  // Client search & filter over ALL loaded accounts
   const filteredAccounts = useMemo(() => {
     return accounts.filter((acc) => {
       if (statusFilter !== "ALL" && acc.status !== statusFilter) return false;
       if (assignedFilter === "ASSIGNED" && !acc.isAssigned) return false;
       if (assignedFilter === "UNASSIGNED" && acc.isAssigned) return false;
+      if (cityFilter !== "ALL" && acc.cityNameAr !== cityFilter) return false;
+      if (sponsorFilter !== "ALL" && acc.sponsorNameAr !== sponsorFilter) return false;
+      if (passwordFilter === "HAS_PASSWORD" && !acc.hasPassword) return false;
+      if (passwordFilter === "MISSING_PASSWORD" && acc.hasPassword) return false;
 
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
@@ -223,7 +251,37 @@ export default function JahezAccountsPage() {
         riderMatch
       );
     });
-  }, [accounts, search, statusFilter, assignedFilter]);
+  }, [accounts, search, statusFilter, assignedFilter, cityFilter, sponsorFilter, passwordFilter]);
+
+  // Reset to first page whenever search, filter or pageSize changes
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, assignedFilter, cityFilter, sponsorFilter, passwordFilter, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
+
+  // Current page items to display in table
+  const paginatedAccounts = useMemo(() => {
+    const startIndex = (page - 1) * pageSize;
+    return filteredAccounts.slice(startIndex, startIndex + pageSize);
+  }, [filteredAccounts, page, pageSize]);
+
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    statusFilter !== "ALL" ||
+    assignedFilter !== "ALL" ||
+    cityFilter !== "ALL" ||
+    sponsorFilter !== "ALL" ||
+    passwordFilter !== "ALL";
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("ALL");
+    setAssignedFilter("ALL");
+    setCityFilter("ALL");
+    setSponsorFilter("ALL");
+    setPasswordFilter("ALL");
+  };
 
   // -----------------------------------------------------------------
   // Handover Action
@@ -259,7 +317,7 @@ export default function JahezAccountsPage() {
         paymentReference: handoverPaymentRef.trim() || undefined,
       });
       setIsHandoverOpen(false);
-      loadData(page);
+      loadData();
     } catch (err: unknown) {
       toast.error("خطأ في التسليم", err instanceof Error ? err.message : "فشل تسليم الحساب");
     } finally {
@@ -380,7 +438,7 @@ export default function JahezAccountsPage() {
     try {
       await executeJahezOperation(savedOperation.id);
       setIsOpModalOpen(false);
-      loadData(page);
+      loadData();
     } catch (err: unknown) {
       toast.error("فشل التنفيذ", err instanceof Error ? err.message : "تعذر تنفيذ العملية المالية");
     } finally {
@@ -409,7 +467,7 @@ export default function JahezAccountsPage() {
         "تم تحويل العملية إلى قيد المراجعة (UnderReview) بانتظار اعتماد الإدارة",
       );
       setIsOpModalOpen(false);
-      loadData(page);
+      loadData();
     } catch (err: unknown) {
       toast.error("فشل الطلب", err instanceof Error ? err.message : "تعذر إنشاء طلب التعديل");
     } finally {
@@ -432,7 +490,7 @@ export default function JahezAccountsPage() {
       });
       toast.success("تم إرسال الطلب", "تم إرسال طلب الترحيل إلى الإدارة لاعتماده وتنفيذه");
       setIsOpModalOpen(false);
-      loadData(page);
+      loadData();
     } catch (err: unknown) {
       toast.error("فشل الطلب", err instanceof Error ? err.message : "تعذر إنشاء طلب الترحيل");
     } finally {
@@ -478,7 +536,7 @@ export default function JahezAccountsPage() {
         rowVersion: statusAccount.rowVersion,
       });
       setIsStatusModalOpen(false);
-      loadData(page);
+      loadData();
     } catch (err: unknown) {
       toast.error("فشل التحديث", err instanceof Error ? err.message : "تعذر تحديث الحالة");
     } finally {
@@ -514,7 +572,7 @@ export default function JahezAccountsPage() {
         reason: feeReason.trim() || "قبض رسوم فتح الحساب",
       });
       setIsFeeModalOpen(false);
-      loadData(page);
+      loadData();
     } catch (err: unknown) {
       toast.error("فشل تسجيل الرسوم", err instanceof Error ? err.message : "تعذر تسجيل الإيصال");
     } finally {
@@ -543,8 +601,6 @@ export default function JahezAccountsPage() {
     exportToExcel(dataToExport, "حسابات_جاهز_V2");
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-
   return (
     <div className="space-y-6 p-4 md:p-8" dir="rtl">
       {/* ----------------- Top Header & Indicators ----------------- */}
@@ -569,7 +625,7 @@ export default function JahezAccountsPage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => loadData(page)}
+            onClick={() => loadData()}
             disabled={loading}
             className="gap-2"
           >
@@ -596,17 +652,38 @@ export default function JahezAccountsPage() {
       {/* ----------------- Statistics Banner ----------------- */}
       {statistics && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-3 shadow-xs dark:border-gray-800 dark:bg-gray-900">
+          <div
+            onClick={clearFilters}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              !hasActiveFilters
+                ? "border-amber-500 bg-amber-50/30 dark:border-amber-600 dark:bg-amber-950/20"
+                : "border-gray-200/80 bg-white hover:border-gray-400 dark:border-gray-800 dark:bg-gray-900"
+            }`}
+            title="انقر لعرض كافة الحسابات وإلغاء أي فلاتر"
+          >
             <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
               إجمالي الحسابات
             </div>
             <div className="mt-1 text-2xl font-black text-gray-900 dark:text-white">
-              {statistics.totalAccounts}
+              {accounts.length > 0 ? accounts.length : statistics.totalAccounts}
             </div>
-            <div className="mt-0.5 text-[10px] text-gray-400">عبر جميع الصفحات</div>
+            <div className="mt-0.5 text-[10px] text-gray-400">
+              {accounts.length > 0 ? "محملة بالكامل" : "عبر جميع الصفحات"}
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-3 shadow-xs dark:border-emerald-950 dark:bg-emerald-950/20">
+          <div
+            onClick={() => {
+              setStatusFilter("ALL");
+              setAssignedFilter("ASSIGNED");
+            }}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              assignedFilter === "ASSIGNED"
+                ? "border-emerald-500 bg-emerald-100/50 dark:border-emerald-600 dark:bg-emerald-950/40"
+                : "border-emerald-200/80 bg-emerald-50/40 hover:border-emerald-400 dark:border-emerald-950 dark:bg-emerald-950/20"
+            }`}
+            title="فلترة الحسابات المسندة والنشطة"
+          >
             <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
               نشطة (Available/Assigned)
             </div>
@@ -618,7 +695,18 @@ export default function JahezAccountsPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-blue-200/80 bg-blue-50/40 p-3 shadow-xs dark:border-blue-950 dark:bg-blue-950/20">
+          <div
+            onClick={() => {
+              setAssignedFilter("UNASSIGNED");
+              setStatusFilter("ALL");
+            }}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              assignedFilter === "UNASSIGNED"
+                ? "border-blue-500 bg-blue-100/50 dark:border-blue-600 dark:bg-blue-950/40"
+                : "border-blue-200/80 bg-blue-50/40 hover:border-blue-400 dark:border-blue-950 dark:bg-blue-950/20"
+            }`}
+            title="فلترة الحسابات غير المسندة المتاحة"
+          >
             <div className="text-xs font-medium text-blue-700 dark:text-blue-400">
               غير مسندة حالياً
             </div>
@@ -630,7 +718,17 @@ export default function JahezAccountsPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-rose-200/80 bg-rose-50/40 p-3 shadow-xs dark:border-rose-950 dark:bg-rose-950/20">
+          <div
+            onClick={() => {
+              setStatusFilter("Suspended");
+            }}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              statusFilter === "Suspended"
+                ? "border-rose-500 bg-rose-100/50 dark:border-rose-600 dark:bg-rose-950/40"
+                : "border-rose-200/80 bg-rose-50/40 hover:border-rose-400 dark:border-rose-950 dark:bg-rose-950/20"
+            }`}
+            title="فلترة الحسابات الموقوفة"
+          >
             <div className="text-xs font-medium text-rose-700 dark:text-rose-400">
               موقوفة إدارياً
             </div>
@@ -642,7 +740,17 @@ export default function JahezAccountsPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-3 shadow-xs dark:border-amber-950 dark:bg-amber-950/20">
+          <div
+            onClick={() => {
+              setPasswordFilter("MISSING_PASSWORD");
+            }}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              passwordFilter === "MISSING_PASSWORD"
+                ? "border-amber-500 bg-amber-100/50 dark:border-amber-600 dark:bg-amber-950/40"
+                : "border-amber-200/80 bg-amber-50/40 hover:border-amber-400 dark:border-amber-950 dark:bg-amber-950/20"
+            }`}
+            title="فلترة الحسابات التي تنقصها كلمة المرور"
+          >
             <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
               ناقصة كلمة المرور
             </div>
@@ -681,18 +789,32 @@ export default function JahezAccountsPage() {
       )}
 
       {/* ----------------- Filter & Search Bar ----------------- */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 md:flex-row md:items-center md:justify-between">
-        <div className="relative flex-1">
-          <Search className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث برقم الحساب، اليوزر، الكفيل، المدينة، اسم أو إقامة أو جوال المالك أو المندوب..."
-            className="pr-10 text-sm"
-          />
+      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative flex-1">
+            <Search className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث برقم الحساب، اليوزر، الكفيل، المدينة، اسم أو إقامة أو جوال المالك أو المندوب..."
+              className="pr-10 text-sm"
+            />
+          </div>
+
+          {hasActiveFilters && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={clearFilters}
+              className="gap-1 text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 self-start md:self-auto"
+            >
+              <X className="h-3.5 w-3.5" />
+              مسح الفلاتر ({filteredAccounts.length} / {accounts.length})
+            </Button>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-800 text-xs">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -715,6 +837,46 @@ export default function JahezAccountsPage() {
             <option value="ASSIGNED">مسند فقط</option>
             <option value="UNASSIGNED">غير مسند فقط</option>
           </select>
+
+          <select
+            value={passwordFilter}
+            onChange={(e) => setPasswordFilter(e.target.value)}
+            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+          >
+            <option value="ALL">جميع حالات كلمة المرور</option>
+            <option value="HAS_PASSWORD">كلمة المرور متوفرة</option>
+            <option value="MISSING_PASSWORD">ناقصة كلمة المرور</option>
+          </select>
+
+          {availableCities.length > 0 && (
+            <select
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            >
+              <option value="ALL">جميع المدن ({availableCities.length})</option>
+              {availableCities.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {availableSponsors.length > 0 && (
+            <select
+              value={sponsorFilter}
+              onChange={(e) => setSponsorFilter(e.target.value)}
+              className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 max-w-[200px]"
+            >
+              <option value="ALL">جميع الكفلاء ({availableSponsors.length})</option>
+              {availableSponsors.map((sp) => (
+                <option key={sp} value={sp}>
+                  {sp}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -751,7 +913,7 @@ export default function JahezAccountsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredAccounts.map((acc) => {
+                paginatedAccounts.map((acc) => {
                   const hasConsistencyIssue = acc.isAssigned && !acc.currentHandoverId;
 
                   return (
@@ -966,32 +1128,76 @@ export default function JahezAccountsPage() {
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50/60 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/40 text-xs text-gray-500">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-gray-200 bg-gray-50/60 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/40 text-xs text-gray-500">
           <div>
-            عرض {filteredAccounts.length} من أصل {totalCount} حساب (الصفحة {page} من {totalPages})
+            عرض {paginatedAccounts.length} من أصل {filteredAccounts.length} حساب مطابق
+            {filteredAccounts.length !== accounts.length && (
+              <span className="text-gray-400 mr-1 font-mono">
+                (من إجمالي {accounts.length} حساب)
+              </span>
+            )}
+            {" "}— (الصفحة {page} من {totalPages})
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <span className="font-semibold text-gray-700 dark:text-gray-300">
-              {page} / {totalPages}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= totalPages || loading}
-              onClick={() => setPage((p) => p + 1)}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+              <span>عرض:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 focus:outline-hidden"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage(1)}
+                className="h-8 px-2 text-[11px]"
+                title="الصفحة الأولى"
+              >
+                الأولى
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="h-8 w-8 p-0"
+                title="الصفحة السابقة"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <span className="font-semibold text-gray-700 dark:text-gray-300 px-1">
+                {page} / {totalPages}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="h-8 w-8 p-0"
+                title="الصفحة التالية"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage(totalPages)}
+                className="h-8 px-2 text-[11px]"
+                title="الصفحة الأخيرة"
+              >
+                الأخيرة
+              </Button>
+            </div>
           </div>
         </div>
       </div>
