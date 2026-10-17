@@ -24,6 +24,8 @@ import type {
   ImportPreview,
   MoneyRecord,
   Movement,
+  MoneyMovement,
+  MoneyMovementsResponse,
   Operation,
   OperationCreate,
   OperationUpdate,
@@ -492,8 +494,8 @@ export async function getJahezMoneyMovements(
   page = 1,
   pageSize = 50,
   init?: CustomRequestInit,
-): Promise<Page<Movement>> {
-  return authFetch<Page<Movement>>(`${ROOT}/money-movements?${pageQuery(page, pageSize)}`, {
+): Promise<MoneyMovementsResponse> {
+  return authFetch<MoneyMovementsResponse>(`${ROOT}/money-movements?${pageQuery(page, pageSize)}`, {
     ...init,
     method: "GET",
   });

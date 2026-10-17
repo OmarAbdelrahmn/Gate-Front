@@ -261,23 +261,44 @@ export interface TransferredDebt extends Audit {
   paidByUserId: Id | null;
 }
 
-export interface Movement {
-  id: Id;
-  handoverId: Id;
-  riderProfileId: Id;
-  operationId: Id | null;
-  transferredDebtId: Id | null;
+export interface RiderPerson {
+  employeeId: string;
+  riderProfileId: string | null;
+  nameAr: string;
+  nameEn: string | null;
+  iqamaNo: string | null;
+  mobile: string | null;
+  sponsorId: string | null;
+}
+
+export interface MoneyMovement {
+  id: string;
+  handoverId: string;
+  riderProfileId: string;
+  operationId: string | null;
+  transferredDebtId: string | null;
   fund: Fund;
   direction: Direction;
   purpose: Purpose;
   amount: number;
-  actorUserId: Id;
-  occurredAtUtc: Instant;
+  actorUserId: string;
+  occurredAtUtc: string;
   reference: string;
   reason: string;
-  createdAtUtc: Instant;
-  createdByUserId: Id | null;
+  createdAtUtc: string;
+  createdByUserId: string | null;
+  userRider: RiderPerson | null;
+  ownerRider: RiderPerson | null;
 }
+
+export type Movement = MoneyMovement;
+
+export interface MoneyMovementsResponse {
+  items: MoneyMovement[];
+  page: number;
+  pageSize: number;
+}
+
 
 export interface FundBalance {
   fund: Fund;

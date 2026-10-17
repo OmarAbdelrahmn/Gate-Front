@@ -21,6 +21,7 @@ import {
   type Movement,
   type TransferredDebt,
   type Account,
+  type RiderPerson,
 } from "@/lib/jahez/types";
 import { listRiders } from "@/lib/workforce/api";
 import type { Rider } from "@/lib/workforce/types";
@@ -48,6 +49,8 @@ import {
   Send,
   Plus,
   Edit3,
+  User,
+  UserCheck,
 } from "lucide-react";
 
 export default function JahezCashboxPage() {
@@ -181,7 +184,13 @@ export default function JahezCashboxPage() {
       m.id.toLowerCase().includes(q) ||
       m.reference.toLowerCase().includes(q) ||
       m.reason.toLowerCase().includes(q) ||
-      m.handoverId.toLowerCase().includes(q)
+      m.handoverId.toLowerCase().includes(q) ||
+      m.userRider?.nameAr?.toLowerCase().includes(q) ||
+      m.userRider?.nameEn?.toLowerCase().includes(q) ||
+      m.userRider?.iqamaNo?.includes(q) ||
+      m.ownerRider?.nameAr?.toLowerCase().includes(q) ||
+      m.ownerRider?.nameEn?.toLowerCase().includes(q) ||
+      m.ownerRider?.iqamaNo?.includes(q)
     );
   });
 
@@ -294,7 +303,10 @@ export default function JahezCashboxPage() {
       "المبلغ": m.amount,
       "المرجع": m.reference,
       "التاريخ": m.occurredAtUtc,
-      "المستخدم الفعلي": m.riderProfileId,
+      "المندوب الفعلي": m.userRider?.nameAr || m.userRider?.nameEn || "-",
+      "إقامة المندوب الفعلي": m.userRider?.iqamaNo || "-",
+      "صاحب الحساب (المالك)": m.ownerRider?.nameAr || m.ownerRider?.nameEn || "-",
+      "إقامة المالك": m.ownerRider?.iqamaNo || "-",
       "السبب": m.reason,
     }));
     exportToExcel(data, "حركات_جاهز_المالية");
@@ -449,7 +461,7 @@ export default function JahezCashboxPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="بحث برقم الحركة، المرجع، أو السبب..."
+                placeholder="بحث برقم الحركة، المرجع، البيان، اسم المندوب، أو رقم الإقامة..."
                 className="pr-10 text-sm"
               />
             </div>
@@ -486,6 +498,8 @@ export default function JahezCashboxPage() {
                 <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
                   <tr>
                     <th className="py-3 px-3">رقم الحركة</th>
+                    <th className="py-3 px-3">المندوب الفعلي (المستخدم)</th>
+                    <th className="py-3 px-3">صاحب الحساب (المالك)</th>
                     <th className="py-3 px-3">الجهة</th>
                     <th className="py-3 px-3 text-center">الاتجاه</th>
                     <th className="py-3 px-3">الغرض</th>
@@ -499,14 +513,14 @@ export default function JahezCashboxPage() {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-gray-500">
+                      <td colSpan={11} className="py-12 text-center text-gray-500">
                         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-emerald-500 mb-2" />
                         جارٍ تحميل الحركات المالية...
                       </td>
                     </tr>
                   ) : filteredMovements.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-gray-500">
+                      <td colSpan={11} className="py-12 text-center text-gray-500">
                         لا توجد حركات مالية مسجلة بعد
                       </td>
                     </tr>
@@ -518,11 +532,58 @@ export default function JahezCashboxPage() {
                         Boolean(m.operationId) &&
                         (m.fund === Fund.Cashbox || m.fund === Fund.Bank);
 
-                      const rider = riderMap.get(m.riderProfileId);
+                      const fallbackRider = riderMap.get(m.riderProfileId);
 
                       return (
                         <tr key={m.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
                           <td className="py-3 px-3 font-mono font-bold">#{m.id.slice(0, 8)}</td>
+
+                          {/* المندوب الفعلي (User Rider) */}
+                          <td className="py-3 px-3">
+                            {m.userRider ? (
+                              <div>
+                                <div className="font-semibold text-indigo-700 dark:text-indigo-400 flex items-center gap-1">
+                                  <UserCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span>{m.userRider.nameAr || m.userRider.nameEn || "-"}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono">
+                                  إقامة: {m.userRider.iqamaNo || "-"}
+                                  {m.userRider.mobile && ` • ${m.userRider.mobile}`}
+                                </div>
+                              </div>
+                            ) : fallbackRider ? (
+                              <div>
+                                <div className="font-semibold text-indigo-700 dark:text-indigo-400 flex items-center gap-1">
+                                  <UserCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span>{fallbackRider.fullNameAr}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono">
+                                  إقامة: {fallbackRider.iqamaNo || "-"}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 font-mono text-[11px]">-</span>
+                            )}
+                          </td>
+
+                          {/* صاحب الحساب (Owner Rider) */}
+                          <td className="py-3 px-3">
+                            {m.ownerRider ? (
+                              <div>
+                                <div className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-1">
+                                  <User className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                                  <span>{m.ownerRider.nameAr || m.ownerRider.nameEn || "-"}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono">
+                                  إقامة: {m.ownerRider.iqamaNo || "-"}
+                                  {m.ownerRider.mobile && ` • ${m.ownerRider.mobile}`}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 font-mono text-[11px]">-</span>
+                            )}
+                          </td>
+
                           <td className="py-3 px-3 font-semibold">{getFundLabel(m.fund)}</td>
                           <td className="py-3 px-3 text-center">
                             <Badge
@@ -544,12 +605,7 @@ export default function JahezCashboxPage() {
                             {m.occurredAtUtc?.slice(0, 16).replace("T", " ")}
                           </td>
                           <td className="py-3 px-3 text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                            <div>{m.reason}</div>
-                            {rider && (
-                              <div className="text-[10px] text-gray-400">
-                                المندوب: {rider.fullNameAr}
-                              </div>
-                            )}
+                            {m.reason}
                           </td>
                           <td className="py-3 px-3 text-center">
                             {isSettlementDisbursement && canEditPayment ? (
@@ -559,7 +615,10 @@ export default function JahezCashboxPage() {
                                 onClick={() => {
                                   setEditPaymentOpId(m.operationId);
                                   setEditPaymentContext({
-                                    riderName: rider?.fullNameAr,
+                                    riderName:
+                                      m.userRider?.nameAr ||
+                                      m.ownerRider?.nameAr ||
+                                      fallbackRider?.fullNameAr,
                                     settlementDate: m.occurredAtUtc?.slice(0, 10),
                                   });
                                   setIsEditPaymentOpen(true);

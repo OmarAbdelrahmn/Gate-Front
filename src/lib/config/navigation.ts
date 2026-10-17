@@ -303,6 +303,14 @@ export const navigation: NavItem[] = [
         ],
       },
       {
+        label: "أداء الطلبات",
+        labelKey: "nav.jahezPerformance",
+        href: "/admin/jahez/performance",
+        icon: BarChart3,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["jahez.read", "jahez.imports.read"],
+      },
+      {
         label: "الإحصائيات والتقارير",
         labelKey: "nav.jahezStatistics",
         href: "/admin/jahez/statistics",
