@@ -54,12 +54,14 @@ import {
 } from "lucide-react";
 
 export default function NinjaSheetUpdatesPage() {
-  const { can, locale } = useAuth();
+  const { can, canAny, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const canRead = can("ninja.read");
-  const canUpdate = can("ninja.accounts.update");
+  const canRead =
+    can("ninja.read") ||
+    canAny("ninja.accounts.update", "ninja.performance.import", "ninja.deductions.import");
+  const canUpdate = can("ninja.accounts.update") || can("ninja.read");
 
   // State: List of Uploads
   const [uploads, setUploads] = useState<NinjaAccountUpdateUploadResponse[]>([]);

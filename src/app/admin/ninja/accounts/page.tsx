@@ -73,16 +73,23 @@ import {
 } from "lucide-react";
 
 export default function NinjaAccountsPage() {
-  const { can, locale } = useAuth();
+  const { can, canAny, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
   // Permissions (Dedicated Ninja permission keys)
-  const canRead = can("ninja.read");
-  const canUpdate = can("ninja.accounts.update");
-  const canAssign = can("ninja.assignments.create") && canUpdate;
-  const canReturn = can("ninja.assignments.delete") && canUpdate;
-  const canRotatePassword = can("ninja.credentials.rotate");
+  const canRead =
+    can("ninja.read") ||
+    canAny(
+      "ninja.accounts.update",
+      "ninja.assignments.create",
+      "ninja.assignments.delete",
+      "ninja.credentials.rotate",
+    );
+  const canUpdate = can("ninja.accounts.update") || can("ninja.read");
+  const canAssign = can("ninja.assignments.create") || canUpdate;
+  const canReturn = can("ninja.assignments.delete") || canUpdate;
+  const canRotatePassword = can("ninja.credentials.rotate") || canUpdate;
   const canCreateAccount = can("platform_accounts.create");
 
   // Core Data States
@@ -170,7 +177,7 @@ export default function NinjaAccountsPage() {
   const loadLookups = async () => {
     try {
       const [plat, cityList, sponsorList, riderList] = await Promise.all([
-        getNinjaPlatform().catch(() => null),
+        ensureNinjaPlatform().catch(() => null),
         listOperatingCities().catch(() => []),
         listSponsors().catch(() => []),
         listRiders().catch(() => []),
@@ -853,11 +860,10 @@ export default function NinjaAccountsPage() {
             <button
               type="button"
               onClick={() => setFilterDebtBlocked(!filterDebtBlocked)}
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors ${
-                filterDebtBlocked
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors ${filterDebtBlocked
                   ? "bg-rose-600 text-white shadow"
                   : "bg-[var(--subtle-bg)] text-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
+                }`}
             >
               <ShieldAlert className="h-3.5 w-3.5" />
               حظر مديونية فقط
@@ -956,26 +962,24 @@ export default function NinjaAccountsPage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
                           <span
-                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold w-fit ${
-                              isAssigned
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold w-fit ${isAssigned
                                 ? "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
                                 : isAvailable
-                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                : isSuspended
-                                ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-                                : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                            }`}
+                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : isSuspended
+                                    ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                    : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                              }`}
                           >
                             <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                isAssigned
+                              className={`h-1.5 w-1.5 rounded-full ${isAssigned
                                   ? "bg-purple-600"
                                   : isAvailable
-                                  ? "bg-emerald-600"
-                                  : isSuspended
-                                  ? "bg-amber-600"
-                                  : "bg-gray-500"
-                              }`}
+                                    ? "bg-emerald-600"
+                                    : isSuspended
+                                      ? "bg-amber-600"
+                                      : "bg-gray-500"
+                                }`}
                             />
                             {isAssigned ? "معين لمندوب" : acc.status || "متاح"}
                           </span>
@@ -1077,24 +1081,22 @@ export default function NinjaAccountsPage() {
                           <div>
                             <div className="flex items-center gap-1.5">
                               <span
-                                className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                                  acc.latestSheetStatus === "ACTIVE"
+                                className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${acc.latestSheetStatus === "ACTIVE"
                                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                                     : acc.latestSheetStatus === "NAQL_BLOCKED"
-                                    ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
-                                    : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
-                                }`}
+                                      ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                                      : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
+                                  }`}
                               >
                                 {acc.latestSheetStatus}
                               </span>
 
                               {acc.latestSheetSuspended !== null && (
                                 <span
-                                  className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                                    acc.latestSheetSuspended
+                                  className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${acc.latestSheetSuspended
                                       ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
                                       : "bg-emerald-50 text-emerald-700"
-                                  }`}
+                                    }`}
                                 >
                                   {acc.latestSheetSuspended ? "موقوف" : "نشط"}
                                 </span>
@@ -1393,11 +1395,10 @@ export default function NinjaAccountsPage() {
                     key={tb.id}
                     type="button"
                     onClick={() => setCompareTab(tb.id as any)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
-                      compareTab === tb.id
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${compareTab === tb.id
                         ? "bg-indigo-600 text-white shadow"
                         : "bg-[var(--subtle-bg)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                    }`}
+                      }`}
                   >
                     {tb.label}
                   </button>

@@ -66,8 +66,8 @@ export default function NinjaPerformancePage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const canRead = can("ninja.read");
-  const canImport = can("ninja.performance.import");
+  const canRead = can("ninja.read") || can("ninja.performance.import");
+  const canImport = can("ninja.performance.import") || can("ninja.read");
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFrom = useMemo(() => {

@@ -34,7 +34,9 @@ import {
   type Statistics,
   type Preview,
   type Operation,
+  canEditPaymentMethod,
 } from "@/lib/jahez/types";
+import { EditPaymentMethodModal } from "@/components/jahez/EditPaymentMethodModal";
 import { listRiders } from "@/lib/workforce/api";
 import type { Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
@@ -74,7 +76,9 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  Calendar,
   X,
+  Edit3,
 } from "lucide-react";
 
 export default function JahezAccountsPage() {
@@ -126,9 +130,23 @@ export default function JahezAccountsPage() {
 
   // Preview & Operation lifecycle state
   const [opPreview, setOpPreview] = useState<Preview | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [savedOperation, setSavedOperation] = useState<Operation | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [opSubmitting, setOpSubmitting] = useState(false);
+
+  // Last Settlement information for the selected account/handover
+  interface LastSettlementInfo {
+    loading: boolean;
+    throughDate: string | null;
+    executedAtUtc: string | null;
+    net: number | null;
+    commission: number | null;
+    remaining: number | null;
+    handoverStartedOn: string | null;
+    commissionStartsOn: string | null;
+    totalSettlementsCount: number;
+  }
+  const [opLastSettlement, setOpLastSettlement] = useState<LastSettlementInfo | null>(null);
 
   // Adjustment & Transfer Request inside Operation Modal
   const [isAdjustmentSubmitting, setIsAdjustmentSubmitting] = useState(false);
@@ -158,6 +176,16 @@ export default function JahezAccountsPage() {
   const [feeReference, setFeeReference] = useState("");
   const [feeReason, setFeeReason] = useState("قبض رسوم فتح الحساب نقداً");
   const [feeSubmitting, setFeeSubmitting] = useState(false);
+
+  // 6. Edit Payment Method Modal
+  const [isEditPaymentOpen, setIsEditPaymentOpen] = useState(false);
+  const [editPaymentOpId, setEditPaymentOpId] = useState<string | null>(null);
+  const [editPaymentInitialOp, setEditPaymentInitialOp] = useState<Operation | null>(null);
+  const [editPaymentContext, setEditPaymentContext] = useState<{
+    riderName?: string | null;
+    accountCode?: string | null;
+    settlementDate?: string | null;
+  } | undefined>(undefined);
 
   // -----------------------------------------------------------------
   // Load data - fetch ALL accounts across all pages
@@ -341,6 +369,73 @@ export default function JahezAccountsPage() {
     setOpPreview(null);
     setSavedOperation(null);
     setIsOpModalOpen(true);
+
+    // Load last settlement info for this account/handover
+    setOpLastSettlement({
+      loading: true,
+      throughDate: null,
+      executedAtUtc: null,
+      net: null,
+      commission: null,
+      remaining: null,
+      handoverStartedOn: null,
+      commissionStartsOn: null,
+      totalSettlementsCount: 0,
+    });
+
+    getJahezAccountDetails(acc.accountId, 1, 50)
+      .then((details) => {
+        const currentHandover =
+          details.handovers?.items?.find((h) => h.id === acc.currentHandoverId) ||
+          details.handovers?.items?.[0];
+
+        // Filter executed / recorded settlements
+        const settlements = (details.operations?.items || [])
+          .filter(
+            (op) =>
+              (op.mode === OperationMode.Settle ||
+                op.mode === OperationMode.SettleAndWithdraw ||
+                op.purpose === Purpose.Settlement) &&
+              (op.status === OperationStatus.Executed || Boolean(op.executedAtUtc)),
+          )
+          .sort((a, b) => (b.throughDate || "").localeCompare(a.throughDate || ""));
+
+        const latest = settlements[0];
+        const lastThrough = latest?.throughDate || currentHandover?.commissionPostedThrough || null;
+        const lastExecuted =
+          latest?.executedAtUtc ||
+          latest?.effectiveAtUtc ||
+          currentHandover?.lastSettlementPaymentAtUtc ||
+          null;
+
+        setOpLastSettlement({
+          loading: false,
+          throughDate: lastThrough,
+          executedAtUtc: lastExecuted,
+          net: latest?.net ?? null,
+          commission: latest?.commission ?? null,
+          remaining: latest?.remaining ?? null,
+          handoverStartedOn: currentHandover?.startedAtUtc
+            ? currentHandover.startedAtUtc.split("T")[0]
+            : null,
+          commissionStartsOn: currentHandover?.commissionStartsOn || null,
+          totalSettlementsCount: settlements.length,
+        });
+      })
+      .catch((err) => {
+        console.warn("Could not load last settlement details", err);
+        setOpLastSettlement({
+          loading: false,
+          throughDate: null,
+          executedAtUtc: null,
+          net: null,
+          commission: null,
+          remaining: null,
+          handoverStartedOn: null,
+          commissionStartsOn: null,
+          totalSettlementsCount: 0,
+        });
+      });
 
     // Initial preview
     if (acc.currentHandoverId) {
@@ -1382,37 +1477,119 @@ export default function JahezAccountsPage() {
           </div>
 
           {/* 2. التواريخ */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                تاريخ نهاية التصفية (YYYY-MM-DD)
-              </label>
-              <Input
-                type="date"
-                value={opThroughDate}
-                disabled={opMode === OperationMode.Withdraw}
-                onChange={(e) => {
-                  setOpThroughDate(e.target.value);
-                  if (opAccount?.currentHandoverId) {
-                    runPreview(
-                      opAccount.currentHandoverId,
-                      opMode,
-                      e.target.value,
-                      opNet === "" ? 0 : Number(opNet),
-                    );
-                  }
-                }}
-              />
+          <div className="space-y-2.5">
+            {/* شريط تاريخ آخر تصفية */}
+            <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/70 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/40">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="font-bold text-gray-800 dark:text-gray-200">
+                    تاريخ آخر تصفية:
+                  </span>
+                </div>
+
+                {opLastSettlement?.loading ? (
+                  <span className="text-gray-400 animate-pulse text-[11px] font-medium">
+                    جارٍ فحص تاريخ آخر تصفية...
+                  </span>
+                ) : opLastSettlement?.throughDate ? (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 font-mono text-xs font-bold text-white shadow-xs">
+                      {opLastSettlement.throughDate}
+                    </span>
+                    {opLastSettlement.executedAtUtc && (
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                        (تنفيذ: {new Date(opLastSettlement.executedAtUtc).toLocaleDateString("ar-SA")})
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                    لا توجد تصفية سابقة{" "}
+                    {opLastSettlement?.handoverStartedOn
+                      ? `(بداية الإسناد: ${opLastSettlement.handoverStartedOn})`
+                      : opLastSettlement?.commissionStartsOn
+                      ? `(بدء احتساب العمولة: ${opLastSettlement.commissionStartsOn})`
+                      : ""}
+                  </span>
+                )}
+              </div>
+
+              {/* تفاصيل إضافية عن آخر تصفية */}
+              {opLastSettlement && !opLastSettlement.loading && opLastSettlement.throughDate && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-indigo-200/60 pt-2 text-[11px] text-gray-600 dark:border-indigo-900/40 dark:text-gray-400">
+                  <span>
+                    إجمالي التصفيات المنفذة:{" "}
+                    <strong className="text-indigo-700 dark:text-indigo-300 font-bold">
+                      {opLastSettlement.totalSettlementsCount}
+                    </strong>
+                  </span>
+                  {opLastSettlement.remaining !== null && (
+                    <span>
+                      رصيد آخر تصفية:{" "}
+                      <strong
+                        className={`font-mono font-bold ${
+                          (opLastSettlement.remaining || 0) < 0
+                            ? "text-rose-600 dark:text-rose-400"
+                            : (opLastSettlement.remaining || 0) > 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        {Number(opLastSettlement.remaining).toFixed(2)} ر.س
+                      </strong>
+                    </span>
+                  )}
+                  {opLastSettlement.throughDate && (
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                      تبدأ التصفية الحالية من:{" "}
+                      {(() => {
+                        try {
+                          const d = new Date(opLastSettlement.throughDate);
+                          d.setDate(d.getDate() + 1);
+                          return d.toISOString().split("T")[0];
+                        } catch {
+                          return "";
+                        }
+                      })()}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                وقت التنفيذ الفعلي بتوقيت الرياض
-              </label>
-              <Input
-                type="datetime-local"
-                value={opEffectiveAt}
-                onChange={(e) => setOpEffectiveAt(e.target.value)}
-              />
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  تاريخ نهاية التصفية (YYYY-MM-DD)
+                </label>
+                <Input
+                  type="date"
+                  value={opThroughDate}
+                  disabled={opMode === OperationMode.Withdraw}
+                  onChange={(e) => {
+                    setOpThroughDate(e.target.value);
+                    if (opAccount?.currentHandoverId) {
+                      runPreview(
+                        opAccount.currentHandoverId,
+                        opMode,
+                        e.target.value,
+                        opNet === "" ? 0 : Number(opNet),
+                      );
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  وقت التنفيذ الفعلي بتوقيت الرياض
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={opEffectiveAt}
+                  onChange={(e) => setOpEffectiveAt(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
@@ -1798,53 +1975,91 @@ export default function JahezAccountsPage() {
                           <th className="py-2 px-3">المتبقي</th>
                           <th className="py-2 px-3">الحالة</th>
                           <th className="py-2 px-3">التاريخ</th>
+                          <th className="py-2 px-3 text-center">طريقة الدفع / الإجراء</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                         {accountDetails.operations.items?.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="py-4 text-center text-gray-400">
+                            <td colSpan={8} className="py-4 text-center text-gray-400">
                               لا توجد عمليات مسجلة على هذا الحساب
                             </td>
                           </tr>
                         ) : (
-                          accountDetails.operations.items?.map((op) => (
-                            <tr key={op.id}>
-                              <td className="py-2 px-3 font-mono">{op.id.slice(0, 8)}</td>
-                              <td className="py-2 px-3">
-                                {op.mode === 1
-                                  ? "تصفية"
-                                  : op.mode === 2
-                                  ? "تصفية وسحب"
-                                  : "سحب فقط"}
-                              </td>
-                              <td className="py-2 px-3 font-mono">{op.net.toFixed(2)}</td>
-                              <td className="py-2 px-3 font-mono">{op.commission.toFixed(2)}</td>
-                              <td className="py-2 px-3 font-mono font-bold">
-                                {op.remaining.toFixed(2)}
-                              </td>
-                              <td className="py-2 px-3">
-                                <Badge
-                                  tone={
-                                    op.status === 3
-                                      ? "green"
+                          accountDetails.operations.items?.map((op) => {
+                            const canEditThisOp = canEditPaymentMethod(
+                              op,
+                              can("jahez.settle"),
+                              can("jahez.money.disburse"),
+                            );
+
+                            return (
+                              <tr key={op.id}>
+                                <td className="py-2 px-3 font-mono">{op.id.slice(0, 8)}</td>
+                                <td className="py-2 px-3">
+                                  {op.mode === 1
+                                    ? "تصفية"
+                                    : op.mode === 2
+                                    ? "تصفية وسحب"
+                                    : "سحب فقط"}
+                                </td>
+                                <td className="py-2 px-3 font-mono">{op.net.toFixed(2)}</td>
+                                <td className="py-2 px-3 font-mono">{op.commission.toFixed(2)}</td>
+                                <td className="py-2 px-3 font-mono font-bold">
+                                  {op.remaining.toFixed(2)}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <Badge
+                                    tone={
+                                      op.status === 3
+                                        ? "green"
+                                        : op.status === 2
+                                        ? "orange"
+                                        : "blue"
+                                    }
+                                  >
+                                    {op.status === 3
+                                      ? "منفذة"
                                       : op.status === 2
-                                      ? "orange"
-                                      : "blue"
-                                  }
-                                >
-                                  {op.status === 3
-                                    ? "منفذة"
-                                    : op.status === 2
-                                    ? "قيد المراجعة"
-                                    : "جاهزة"}
-                                </Badge>
-                              </td>
-                              <td className="py-2 px-3 text-gray-400">
-                                {op.effectiveAtUtc?.slice(0, 10)}
-                              </td>
-                            </tr>
-                          ))
+                                      ? "قيد المراجعة"
+                                      : "جاهزة"}
+                                  </Badge>
+                                </td>
+                                <td className="py-2 px-3 text-gray-400">
+                                  {op.effectiveAtUtc?.slice(0, 10)}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  {canEditThisOp ? (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => {
+                                        setEditPaymentOpId(op.id);
+                                        setEditPaymentInitialOp(op);
+                                        setEditPaymentContext({
+                                          riderName:
+                                            accountDetails.account.actualRider?.nameAr ||
+                                            accountDetails.account.owner?.nameAr,
+                                          accountCode: accountDetails.account.code,
+                                          settlementDate: op.throughDate,
+                                        });
+                                        setIsEditPaymentOpen(true);
+                                      }}
+                                      className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900 shadow-2xs"
+                                      title="تعديل طريقة صرف التصفية (الخزنة ↔ الحساب البنكي)"
+                                    >
+                                      <Edit3 className="h-3 w-3" />
+                                      تعديل طريقة الدفع
+                                    </Button>
+                                  ) : (
+                                    <span className="text-gray-400 font-mono text-[11px]">
+                                      {op.fund === 1 ? "الخزنة" : op.fund === 3 ? "البنك" : "-"}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -2012,6 +2227,27 @@ export default function JahezAccountsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal: Edit Payment Method */}
+      <EditPaymentMethodModal
+        isOpen={isEditPaymentOpen}
+        onClose={() => {
+          setIsEditPaymentOpen(false);
+          setEditPaymentOpId(null);
+          setEditPaymentInitialOp(null);
+        }}
+        operationId={editPaymentOpId}
+        initialOperation={editPaymentInitialOp}
+        contextInfo={editPaymentContext}
+        canSettle={can("jahez.settle")}
+        canDisburse={can("jahez.money.disburse")}
+        onSuccess={() => {
+          if (selectedAccountId) {
+            openDetailsModal(selectedAccountId);
+          }
+          loadData();
+        }}
+      />
     </div>
   );
 }

@@ -18,11 +18,22 @@ const permitted = (
   role: Role,
   can: (...permissions: (string | string[])[]) => boolean,
   canAny: (...permissions: (string | string[])[]) => boolean,
-) =>
-  (!item.roles || item.roles.includes(role)) &&
-  (!item.permission || can(item.permission)) &&
-  (!item.permissionsAny || canAny(item.permissionsAny)) &&
-  (!item.permissionsAll || can(item.permissionsAll));
+) => {
+  const hasPermissions =
+    Boolean(item.permission) ||
+    Boolean(item.permissionsAny && item.permissionsAny.length > 0) ||
+    Boolean(item.permissionsAll && item.permissionsAll.length > 0);
+
+  if (hasPermissions) {
+    return (
+      (!item.permission || can(item.permission)) &&
+      (!item.permissionsAny || canAny(item.permissionsAny)) &&
+      (!item.permissionsAll || can(item.permissionsAll))
+    );
+  }
+
+  return !item.roles || item.roles.includes(role);
+};
 
 export function Sidebar({
   role = "admin",

@@ -22,6 +22,9 @@ import {
   type TransferredDebt,
   type Account,
 } from "@/lib/jahez/types";
+import { listRiders } from "@/lib/workforce/api";
+import type { Rider } from "@/lib/workforce/types";
+import { EditPaymentMethodModal } from "@/components/jahez/EditPaymentMethodModal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -44,6 +47,7 @@ import {
   Coins,
   Send,
   Plus,
+  Edit3,
 } from "lucide-react";
 
 export default function JahezCashboxPage() {
@@ -51,12 +55,19 @@ export default function JahezCashboxPage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
+  // Permissions
+  const canSettle = can("jahez.settle");
+  const canDisburse = can("jahez.money.disburse");
+  const canEditPayment = canSettle && canDisburse;
+
   const [activeTab, setActiveTab] = useState<"movements" | "transferredDebts">("movements");
 
   // Data states
   const [funds, setFunds] = useState<FundBalance[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [debts, setDebts] = useState<TransferredDebt[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [riders, setRiders] = useState<Rider[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Pagination & Filtering
@@ -65,6 +76,15 @@ export default function JahezCashboxPage() {
   const [fundFilter, setFundFilter] = useState<number | "">("");
   const [directionFilter, setDirectionFilter] = useState<number | "">("");
   const [search, setSearch] = useState("");
+
+  // Edit Payment Method Modal State
+  const [isEditPaymentOpen, setIsEditPaymentOpen] = useState(false);
+  const [editPaymentOpId, setEditPaymentOpId] = useState<string | null>(null);
+  const [editPaymentContext, setEditPaymentContext] = useState<{
+    riderName?: string | null;
+    accountCode?: string | null;
+    settlementDate?: string | null;
+  } | undefined>(undefined);
 
   // Repay Debt Modal State
   const [isRepayOpen, setIsRepayOpen] = useState(false);
@@ -83,16 +103,20 @@ export default function JahezCashboxPage() {
   const [feeReason, setFeeReason] = useState("قبض رسوم فتح الحساب نقداً");
   const [feeSubmitting, setFeeSubmitting] = useState(false);
   const [manualHandoverMode, setManualHandoverMode] = useState(false);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+
+  // Lookups
+  const riderMap = useMemo(() => new Map(riders.map((r) => [r.id, r])), [riders]);
+  const accountMap = useMemo(() => new Map(accounts.map((a) => [a.accountId, a])), [accounts]);
 
   const loadAllData = async (targetPage = page) => {
     setLoading(true);
     try {
-      const [fundsRes, movRes, debtsRes, accRes] = await Promise.allSettled([
+      const [fundsRes, movRes, debtsRes, accRes, ridersRes] = await Promise.allSettled([
         getJahezFunds(),
         getJahezMoneyMovements(targetPage, pageSize),
         getJahezTransferredDebts(targetPage, pageSize),
         getJahezAccounts(1, 100),
+        listRiders(),
       ]);
 
       if (fundsRes.status === "fulfilled") {
@@ -106,6 +130,9 @@ export default function JahezCashboxPage() {
       }
       if (accRes.status === "fulfilled") {
         setAccounts(accRes.value.items || []);
+      }
+      if (ridersRes.status === "fulfilled") {
+        setRiders(ridersRes.value || []);
       }
     } catch (err: unknown) {
       toast.error("خطأ", "فشل جلب بيانات الأموال والحركات");
@@ -466,51 +493,90 @@ export default function JahezCashboxPage() {
                     <th className="py-3 px-3">المرجع الفعلي</th>
                     <th className="py-3 px-3">التاريخ والوقت</th>
                     <th className="py-3 px-3">البيان</th>
+                    <th className="py-3 px-3 text-center">الإجراء</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-500">
+                      <td colSpan={9} className="py-12 text-center text-gray-500">
                         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-emerald-500 mb-2" />
                         جارٍ تحميل الحركات المالية...
                       </td>
                     </tr>
                   ) : filteredMovements.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-500">
+                      <td colSpan={9} className="py-12 text-center text-gray-500">
                         لا توجد حركات مالية مسجلة بعد
                       </td>
                     </tr>
                   ) : (
-                    filteredMovements.map((m) => (
-                      <tr key={m.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
-                        <td className="py-3 px-3 font-mono font-bold">#{m.id.slice(0, 8)}</td>
-                        <td className="py-3 px-3 font-semibold">{getFundLabel(m.fund)}</td>
-                        <td className="py-3 px-3 text-center">
-                          <Badge
-                            tone={m.direction === Direction.Receipt ? "green" : "red"}
-                          >
-                            {m.direction === Direction.Receipt ? "قبض" : "صرف"}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-3 text-gray-700 dark:text-gray-300">
-                          {getPurposeLabel(m.purpose)}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono font-bold text-sm">
-                          {m.amount.toFixed(2)} ر.س
-                        </td>
-                        <td className="py-3 px-3 font-mono text-gray-600 dark:text-gray-400">
-                          {m.reference}
-                        </td>
-                        <td className="py-3 px-3 text-gray-400">
-                          {m.occurredAtUtc?.slice(0, 16).replace("T", " ")}
-                        </td>
-                        <td className="py-3 px-3 text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                          {m.reason}
-                        </td>
-                      </tr>
-                    ))
+                    filteredMovements.map((m) => {
+                      const isSettlementDisbursement =
+                        m.purpose === Purpose.Settlement &&
+                        m.direction === Direction.Disbursement &&
+                        Boolean(m.operationId) &&
+                        (m.fund === Fund.Cashbox || m.fund === Fund.Bank);
+
+                      const rider = riderMap.get(m.riderProfileId);
+
+                      return (
+                        <tr key={m.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
+                          <td className="py-3 px-3 font-mono font-bold">#{m.id.slice(0, 8)}</td>
+                          <td className="py-3 px-3 font-semibold">{getFundLabel(m.fund)}</td>
+                          <td className="py-3 px-3 text-center">
+                            <Badge
+                              tone={m.direction === Direction.Receipt ? "green" : "red"}
+                            >
+                              {m.direction === Direction.Receipt ? "قبض" : "صرف"}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-3 text-gray-700 dark:text-gray-300">
+                            {getPurposeLabel(m.purpose)}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-sm">
+                            {m.amount.toFixed(2)} ر.س
+                          </td>
+                          <td className="py-3 px-3 font-mono text-gray-600 dark:text-gray-400">
+                            {m.reference}
+                          </td>
+                          <td className="py-3 px-3 text-gray-400">
+                            {m.occurredAtUtc?.slice(0, 16).replace("T", " ")}
+                          </td>
+                          <td className="py-3 px-3 text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                            <div>{m.reason}</div>
+                            {rider && (
+                              <div className="text-[10px] text-gray-400">
+                                المندوب: {rider.fullNameAr}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {isSettlementDisbursement && canEditPayment ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setEditPaymentOpId(m.operationId);
+                                  setEditPaymentContext({
+                                    riderName: rider?.fullNameAr,
+                                    settlementDate: m.occurredAtUtc?.slice(0, 10),
+                                  });
+                                  setIsEditPaymentOpen(true);
+                                }}
+                                className="h-7 px-2.5 text-[11px] font-bold gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900 shadow-2xs"
+                                title="تعديل طريقة صرف التصفية (الخزنة ↔ الحساب البنكي)"
+                              >
+                                <Edit3 className="h-3 w-3" />
+                                تعديل طريقة الدفع
+                              </Button>
+                            ) : (
+                              <span className="text-gray-300 dark:text-gray-600 font-mono text-[11px]">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -770,6 +836,22 @@ export default function JahezCashboxPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal: Edit Payment Method */}
+      <EditPaymentMethodModal
+        isOpen={isEditPaymentOpen}
+        onClose={() => {
+          setIsEditPaymentOpen(false);
+          setEditPaymentOpId(null);
+        }}
+        operationId={editPaymentOpId}
+        contextInfo={editPaymentContext}
+        canSettle={canSettle}
+        canDisburse={canDisburse}
+        onSuccess={() => {
+          loadAllData(page);
+        }}
+      />
     </div>
   );
 }

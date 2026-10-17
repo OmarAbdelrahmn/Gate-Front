@@ -155,6 +155,29 @@ export interface OperationUpdate {
   rowVersion: string;
 }
 
+export interface OperationPaymentMethodUpdate {
+  fund: Fund;
+  paymentReference: string;
+  reason: string;
+  rowVersion: string;
+}
+
+export function canEditPaymentMethod(
+  operation: Operation,
+  canSettle: boolean,
+  canDisburse: boolean,
+): boolean {
+  return (
+    canSettle &&
+    canDisburse &&
+    operation.status === OperationStatus.Executed && // 3
+    operation.paymentStatus === PaymentStatus.Paid && // 2
+    operation.remaining < 0 && // Money paid to rider
+    operation.transferToRider === false &&
+    (operation.fund === Fund.Cashbox || operation.fund === Fund.Bank)
+  );
+}
+
 export interface RequestCreate {
   handoverId: Id;
   kind: ApprovalKind;

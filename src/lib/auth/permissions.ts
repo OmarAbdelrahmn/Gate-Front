@@ -357,11 +357,15 @@ export function hasPermission(
     snapshot.deniedPermissionKeys ?? snapshot.directDenies ?? [],
   );
   if (denied.has(permission)) return false;
-  const perms =
-    snapshot.effectivePermissionKeys ??
-    snapshot.effectivePermissions ??
-    snapshot.permissions ??
-    [];
+  const perms = [
+    ...(snapshot.effectivePermissionKeys ?? []),
+    ...(snapshot.effectivePermissions ?? []),
+    ...(snapshot.permissions ?? []),
+    ...(snapshot.directGrants ?? []),
+    ...((snapshot.directPermissions || [])
+      .map((p: any) => (typeof p === "string" ? p : p?.permissionKey || p?.key))
+      .filter((k): k is string => typeof k === "string" && Boolean(k.trim()))),
+  ];
   if (perms.includes("*")) return true;
   const prefix = permission.split(".")[0];
   if (prefix && perms.includes(`${prefix}.*`)) return true;

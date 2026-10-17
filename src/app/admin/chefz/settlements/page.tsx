@@ -50,6 +50,7 @@ import {
   Printer,
   Info,
   DollarSign,
+  Coins,
   Clock,
   ArrowRight,
   ShieldAlert,
@@ -236,6 +237,67 @@ export default function ChefzSettlementsPage() {
     const riyadhToday = getRiyadhTodayDate();
     return previewResult.chargedTo > riyadhToday;
   }, [previewResult]);
+
+  // Last settlement information for selected account & assignment in modal
+  const lastSettlementInfo = useMemo(() => {
+    if (!modalAccountId) return null;
+
+    const forAccount = settlements.filter((s) => s.accountId === modalAccountId);
+    if (forAccount.length === 0) {
+      return {
+        latest: null,
+        totalCount: 0,
+        isSpecificToAssignment: false,
+        nextSuggested: null,
+      };
+    }
+
+    const forAssignment = selectedAssignmentId
+      ? forAccount.filter((s) => s.assignmentId === selectedAssignmentId)
+      : [];
+
+    const targetList = forAssignment.length > 0 ? forAssignment : forAccount;
+
+    const sorted = [...targetList].sort((a, b) => {
+      const dateA = a.periodTo || a.chargedTo || "";
+      const dateB = b.periodTo || b.chargedTo || "";
+      return dateB.localeCompare(dateA);
+    });
+
+    const latest = sorted[0];
+
+    // Compute next suggested period
+    let nextSuggested: { year: number; month: number; half: 1 | 2 } | null = null;
+    const refDateStr = latest?.periodTo || latest?.chargedTo;
+    if (refDateStr) {
+      const parts = refDateStr.split("-");
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const d = parseInt(parts[2], 10);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          if (d <= 15) {
+            // Last was Half 1 -> next is Half 2 of same month
+            nextSuggested = { year: y, month: m, half: 2 };
+          } else {
+            // Last was Half 2 -> next is next month Half 1
+            if (m === 12) {
+              nextSuggested = { year: y + 1, month: 1, half: 1 };
+            } else {
+              nextSuggested = { year: y, month: m + 1, half: 1 };
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      latest,
+      totalCount: forAccount.length,
+      isSpecificToAssignment: forAssignment.length > 0,
+      nextSuggested,
+    };
+  }, [settlements, modalAccountId, selectedAssignmentId]);
 
   // -------------------------------------------------------------
   // Handle Preview
@@ -1054,6 +1116,111 @@ export default function ChefzSettlementsPage() {
               </div>
             )}
           </div>
+
+          {/* Last Settlement Information Card */}
+          {modalAccountId && (
+            <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/70 p-3.5 dark:border-indigo-900/50 dark:bg-indigo-950/40">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="font-bold text-gray-800 dark:text-gray-200 text-xs">
+                    تاريخ آخر تصفية:
+                  </span>
+                </div>
+
+                {lastSettlementInfo?.latest ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 font-mono text-xs font-bold text-white shadow-xs">
+                      {lastSettlementInfo.latest.periodTo || lastSettlementInfo.latest.chargedTo}
+                    </span>
+                    <span className="text-[11px] text-gray-600 dark:text-gray-300">
+                      (الفترة: {lastSettlementInfo.latest.periodFrom || lastSettlementInfo.latest.chargedFrom} إلى {lastSettlementInfo.latest.periodTo || lastSettlementInfo.latest.chargedTo})
+                    </span>
+                  </div>
+                ) : (
+                  <span className="rounded-md bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                    لا توجد تصفية سابقة لهذا الحساب
+                  </span>
+                )}
+              </div>
+
+              {lastSettlementInfo?.latest && (
+                <div className="mt-2.5 space-y-2 border-t border-indigo-200/60 pt-2 text-[11px] text-gray-600 dark:border-indigo-900/40 dark:text-gray-400">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>
+                      إجمالي التصفيات المنفذة للحساب:{" "}
+                      <strong className="text-indigo-700 dark:text-indigo-300 font-bold">
+                        {lastSettlementInfo.totalCount}
+                      </strong>
+                    </span>
+                    <span>
+                      مصدر آخر تصفية:{" "}
+                      <strong className="font-semibold text-gray-800 dark:text-gray-200">
+                        {lastSettlementInfo.latest.source === "Orders" ? "ملف طلبات إكسل" : "تصفية محفظة يدوية"}
+                      </strong>
+                    </span>
+                    {lastSettlementInfo.latest.riderAmount !== undefined && (
+                      <span>
+                        صافي المندوب:{" "}
+                        <strong className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {Number(lastSettlementInfo.latest.riderAmount).toFixed(2)} ر.س
+                        </strong>
+                      </span>
+                    )}
+                    {lastSettlementInfo.latest.endWalletAmount !== undefined && (
+                      <span>
+                        رصيد إغلاق المحفظة السابق:{" "}
+                        <strong className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                          {Number(lastSettlementInfo.latest.endWalletAmount).toFixed(2)} ر.س
+                        </strong>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Quick-action helpers based on last settlement */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {lastSettlementInfo.nextSuggested && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (lastSettlementInfo.nextSuggested) {
+                            setModalYear(lastSettlementInfo.nextSuggested.year);
+                            setModalMonth(lastSettlementInfo.nextSuggested.month);
+                            setModalHalf(lastSettlementInfo.nextSuggested.half);
+                            invalidatePreview();
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md bg-indigo-100 hover:bg-indigo-200 px-2 py-1 text-[10px] font-bold text-indigo-800 dark:bg-indigo-900/60 dark:hover:bg-indigo-900 dark:text-indigo-200 transition-colors"
+                        title="تحديد الفترة التالية مباشرة بناءً على تاريخ آخر تصفية"
+                      >
+                        <Clock className="h-3 w-3" />
+                        الفترة المقترحة التالية: شهر {lastSettlementInfo.nextSuggested.month} / {lastSettlementInfo.nextSuggested.year} ({lastSettlementInfo.nextSuggested.half === 1 ? "النصف الأول" : "النصف الثاني"}) — اضغط للتطبيق
+                      </button>
+                    )}
+
+                    {lastSettlementInfo.latest.endWalletAmount !== undefined &&
+                      Number(lastSettlementInfo.latest.endWalletAmount) >= 0 &&
+                      startWalletAmount !== String(lastSettlementInfo.latest.endWalletAmount) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (lastSettlementInfo.latest.endWalletAmount !== undefined) {
+                              setStartWalletAmount(String(lastSettlementInfo.latest.endWalletAmount));
+                              invalidatePreview();
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-100 hover:bg-emerald-200 px-2 py-1 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 dark:text-emerald-200 transition-colors"
+                          title="استخدام رصيد إغلاق آخر تصفية كرصيد بداية لهذه التصفية"
+                        >
+                          <Coins className="h-3 w-3" />
+                          استخدام رصيد الإغلاق ({Number(lastSettlementInfo.latest.endWalletAmount).toFixed(2)} ر.س) كرصيد بداية
+                        </button>
+                      )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Step 3: Period Selection (Year, Month, Half) */}
           <div className="space-y-2 border-t border-[var(--border)] pt-3">

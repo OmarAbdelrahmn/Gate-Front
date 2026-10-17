@@ -373,7 +373,7 @@ const permissionRequest = (
 });
 
 export function AuthorizationEditor({ userId }: { userId: string }) {
-  const { can, locale } = useAuth();
+  const { can, locale, user, refreshSession } = useAuth();
   const t = (key: string) => translate(locale, key);
   const [roles, setRoles] = useState<Role[]>([]);
   const [catalog, setCatalog] = useState<PermissionCatalogItem[]>([]);
@@ -879,6 +879,9 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
       }
 
       await Promise.all(promises);
+      if (userId === user?.id) {
+        void refreshSession();
+      }
       if (preparedAssignments) {
         setAssignPermissions(preparedAssignments);
         setDetectedConflicts([]);
@@ -931,6 +934,9 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
         scopes: (r.isAllHousingScope && r.isAllClientScope) ? [] : (r.scopes ?? []),
       }));
       await replaceUserRoles(userId, rolePayload);
+      if (userId === user?.id) {
+        void refreshSession();
+      }
       const msg =
         locale === "en"
           ? "User roles saved successfully."
@@ -956,6 +962,9 @@ export function AuthorizationEditor({ userId }: { userId: string }) {
     try {
       const assignments = preparePermissionAssignments(assignPermissions, catalog);
       await replaceUserPermissions(userId, assignments);
+      if (userId === user?.id) {
+        void refreshSession();
+      }
       setAssignPermissions(assignments);
       setDetectedConflicts([]);
       const msg =

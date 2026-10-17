@@ -27,6 +27,7 @@ import type {
   Operation,
   OperationCreate,
   OperationUpdate,
+  OperationPaymentMethodUpdate,
   Page,
   Preview,
   RequestCreate,
@@ -308,6 +309,110 @@ export async function getJahezOperations(
     ...init,
     method: "GET",
   });
+}
+
+export interface GetOperationHints {
+  accountId?: string | null;
+  handoverId?: string | null;
+  riderProfileId?: string | null;
+}
+
+export async function getJahezOperation(
+  operationId: string,
+  hints?: GetOperationHints,
+  init?: CustomRequestInit,
+): Promise<Operation> {
+  // Strategy 1: If accountId hint is provided, query account details directly
+  if (hints?.accountId) {
+    try {
+      const details = await getJahezAccountDetails(hints.accountId, 1, 100, {
+        ...init,
+        suppressErrorToast: true,
+      });
+      const match = details?.operations?.items?.find((o) => o.id === operationId);
+      if (match) return match;
+    } catch {
+      // Continue to next strategy
+    }
+  }
+
+  // Strategy 2: Look in the global operations list (page 1 to 5)
+  try {
+    const page1 = await getJahezOperations(1, 100, { ...init, suppressErrorToast: true });
+    const match = page1?.items?.find((o) => o.id === operationId);
+    if (match) return match;
+
+    if (page1?.items && page1.items.length >= 100) {
+      for (let p = 2; p <= 5; p++) {
+        const next = await getJahezOperations(p, 100, { ...init, suppressErrorToast: true });
+        const found = next?.items?.find((o) => o.id === operationId);
+        if (found) return found;
+        if (!next?.items || next.items.length < 100) break;
+      }
+    }
+  } catch {
+    // Continue to next strategy
+  }
+
+  // Strategy 3: Find account by handoverId or riderProfileId and check its operations
+  try {
+    const accs = await getJahezAccounts(1, 100, { ...init, suppressErrorToast: true });
+    const items = accs?.items || [];
+
+    // Prioritize accounts matching handoverId or riderProfileId
+    const sorted = [...items].sort((a, b) => {
+      const aMatch =
+        (hints?.handoverId && a.currentHandoverId === hints.handoverId) ||
+        (hints?.riderProfileId &&
+          (a.actualRider?.riderProfileId === hints.riderProfileId ||
+            a.owner?.riderProfileId === hints.riderProfileId));
+      const bMatch =
+        (hints?.handoverId && b.currentHandoverId === hints.handoverId) ||
+        (hints?.riderProfileId &&
+          (b.actualRider?.riderProfileId === hints.riderProfileId ||
+            b.owner?.riderProfileId === hints.riderProfileId));
+      return (bMatch ? 1 : 0) - (aMatch ? 1 : 0);
+    });
+
+    for (const acc of sorted) {
+      try {
+        const details = await getJahezAccountDetails(acc.accountId, 1, 100, {
+          ...init,
+          suppressErrorToast: true,
+        });
+        const match = details?.operations?.items?.find((o) => o.id === operationId);
+        if (match) return match;
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Continue
+  }
+
+  throw new Error("لم يتم العثور على بيانات التصفية في العمليات أو الحسابات المسجلة.");
+}
+
+export async function updateJahezOperationPaymentMethod(
+  operationId: string,
+  data: OperationPaymentMethodUpdate,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Operation> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("op-pay-method");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Operation>(
+    `${ROOT}/operations/${encodeURIComponent(operationId)}/payment-method`,
+    {
+      ...init,
+      method: "PUT",
+      headers,
+      body: JSON.stringify(data),
+      notifySuccess: init?.notifySuccess ?? "تم تحديث طريقة دفع التصفية بنجاح",
+    },
+  );
 }
 
 // ----------------------------------------------------------------------

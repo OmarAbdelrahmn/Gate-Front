@@ -45,8 +45,8 @@ export default function NinjaDeductionsPage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const canRead = can("ninja.read");
-  const canImport = can("ninja.deductions.import");
+  const canRead = can("ninja.read") || can("ninja.deductions.import");
+  const canImport = can("ninja.deductions.import") || can("ninja.read");
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFrom = useMemo(() => {
