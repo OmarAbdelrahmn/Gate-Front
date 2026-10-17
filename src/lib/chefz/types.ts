@@ -107,6 +107,7 @@ export interface ChefzSettlement {
   dailyFee: number;
   companyAmount: number;
   riderAmount: number;
+  sponsorNameAr?: string | null;
   // Order settlement source & financial breakdown fields
   source?: "Wallet" | "Orders";
   importId?: Guid | null;

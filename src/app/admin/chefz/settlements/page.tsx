@@ -10,6 +10,7 @@ import {
   getChefzPlatform,
   getAllChefzAccounts,
   getChefzSettlements,
+  getAllChefzSettlements,
   previewChefzSettlement,
   createChefzSettlement,
   getRiyadhTodayDate,
@@ -53,6 +54,9 @@ import {
   ArrowRight,
   ShieldAlert,
   Upload,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from "lucide-react";
 
 export default function ChefzSettlementsPage() {
@@ -72,13 +76,15 @@ export default function ChefzSettlementsPage() {
 
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const pageSize = 50;
+  const [pageSize, setPageSize] = useState(50);
 
   // Filters
   const [filterAccountId, setFilterAccountId] = useState(preselectedAccountId);
   const [filterRiderId, setFilterRiderId] = useState("");
+  const [filterSponsor, setFilterSponsor] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>("all");
   const [filterMonth, setFilterMonth] = useState<string>("all");
+  const [filterHalf, setFilterHalf] = useState<string>("all");
 
   // View Mode: History vs Bulk Order Settlements
   const [viewMode, setViewMode] = useState<"history" | "bulk-orders">("history");
@@ -109,7 +115,7 @@ export default function ChefzSettlementsPage() {
   const [selectedSettlement, setSelectedSettlement] = useState<ChefzSettlement | null>(null);
 
   // -------------------------------------------------------------
-  // Load Platform, Accounts, Settlements
+  // Load Platform, Accounts, Settlements (ALL settlements)
   // -------------------------------------------------------------
   const loadData = async () => {
     setLoading(true);
@@ -118,22 +124,17 @@ export default function ChefzSettlementsPage() {
       setPlatform(plat);
 
       if (plat) {
-        const [accs, chefzAccs, riderList, settlePage] = await Promise.all([
+        const [accs, chefzAccs, riderList, settleItems] = await Promise.all([
           getAllPlatformAccounts({ platformId: plat.id, includeArchived: false }).catch(() => []),
           getAllChefzAccounts().catch(() => []),
           listRiders().catch(() => []),
-          getChefzSettlements({
-            accountId: filterAccountId || undefined,
-            riderId: filterRiderId || undefined,
-            page,
-            pageSize,
-          }).catch(() => ({ items: [], page: 1, pageSize })),
+          getAllChefzSettlements().catch(() => []),
         ]);
 
         setBaseAccounts(accs);
         setChefzAccounts(chefzAccs);
         setRiders(riderList);
-        setSettlements(settlePage.items || []);
+        setSettlements(settleItems);
       }
     } catch (err: unknown) {
       toast.error("خطأ", "تعذر تحميل تصفيات شيفز.");
@@ -144,7 +145,7 @@ export default function ChefzSettlementsPage() {
 
   useEffect(() => {
     loadData();
-  }, [filterAccountId, filterRiderId, page]);
+  }, []);
 
   // Lookup helpers
   const baseAccountMap = useMemo(() => {
@@ -333,6 +334,9 @@ export default function ChefzSettlementsPage() {
   // -------------------------------------------------------------
   const filteredSettlements = useMemo(() => {
     return settlements.filter((s) => {
+      if (filterAccountId && s.accountId !== filterAccountId) return false;
+      if (filterRiderId && s.riderProfileId !== filterRiderId) return false;
+      if (filterSponsor !== "all" && (s.sponsorNameAr?.trim() || "") !== filterSponsor) return false;
       if (filterYear !== "all") {
         const sYear = s.periodFrom.slice(0, 4);
         if (sYear !== filterYear) return false;
@@ -341,9 +345,66 @@ export default function ChefzSettlementsPage() {
         const sMonth = String(parseInt(s.periodFrom.slice(5, 7), 10));
         if (sMonth !== filterMonth) return false;
       }
+      if (filterHalf !== "all") {
+        const day = parseInt(s.periodFrom.slice(8, 10), 10);
+        const isFirstHalf = !isNaN(day) ? day <= 15 : s.periodFrom.endsWith("-01");
+        if (filterHalf === "1" && !isFirstHalf) return false;
+        if (filterHalf === "2" && isFirstHalf) return false;
+      }
       return true;
     });
-  }, [settlements, filterYear, filterMonth]);
+  }, [settlements, filterAccountId, filterRiderId, filterSponsor, filterYear, filterMonth, filterHalf]);
+
+  // Reset to first page when any filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [filterAccountId, filterRiderId, filterSponsor, filterYear, filterMonth, filterHalf, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSettlements.length / pageSize));
+
+  const paginatedSettlements = useMemo(() => {
+    const startIndex = (page - 1) * pageSize;
+    return filteredSettlements.slice(startIndex, startIndex + pageSize);
+  }, [filteredSettlements, page, pageSize]);
+
+  const availableSponsors = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of settlements) {
+      if (s.sponsorNameAr?.trim()) {
+        set.add(s.sponsorNameAr.trim());
+      }
+    }
+    return Array.from(set).sort();
+  }, [settlements]);
+
+  const availableYears = useMemo(() => {
+    const set = new Set<string>();
+    const curYear = String(new Date().getFullYear());
+    set.add(curYear);
+    set.add(String(Number(curYear) - 1));
+    for (const s of settlements) {
+      const yr = s.periodFrom?.slice(0, 4);
+      if (yr) set.add(yr);
+    }
+    return Array.from(set).sort().reverse();
+  }, [settlements]);
+
+  const hasActiveFilters =
+    Boolean(filterAccountId) ||
+    Boolean(filterRiderId) ||
+    filterSponsor !== "all" ||
+    filterYear !== "all" ||
+    filterMonth !== "all" ||
+    filterHalf !== "all";
+
+  const clearFilters = () => {
+    setFilterAccountId("");
+    setFilterRiderId("");
+    setFilterSponsor("all");
+    setFilterYear("all");
+    setFilterMonth("all");
+    setFilterHalf("all");
+  };
 
   // Excel Export
   const handleExportExcel = () => {
@@ -368,6 +429,11 @@ export default function ChefzSettlementsPage() {
         {
           header: "المندوب الفعلي",
           accessor: (s) => riderMap.get(s.riderProfileId)?.fullNameAr || "مندوب سابق",
+        },
+        {
+          header: "الكفيل",
+          accessor: (s) => s.sponsorNameAr || "—",
+          isText: true,
         },
         {
           header: "نوع الحساب",
@@ -488,7 +554,7 @@ export default function ChefzSettlementsPage() {
 
       {/* Filter Toolbar */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
           {/* Account Filter */}
           <div>
             <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">تصفية بالحساب</label>
@@ -529,6 +595,23 @@ export default function ChefzSettlementsPage() {
             />
           </div>
 
+          {/* Sponsor Filter */}
+          <div>
+            <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">تصفية بالكفيل</label>
+            <select
+              value={filterSponsor}
+              onChange={(e) => setFilterSponsor(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
+            >
+              <option value="all">جميع الكفلاء {availableSponsors.length > 0 ? `(${availableSponsors.length})` : ""}</option>
+              {availableSponsors.map((sp) => (
+                <option key={sp} value={sp}>
+                  {sp}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Year Filter */}
           <div>
             <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">السنة (محلي)</label>
@@ -538,8 +621,11 @@ export default function ChefzSettlementsPage() {
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
             >
               <option value="all">جميع السنوات</option>
-              <option value="2026">2026</option>
-              <option value="2025">2025</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -559,22 +645,36 @@ export default function ChefzSettlementsPage() {
               ))}
             </select>
           </div>
+
+          {/* Half Filter */}
+          <div>
+            <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">نصف الشهر</label>
+            <select
+              value={filterHalf}
+              onChange={(e) => setFilterHalf(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
+            >
+              <option value="all">كلا النصفيْن (كامل الشهر)</option>
+              <option value="1">النصف الأول (1 - 15)</option>
+              <option value="2">النصف الثاني (16 - نهاية الشهر)</option>
+            </select>
+          </div>
         </div>
 
         <div className="flex items-center justify-between text-xs text-[var(--muted)] border-t border-[var(--border)] pt-3">
           <span>
-            عدد التصفيات المعروضة: <strong className="text-[var(--foreground)]">{filteredSettlements.length}</strong>
+            عدد التصفيات المعروضة:{" "}
+            <strong className="text-[var(--foreground)]">{filteredSettlements.length}</strong>
+            {filteredSettlements.length !== settlements.length && (
+              <span className="font-mono mr-1">(من إجمالي {settlements.length})</span>
+            )}
           </span>
-          {(filterAccountId || filterRiderId || filterYear !== "all" || filterMonth !== "all") && (
+          {hasActiveFilters && (
             <button
-              onClick={() => {
-                setFilterAccountId("");
-                setFilterRiderId("");
-                setFilterYear("all");
-                setFilterMonth("all");
-              }}
-              className="text-[var(--brand)] hover:underline font-semibold"
+              onClick={clearFilters}
+              className="text-[var(--brand)] hover:underline font-semibold flex items-center gap-1"
             >
+              <X className="h-3.5 w-3.5" />
               إلغاء التصفية
             </button>
           )}
@@ -591,6 +691,7 @@ export default function ChefzSettlementsPage() {
                 <th className="px-4 py-3.5">المصدر</th>
                 <th className="px-4 py-3.5">الحساب</th>
                 <th className="px-4 py-3.5">المندوب الفعلي</th>
+                <th className="px-4 py-3.5">الكفيل</th>
                 <th className="px-4 py-3.5">النوع</th>
                 <th className="px-4 py-3.5">أيام التكليف</th>
                 <th className="px-4 py-3.5">بداية المحفظة</th>
@@ -604,19 +705,19 @@ export default function ChefzSettlementsPage() {
             <tbody className="divide-y divide-[var(--border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-sm text-[var(--muted)]">
+                  <td colSpan={13} className="py-12 text-center text-sm text-[var(--muted)]">
                     <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
                     جارٍ تحميل سجلات التصفيات...
                   </td>
                 </tr>
               ) : filteredSettlements.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-sm text-[var(--muted)]">
+                  <td colSpan={13} className="py-12 text-center text-sm text-[var(--muted)]">
                     لا توجد تصفيات مسجلة مطابقة للبحث.
                   </td>
                 </tr>
               ) : (
-                filteredSettlements.map((s) => {
+                paginatedSettlements.map((s) => {
                   const acc = baseAccountMap.get(s.accountId);
                   const rider = riderMap.get(s.riderProfileId);
                   const isOrdersSource = s.source === "Orders" || Boolean(s.importId);
@@ -675,6 +776,11 @@ export default function ChefzSettlementsPage() {
                             {rider.iqamaNo}
                           </div>
                         )}
+                      </td>
+
+                      {/* Sponsor */}
+                      <td className="px-4 py-3 text-xs text-[var(--foreground)]">
+                        {s.sponsorNameAr || "—"}
                       </td>
 
                       {/* Account Type */}
@@ -773,6 +879,80 @@ export default function ChefzSettlementsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-[var(--border)] bg-[var(--table-header-bg)] px-4 py-3 text-xs text-[var(--muted)]">
+          <div>
+            عرض {paginatedSettlements.length} من أصل {filteredSettlements.length} تصفية مطابقة
+            {filteredSettlements.length !== settlements.length && (
+              <span className="font-mono mr-1">
+                (من إجمالي {settlements.length} تصفية)
+              </span>
+            )}
+            {" "}— (الصفحة {page} من {totalPages})
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+              <span>عرض:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="rounded-lg border border-[var(--border)] bg-[var(--card-bg)] px-2 py-1 text-xs text-[var(--foreground)] focus:outline-hidden"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage(1)}
+                className="h-8 px-2 text-[11px]"
+                title="الصفحة الأولى"
+              >
+                الأولى
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="h-8 w-8 p-0"
+                title="الصفحة السابقة"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <span className="font-semibold text-[var(--foreground)] px-1">
+                {page} / {totalPages}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="h-8 w-8 p-0"
+                title="الصفحة التالية"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage(totalPages)}
+                className="h-8 px-2 text-[11px]"
+                title="الصفحة الأخيرة"
+              >
+                الأخيرة
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1115,6 +1295,14 @@ export default function ChefzSettlementsPage() {
                   {riderMap.get(selectedSettlement.riderProfileId)?.fullNameAr || "مندوب سابق"}
                 </span>
               </div>
+              {selectedSettlement.sponsorNameAr && (
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">الكفيل:</span>
+                  <span className="font-semibold text-[var(--foreground)]">
+                    {selectedSettlement.sponsorNameAr}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">فترة التصفية:</span>
                 <span className="font-mono text-[var(--foreground)]" dir="ltr">

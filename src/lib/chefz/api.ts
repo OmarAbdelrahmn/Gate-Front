@@ -257,6 +257,95 @@ export async function getChefzSettlements(params?: {
 }
 
 /**
+ * Fetch all Chefz settlements across all pages.
+ */
+export async function getAllChefzSettlements(params?: {
+  accountId?: string;
+  riderId?: string;
+  pageSize?: number;
+}): Promise<ChefzSettlement[]> {
+  const pageSize = params?.pageSize || 100;
+  const firstPage = await getChefzSettlements({
+    accountId: params?.accountId,
+    riderId: params?.riderId,
+    page: 1,
+    pageSize,
+  });
+  const items = firstPage?.items || [];
+  const totalCount = firstPage?.totalCount;
+
+  if (items.length === 0 || items.length < pageSize) {
+    return items;
+  }
+
+  if (typeof totalCount === "number" && items.length >= totalCount) {
+    return items;
+  }
+
+  const all = [...items];
+  const seenIds = new Set(items.map((x) => x.id).filter(Boolean));
+
+  if (typeof totalCount === "number" && totalCount > pageSize) {
+    const totalPages = Math.min(Math.ceil(totalCount / pageSize), 50);
+    const pagePromises: Promise<ChefzPage<ChefzSettlement>>[] = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(
+        getChefzSettlements({
+          accountId: params?.accountId,
+          riderId: params?.riderId,
+          page: p,
+          pageSize,
+        })
+      );
+    }
+    const otherPages = await Promise.allSettled(pagePromises);
+    for (const res of otherPages) {
+      if (res.status === "fulfilled" && res.value?.items) {
+        for (const item of res.value.items) {
+          if (!item?.id || !seenIds.has(item.id)) {
+            if (item?.id) seenIds.add(item.id);
+            all.push(item);
+          }
+        }
+      }
+    }
+    return all;
+  }
+
+  // Fallback sequential
+  let page = 2;
+  const maxPages = 50;
+  while (page <= maxPages) {
+    try {
+      const pageRes = await getChefzSettlements({
+        accountId: params?.accountId,
+        riderId: params?.riderId,
+        page,
+        pageSize,
+      });
+      const pageItems = pageRes?.items || [];
+      if (pageItems.length === 0) break;
+
+      let newCount = 0;
+      for (const item of pageItems) {
+        if (!item?.id || !seenIds.has(item.id)) {
+          if (item?.id) seenIds.add(item.id);
+          all.push(item);
+          newCount++;
+        }
+      }
+
+      if (newCount === 0 || pageItems.length < pageSize) break;
+      page++;
+    } catch {
+      break;
+    }
+  }
+
+  return all;
+}
+
+/**
  * Preview bulk order settlements from an Excel file (.xlsx).
  * Uses multipart FormData without extra JSON headers.
  */
