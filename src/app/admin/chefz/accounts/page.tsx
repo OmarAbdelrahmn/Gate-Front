@@ -1106,10 +1106,6 @@ export default function ChefzAccountsPage() {
     (employees || []).forEach((e) => {
       if (!e.id) return;
 
-      // Eligibility: must be Active in HR (matching TakeVehicleModal)
-      const statusStr = String(e.status || "").toLowerCase();
-      if (statusStr !== "active") return;
-
       const existingRiderId = (e as any).riderProfileId || e.rider?.id || null;
       if (isPersonSeen(existingRiderId, e.id, e.iqamaNo)) return;
 
