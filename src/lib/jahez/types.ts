@@ -12,6 +12,7 @@ import {
   ApprovalStatus,
   AdjustmentTarget,
   ImportKind,
+  CashboxHandoverStatus,
 } from "./constants";
 
 export * from "./constants";
@@ -269,6 +270,7 @@ export interface RiderPerson {
   iqamaNo: string | null;
   mobile: string | null;
   sponsorId: string | null;
+  sponsorNameAr?: string | null;
 }
 
 export interface MoneyMovement {
@@ -287,6 +289,10 @@ export interface MoneyMovement {
   reason: string;
   createdAtUtc: string;
   createdByUserId: string | null;
+  sponsorId?: string | null;
+  sponsorNameAr: string | null;
+  cashboxHandoverId: string | null;
+  isHandedToAccountant: boolean;
   userRider: RiderPerson | null;
   ownerRider: RiderPerson | null;
 }
@@ -297,6 +303,55 @@ export interface MoneyMovementsResponse {
   items: MoneyMovement[];
   page: number;
   pageSize: number;
+}
+
+export interface CashboxHandover {
+  id: string;
+  businessDate: string;
+  status: CashboxHandoverStatus;
+  requestedByUserId: string;
+  cashboxAmount: number;
+  petroAppAmount: number;
+  bankAmount: number;
+  movementCount: number;
+  reason: string;
+  accountantUserId: string | null;
+  confirmedAtUtc: string | null;
+  confirmationReason: string | null;
+  cancelledAtUtc: string | null;
+  cancellationReason: string | null;
+  createdAtUtc: string;
+  createdByUserId: string | null;
+  updatedAtUtc: string | null;
+  updatedByUserId: string | null;
+  rowVersion: string;
+  isDeleted: boolean;
+  deletedAtUtc: string | null;
+  deletedByUserId: string | null;
+  deletionReason: string | null;
+}
+
+export interface CashboxHandoverCreate {
+  businessDate: string;
+  reason: string;
+}
+
+export interface CashboxHandoverConfirm {
+  cashboxAmount: number;
+  petroAppAmount: number;
+  bankAmount: number;
+  reason: string;
+  rowVersion: string;
+}
+
+export interface CashboxHandoverCancel {
+  reason: string;
+  rowVersion: string;
+}
+
+export interface MoneyMovementDateRange {
+  fromDate?: string | null;
+  toDate?: string | null;
 }
 
 

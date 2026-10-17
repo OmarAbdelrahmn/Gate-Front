@@ -35,6 +35,10 @@ import type {
   RequestCreate,
   Statistics,
   TransferredDebt,
+  CashboxHandover,
+  CashboxHandoverCreate,
+  CashboxHandoverConfirm,
+  CashboxHandoverCancel,
 } from "./types";
 
 export * from "./constants";
@@ -490,12 +494,29 @@ export async function getJahezFunds(init?: CustomRequestInit): Promise<FundBalan
   });
 }
 
+export interface MoneyMovementsFilterParams {
+  fromDate?: string;
+  toDate?: string;
+  sponsorId?: string;
+  sponsorNameAr?: string;
+}
+
 export async function getJahezMoneyMovements(
   page = 1,
   pageSize = 50,
+  params?: MoneyMovementsFilterParams,
   init?: CustomRequestInit,
 ): Promise<MoneyMovementsResponse> {
-  return authFetch<MoneyMovementsResponse>(`${ROOT}/money-movements?${pageQuery(page, pageSize)}`, {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (params?.fromDate) query.set("fromDate", params.fromDate);
+  if (params?.toDate) query.set("toDate", params.toDate);
+  if (params?.sponsorId) query.set("sponsorId", params.sponsorId);
+  if (params?.sponsorNameAr) query.set("sponsorNameAr", params.sponsorNameAr);
+
+  return authFetch<MoneyMovementsResponse>(`${ROOT}/money-movements?${query.toString()}`, {
     ...init,
     method: "GET",
   });
@@ -517,6 +538,96 @@ export async function recordJahezFeeReceipt(
     body: JSON.stringify(data),
     notifySuccess: init?.notifySuccess ?? "تم تسجيل قبض رسوم فتح الحساب بنجاح",
   });
+}
+
+// ----------------------------------------------------------------------
+// 8. Cashbox Accountant Handovers
+// ----------------------------------------------------------------------
+
+export async function getJahezCashboxHandovers(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<CashboxHandover>> {
+  return authFetch<Page<CashboxHandover>>(
+    `${ROOT}/cashbox/handovers?${pageQuery(page, pageSize)}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+}
+
+export async function getJahezCashboxHandover(
+  id: string,
+  init?: CustomRequestInit,
+): Promise<CashboxHandover> {
+  return authFetch<CashboxHandover>(`${ROOT}/cashbox/handovers/${encodeURIComponent(id)}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+export async function submitJahezCashboxHandover(
+  data: CashboxHandoverCreate,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<CashboxHandover> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("cashbox-handover-submit");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<CashboxHandover>(`${ROOT}/cashbox/handovers`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم تسليم الأموال للمحاسب بنجاح (قيد التأكيد)",
+  });
+}
+
+export async function confirmJahezCashboxHandover(
+  id: string,
+  data: CashboxHandoverConfirm,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<CashboxHandover> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("cashbox-handover-confirm");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<CashboxHandover>(
+    `${ROOT}/cashbox/handovers/${encodeURIComponent(id)}/confirm`,
+    {
+      ...init,
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+      notifySuccess: init?.notifySuccess ?? "تم تأكيد ومطابقة استلام الأموال بنجاح",
+    },
+  );
+}
+
+export async function cancelJahezCashboxHandover(
+  id: string,
+  data: CashboxHandoverCancel,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<CashboxHandover> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("cashbox-handover-cancel");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<CashboxHandover>(
+    `${ROOT}/cashbox/handovers/${encodeURIComponent(id)}/cancel`,
+    {
+      ...init,
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+      notifySuccess: init?.notifySuccess ?? "تم إلغاء تسليم الأموال بنجاح",
+    },
+  );
 }
 
 export async function getJahezTransferredDebts(

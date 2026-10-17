@@ -73,6 +73,14 @@ export const ImportKind = {
 } as const;
 export type ImportKind = (typeof ImportKind)[keyof typeof ImportKind];
 
+export const CashboxHandoverStatus = {
+  Pending: 1,
+  Confirmed: 2,
+  Cancelled: 3,
+} as const;
+export type CashboxHandoverStatus =
+  (typeof CashboxHandoverStatus)[keyof typeof CashboxHandoverStatus];
+
 // Aliases for legacy component compatibility during migration
 export const JahezApprovalKind = ApprovalKind;
 export type JahezApprovalKind = ApprovalKind;
