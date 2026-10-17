@@ -377,7 +377,7 @@ export default function JahezOrderPerformancePage() {
               <BarChart3 className="h-4 w-4 text-purple-600" />
               إجمالي طلبات الأمس
             </span>
-            <Badge tone="purple">{statistics?.yesterday || "أمس"}</Badge>
+            <Badge tone="blue">{statistics?.yesterday || "أمس"}</Badge>
           </div>
           <div className="mt-2 text-2xl font-black text-purple-900 dark:text-purple-100 font-mono">
             {displayYesterdayOrders.toLocaleString()} <span className="text-sm font-normal text-purple-600">طلب</span>
@@ -449,7 +449,7 @@ export default function JahezOrderPerformancePage() {
               <Award className="h-4 w-4 text-indigo-600" />
               الأعلى إنجازاً أمس
             </span>
-            <Badge tone="indigo">Top Performer</Badge>
+            <Badge tone="blue">الأعلى أداءً</Badge>
           </div>
           <div className="mt-2 text-2xl font-black text-indigo-900 dark:text-indigo-100 font-mono">
             {topPerformer?.yesterdayOrders ?? 0} <span className="text-sm font-normal text-indigo-600">طلب</span>
