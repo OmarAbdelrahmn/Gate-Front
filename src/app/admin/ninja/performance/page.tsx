@@ -66,8 +66,8 @@ export default function NinjaPerformancePage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const canRead = can("platform_accounts.read");
-  const canImport = can("platform_accounts.update");
+  const canRead = can("ninja.read");
+  const canImport = can("ninja.performance.import");
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFrom = useMemo(() => {
@@ -335,6 +335,22 @@ export default function NinjaPerformancePage() {
       ],
     });
   };
+
+  if (!canRead) {
+    return (
+      <div className="flex h-96 flex-col items-center justify-center gap-3 text-center" dir={isEn ? "ltr" : "rtl"}>
+        <AlertTriangle className="h-12 w-12 text-amber-500" />
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+          {t("common.error") || "غير مصرح"}
+        </h2>
+        <p className="text-slate-500 max-w-md">
+          {isEn
+            ? "You do not have permission to view Ninja performance reports (ninja.read)."
+            : "ليس لديك الصلاحية الكافية لعرض تقارير أداء نينجا (ninja.read)."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" dir={isEn ? "ltr" : "rtl"}>

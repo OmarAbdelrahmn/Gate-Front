@@ -143,6 +143,15 @@ export const PERMISSIONS = [
   "chefz.settlements.create",
   "chefz.performance.import",
 
+  // Ninja Platform
+  "ninja.read",
+  "ninja.accounts.update",
+  "ninja.assignments.create",
+  "ninja.assignments.delete",
+  "ninja.credentials.rotate",
+  "ninja.performance.import",
+  "ninja.deductions.import",
+
   // Reporting
   "reports.read",
   "exports.create",

@@ -58,8 +58,8 @@ export default function NinjaSheetUpdatesPage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const canRead = can("platform_accounts.read");
-  const canUpdate = can("platform_accounts.update");
+  const canRead = can("ninja.read");
+  const canUpdate = can("ninja.accounts.update");
 
   // State: List of Uploads
   const [uploads, setUploads] = useState<NinjaAccountUpdateUploadResponse[]>([]);
@@ -359,6 +359,22 @@ export default function NinjaSheetUpdatesPage() {
     setCopiedHash(true);
     setTimeout(() => setCopiedHash(false), 2000);
   };
+
+  if (!canRead) {
+    return (
+      <div className="flex h-96 flex-col items-center justify-center gap-3 text-center" dir={isEn ? "ltr" : "rtl"}>
+        <AlertTriangle className="h-12 w-12 text-amber-500" />
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+          {t("common.error") || "غير مصرح"}
+        </h2>
+        <p className="text-slate-500 max-w-md">
+          {isEn
+            ? "You do not have permission to view Ninja sheet updates (ninja.read)."
+            : "ليس لديك الصلاحية الكافية لعرض وفحص شيتات نينجا (ninja.read)."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" dir={isEn ? "ltr" : "rtl"}>

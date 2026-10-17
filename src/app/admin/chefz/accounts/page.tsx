@@ -38,8 +38,16 @@ import {
   type CredentialHistoryResponse,
   type PlatformResponse,
 } from "@/lib/platforms/api";
-import { listOperatingCities, listSponsors, listRiders, type OperatingCity, type Sponsor } from "@/lib/workforce/api";
-import type { Rider } from "@/lib/workforce/types";
+import {
+  listOperatingCities,
+  listSponsors,
+  listRiders,
+  listEmployees,
+  ensureEmployeeVehicleProfile,
+  type OperatingCity,
+  type Sponsor,
+} from "@/lib/workforce/api";
+import type { Rider, Employee } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DateInput } from "@/components/ui/DateInput";
@@ -113,6 +121,7 @@ export default function ChefzAccountsPage() {
   const [cities, setCities] = useState<OperatingCity[]>([]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [reminders, setReminders] = useState<ChefzAccountReminder[]>([]);
   const [chefzSummary, setChefzSummary] = useState<ChefzAccountCounts | null>(null);
   const [chefzSponsors, setChefzSponsors] = useState<ChefzSponsorAccountCounts[]>([]);
@@ -161,7 +170,11 @@ export default function ChefzAccountsPage() {
 
   // 3. Assignment Modals (Assign / Release / History)
   const [assigningAccount, setAssigningAccount] = useState<AccountResponse | null>(null);
+  const [selectedPersonKey, setSelectedPersonKey] = useState("");
   const [selectedRiderId, setSelectedRiderId] = useState("");
+  const [isEnsuringProfile, setIsEnsuringProfile] = useState(false);
+  const [profileEnsureError, setProfileEnsureError] = useState<string | null>(null);
+  const [profileEnsureSuccess, setProfileEnsureSuccess] = useState(false);
   const [assignEffectiveFrom, setAssignEffectiveFrom] = useState(new Date().toISOString().split("T")[0]);
   const [assignReason, setAssignReason] = useState("تسليم الحساب للمندوب");
   const [assignSubmitting, setAssignSubmitting] = useState(false);
@@ -208,7 +221,7 @@ export default function ChefzAccountsPage() {
       }
 
       // 2. Parallel fetch base accounts, chefz accounts with summary, metadata, and reminders
-      const [baseAccounts, chefzData, cityList, sponsorList, riderList, reminderList] = await Promise.all([
+      const [baseAccounts, chefzData, cityList, sponsorList, riderList, employeeList, reminderList] = await Promise.all([
         getAllPlatformAccounts({ platformId: plat.id, includeArchived: false }),
         getAllChefzAccountsWithSummary().catch(() => ({
           accounts: [] as ChefzAccount[],
@@ -219,12 +232,14 @@ export default function ChefzAccountsPage() {
         listOperatingCities().catch(() => []),
         listSponsors().catch(() => []),
         listRiders().catch(() => []),
+        listEmployees().catch(() => []),
         getAllChefzReminders().catch(() => [] as ChefzAccountReminder[]),
       ]);
 
       setCities(cityList);
       setSponsors(sponsorList);
       setRiders(riderList);
+      setEmployees(employeeList);
       setReminders(reminderList);
       setChefzSummary(chefzData.summary);
       setChefzSponsors(chefzData.sponsors || []);
@@ -998,6 +1013,141 @@ export default function ChefzAccountsPage() {
     return map;
   }, [accounts]);
 
+  // Combined Persons (Employees + Riders) for Account Assignment
+  interface AssignPersonOption {
+    key: string;
+    riderProfileId: string | null;
+    employeeId: string | null;
+    name: string;
+    iqamaNo: string | null;
+    isEmployee: boolean;
+    typeLabel: string;
+    hasActiveAccountsCount: number;
+  }
+
+  const { assignPersonOptions, personMetaMap } = useMemo(() => {
+    const options: { value: string; label: string; sublabel?: string; keywords?: string }[] = [];
+    const metaMap = new Map<string, AssignPersonOption>();
+
+    const seenRiderProfileIds = new Set<string>();
+    const seenEmployeeIds = new Set<string>();
+    const seenIqamaNos = new Set<string>();
+
+    const isPersonSeen = (riderId?: string | null, empId?: string | null, iqama?: string | null) => {
+      if (riderId && seenRiderProfileIds.has(riderId)) return true;
+      if (empId && seenEmployeeIds.has(empId)) return true;
+      const cleanIqama = iqama?.trim();
+      if (cleanIqama && seenIqamaNos.has(cleanIqama)) return true;
+      return false;
+    };
+
+    const markPersonSeen = (riderId?: string | null, empId?: string | null, iqama?: string | null) => {
+      if (riderId) seenRiderProfileIds.add(riderId);
+      if (empId) seenEmployeeIds.add(empId);
+      const cleanIqama = iqama?.trim();
+      if (cleanIqama) seenIqamaNos.add(cleanIqama);
+    };
+
+    const formatStatus = (s?: string | null) => {
+      if (!s) return "";
+      const lower = s.toLowerCase();
+      if (lower === "active") return "نشط";
+      if (lower === "inactive") return "غير نشط";
+      if (lower === "suspended") return "موقوف";
+      if (lower === "terminated") return "منتهي الخدمة";
+      return s;
+    };
+
+    // 1. Operational Riders (from listRiders)
+    (riders || []).forEach((r) => {
+      if (!r.id) return;
+      if (isPersonSeen(r.id, r.employeeId, r.iqamaNo)) return;
+
+      const key = `rider_${r.id}`;
+      const count = riderAccountsSummaryMap.get(r.id) || 0;
+      let countBadge = "";
+      if (count === 1) {
+        countBadge = " [لديه حساب نشط ⚠️]";
+      } else if (count >= 2) {
+        countBadge = ` [لديه ${count} حسابات نشطة ⛔ مكتمل]`;
+      }
+
+      const name = r.fullNameAr || "مندوب";
+      const iqamaStr = r.iqamaNo ? ` (${r.iqamaNo})` : "";
+      const statusLabel = formatStatus(r.status);
+      const statusSuffix = statusLabel && statusLabel !== "نشط" ? ` • ${statusLabel}` : "";
+
+      options.push({
+        value: key,
+        label: `${name}${iqamaStr} — مندوب${countBadge}`,
+        sublabel: `مندوب ميداني${r.iqamaNo ? ` • هوية: ${r.iqamaNo}` : ""}${statusSuffix}`,
+        keywords: `${name} ${r.iqamaNo || ""} مندوب ${count >= 2 ? "مكتمل ممتلئ ممنوع" : count === 1 ? "حساب واحد تنبيه" : "متاح"}`,
+      });
+
+      metaMap.set(key, {
+        key,
+        riderProfileId: r.id,
+        employeeId: r.employeeId || null,
+        name,
+        iqamaNo: r.iqamaNo || null,
+        isEmployee: false,
+        typeLabel: "مندوب",
+        hasActiveAccountsCount: count,
+      });
+
+      markPersonSeen(r.id, r.employeeId, r.iqamaNo);
+    });
+
+    // 2. Employees (from listEmployees)
+    (employees || []).forEach((e) => {
+      if (!e.id) return;
+
+      const existingRiderId = (e as any).riderProfileId || e.rider?.id || null;
+      if (isPersonSeen(existingRiderId, e.id, e.iqamaNo)) return;
+
+      const key = `emp_${e.id}`;
+      const isAdministrative = e.isEmployee !== false;
+      const typeTag = isAdministrative ? "موظف إداري" : "موظف";
+      const count = existingRiderId ? riderAccountsSummaryMap.get(existingRiderId) || 0 : 0;
+
+      let countBadge = "";
+      if (count === 1) {
+        countBadge = " [لديه حساب نشط ⚠️]";
+      } else if (count >= 2) {
+        countBadge = ` [لديه ${count} حسابات نشطة ⛔ مكتمل]`;
+      } else if (!existingRiderId) {
+        countBadge = " [سيتم إنشاء ملف مندوب]";
+      }
+
+      const name = e.fullNameAr || e.fullNameEn || "موظف";
+      const iqamaStr = e.iqamaNo ? ` (${e.iqamaNo})` : "";
+      const statusLabel = formatStatus(e.status);
+      const statusSuffix = statusLabel && statusLabel !== "نشط" ? ` • ${statusLabel}` : "";
+
+      options.push({
+        value: key,
+        label: `${name}${iqamaStr} — ${typeTag}${countBadge}`,
+        sublabel: `${typeTag}${e.iqamaNo ? ` • هوية: ${e.iqamaNo}` : ""}${existingRiderId ? "" : " • إنشاء ملف تلقائي"}${statusSuffix}`,
+        keywords: `${name} ${e.fullNameEn || ""} ${e.iqamaNo || ""} ${typeTag} موظف ${existingRiderId ? "" : "جديد ملف"}`,
+      });
+
+      metaMap.set(key, {
+        key,
+        riderProfileId: existingRiderId,
+        employeeId: e.id,
+        name,
+        iqamaNo: e.iqamaNo || null,
+        isEmployee: true,
+        typeLabel: typeTag,
+        hasActiveAccountsCount: count,
+      });
+
+      markPersonSeen(existingRiderId, e.id, e.iqamaNo);
+    });
+
+    return { assignPersonOptions: options, personMetaMap: metaMap };
+  }, [riders, employees, riderAccountsSummaryMap]);
+
   // Track active accounts for the selected rider in the assign modal
   useEffect(() => {
     if (!selectedRiderId) {
@@ -1049,7 +1199,11 @@ export default function ChefzAccountsPage() {
 
   const openAssignModal = (base: AccountResponse) => {
     setAssigningAccount(base);
+    setSelectedPersonKey("");
     setSelectedRiderId("");
+    setIsEnsuringProfile(false);
+    setProfileEnsureError(null);
+    setProfileEnsureSuccess(false);
     setSelectedRiderActiveAccounts([]);
     setCheckingRiderAccounts(false);
     setAssignEffectiveFrom(new Date().toISOString().split("T")[0]);
@@ -1058,9 +1212,116 @@ export default function ChefzAccountsPage() {
     setAssignLimitDetails(null);
   };
 
+  const handlePersonChange = async (key: string) => {
+    setSelectedPersonKey(key);
+    setAssignError(null);
+    setAssignLimitDetails(null);
+    setProfileEnsureError(null);
+    setProfileEnsureSuccess(false);
+
+    if (!key) {
+      setSelectedRiderId("");
+      setIsEnsuringProfile(false);
+      return;
+    }
+
+    const person = personMetaMap.get(key);
+    if (!person) {
+      setSelectedRiderId("");
+      setIsEnsuringProfile(false);
+      return;
+    }
+
+    // 1. If person already has an operational rider profile
+    if (person.riderProfileId) {
+      setSelectedRiderId(person.riderProfileId);
+      setIsEnsuringProfile(false);
+      return;
+    }
+
+    // 2. If person is an employee without a rider profile -> create minimal rider profile!
+    if (person.employeeId) {
+      setSelectedRiderId("");
+      setIsEnsuringProfile(true);
+      try {
+        const res = await ensureEmployeeVehicleProfile(person.employeeId);
+        if (res?.riderProfileId) {
+          const newRiderProfileId = res.riderProfileId;
+          person.riderProfileId = newRiderProfileId;
+          // Update in local state so subsequent selections remember it
+          setEmployees((prev) =>
+            prev.map((emp) =>
+              emp.id === person.employeeId ? { ...emp, riderProfileId: newRiderProfileId } : emp
+            )
+          );
+          setSelectedRiderId(newRiderProfileId);
+          setProfileEnsureSuccess(true);
+          toast.success(
+            "تم إنشاء ملف المندوب",
+            `تم إنشاء ملف المندوب بالحد الأدنى للموظف (${person.name}) بنجاح. يمكنك الآن تعيين الحساب.`
+          );
+        } else {
+          setProfileEnsureError("لم يُرجع النظام معرّف ملف المندوب (Rider Profile ID).");
+          toast.error("خطأ", "تعذر استلام معرف ملف المندوب للموظف.");
+        }
+      } catch (err: unknown) {
+        const e = err as { details?: { detail?: string; message?: string }; message?: string };
+        const msg =
+          e?.details?.detail || e?.details?.message || e?.message || "فشل إنشاء ملف المندوب للموظف بالحد الأدنى من البيانات.";
+        setProfileEnsureError(msg);
+        toast.error("فشل إنشاء ملف المندوب", msg);
+      } finally {
+        setIsEnsuringProfile(false);
+      }
+    }
+  };
+
   const handleAssignRider = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!assigningAccount || !selectedRiderId) return;
+    if (!assigningAccount || !selectedPersonKey) return;
+
+    if (isEnsuringProfile) {
+      toast.error("يرجى الانتظار", "جارٍ إنشاء ملف المندوب للموظف بالحد الأدنى من البيانات...");
+      return;
+    }
+
+    const person = personMetaMap.get(selectedPersonKey);
+    let targetRiderProfileId = selectedRiderId || person?.riderProfileId;
+
+    // Safety fallback: if riderProfileId is still missing for an employee, attempt creation now
+    if (!targetRiderProfileId && person?.employeeId) {
+      setIsEnsuringProfile(true);
+      setProfileEnsureError(null);
+      try {
+        const res = await ensureEmployeeVehicleProfile(person.employeeId);
+        if (res?.riderProfileId) {
+          targetRiderProfileId = res.riderProfileId;
+          person.riderProfileId = targetRiderProfileId;
+          setEmployees((prev) =>
+            prev.map((emp) =>
+              emp.id === person.employeeId ? { ...emp, riderProfileId: res.riderProfileId } : emp
+            )
+          );
+          setSelectedRiderId(targetRiderProfileId);
+        } else {
+          setProfileEnsureError("تعذر إنشاء ملف المندوب للموظف.");
+          setIsEnsuringProfile(false);
+          return;
+        }
+      } catch (err: unknown) {
+        const e = err as { details?: { detail?: string }; message?: string };
+        setProfileEnsureError(e?.details?.detail || e?.message || "فشل إنشاء ملف المندوب للموظف.");
+        setIsEnsuringProfile(false);
+        return;
+      } finally {
+        setIsEnsuringProfile(false);
+      }
+    }
+
+    if (!targetRiderProfileId) {
+      toast.error("تنبيه", "يجب توفر ملف مندوب صالح لإتمام تعيين الحساب.");
+      return;
+    }
 
     // Hard stop if rider already has 2 active accounts
     if (selectedRiderActiveAccounts.length >= 2) {
@@ -1076,7 +1337,7 @@ export default function ChefzAccountsPage() {
     setAssignLimitDetails(null);
     try {
       await assignPlatformAccount(assigningAccount.id, {
-        actualRiderProfileId: selectedRiderId,
+        actualRiderProfileId: targetRiderProfileId,
         effectiveFrom: assignEffectiveFrom,
         reason: assignReason.trim() || null,
       });
@@ -2173,7 +2434,7 @@ export default function ChefzAccountsPage() {
                             </button>
                           )}
 
-                          {can("platform_assignments.delete") && currentRider && (
+                          {currentRider && (
                             <button
                               onClick={() => {
                                 setReleasingAccount(base);
@@ -2610,39 +2871,71 @@ export default function ChefzAccountsPage() {
             )}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[var(--foreground)]">
-                اختر المندوب الفعلي <span className="text-red-500">*</span>
+                اختر المندوب أو الموظف المكلف بالاستلام <span className="text-red-500">*</span>
               </label>
               <SearchableSelect
-                value={selectedRiderId}
-                onChange={(val) => {
-                  setSelectedRiderId(val);
-                  setAssignError(null);
-                  setAssignLimitDetails(null);
-                }}
-                options={riders.map((r) => {
-                  const count = riderAccountsSummaryMap.get(r.id) || 0;
-                  let suffix = "";
-                  if (count === 1) {
-                    suffix = " [لديه حساب نشط ⚠️]";
-                  } else if (count >= 2) {
-                    suffix = ` [لديه ${count} حسابات نشطة ⛔ مكتمل]`;
-                  }
-                  return {
-                    value: r.id,
-                    label: `${r.fullNameAr} (${r.iqamaNo || "بدون إقامة"})${suffix ? ` — ${suffix}` : ""}`,
-                    keywords: `${r.fullNameAr} ${r.iqamaNo || ""} ${count >= 2 ? "مكتمل ممتلئ ممنوع" : count === 1 ? "حساب واحد تنبيه" : "متاح"}`,
-                  };
-                })}
-                placeholder="ابحث بالاسم أو رقم الإقامة..."
+                value={selectedPersonKey}
+                onChange={handlePersonChange}
+                options={assignPersonOptions}
+                placeholder="ابحث باسم الموظف أو المندوب أو رقم الهوية..."
                 required
               />
             </div>
+
+            {/* Profile Creation in Progress */}
+            {isEnsuringProfile && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50/90 dark:border-blue-900/40 dark:bg-blue-950/40 p-3 text-xs text-blue-900 dark:text-blue-200">
+                <RefreshCw className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400 shrink-0" />
+                <div>
+                  <p className="font-bold">الموظف ليس لديه ملف مندوب مسجل</p>
+                  <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                    جارٍ إنشاء ملف مندوب جديد بالحد الأدنى من البيانات تلقائياً...
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Profile Creation Success */}
+            {profileEnsureSuccess && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-800/40 dark:bg-emerald-950/30 p-3 text-xs text-emerald-900 dark:text-emerald-200">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div>
+                  <p className="font-bold">تم إنشاء ملف المندوب بنجاح ✓</p>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                    تم إنشاء وتجهيز ملف المندوب بالحد الأدنى من البيانات للموظف. يمكنك الآن إتمام تعيين الحساب.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Profile Creation Error */}
+            {profileEnsureError && (
+              <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold">فشل إنشاء ملف المندوب للموظف</p>
+                    <p className="text-[11px] text-red-700 dark:text-red-300">{profileEnsureError}</p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handlePersonChange(selectedPersonKey)}
+                  className="w-full text-xs"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  إعادة المحاولة
+                </Button>
+              </div>
+            )}
 
             {/* Assessment of selected rider's active accounts */}
             {selectedRiderId && checkingRiderAccounts && (
               <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5 text-xs text-[var(--muted)]">
                 <RefreshCw className="h-3.5 w-3.5 animate-spin text-[var(--brand)]" />
-                <span>جارٍ فحص الحسابات النشطة المسندة للمندوب...</span>
+                <span>جارٍ فحص الحسابات النشطة المسندة...</span>
               </div>
             )}
 
@@ -2653,10 +2946,10 @@ export default function ChefzAccountsPage() {
                   <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
                   <div className="space-y-1">
                     <p className="font-bold text-amber-950 dark:text-amber-100">
-                      تنبيه للمشرف: هذا المندوب يمتلك حساباً نشطاً مسبقاً (حساب واحد)
+                      تنبيه للمشرف: يمتلك حساباً نشطاً مسبقاً (حساب واحد)
                     </p>
                     <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                      المندوب <strong>{riders.find((r) => r.id === selectedRiderId)?.fullNameAr}</strong> مرتبط حالياً بحساب نشط. عند إتمام هذا التعيين، سيصبح لديه <strong>حسابان نشطان</strong> وهو <strong>الحد الأقصى المسموح به</strong> نظامياً في شيفز.
+                      المندوب/الموظف <strong>{personMetaMap.get(selectedPersonKey)?.name || "المكلف"}</strong> مرتبط حالياً بحساب نشط. عند إتمام هذا التعيين، سيصبح لديه <strong>حسابان نشطان</strong> وهو <strong>الحد الأقصى المسموح به</strong> نظامياً في شيفز.
                     </p>
                   </div>
                 </div>
@@ -2684,10 +2977,10 @@ export default function ChefzAccountsPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="font-black text-sm text-red-700 dark:text-red-300">
-                      تم إيقاف العملية: لا يمكن تعيين هذا المندوب (الحد الأقصى مكتمل)
+                      تم إيقاف العملية: لا يمكن التعيين (الحد الأقصى مكتمل)
                     </p>
                     <p className="text-[11px] leading-relaxed text-red-800 dark:text-red-300">
-                      المندوب <strong>{riders.find((r) => r.id === selectedRiderId)?.fullNameAr}</strong> يمتلك بالفعل <strong>{selectedRiderActiveAccounts.length} حسابات نشطة</strong> في النظام. يُمنع منعاً باتاً إضافة حساب ثالث للمندوب.
+                      المندوب/الموظف <strong>{personMetaMap.get(selectedPersonKey)?.name || "المكلف"}</strong> يمتلك بالفعل <strong>{selectedRiderActiveAccounts.length} حسابات نشطة</strong> في النظام. يُمنع منعاً باتاً إضافة حساب ثالث للمندوب.
                     </p>
                   </div>
                 </div>
@@ -2719,7 +3012,9 @@ export default function ChefzAccountsPage() {
             {selectedRiderId && !checkingRiderAccounts && selectedRiderActiveAccounts.length === 0 && (
               <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 px-3 py-1.5 rounded-lg">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                <span>المندوب لا يمتلك أي حساب نشط حالياً (متاح للتعيين كحساب أول).</span>
+                <span>
+                  {personMetaMap.get(selectedPersonKey)?.isEmployee ? "الموظف" : "المندوب"} لا يمتلك أي حساب نشط حالياً (متاح للتعيين كحساب أول).
+                </span>
               </div>
             )}
 
@@ -2759,6 +3054,8 @@ export default function ChefzAccountsPage() {
                 type="submit"
                 disabled={
                   assignSubmitting ||
+                  !selectedPersonKey ||
+                  isEnsuringProfile ||
                   !selectedRiderId ||
                   selectedRiderActiveAccounts.length >= 2 ||
                   checkingRiderAccounts
@@ -2768,11 +3065,15 @@ export default function ChefzAccountsPage() {
                     ? "bg-red-600/70 text-white cursor-not-allowed opacity-60"
                     : selectedRiderActiveAccounts.length === 1
                     ? "bg-amber-600 text-white hover:bg-amber-700"
+                    : isEnsuringProfile
+                    ? "bg-blue-600/70 text-white cursor-wait opacity-80"
                     : "bg-emerald-600 text-white hover:bg-emerald-700"
                 }
               >
                 {assignSubmitting ? (
                   "جارٍ التعيين..."
+                ) : isEnsuringProfile ? (
+                  "جارٍ إنشاء ملف المندوب..."
                 ) : checkingRiderAccounts ? (
                   "جارٍ التحقق..."
                 ) : selectedRiderActiveAccounts.length >= 2 ? (

@@ -364,8 +364,10 @@ export const navigation: NavItem[] = [
     icon: Zap,
     roles: ["admin", "manager", "member", "accountant"],
     permissionsAny: [
-      "platform_accounts.read",
-      "platform_accounts.update",
+      "ninja.read",
+      "ninja.accounts.update",
+      "ninja.performance.import",
+      "ninja.deductions.import",
     ],
     children: [
       {
@@ -374,7 +376,7 @@ export const navigation: NavItem[] = [
         href: "/admin/ninja/accounts",
         icon: Server,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
+        permissionsAny: ["ninja.read", "ninja.accounts.update"],
       },
       {
         label: "فحص ومراجعة الشيتات",
@@ -382,7 +384,7 @@ export const navigation: NavItem[] = [
         href: "/admin/ninja/sheet-updates",
         icon: FileSpreadsheet,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
+        permissionsAny: ["ninja.read", "ninja.accounts.update"],
       },
       {
         label: "الأداء والتقارير",
@@ -390,7 +392,7 @@ export const navigation: NavItem[] = [
         href: "/admin/ninja/performance",
         icon: BarChart3,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
+        permissionsAny: ["ninja.read", "ninja.performance.import"],
       },
       {
         label: "الخصومات اليومية",
@@ -398,7 +400,7 @@ export const navigation: NavItem[] = [
         href: "/admin/ninja/deductions",
         icon: BadgeDollarSign,
         roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
+        permissionsAny: ["ninja.read", "ninja.deductions.import"],
       },
     ],
   },

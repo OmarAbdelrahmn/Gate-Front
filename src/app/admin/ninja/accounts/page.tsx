@@ -77,12 +77,12 @@ export default function NinjaAccountsPage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  // Permissions
-  const canRead = can("platform_accounts.read");
-  const canUpdate = can("platform_accounts.update");
-  const canAssign = can("platform_assignments.create") && canUpdate;
-  const canReturn = can("platform_assignments.delete") && canUpdate;
-  const canRotatePassword = can("platform_credentials.rotate");
+  // Permissions (Dedicated Ninja permission keys)
+  const canRead = can("ninja.read");
+  const canUpdate = can("ninja.accounts.update");
+  const canAssign = can("ninja.assignments.create") && canUpdate;
+  const canReturn = can("ninja.assignments.delete") && canUpdate;
+  const canRotatePassword = can("ninja.credentials.rotate");
   const canCreateAccount = can("platform_accounts.create");
 
   // Core Data States
@@ -351,6 +351,10 @@ export default function NinjaAccountsPage() {
       toast.error("تنبيه", "يرجى إدخال رقم هاتف صالح (7 خانات على الأقل).");
       return;
     }
+    if (assignPassword.trim() && !canRotatePassword) {
+      toast.error("غير مصرح", "إدخال كلمة مرور جديدة يتطلب توفر صلاحية تدوير كلمات المرور (ninja.credentials.rotate).");
+      return;
+    }
 
     setAssignSubmitting(true);
     try {
@@ -431,6 +435,10 @@ export default function NinjaAccountsPage() {
       );
       return;
     }
+    if (returnPassword.trim() && !canRotatePassword) {
+      toast.error("غير مصرح", "إدخال كلمة مرور جديدة يتطلب توفر صلاحية تدوير كلمات المرور (ninja.credentials.rotate).");
+      return;
+    }
 
     if (!releasingAccount.assignmentRowVersion) {
       toast.error("خطأ", "رمز تزامن التعيين مفقود. يرجى تحديث بيانات الحساب والمحاولة ثانية.");
@@ -504,6 +512,10 @@ export default function NinjaAccountsPage() {
     }
     if (!credReason.trim()) {
       toast.error("تنبيه", "يرجى ذكر سبب التحديث.");
+      return;
+    }
+    if (trimmedPass && !canRotatePassword) {
+      toast.error("غير مصرح", "تحديث أو إدخال كلمة مرور جديدة يتطلب صلاحية تدوير كلمات المرور (ninja.credentials.rotate).");
       return;
     }
 
@@ -696,6 +708,22 @@ export default function NinjaAccountsPage() {
       ],
     });
   };
+
+  if (!canRead) {
+    return (
+      <div className="flex h-96 flex-col items-center justify-center gap-3 text-center" dir={isEn ? "ltr" : "rtl"}>
+        <AlertTriangle className="h-12 w-12 text-amber-500" />
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+          {t("common.error") || "غير مصرح"}
+        </h2>
+        <p className="text-slate-500 max-w-md">
+          {isEn
+            ? "You do not have permission to view Ninja accounts (ninja.read)."
+            : "ليس لديك الصلاحية الكافية لعرض حسابات وعمليات نينجا (ninja.read)."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" dir={isEn ? "ltr" : "rtl"}>
