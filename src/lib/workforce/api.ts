@@ -289,3 +289,23 @@ export function ensureEmployeeVehicleProfile(employeeId: string) {
     { method: "PUT" }
   );
 }
+
+/**
+ * Ensures an employee has a rider profile (used across vehicle take, fuel cards, and platform assignments).
+ * First checks existing via GET /api/employees/{id}/vehicle-profile; if missing, calls PUT /api/employees/{id}/vehicle-profile.
+ */
+export async function resolveEmployeeRiderProfile(employeeId: string): Promise<string | null> {
+  try {
+    let profile = await getEmployeeVehicleProfile(employeeId).catch(() => null);
+    if (!profile?.exists || !profile?.riderProfileId) {
+      profile = await ensureEmployeeVehicleProfile(employeeId).catch((err) => {
+        console.warn("resolveEmployeeRiderProfile - PUT failed:", err);
+        return null;
+      });
+    }
+    return profile?.riderProfileId || null;
+  } catch (err) {
+    console.warn("resolveEmployeeRiderProfile error:", err);
+    return null;
+  }
+}

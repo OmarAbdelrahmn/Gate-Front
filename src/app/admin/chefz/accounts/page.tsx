@@ -1,7 +1,7 @@
 // src/app/admin/chefz/accounts/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -43,7 +43,9 @@ import {
   listSponsors,
   listRiders,
   listEmployees,
+  getEmployeeVehicleProfile,
   ensureEmployeeVehicleProfile,
+  resolveEmployeeRiderProfile,
   type OperatingCity,
   type Sponsor,
 } from "@/lib/workforce/api";
@@ -172,9 +174,11 @@ export default function ChefzAccountsPage() {
   const [assigningAccount, setAssigningAccount] = useState<AccountResponse | null>(null);
   const [selectedPersonKey, setSelectedPersonKey] = useState("");
   const [selectedRiderId, setSelectedRiderId] = useState("");
+  const backgroundProfilePromiseRef = useRef<Promise<string | null> | null>(null);
   const [isEnsuringProfile, setIsEnsuringProfile] = useState(false);
   const [profileEnsureError, setProfileEnsureError] = useState<string | null>(null);
   const [profileEnsureSuccess, setProfileEnsureSuccess] = useState(false);
+  const [profileReadyNotice, setProfileReadyNotice] = useState<string | null>(null);
   const [assignEffectiveFrom, setAssignEffectiveFrom] = useState(new Date().toISOString().split("T")[0]);
   const [assignReason, setAssignReason] = useState("تسليم الحساب للمندوب");
   const [assignSubmitting, setAssignSubmitting] = useState(false);
@@ -1102,6 +1106,10 @@ export default function ChefzAccountsPage() {
     (employees || []).forEach((e) => {
       if (!e.id) return;
 
+      // Eligibility: must be Active in HR (matching TakeVehicleModal)
+      const statusStr = String(e.status || "").toLowerCase();
+      if (statusStr !== "active") return;
+
       const existingRiderId = (e as any).riderProfileId || e.rider?.id || null;
       if (isPersonSeen(existingRiderId, e.id, e.iqamaNo)) return;
 
@@ -1201,9 +1209,11 @@ export default function ChefzAccountsPage() {
     setAssigningAccount(base);
     setSelectedPersonKey("");
     setSelectedRiderId("");
+    backgroundProfilePromiseRef.current = null;
     setIsEnsuringProfile(false);
     setProfileEnsureError(null);
     setProfileEnsureSuccess(false);
+    setProfileReadyNotice(null);
     setSelectedRiderActiveAccounts([]);
     setCheckingRiderAccounts(false);
     setAssignEffectiveFrom(new Date().toISOString().split("T")[0]);
@@ -1212,15 +1222,17 @@ export default function ChefzAccountsPage() {
     setAssignLimitDetails(null);
   };
 
-  const handlePersonChange = async (key: string) => {
+  const handlePersonChange = (key: string) => {
     setSelectedPersonKey(key);
     setAssignError(null);
     setAssignLimitDetails(null);
     setProfileEnsureError(null);
     setProfileEnsureSuccess(false);
+    setProfileReadyNotice(null);
 
     if (!key) {
       setSelectedRiderId("");
+      backgroundProfilePromiseRef.current = null;
       setIsEnsuringProfile(false);
       return;
     }
@@ -1228,51 +1240,68 @@ export default function ChefzAccountsPage() {
     const person = personMetaMap.get(key);
     if (!person) {
       setSelectedRiderId("");
+      backgroundProfilePromiseRef.current = null;
       setIsEnsuringProfile(false);
       return;
     }
 
-    // 1. If person already has an operational rider profile
+    // 1. If person already has an operational rider profile (or already resolved)
     if (person.riderProfileId) {
+      backgroundProfilePromiseRef.current = Promise.resolve(person.riderProfileId);
       setSelectedRiderId(person.riderProfileId);
       setIsEnsuringProfile(false);
+      setProfileReadyNotice(null);
       return;
     }
 
-    // 2. If person is an employee without a rider profile -> create minimal rider profile!
+    // 2. If person is an employee without a rider profile, ensure it immediately in the background! (matching TakeVehicleModal)
     if (person.employeeId) {
-      setSelectedRiderId("");
       setIsEnsuringProfile(true);
-      try {
-        const res = await ensureEmployeeVehicleProfile(person.employeeId);
-        if (res?.riderProfileId) {
-          const newRiderProfileId = res.riderProfileId;
-          person.riderProfileId = newRiderProfileId;
-          // Update in local state so subsequent selections remember it
-          setEmployees((prev) =>
-            prev.map((emp) =>
-              emp.id === person.employeeId ? { ...emp, riderProfileId: newRiderProfileId } : emp
-            )
-          );
-          setSelectedRiderId(newRiderProfileId);
-          setProfileEnsureSuccess(true);
-          toast.success(
-            "تم إنشاء ملف المندوب",
-            `تم إنشاء ملف المندوب بالحد الأدنى للموظف (${person.name}) بنجاح. يمكنك الآن تعيين الحساب.`
-          );
-        } else {
-          setProfileEnsureError("لم يُرجع النظام معرّف ملف المندوب (Rider Profile ID).");
-          toast.error("خطأ", "تعذر استلام معرف ملف المندوب للموظف.");
+      setProfileReadyNotice(null);
+      const bgPromise = (async () => {
+        try {
+          // 1. GET /api/employees/{employeeId}/vehicle-profile to check existing
+          let profile = await getEmployeeVehicleProfile(person.employeeId!).catch(() => null);
+
+          // 2. If null or !exists, call PUT to create minimal profile in the background
+          if (!profile?.exists || !profile?.riderProfileId) {
+            profile = await ensureEmployeeVehicleProfile(person.employeeId!).catch((err) => {
+              console.warn("Background vehicle-profile creation failed:", err);
+              return null;
+            });
+          }
+
+          if (profile?.riderProfileId) {
+            const newRiderProfileId = profile.riderProfileId;
+            person.riderProfileId = newRiderProfileId;
+            // Update in local state so subsequent selections remember it
+            setEmployees((prev) =>
+              prev.map((emp) =>
+                emp.id === person.employeeId ? { ...emp, riderProfileId: newRiderProfileId } : emp
+              )
+            );
+            setSelectedRiderId(newRiderProfileId);
+            setProfileEnsureSuccess(true);
+            setProfileReadyNotice("تم تجهيز ملف المندوب للموظف في الخلفية بنجاح");
+            return newRiderProfileId;
+          } else {
+            setProfileEnsureError("لم يُرجع النظام معرّف ملف المندوب (Rider Profile ID).");
+          }
+        } catch (err: unknown) {
+          const e = err as { details?: { detail?: string; message?: string }; message?: string };
+          const msg =
+            e?.details?.detail || e?.details?.message || e?.message || "فشل إنشاء ملف المندوب للموظف بالحد الأدنى من البيانات.";
+          setProfileEnsureError(msg);
+        } finally {
+          setIsEnsuringProfile(false);
         }
-      } catch (err: unknown) {
-        const e = err as { details?: { detail?: string; message?: string }; message?: string };
-        const msg =
-          e?.details?.detail || e?.details?.message || e?.message || "فشل إنشاء ملف المندوب للموظف بالحد الأدنى من البيانات.";
-        setProfileEnsureError(msg);
-        toast.error("فشل إنشاء ملف المندوب", msg);
-      } finally {
-        setIsEnsuringProfile(false);
-      }
+        return null;
+      })();
+
+      backgroundProfilePromiseRef.current = bgPromise;
+    } else {
+      backgroundProfilePromiseRef.current = null;
+      setIsEnsuringProfile(false);
     }
   };
 
@@ -1280,16 +1309,26 @@ export default function ChefzAccountsPage() {
     e.preventDefault();
     if (!assigningAccount || !selectedPersonKey) return;
 
-    if (isEnsuringProfile) {
-      toast.error("يرجى الانتظار", "جارٍ إنشاء ملف المندوب للموظف بالحد الأدنى من البيانات...");
+    const person = personMetaMap.get(selectedPersonKey);
+    if (!person) {
+      toast.error("خطأ في البيانات", "يرجى اختيار المندوب أو الموظف المستلم.");
       return;
     }
 
-    const person = personMetaMap.get(selectedPersonKey);
-    let targetRiderProfileId = selectedRiderId || person?.riderProfileId;
+    let targetRiderProfileId = selectedRiderId || person.riderProfileId;
+
+    // If background creation was initiated, await it! (exactly matching TakeVehicleModal)
+    if (!targetRiderProfileId && backgroundProfilePromiseRef.current) {
+      setIsEnsuringProfile(true);
+      try {
+        targetRiderProfileId = await backgroundProfilePromiseRef.current;
+      } finally {
+        setIsEnsuringProfile(false);
+      }
+    }
 
     // Safety fallback: if riderProfileId is still missing for an employee, attempt creation now
-    if (!targetRiderProfileId && person?.employeeId) {
+    if (!targetRiderProfileId && person.employeeId) {
       setIsEnsuringProfile(true);
       setProfileEnsureError(null);
       try {
@@ -2896,13 +2935,13 @@ export default function ChefzAccountsPage() {
             )}
 
             {/* Profile Creation Success */}
-            {profileEnsureSuccess && (
+            {(profileEnsureSuccess || profileReadyNotice) && (
               <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-800/40 dark:bg-emerald-950/30 p-3 text-xs text-emerald-900 dark:text-emerald-200">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <div>
-                  <p className="font-bold">تم إنشاء ملف المندوب بنجاح ✓</p>
+                  <p className="font-bold">تم تجهيز ملف المندوب بنجاح ✓</p>
                   <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                    تم إنشاء وتجهيز ملف المندوب بالحد الأدنى من البيانات للموظف. يمكنك الآن إتمام تعيين الحساب.
+                    {profileReadyNotice || "تم إنشاء وتجهيز ملف المندوب بالحد الأدنى من البيانات للموظف. يمكنك الآن إتمام تعيين الحساب."}
                   </p>
                 </div>
               </div>
