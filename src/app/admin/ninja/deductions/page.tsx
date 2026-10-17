@@ -152,7 +152,7 @@ export default function NinjaDeductionsPage() {
     let collected = 0;
     let deductions = 0;
     for (const r of records) {
-      collected += Number(r.totalCollectedAmount) || 0;
+      collected += Number(r.totalCollectedAmountAtDelivery ?? r.totalCollectedAmount ?? 0) || 0;
       deductions += Number(r.totalDeductions) || 0;
     }
     return {
@@ -234,7 +234,7 @@ export default function NinjaDeductionsPage() {
         },
         {
           header: "المبلغ المحصل عند التوصيل (ر.س)",
-          accessor: (r) => Number(r.totalCollectedAmount).toFixed(2),
+          accessor: (r) => Number(r.totalCollectedAmountAtDelivery ?? r.totalCollectedAmount ?? 0).toFixed(2),
         },
         {
           header: "إجمالي الخصومات (ر.س)",
@@ -276,6 +276,27 @@ export default function NinjaDeductionsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/ninja/accounts">
+            <Button variant="secondary" className="gap-2 text-xs">
+              <Zap className="h-4 w-4 text-purple-600" />
+              حسابات نينجا
+            </Button>
+          </Link>
+
+          <Link href="/admin/ninja/sheet-updates">
+            <Button variant="secondary" className="gap-2 text-xs">
+              <FileSpreadsheet className="h-4 w-4 text-purple-600" />
+              فحص الشيتات
+            </Button>
+          </Link>
+
+          <Link href="/admin/ninja/performance">
+            <Button variant="secondary" className="gap-2 text-xs">
+              <Receipt className="h-4 w-4 text-purple-600" />
+              الأداء والتقارير
+            </Button>
+          </Link>
+
           <Button
             variant="secondary"
             onClick={() => loadDeductions(page)}
@@ -405,7 +426,7 @@ export default function NinjaDeductionsPage() {
               options={[
                 { value: "", label: "كافة الحسابات" },
                 ...accounts.map((a) => ({
-                  value: a.id,
+                  value: a.accountId || a.id || "",
                   label: `${a.captainId} ${a.actualRiderNameAr ? `(${a.actualRiderNameAr})` : ""}`,
                 })),
               ]}
@@ -514,7 +535,7 @@ export default function NinjaDeductionsPage() {
 
                       {/* Collected Amount */}
                       <td className="px-4 py-3 text-center font-bold font-mono text-sm text-emerald-600 dark:text-emerald-400" dir="ltr">
-                        {Number(r.totalCollectedAmount).toFixed(2)}
+                        {Number(r.totalCollectedAmountAtDelivery ?? r.totalCollectedAmount ?? 0).toFixed(2)}
                       </td>
 
                       {/* Total Deductions (Signed) */}

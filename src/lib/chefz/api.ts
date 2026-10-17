@@ -22,6 +22,8 @@ import type {
   ChefzSponsorAccountCounts,
   ChefzStatisticsRequest,
   ChefzStatisticsResponse,
+  UpdateChefzAssignmentStartDateRequest,
+  UpdateChefzAssignmentStartDateResponse,
 } from "./types";
 import {
   chefzPaths,
@@ -29,6 +31,10 @@ import {
 } from "./chefz-new-endpoints-contracts";
 
 export { chefzPaths, uploadOrderSettlements };
+export type {
+  UpdateChefzAssignmentStartDateRequest,
+  UpdateChefzAssignmentStartDateResponse,
+};
 
 
 export const CHEFZ_PLATFORM_CODES = ["SHIFTZ", "CHEFZ", "THECHEFZ", "CHEFSZ"];
@@ -162,6 +168,27 @@ export async function updateChefzAccountStatus(
     body: JSON.stringify(data),
     notifySuccess: "تم تحديث حالة حساب شيفز بنجاح",
   });
+}
+
+/**
+ * Update the assignment start date (effectiveFrom).
+ * PUT /api/chefz/assignments/{assignmentId}/start-date
+ * Request: { effectiveFrom: "YYYY-MM-DD", rowVersion: "<assignment rowVersion>" }
+ * Concurrency token MUST be the assignment's rowVersion from assignment history.
+ * Returns the updated date and row version.
+ */
+export async function updateChefzAssignmentStartDate(
+  assignmentId: string,
+  data: UpdateChefzAssignmentStartDateRequest
+): Promise<UpdateChefzAssignmentStartDateResponse> {
+  return authFetch<UpdateChefzAssignmentStartDateResponse>(
+    chefzPaths.assignmentStartDate(assignmentId),
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+      notifySuccess: "تم تحديث تاريخ بدء التكليف بنجاح",
+    }
+  );
 }
 
 // -------------------------------------------------------------

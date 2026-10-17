@@ -1,11 +1,14 @@
 // src/lib/ninja/api.ts
 // Ninja Platform ERP API Client and Utility Functions
+// Updated to support all 19 endpoints from 15 October 2026 documentation.
 
 import { authFetch } from "../auth/api";
 import { getPlatforms, createPlatform, type PlatformResponse } from "../platforms/api";
 import {
   ninjaPaths,
   type NinjaAccountResponse,
+  type NinjaAccountStatusRequest,
+  type NinjaAccountComparisonResponse,
   type NinjaAssignRequest,
   type NinjaCredentialRequest,
   type NinjaCredentialResponse,
@@ -14,8 +17,16 @@ import {
   type NinjaLifecycleResponse,
   type NinjaPage,
   type NinjaPerformanceResponse,
-  type NinjaReportFilterParams,
+  type NinjaPerformanceReport,
+  type NinjaDailyReport,
+  type NinjaRiderReport,
+  type NinjaReportQuery,
   type NinjaReturnRequest,
+  type NinjaAccountUpdateUploadResponse,
+  type NinjaAccountUpdatePage,
+  type NinjaAccountUpdateRowResponse,
+  type NinjaAccountUpdateRowQuery,
+  type NinjaAccountUpdateNoteRequest,
 } from "./ninja-api-contracts";
 
 export * from "./ninja-api-contracts";
@@ -153,8 +164,15 @@ export async function ensureNinjaPlatform(): Promise<PlatformResponse> {
   });
 }
 
+function normalizeAccount(account: NinjaAccountResponse): NinjaAccountResponse {
+  if (!account) return account;
+  if (!account.accountId && account.id) account.accountId = account.id;
+  if (!account.id && account.accountId) account.id = account.accountId;
+  return account;
+}
+
 // -------------------------------------------------------------
-// 1. Ninja Accounts Endpoints
+// 1. Ninja Accounts Endpoints (GET /api/ninja/accounts, GET /accounts/{id})
 // -------------------------------------------------------------
 
 export async function getNinjaAccounts(params?: {
@@ -166,17 +184,24 @@ export async function getNinjaAccounts(params?: {
   if (params?.pageSize) query.set("pageSize", String(params.pageSize));
   const queryString = query.toString();
 
-  return authFetch<NinjaPage<NinjaAccountResponse>>(
+  const res = await authFetch<NinjaPage<NinjaAccountResponse>>(
     `${ninjaPaths.accounts}${queryString ? `?${queryString}` : ""}`,
-    {
-      method: "GET",
-    }
+    { method: "GET" }
   );
+
+  if (res?.items) {
+    res.items.forEach(normalizeAccount);
+  }
+  return res;
 }
 
-/**
- * Fetches all Ninja accounts across pages (defaults page=1, pageSize=50 up to 100).
- */
+export async function getNinjaAccount(accountId: string): Promise<NinjaAccountResponse> {
+  const res = await authFetch<NinjaAccountResponse>(ninjaPaths.account(accountId), {
+    method: "GET",
+  });
+  return normalizeAccount(res);
+}
+
 export async function getAllNinjaAccounts(pageSize = 100): Promise<NinjaAccountResponse[]> {
   const all: NinjaAccountResponse[] = [];
   let page = 1;
@@ -199,7 +224,42 @@ export async function getAllNinjaAccounts(pageSize = 100): Promise<NinjaAccountR
 }
 
 // -------------------------------------------------------------
-// 2. Lifecycle: Assign, Return, and Credentials
+// 2. Status Control (PUT /api/ninja/accounts/{accountId}/status)
+// -------------------------------------------------------------
+
+export async function setNinjaAccountStatus(
+  accountId: string,
+  data: NinjaAccountStatusRequest
+): Promise<NinjaAccountResponse> {
+  const res = await authFetch<NinjaAccountResponse>(ninjaPaths.status(accountId), {
+    method: "PUT",
+    body: JSON.stringify(data),
+    suppressErrorToast: false,
+  });
+  return normalizeAccount(res);
+}
+
+// -------------------------------------------------------------
+// 3. Comparison (POST /api/ninja/accounts/compare)
+// -------------------------------------------------------------
+
+export async function compareNinjaAccounts(
+  file: File,
+  signal?: AbortSignal
+): Promise<NinjaAccountComparisonResponse> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+
+  return authFetch<NinjaAccountComparisonResponse>(ninjaPaths.compare, {
+    method: "POST",
+    body: form,
+    signal,
+    suppressErrorToast: true, // Inspected and handled in comparison UI
+  });
+}
+
+// -------------------------------------------------------------
+// 4. Lifecycle: Assign, Return, and Credentials
 // -------------------------------------------------------------
 
 export async function assignNinjaAccount(
@@ -236,13 +296,9 @@ export async function updateNinjaCredentials(
 }
 
 // -------------------------------------------------------------
-// 3. Daily Uploads (Performance & Deductions)
+// 5. Daily Uploads (Performance & Deductions)
 // -------------------------------------------------------------
 
-/**
- * Upload daily performance report .xlsx file.
- * Multi-part FormData with reportDate and file.
- */
 export async function importNinjaPerformance(
   reportDate: string,
   file: File,
@@ -260,10 +316,6 @@ export async function importNinjaPerformance(
   });
 }
 
-/**
- * Upload daily deductions report .xlsx file.
- * Multi-part FormData with reportDate and file.
- */
 export async function importNinjaDeductions(
   reportDate: string,
   file: File,
@@ -282,11 +334,11 @@ export async function importNinjaDeductions(
 }
 
 // -------------------------------------------------------------
-// 4. Daily Reports (Performance & Deductions)
+// 6. Raw Daily Records (Performance & Deductions)
 // -------------------------------------------------------------
 
 export async function getNinjaPerformance(
-  params: NinjaReportFilterParams
+  params: NinjaReportQuery
 ): Promise<NinjaPage<NinjaPerformanceResponse>> {
   const query = new URLSearchParams();
   query.set("from", params.from);
@@ -298,14 +350,12 @@ export async function getNinjaPerformance(
 
   return authFetch<NinjaPage<NinjaPerformanceResponse>>(
     `${ninjaPaths.performance}?${query.toString()}`,
-    {
-      method: "GET",
-    }
+    { method: "GET" }
   );
 }
 
 export async function getAllNinjaPerformance(
-  params: Omit<NinjaReportFilterParams, "page" | "pageSize">,
+  params: Omit<NinjaReportQuery, "page" | "pageSize">,
   pageSize = 100
 ): Promise<NinjaPerformanceResponse[]> {
   const all: NinjaPerformanceResponse[] = [];
@@ -328,7 +378,7 @@ export async function getAllNinjaPerformance(
 }
 
 export async function getNinjaDeductions(
-  params: NinjaReportFilterParams
+  params: NinjaReportQuery
 ): Promise<NinjaPage<NinjaDeductionResponse>> {
   const query = new URLSearchParams();
   query.set("from", params.from);
@@ -340,14 +390,12 @@ export async function getNinjaDeductions(
 
   return authFetch<NinjaPage<NinjaDeductionResponse>>(
     `${ninjaPaths.deductions}?${query.toString()}`,
-    {
-      method: "GET",
-    }
+    { method: "GET" }
   );
 }
 
 export async function getAllNinjaDeductions(
-  params: Omit<NinjaReportFilterParams, "page" | "pageSize">,
+  params: Omit<NinjaReportQuery, "page" | "pageSize">,
   pageSize = 100
 ): Promise<NinjaDeductionResponse[]> {
   const all: NinjaDeductionResponse[] = [];
@@ -367,4 +415,143 @@ export async function getAllNinjaDeductions(
   }
 
   return all;
+}
+
+// -------------------------------------------------------------
+// 7. Aggregate Reports (Performance, Daily Trend, Rider Report)
+// -------------------------------------------------------------
+
+export async function getNinjaPerformanceReport(
+  params: NinjaReportQuery,
+  signal?: AbortSignal
+): Promise<NinjaPerformanceReport> {
+  const query = new URLSearchParams();
+  query.set("from", params.from);
+  query.set("to", params.to);
+  if (params.accountId) query.set("accountId", params.accountId);
+  if (params.riderId) query.set("riderId", params.riderId);
+
+  return authFetch<NinjaPerformanceReport>(
+    `${ninjaPaths.performanceReport}?${query.toString()}`,
+    { method: "GET", signal }
+  );
+}
+
+export async function getNinjaDailyReport(
+  params: NinjaReportQuery,
+  signal?: AbortSignal
+): Promise<NinjaPage<NinjaDailyReport>> {
+  const query = new URLSearchParams();
+  query.set("from", params.from);
+  query.set("to", params.to);
+  if (params.accountId) query.set("accountId", params.accountId);
+  if (params.riderId) query.set("riderId", params.riderId);
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+  return authFetch<NinjaPage<NinjaDailyReport>>(
+    `${ninjaPaths.dailyReport}?${query.toString()}`,
+    { method: "GET", signal }
+  );
+}
+
+export async function getNinjaRiderReport(
+  params: NinjaReportQuery,
+  signal?: AbortSignal
+): Promise<NinjaPage<NinjaRiderReport>> {
+  const query = new URLSearchParams();
+  query.set("from", params.from);
+  query.set("to", params.to);
+  if (params.accountId) query.set("accountId", params.accountId);
+  if (params.riderId) query.set("riderId", params.riderId);
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+  return authFetch<NinjaPage<NinjaRiderReport>>(
+    `${ninjaPaths.riderReport}?${query.toString()}`,
+    { method: "GET", signal }
+  );
+}
+
+// -------------------------------------------------------------
+// 8. Sheet Checkup Services (Uploads, Reviews, Rows, Notes)
+// -------------------------------------------------------------
+
+export async function uploadNinjaAccountSheet(
+  file: File,
+  note?: string,
+  signal?: AbortSignal
+): Promise<NinjaAccountUpdateUploadResponse> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  if (note !== undefined && note !== null && note.trim()) {
+    form.append("note", note.trim());
+  }
+
+  return authFetch<NinjaAccountUpdateUploadResponse>(ninjaPaths.sheetUpdates, {
+    method: "POST",
+    body: form,
+    signal,
+    suppressErrorToast: true, // We inspect issues and errors in the UI
+  });
+}
+
+export async function getNinjaAccountSheetUploads(
+  params?: { page?: number; pageSize?: number },
+  signal?: AbortSignal
+): Promise<NinjaAccountUpdatePage<NinjaAccountUpdateUploadResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  const qs = query.toString();
+
+  return authFetch<NinjaAccountUpdatePage<NinjaAccountUpdateUploadResponse>>(
+    `${ninjaPaths.sheetUpdates}${qs ? `?${qs}` : ""}`,
+    { method: "GET", signal }
+  );
+}
+
+export async function getNinjaAccountSheetUpload(
+  uploadId: string,
+  signal?: AbortSignal
+): Promise<NinjaAccountUpdateUploadResponse> {
+  return authFetch<NinjaAccountUpdateUploadResponse>(
+    ninjaPaths.sheetUpdate(uploadId),
+    { method: "GET", signal }
+  );
+}
+
+export async function getNinjaAccountSheetRows(
+  uploadId: string,
+  query: NinjaAccountUpdateRowQuery = {},
+  signal?: AbortSignal
+): Promise<NinjaAccountUpdatePage<NinjaAccountUpdateRowResponse>> {
+  const params = new URLSearchParams();
+  if (query.matchStatus) params.set("matchStatus", query.matchStatus);
+  if (query.sheetStatus) params.set("sheetStatus", query.sheetStatus);
+  if (query.problemsOnly !== undefined) params.set("problemsOnly", String(query.problemsOnly));
+  if (query.page) params.set("page", String(query.page));
+  if (query.pageSize) params.set("pageSize", String(query.pageSize));
+  const qs = params.toString();
+
+  return authFetch<NinjaAccountUpdatePage<NinjaAccountUpdateRowResponse>>(
+    `${ninjaPaths.sheetUpdateRows(uploadId)}${qs ? `?${qs}` : ""}`,
+    { method: "GET", signal }
+  );
+}
+
+export async function updateNinjaAccountSheetNote(
+  uploadId: string,
+  data: NinjaAccountUpdateNoteRequest,
+  signal?: AbortSignal
+): Promise<NinjaAccountUpdateUploadResponse> {
+  return authFetch<NinjaAccountUpdateUploadResponse>(
+    ninjaPaths.sheetUpdateNote(uploadId),
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+      signal,
+      suppressErrorToast: false,
+    }
+  );
 }

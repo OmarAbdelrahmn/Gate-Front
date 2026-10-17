@@ -344,3 +344,17 @@ export interface ApiProblem {
 }
 
 export type ChefzOperationProblem = ApiProblem;
+
+// -------------------------------------------------------------
+// 6. Assignment Start Date Modification
+// -------------------------------------------------------------
+export interface UpdateChefzAssignmentStartDateRequest {
+  effectiveFrom: DateOnly; // "YYYY-MM-DD"
+  rowVersion: RowVersion;
+}
+
+export interface UpdateChefzAssignmentStartDateResponse {
+  effectiveFrom: DateOnly;
+  rowVersion: RowVersion;
+  [key: string]: unknown;
+}

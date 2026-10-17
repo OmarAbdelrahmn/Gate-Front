@@ -7,18 +7,26 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
   getNinjaPerformance,
+  getNinjaPerformanceReport,
+  getNinjaDailyReport,
+  getNinjaRiderReport,
   importNinjaPerformance,
   getAllNinjaAccounts,
   getRiyadhTodayDate,
   type NinjaPerformanceResponse,
+  type NinjaPerformanceReport,
+  type NinjaDailyReport,
+  type NinjaRiderReport,
   type NinjaAccountResponse,
   type NinjaImportResponse,
   type NinjaImportIssue,
+  type NinjaReportQuery,
 } from "@/lib/ninja/api";
 import { listRiders } from "@/lib/workforce/api";
 import type { Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { DateInput } from "@/components/ui/DateInput";
@@ -37,9 +45,21 @@ import {
   Info,
   XCircle,
   Clock,
-  ExternalLink,
   Zap,
+  TrendingUp,
+  Award,
+  Layers,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Users,
+  Wallet,
+  Receipt,
+  Building2,
 } from "lucide-react";
+
+type PerformanceTab = "summary" | "riders" | "daily" | "records";
 
 export default function NinjaPerformancePage() {
   const { can, locale } = useAuth();
@@ -62,19 +82,36 @@ export default function NinjaPerformancePage() {
   const [filterAccountId, setFilterAccountId] = useState("");
   const [filterRiderId, setFilterRiderId] = useState("");
 
-  // Data States
-  const [records, setRecords] = useState<NinjaPerformanceResponse[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  // Tab State
+  const [activeTab, setActiveTab] = useState<PerformanceTab>("summary");
 
   // Lookups
   const [accounts, setAccounts] = useState<NinjaAccountResponse[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
 
-  // Pagination (no totalCount from server)
-  const [page, setPage] = useState(1);
-  const pageSize = 50;
-  const [hasMore, setHasMore] = useState(false);
+  // 1. Range Summary Report State
+  const [summaryReport, setSummaryReport] = useState<NinjaPerformanceReport | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  // 2. Rider Performance Report State
+  const [riderReportItems, setRiderReportItems] = useState<NinjaRiderReport[]>([]);
+  const [riderPage, setRiderPage] = useState(1);
+  const [riderLoading, setRiderLoading] = useState(false);
+  const [riderSearch, setRiderSearch] = useState("");
+  const riderPageSize = 50;
+
+  // 3. Daily Trend Report State
+  const [dailyReportItems, setDailyReportItems] = useState<NinjaDailyReport[]>([]);
+  const [dailyPage, setDailyPage] = useState(1);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const dailyPageSize = 50;
+
+  // 4. Raw Records State
+  const [records, setRecords] = useState<NinjaPerformanceResponse[]>([]);
+  const [recordsPage, setRecordsPage] = useState(1);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsHasMore, setRecordsHasMore] = useState(false);
+  const recordsPageSize = 50;
 
   // Upload Modal State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -84,84 +121,108 @@ export default function NinjaPerformancePage() {
   const [uploadResult, setUploadResult] = useState<NinjaImportResponse | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Load lookups (accounts and riders)
-  const loadLookups = async () => {
-    try {
-      const [accList, riderList] = await Promise.all([
-        getAllNinjaAccounts(100).catch(() => []),
-        listRiders().catch(() => []),
-      ]);
-      setAccounts(accList);
-      setRiders(riderList);
-    } catch (e) {
-      console.warn("Could not load lookups", e);
-    }
-  };
-
+  // Load lookups
   useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const [accList, riderList] = await Promise.all([
+          getAllNinjaAccounts(100).catch(() => []),
+          listRiders().catch(() => []),
+        ]);
+        setAccounts(accList);
+        setRiders(riderList);
+      } catch (e) {
+        console.warn("Could not load lookups", e);
+      }
+    };
     loadLookups();
   }, []);
 
-  // Rider map
-  const riderMap = useMemo(() => {
-    const map = new Map<string, Rider>();
-    for (const r of riders) {
-      map.set(r.id, r);
-    }
-    return map;
-  }, [riders]);
+  const baseQuery = useMemo<NinjaReportQuery>(() => {
+    const q: NinjaReportQuery = {
+      from: filterFrom,
+      to: filterTo,
+    };
+    if (filterAccountId) q.accountId = filterAccountId;
+    if (filterRiderId) q.riderId = filterRiderId;
+    return q;
+  }, [filterFrom, filterTo, filterAccountId, filterRiderId]);
 
-  // Load performance records
-  const loadPerformance = async (targetPage = page) => {
+  // Load Summary
+  const loadSummary = async () => {
     if (!canRead || !filterFrom || !filterTo) return;
-    setLoading(true);
-    setFetchError(null);
+    setSummaryLoading(true);
     try {
-      const res = await getNinjaPerformance({
-        from: filterFrom,
-        to: filterTo,
-        accountId: filterAccountId || undefined,
-        riderId: filterRiderId || undefined,
-        page: targetPage,
-        pageSize,
-      });
-
-      const items = res?.items || [];
-      setRecords(items);
-      setHasMore(items.length >= pageSize);
+      const res = await getNinjaPerformanceReport(baseQuery);
+      setSummaryReport(res);
     } catch (err: any) {
-      console.error("Failed to load Ninja performance records", err);
-      const msg = err?.message || "تعذر تحميل بيانات الأداء اليومي لمنصة نينجا.";
-      setFetchError(msg);
-      setRecords([]);
+      console.warn("Could not load summary report", err);
     } finally {
-      setLoading(false);
+      setSummaryLoading(false);
     }
   };
 
+  // Load Rider Report
+  const loadRiderReport = async (page = riderPage) => {
+    if (!canRead || !filterFrom || !filterTo) return;
+    setRiderLoading(true);
+    try {
+      const res = await getNinjaRiderReport({ ...baseQuery, page, pageSize: riderPageSize });
+      setRiderReportItems(res?.items || []);
+    } catch (err: any) {
+      console.warn("Could not load rider report", err);
+      setRiderReportItems([]);
+    } finally {
+      setRiderLoading(false);
+    }
+  };
+
+  // Load Daily Trend
+  const loadDailyReport = async (page = dailyPage) => {
+    if (!canRead || !filterFrom || !filterTo) return;
+    setDailyLoading(true);
+    try {
+      const res = await getNinjaDailyReport({ ...baseQuery, page, pageSize: dailyPageSize });
+      setDailyReportItems(res?.items || []);
+    } catch (err: any) {
+      console.warn("Could not load daily report", err);
+      setDailyReportItems([]);
+    } finally {
+      setDailyLoading(false);
+    }
+  };
+
+  // Load Raw Records
+  const loadRawRecords = async (page = recordsPage) => {
+    if (!canRead || !filterFrom || !filterTo) return;
+    setRecordsLoading(true);
+    try {
+      const res = await getNinjaPerformance({ ...baseQuery, page, pageSize: recordsPageSize });
+      const items = res?.items || [];
+      setRecords(items);
+      setRecordsHasMore(items.length >= recordsPageSize);
+    } catch (err: any) {
+      console.warn("Could not load raw performance records", err);
+      setRecords([]);
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
+
+  // Refetch when filters change
   useEffect(() => {
-    setPage(1);
-    loadPerformance(1);
+    loadSummary();
+    if (activeTab === "riders") loadRiderReport(1);
+    if (activeTab === "daily") loadDailyReport(1);
+    if (activeTab === "records") loadRawRecords(1);
   }, [filterFrom, filterTo, filterAccountId, filterRiderId]);
 
   useEffect(() => {
-    loadPerformance(page);
-  }, [page]);
-
-  // Summary Metrics on current view
-  const metrics = useMemo(() => {
-    let orders = 0;
-    let hours = 0;
-    for (const r of records) {
-      orders += r.totalOrders || 0;
-      hours += Number(r.totalWorkingHours) || 0;
-    }
-    return {
-      count: records.length,
-      orders,
-      hours: Number(hours.toFixed(2)),
-    };
-  }, [records]);
+    if (activeTab === "summary") loadSummary();
+    else if (activeTab === "riders") loadRiderReport(riderPage);
+    else if (activeTab === "daily") loadDailyReport(dailyPage);
+    else if (activeTab === "records") loadRawRecords(recordsPage);
+  }, [activeTab, riderPage, dailyPage, recordsPage]);
 
   // Handle Upload
   const handleUpload = async (e: React.FormEvent) => {
@@ -188,64 +249,96 @@ export default function NinjaPerformancePage() {
       setUploadResult(outcome);
 
       if (outcome.issues && outcome.issues.length > 0) {
-        // All-or-nothing rejection: render issue table, do not toast success!
-        toast.error("تنبيه الاستيراد", `لم يتم حفظ أي صف بسبب وجود ${outcome.issues.length} ملاحظة.`);
+        toast.error("تنبيه الاستيراد", `تم رفض الملف بالكامل لوجود ${outcome.issues.length} مشكلة.`);
       } else if (outcome.importedRows === 0 && outcome.skippedRows > 0) {
         toast.info("بيانات مكررة", "تم استيراد كافة صفوف هذا اليوم سابقاً (تطابق تام).");
-        // Reload if current filters cover this date
-        if (filterFrom <= uploadDate && filterTo >= uploadDate) {
-          loadPerformance(page);
-        }
+        loadSummary();
       } else {
         toast.success(
           "تم الاستيراد بنجاح",
-          `تم حفظ أداء ${outcome.importedRows} كابتن بنجاح${
-            outcome.skippedRows > 0 ? ` (وتخطي ${outcome.skippedRows} مكرر)` : ""
-          }.`
+          `تم استيراد ${outcome.importedRows} صف وتخطي ${outcome.skippedRows} صف مكرر.`
         );
-        // Automatically switch filter range to inspect the uploaded date
-        setFilterFrom(uploadDate);
-        setFilterTo(uploadDate);
-        loadPerformance(1);
+        loadSummary();
+        if (activeTab === "daily") loadDailyReport(1);
+        if (activeTab === "records") loadRawRecords(1);
       }
     } catch (err: any) {
       console.error("Upload error", err);
-      const msg = err?.message || "تعذر معالجة أو رفع ملف الأداء اليومي.";
+      const msg = err?.message || "حدث خطأ أثناء رفع ملف الأداء اليومي.";
       setUploadError(msg);
-      toast.error("خطأ", msg);
+      toast.error("خطأ في الرفع", msg);
     } finally {
       setUploading(false);
     }
   };
 
-  // Export
-  const handleExport = () => {
+  // Filtered riders for search
+  const filteredRiders = useMemo(() => {
+    if (!riderSearch.trim()) return riderReportItems;
+    const q = riderSearch.trim().toLowerCase();
+    return riderReportItems.filter((item) => {
+      const nameAr = (item.rider?.nameAr || "").toLowerCase();
+      const nameEn = (item.rider?.nameEn || "").toLowerCase();
+      const iqama = (item.rider?.iqamaNo || "").toLowerCase();
+      const phone = (item.rider?.phoneNumber || "").toLowerCase();
+      return nameAr.includes(q) || nameEn.includes(q) || iqama.includes(q) || phone.includes(q);
+    });
+  }, [riderReportItems, riderSearch]);
+
+  // Exports
+  const exportRiders = () => {
     exportToExcel({
-      filename: `ninja-performance-${filterFrom}-to-${filterTo}`,
-      sheetName: "الأداء اليومي نينجا",
-      data: records,
+      filename: `ninja-riders-performance-${filterFrom}-to-${filterTo}`,
+      sheetName: "أداء المناديب",
+      data: filteredRiders,
       columns: [
-        { header: "تاريخ التقرير", accessor: (r) => r.reportDate, isText: true },
-        { header: "كابتن ID", accessor: (r) => r.captainId, isText: true },
+        { header: "اسم المندوب", accessor: (r) => r.rider?.nameAr || r.rider?.nameEn || "—" },
+        { header: "رقم الهوية", accessor: (r) => r.rider?.iqamaNo || "—", isText: true },
+        { header: "رقم الهاتف", accessor: (r) => r.rider?.phoneNumber || "—", isText: true },
+        { header: "عدد الحسابات", accessor: (r) => r.accountsWithData },
+        { header: "أيام الأداء", accessor: (r) => r.daysWithPerformance },
+        { header: "إجمالي الطلبات", accessor: (r) => r.metrics?.totalOrders || 0 },
+        { header: "ساعات العمل", accessor: (r) => Number((r.metrics?.totalWorkingHours || 0).toFixed(2)) },
         {
-          header: "المندوب الفعلي",
-          accessor: (r) => {
-            const rider = riderMap.get(r.riderProfileId);
-            return rider ? rider.fullNameAr || rider.fullNameEn : "—";
-          },
+          header: "الإنتاجية (طلب/ساعة)",
+          accessor: (r) =>
+            r.metrics?.ordersPerWorkingHour !== null && r.metrics?.ordersPerWorkingHour !== undefined
+              ? Number(r.metrics.ordersPerWorkingHour.toFixed(2))
+              : "—",
         },
-        { header: "إجمالي الطلبات", accessor: (r) => r.totalOrders },
+        { header: "المبالغ المحصلة", accessor: (r) => r.metrics?.totalCollectedAmountAtDelivery || 0 },
+        { header: "الخصومات", accessor: (r) => r.metrics?.totalDeductions || 0 },
+      ],
+    });
+  };
+
+  const exportDaily = () => {
+    exportToExcel({
+      filename: `ninja-daily-trend-${filterFrom}-to-${filterTo}`,
+      sheetName: "تقرير الأيام",
+      data: dailyReportItems,
+      columns: [
+        { header: "التاريخ", accessor: (d) => d.date, isText: true },
+        { header: "سجلات الأداء", accessor: (d) => d.metrics?.performanceRecords || 0 },
+        { header: "سجلات الخصومات", accessor: (d) => d.metrics?.deductionRecords || 0 },
+        { header: "إجمالي الطلبات", accessor: (d) => d.metrics?.totalOrders || 0 },
+        { header: "ساعات العمل", accessor: (d) => Number((d.metrics?.totalWorkingHours || 0).toFixed(2)) },
         {
-          header: "إجمالي ساعات العمل",
-          accessor: (r) => Number(r.totalWorkingHours).toFixed(2),
+          header: "الإنتاجية (طلب/ساعة)",
+          accessor: (d) =>
+            d.metrics?.ordersPerWorkingHour !== null && d.metrics?.ordersPerWorkingHour !== undefined
+              ? Number(d.metrics.ordersPerWorkingHour.toFixed(2))
+              : "—",
         },
+        { header: "المبالغ المحصلة", accessor: (d) => d.metrics?.totalCollectedAmountAtDelivery || 0 },
+        { header: "الخصومات", accessor: (d) => d.metrics?.totalDeductions || 0 },
       ],
     });
   };
 
   return (
     <div className="space-y-6" dir={isEn ? "ltr" : "rtl"}>
-      {/* Header */}
+      {/* Breadcrumb & Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
@@ -253,454 +346,657 @@ export default function NinjaPerformancePage() {
               {t("nav.dashboard") || "لوحة التحكم"}
             </Link>
             <span>/</span>
-            <Link href="/admin/ninja/accounts" className="hover:text-[var(--foreground)]">
-              إدارة نينجا
-            </Link>
+            <span className="font-semibold text-[var(--foreground)]">إدارة نينجا</span>
             <span>/</span>
-            <span className="font-semibold text-[var(--foreground)]">الأداء اليومي</span>
+            <span>الأداء والتقارير</span>
           </div>
+
           <div className="mt-1 flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-600/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
               <BarChart3 className="h-6 w-6" />
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
-                الأداء اليومي لكباتن نينجا (Ninja Performance)
+                الأداء والتقارير التجميعية لمنصة نينجا
               </h1>
               <p className="text-xs text-[var(--muted)]">
-                متابعة عدد الطلبات وساعات العمل اليومية وربطها بالمندوب الفعلي لكل يوم.
+                متابعة أداء المناديب الفعليين، اتجاهات الأيام، معدلات الإنتاجية، ورفع شيتات الأداء اليومية.
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => loadPerformance(page)}
-            disabled={loading}
-            className="gap-2 text-xs"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            تحديث
-          </Button>
+          <Link href="/admin/ninja/accounts">
+            <Button variant="secondary" className="gap-2 text-xs">
+              <Zap className="h-4 w-4 text-purple-600" />
+              حسابات نينجا
+            </Button>
+          </Link>
 
           <Button
             variant="secondary"
-            onClick={handleExport}
-            disabled={records.length === 0}
+            onClick={() => {
+              loadSummary();
+              if (activeTab === "riders") loadRiderReport(1);
+              if (activeTab === "daily") loadDailyReport(1);
+              if (activeTab === "records") loadRawRecords(1);
+            }}
+            disabled={summaryLoading || riderLoading || dailyLoading || recordsLoading}
             className="gap-2 text-xs"
           >
-            <FileSpreadsheet className="h-4 w-4" />
-            تصدير إكسل
+            <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} />
+            تحديث
           </Button>
 
           {canImport && (
             <Button
+              variant="primary"
               onClick={() => {
+                setIsUploadOpen(true);
                 setUploadResult(null);
                 setUploadError(null);
                 setUploadFile(null);
-                setIsUploadOpen(true);
               }}
-              className="gap-2 bg-purple-600 text-white hover:bg-purple-700 text-xs shadow-sm shadow-purple-600/30"
+              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold"
             >
               <Upload className="h-4 w-4" />
-              رفع ملف الأداء اليومي (.xlsx)
+              رفع شيت أداء يومي
             </Button>
           )}
         </div>
       </div>
 
-      {/* Upload Rules Notice */}
-      <div className="rounded-2xl border border-purple-200 bg-purple-50/60 p-4 dark:border-purple-900/40 dark:bg-purple-950/20">
-        <div className="flex items-start gap-3">
-          <Zap className="h-5 w-5 shrink-0 text-purple-600 dark:text-purple-400 mt-0.5" />
-          <div className="text-xs space-y-1">
-            <p className="font-bold text-purple-900 dark:text-purple-200">
-              شروط وأعمدة استيراد ملف أداء نينجا (Performance Import Headers)
-            </p>
-            <p className="text-purple-800 dark:text-purple-300">
-              يجب أن يحتوي ملف الإكسل في الصف الأول على الأعمدة الإلزامية:{" "}
-              <code className="font-bold font-mono">Captain ID</code> و{" "}
-              <code className="font-bold font-mono">Total Orders</code> و{" "}
-              <code className="font-bold font-mono">Total Working Hours</code>. يتم تجميد attribution للمندوب
-              الفعلي المعين في ذلك اليوم تحديداً. لا يتم استنتاج تاريخ التقرير من اسم الملف.
-            </p>
+      {/* Date Range & Global Filters */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[var(--muted)]">الفترة:</span>
+              <DateInput
+                value={filterFrom}
+                onChange={setFilterFrom}
+                max={filterTo || todayRiyadh}
+                className="w-36 text-xs"
+              />
+              <span className="text-xs text-[var(--muted)]">إلى</span>
+              <DateInput
+                value={filterTo}
+                onChange={setFilterTo}
+                max={todayRiyadh}
+                min={filterFrom}
+                className="w-36 text-xs"
+              />
+            </div>
+
+            <div className="w-48">
+              <SearchableSelect
+                options={[
+                  { value: "", label: "جميع الكباتن / الحسابات" },
+                  ...accounts.map((a) => ({
+                    value: a.accountId || a.id || "",
+                    label: `${a.captainId} (${a.code || "NINJA"})`,
+                  })),
+                ]}
+                value={filterAccountId}
+                onChange={setFilterAccountId}
+                placeholder="تصفية بالحساب..."
+              />
+            </div>
+
+            <div className="w-56">
+              <SearchableSelect
+                options={[
+                  { value: "", label: "جميع المناديب الفعليين" },
+                  ...riders.map((r) => ({
+                    value: r.id,
+                    label: `${r.fullNameAr || r.fullNameEn} (${r.iqamaNo || r.employeeId})`,
+                  })),
+                ]}
+                value={filterRiderId}
+                onChange={setFilterRiderId}
+                placeholder="تصفية بالمندوب الفعلي..."
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-            <span>عدد السجلات في الصفحة</span>
-            <User className="h-4 w-4 text-purple-600" />
-          </div>
-          <p className="mt-2 text-2xl font-black font-mono text-[var(--foreground)]">
-            {metrics.count.toLocaleString()}
-          </p>
-          <span className="text-[11px] text-[var(--muted)]">سجل يومي معروض</span>
-        </div>
-
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-            <span>إجمالي الطلبات (الصفحة الحالية)</span>
-            <Zap className="h-4 w-4 text-emerald-600" />
-          </div>
-          <p className="mt-2 text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
-            {metrics.orders.toLocaleString()}
-          </p>
-          <span className="text-[11px] text-[var(--muted)]">
-            (مجموع الصفحة — لا يمثل إجمالي الفترة كاملاً حتى اكتمال كافة الصفحات)
-          </span>
-        </div>
-
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-            <span>إجمالي ساعات العمل (الصفحة الحالية)</span>
-            <Clock className="h-4 w-4 text-blue-600" />
-          </div>
-          <p className="mt-2 text-2xl font-black font-mono text-blue-600 dark:text-blue-400">
-            {metrics.hours.toLocaleString()} ساعة
-          </p>
-          <span className="text-[11px] text-[var(--muted)]">ساعات العمل التشغيلية</span>
-        </div>
-      </div>
-
-      {/* Filter Toolbar */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {/* From Date */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              من تاريخ (شامل) <span className="text-red-500">*</span>
-            </label>
-            <DateInput value={filterFrom} onChange={setFilterFrom} max={todayRiyadh} required />
-          </div>
-
-          {/* To Date */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              إلى تاريخ (شامل) <span className="text-red-500">*</span>
-            </label>
-            <DateInput value={filterTo} onChange={setFilterTo} max={todayRiyadh} required />
-          </div>
-
-          {/* Account Filter */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              حساب الكابتن (Captain ID)
-            </label>
-            <SearchableSelect
-              options={[
-                { value: "", label: "كافة الحسابات" },
-                ...accounts.map((a) => ({
-                  value: a.id,
-                  label: `${a.captainId} ${a.actualRiderNameAr ? `(${a.actualRiderNameAr})` : ""}`,
-                })),
-              ]}
-              value={filterAccountId}
-              onChange={setFilterAccountId}
-              placeholder="اختر حساب الكابتن..."
-            />
-          </div>
-
-          {/* Actual Rider Filter */}
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-              المندوب الفعلي (المسجل باليوم)
-            </label>
-            <SearchableSelect
-              options={[
-                { value: "", label: "كافة المناديب" },
-                ...riders.map((r) => ({
-                  value: r.id,
-                  label: `${r.fullNameAr || r.fullNameEn} (${r.iqamaNo || r.employeeId})`,
-                })),
-              ]}
-              value={filterRiderId}
-              onChange={setFilterRiderId}
-              placeholder="اختر المندوب..."
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Performance Records Table */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead className="bg-[var(--subtle-bg)] border-b border-[var(--border)] text-[var(--muted)] font-bold">
-              <tr>
-                <th className="px-4 py-3.5">تاريخ التقرير</th>
-                <th className="px-4 py-3.5">كابتن ID</th>
-                <th className="px-4 py-3.5">المندوب الفعلي (Actual Rider)</th>
-                <th className="px-4 py-3.5 text-center">إجمالي الطلبات</th>
-                <th className="px-4 py-3.5 text-center">ساعات العمل</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {loading && records.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-sm text-[var(--muted)]">
-                    <RefreshCw className="mx-auto h-6 w-6 animate-spin mb-2" />
-                    جارٍ تحميل سجلات الأداء...
-                  </td>
-                </tr>
-              ) : records.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-10 text-center">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 mb-3">
-                      <BarChart3 className="h-6 w-6" />
-                    </div>
-                    <p className="font-bold text-[var(--foreground)]">لا توجد بيانات أداء في الفترة المحددة</p>
-                    <p className="text-xs text-[var(--muted)] mt-1">
-                      يمكنك رفع ملف أداء يومي جديد بصيغة .xlsx لمطابقة كباتن نينجا مع المناديب.
-                    </p>
-                    {canImport && (
-                      <Button
-                        onClick={() => {
-                          setUploadResult(null);
-                          setUploadError(null);
-                          setUploadFile(null);
-                          setIsUploadOpen(true);
-                        }}
-                        className="mt-4 gap-2 bg-purple-600 text-white hover:bg-purple-700 text-xs"
-                      >
-                        <Upload className="h-4 w-4" />
-                        رفع تقرير أداء
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                records.map((r) => {
-                  const rider = riderMap.get(r.riderProfileId);
-
-                  return (
-                    <tr key={r.id} className="hover:bg-[var(--subtle-bg)]/50 transition-colors">
-                      {/* Date */}
-                      <td className="px-4 py-3 font-mono font-medium" dir="ltr">
-                        {r.reportDate}
-                      </td>
-
-                      {/* Captain ID */}
-                      <td className="px-4 py-3 font-mono font-bold text-sm text-[var(--foreground)]" dir="ltr">
-                        {r.captainId}
-                      </td>
-
-                      {/* Actual Rider Name */}
-                      <td className="px-4 py-3">
-                        <div className="font-bold text-purple-700 dark:text-purple-300">
-                          {rider ? rider.fullNameAr || rider.fullNameEn : "مندوب معين"}
-                        </div>
-                        {(rider?.iqamaNo || rider?.employeeId) && (
-                          <div className="text-[11px] font-mono text-[var(--muted)]" dir="ltr">
-                            {rider.iqamaNo ? `Iqama: ${rider.iqamaNo}` : `ID: ${rider.employeeId}`}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Total Orders */}
-                      <td className="px-4 py-3 text-center font-bold font-mono text-sm text-emerald-600 dark:text-emerald-400" dir="ltr">
-                        {r.totalOrders.toLocaleString()}
-                      </td>
-
-                      {/* Working Hours */}
-                      <td className="px-4 py-3 text-center font-bold font-mono text-sm text-blue-600 dark:text-blue-400" dir="ltr">
-                        {Number(r.totalWorkingHours).toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Bar */}
-        <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
-          <div className="text-[var(--muted)]">
-            صفحة <span className="font-bold text-[var(--foreground)]">{page}</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="text-xs"
-            >
-              الصفحة السابقة
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!hasMore || loading}
-              onClick={() => setPage((p) => p + 1)}
-              className="text-xs"
-            >
-              الصفحة التالية
-            </Button>
-          </div>
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--border)] pt-3">
+          {[
+            { id: "summary", label: "مؤشرات الأداء العامة (KPIs)", icon: TrendingUp },
+            { id: "riders", label: "تقرير أداء المناديب", icon: Award },
+            { id: "daily", label: "تقرير الأيام والاتجاهات", icon: Calendar },
+            { id: "records", label: "السجلات اليومية الخام", icon: Layers },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as PerformanceTab)}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                  active
+                    ? "bg-purple-600 text-white shadow-md shadow-purple-600/20"
+                    : "bg-[var(--subtle-bg)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* Upload Modal                                                  */}
+      {/* TAB 1: Performance Summary KPIs                                */}
+      {/* ------------------------------------------------------------- */}
+      {activeTab === "summary" && (
+        <div className="space-y-6">
+          {summaryLoading ? (
+            <div className="flex flex-col items-center justify-center p-16 text-center">
+              <RefreshCw className="h-8 w-8 animate-spin text-purple-600 mb-2" />
+              <p className="text-xs text-[var(--muted)]">جارٍ حساب مؤشرات الفترة المحددة...</p>
+            </div>
+          ) : !summaryReport ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-12 text-center text-[var(--muted)]">
+              لا توجد بيانات متاحة لهذه الفترة.
+            </div>
+          ) : (
+            <>
+              {/* Top Stats Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {/* Total Orders */}
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm space-y-1">
+                  <div className="text-[11px] font-bold text-[var(--muted)] flex items-center justify-between">
+                    <span>إجمالي الطلبات</span>
+                    <BarChart3 className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div className="text-2xl font-black text-[var(--foreground)]">
+                    {summaryReport.metrics?.totalOrders || 0}
+                  </div>
+                  <div className="text-[10px] text-[var(--muted)]">خلال الفترة المحددة</div>
+                </div>
+
+                {/* Total Working Hours */}
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm space-y-1">
+                  <div className="text-[11px] font-bold text-[var(--muted)] flex items-center justify-between">
+                    <span>ساعات العمل الكلية</span>
+                    <Clock className="h-4 w-4 text-indigo-600" />
+                  </div>
+                  <div className="text-2xl font-black text-[var(--foreground)]">
+                    {Number((summaryReport.metrics?.totalWorkingHours || 0).toFixed(2))}
+                  </div>
+                  <div className="text-[10px] text-[var(--muted)]">ساعة مسجلة</div>
+                </div>
+
+                {/* Productivity (Orders / Hour) */}
+                <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/30 dark:bg-emerald-950/20 p-4 shadow-sm space-y-1">
+                  <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center justify-between">
+                    <span>معدل الإنتاجية</span>
+                    <TrendingUp className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300">
+                    {summaryReport.metrics?.ordersPerWorkingHour !== null &&
+                    summaryReport.metrics?.ordersPerWorkingHour !== undefined
+                      ? Number(summaryReport.metrics.ordersPerWorkingHour.toFixed(2))
+                      : "—"}
+                  </div>
+                  <div className="text-[10px] text-emerald-600/80">طلب / ساعة عمل</div>
+                </div>
+
+                {/* Total Collected Amount */}
+                <div className="rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/30 dark:bg-blue-950/20 p-4 shadow-sm space-y-1">
+                  <div className="text-[11px] font-bold text-blue-700 dark:text-blue-400 flex items-center justify-between">
+                    <span>المبالغ المحصلة</span>
+                    <Wallet className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="text-2xl font-black text-blue-700 dark:text-blue-300">
+                    {summaryReport.metrics?.totalCollectedAmountAtDelivery || 0}
+                  </div>
+                  <div className="text-[10px] text-blue-600/80">ريال سعودي</div>
+                </div>
+
+                {/* Total Deductions (Signed) */}
+                <div className="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/30 dark:bg-rose-950/20 p-4 shadow-sm space-y-1">
+                  <div className="text-[11px] font-bold text-rose-700 dark:text-rose-400 flex items-center justify-between">
+                    <span>صافي الخصومات</span>
+                    <Receipt className="h-4 w-4 text-rose-600" />
+                  </div>
+                  <div className="text-2xl font-black text-rose-700 dark:text-rose-300">
+                    {summaryReport.metrics?.totalDeductions || 0}
+                  </div>
+                  <div className="text-[10px] text-rose-600/80">ريال (تحتفظ بالإشارة)</div>
+                </div>
+              </div>
+
+              {/* Coverage and Activity Details */}
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
+                  <Users className="h-4 w-4 text-purple-600" />
+                  تغطية النشاط والسجلات المرفوعة بالفترة
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6 text-center">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3">
+                    <div className="text-xs text-[var(--muted)]">أيام بها أداء</div>
+                    <div className="text-lg font-black text-[var(--foreground)]">
+                      {summaryReport.daysWithPerformance || 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3">
+                    <div className="text-xs text-[var(--muted)]">أيام بها خصومات</div>
+                    <div className="text-lg font-black text-[var(--foreground)]">
+                      {summaryReport.daysWithDeductions || 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3">
+                    <div className="text-xs text-[var(--muted)]">الحسابات النشطة</div>
+                    <div className="text-lg font-black text-[var(--foreground)]">
+                      {summaryReport.accountsWithData || 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3">
+                    <div className="text-xs text-[var(--muted)]">المناديب النشطين</div>
+                    <div className="text-lg font-black text-[var(--foreground)]">
+                      {summaryReport.ridersWithData || 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3">
+                    <div className="text-xs text-[var(--muted)]">سجلات الأداء</div>
+                    <div className="text-lg font-black text-[var(--foreground)]">
+                      {summaryReport.metrics?.performanceRecords || 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3">
+                    <div className="text-xs text-[var(--muted)]">سجلات الخصم</div>
+                    <div className="text-lg font-black text-[var(--foreground)]">
+                      {summaryReport.metrics?.deductionRecords || 0}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20 p-3 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
+                  <Info className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
+                  <div>
+                    تعتمد هذه الإحصائيات على بيانات الأداء والخصومات المرفوعة مسبقاً وتنسب تاريخياً للمندوب الفعلي المشغل للحساب في يوم التقرير،
+                    ولا تتأثر بإرجاع أو إعادة تعيين الحساب لاحقاً.
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 2: Rider Performance Report                                */}
+      {/* ------------------------------------------------------------- */}
+      {activeTab === "riders" && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden space-y-4 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative min-w-[260px]">
+              <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)] rtl:right-3 ltr:left-3" />
+              <Input
+                placeholder="بحث باسم المندوب، الهوية أو الهاتف..."
+                value={riderSearch}
+                onChange={(e) => setRiderSearch(e.target.value)}
+                className="h-8.5 text-xs pr-8 rtl:pr-8 ltr:pl-8"
+              />
+            </div>
+
+            <Button variant="secondary" size="sm" onClick={exportRiders} className="gap-2 text-xs">
+              <Download className="h-3.5 w-3.5 text-emerald-600" />
+              تصدير المناديب (Excel)
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-right border-collapse">
+              <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
+                <tr>
+                  <th className="px-4 py-3 font-bold">المندوب الفعلي</th>
+                  <th className="px-4 py-3 font-bold">رقم الهوية</th>
+                  <th className="px-4 py-3 font-bold">رقم الهاتف</th>
+                  <th className="px-4 py-3 font-bold text-center">الحسابات</th>
+                  <th className="px-4 py-3 font-bold text-center">أيام الأداء</th>
+                  <th className="px-4 py-3 font-bold text-center">إجمالي الطلبات</th>
+                  <th className="px-4 py-3 font-bold text-center">ساعات العمل</th>
+                  <th className="px-4 py-3 font-bold text-center">الإنتاجية (طلب/ساعة)</th>
+                  <th className="px-4 py-3 font-bold text-center">المبالغ المحصلة</th>
+                  <th className="px-4 py-3 font-bold text-center">الخصومات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {riderLoading ? (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center">
+                      <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
+                      <p className="text-xs text-[var(--muted)]">جارٍ جلب تقرير المناديب...</p>
+                    </td>
+                  </tr>
+                ) : filteredRiders.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center text-[var(--muted)]">
+                      لا توجد بيانات مناديب مسجلة في هذه الفترة.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRiders.map((item, idx) => {
+                    const rider = item.rider;
+                    const orders = item.metrics?.totalOrders || 0;
+                    const hours = Number((item.metrics?.totalWorkingHours || 0).toFixed(2));
+                    const prod = item.metrics?.ordersPerWorkingHour;
+
+                    return (
+                      <tr key={idx} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
+                        <td className="px-4 py-3 font-bold text-[var(--foreground)]">
+                          {rider?.nameAr || rider?.nameEn || "مندوب غير محدد"}
+                        </td>
+                        <td className="px-4 py-3 font-mono" dir="ltr">
+                          {rider?.iqamaNo || "—"}
+                        </td>
+                        <td className="px-4 py-3 font-mono" dir="ltr">
+                          {rider?.phoneNumber || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold">
+                          {item.accountsWithData}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold">
+                          {item.daysWithPerformance}
+                        </td>
+                        <td className="px-4 py-3 text-center font-black text-purple-700 dark:text-purple-300 text-sm">
+                          {orders}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold">
+                          {hours}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {prod !== null && prod !== undefined ? (
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              {Number(prod.toFixed(2))}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono">
+                          {item.metrics?.totalCollectedAmountAtDelivery || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono font-bold text-rose-600">
+                          {item.metrics?.totalDeductions || 0}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 3: Daily Trend Report                                      */}
+      {/* ------------------------------------------------------------- */}
+      {activeTab === "daily" && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden space-y-4 p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[var(--muted)]">
+              تقرير الاتجاهات اليومية بالأيام المسجلة
+            </span>
+            <Button variant="secondary" size="sm" onClick={exportDaily} className="gap-2 text-xs">
+              <Download className="h-3.5 w-3.5 text-emerald-600" />
+              تصدير الأيام (Excel)
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-right border-collapse">
+              <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
+                <tr>
+                  <th className="px-4 py-3 font-bold">التاريخ</th>
+                  <th className="px-4 py-3 font-bold text-center">سجلات الأداء</th>
+                  <th className="px-4 py-3 font-bold text-center">سجلات الخصم</th>
+                  <th className="px-4 py-3 font-bold text-center">إجمالي الطلبات</th>
+                  <th className="px-4 py-3 font-bold text-center">ساعات العمل</th>
+                  <th className="px-4 py-3 font-bold text-center">الإنتاجية</th>
+                  <th className="px-4 py-3 font-bold text-center">المبالغ المحصلة</th>
+                  <th className="px-4 py-3 font-bold text-center">الخصومات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {dailyLoading ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center">
+                      <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
+                      <p className="text-xs text-[var(--muted)]">جارٍ جلب تقرير الأيام...</p>
+                    </td>
+                  </tr>
+                ) : dailyReportItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
+                      لا توجد أيام مسجلة في هذه الفترة.
+                    </td>
+                  </tr>
+                ) : (
+                  dailyReportItems.map((day, idx) => {
+                    const prod = day.metrics?.ordersPerWorkingHour;
+                    return (
+                      <tr key={idx} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-sm text-[var(--foreground)]" dir="ltr">
+                          {day.date}
+                        </td>
+                        <td className="px-4 py-3 text-center">{day.metrics?.performanceRecords || 0}</td>
+                        <td className="px-4 py-3 text-center">{day.metrics?.deductionRecords || 0}</td>
+                        <td className="px-4 py-3 text-center font-black text-purple-700 dark:text-purple-300">
+                          {day.metrics?.totalOrders || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold">
+                          {Number((day.metrics?.totalWorkingHours || 0).toFixed(2))}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-emerald-600">
+                          {prod !== null && prod !== undefined ? Number(prod.toFixed(2)) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono">
+                          {day.metrics?.totalCollectedAmountAtDelivery || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono font-bold text-rose-600">
+                          {day.metrics?.totalDeductions || 0}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 4: Raw Daily Records                                       */}
+      {/* ------------------------------------------------------------- */}
+      {activeTab === "records" && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+            <span className="font-bold text-sm text-[var(--foreground)]">سجلات الأداء اليومية الخام</span>
+            <Badge tone="gray" className="text-xs">
+              {records.length} سجل بالصفحة
+            </Badge>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-right border-collapse">
+              <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
+                <tr>
+                  <th className="px-4 py-3 font-bold">التاريخ</th>
+                  <th className="px-4 py-3 font-bold">كابتن ID</th>
+                  <th className="px-4 py-3 font-bold">المندوب الفعلي المنسوب</th>
+                  <th className="px-4 py-3 font-bold text-center">إجمالي الطلبات</th>
+                  <th className="px-4 py-3 font-bold text-center">ساعات العمل</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {recordsLoading ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center">
+                      <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
+                      <p className="text-xs text-[var(--muted)]">جارٍ جلب السجلات الخام...</p>
+                    </td>
+                  </tr>
+                ) : records.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-[var(--muted)]">
+                      لا توجد سجلات أداء مطابقة.
+                    </td>
+                  </tr>
+                ) : (
+                  records.map((r) => {
+                    const rider = riders.find((rd) => rd.id === r.riderProfileId);
+                    return (
+                      <tr key={r.id} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold" dir="ltr">
+                          {r.reportDate}
+                        </td>
+                        <td className="px-4 py-3 font-mono font-black text-[var(--foreground)]" dir="ltr">
+                          {r.captainId}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-[var(--foreground)]">
+                            {rider?.fullNameAr || rider?.fullNameEn || "المندوب المنسوب"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center font-black text-purple-700 dark:text-purple-300">
+                          {r.totalOrders}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold">
+                          {Number(Number(r.totalWorkingHours).toFixed(2))}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
+            <div className="text-[var(--muted)]">صفحة {recordsPage}</div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={recordsPage <= 1 || recordsLoading}
+                onClick={() => setRecordsPage((p) => Math.max(1, p - 1))}
+              >
+                السابق
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!recordsHasMore || recordsLoading}
+                onClick={() => setRecordsPage((p) => p + 1)}
+              >
+                التالي
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* Upload Daily Performance Modal                                */}
       {/* ------------------------------------------------------------- */}
       <Modal
         isOpen={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
-        title="استيراد ورفع تقرير أداء نينجا اليومي (.xlsx)"
-        maxWidth="max-w-2xl"
+        onClose={() => !uploading && setIsUploadOpen(false)}
+        title="رفع شيت الأداء اليومي لمنصة نينجا"
+        maxWidth="max-w-xl"
       >
-        <form onSubmit={handleUpload} className="space-y-4" dir="rtl">
-          {uploadError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>{uploadError}</span>
+        <form onSubmit={handleUpload} className="space-y-4 text-xs" dir="rtl">
+          <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3 text-purple-900 dark:border-purple-900/50 dark:bg-purple-950/30 dark:text-purple-200 space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <Zap className="h-4 w-4 text-purple-600" />
+              قواعد رفع شيت الأداء (Daily Performance)
             </div>
-          )}
+            <p className="text-[11px] text-[var(--muted)]">
+              الأعمدة المطلوبة في الصف الأول: Captain ID, Total Orders, Total Working Hours.
+              يتم ربط كل صف بالمندوب الفعلي المعين في تاريخ التقرير المحدد ولا يمكن تعديل السجلات المسجلة مسبقاً.
+            </p>
+          </div>
 
-          {/* Date Picker */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[var(--foreground)]">
-              تاريخ التقرير <span className="text-red-500">*</span>
+          <div>
+            <label className="block font-bold text-[var(--foreground)] mb-1">
+              تاريخ التقرير (Report Date) *
             </label>
             <DateInput
               value={uploadDate}
               onChange={setUploadDate}
               max={todayRiyadh}
               required
+              className="w-full text-xs"
             />
-            <p className="text-[11px] text-[var(--muted)]">
-              ملفات نينجا لا تحتوي على عمود للتاريخ؛ يجب تحديد تاريخ اليوم التشغيلي بدقة (أقصاه اليوم بتوقيت الرياض).
+            <p className="text-[10px] text-[var(--muted)] mt-1">
+              لا يمكن أن يكون التاريخ بعد اليوم بتوقيت الرياض ({todayRiyadh}).
             </p>
           </div>
 
-          {/* File Picker */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[var(--foreground)]">
-              ملف الإكسل (.xlsx) <span className="text-red-500">*</span>
+          <div>
+            <label className="block font-bold text-[var(--foreground)] mb-1">
+              ملف إكسل للأداء (.xlsx) *
             </label>
-            <div className="relative rounded-2xl border-2 border-dashed border-[var(--border)] p-6 text-center hover:border-purple-600 transition-colors">
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                required
-                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-              />
-              <FileSpreadsheet className="mx-auto h-10 w-10 text-[var(--muted)]" />
-              {uploadFile ? (
-                <div className="mt-2 text-xs">
-                  <p className="font-bold text-[var(--foreground)]">{uploadFile.name}</p>
-                  <p className="text-[var(--muted)]" dir="ltr">
-                    {(uploadFile.size / 1024).toFixed(1)} KB
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-2 text-xs text-[var(--muted)]">
-                  <span className="font-semibold text-purple-600">اضغط لاختيار ملف الإكسل</span> أو اسحبه هنا
-                  <p className="mt-1 text-[11px]">الأعمدة المطلوبة: Captain ID, Total Orders, Total Working Hours</p>
-                </div>
-              )}
-            </div>
+            <input
+              type="file"
+              accept=".xlsx"
+              required
+              disabled={uploading}
+              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+              className="block w-full text-xs text-[var(--foreground)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer"
+            />
           </div>
 
-          {/* Upload Result Feedback */}
-          {uploadResult && uploadResult.issues.length === 0 && uploadResult.importedRows > 0 && (
-            <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-                <span className="font-bold text-sm">
-                  تم حفظ أداء {uploadResult.importedRows} كابتن بنجاح!
-                </span>
-              </div>
-              {uploadResult.skippedRows > 0 && (
-                <p className="mt-1 text-[11px]">
-                  (تم تخطي {uploadResult.skippedRows} صفاً مكرراً محفوظاً مسبقاً)
-                </p>
-              )}
+          {uploadError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700 font-bold">
+              {uploadError}
             </div>
           )}
 
-          {uploadResult &&
-            uploadResult.issues.length === 0 &&
-            uploadResult.importedRows === 0 &&
-            uploadResult.skippedRows > 0 && (
-              <div className="rounded-xl border border-blue-300 bg-blue-50 p-4 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200">
-                <div className="flex items-center gap-2">
-                  <Info className="h-5 w-5 shrink-0 text-blue-600" />
-                  <span className="font-bold text-sm">
-                    البيانات محفوظة سابقاً؛ لا توجد صفوف جديدة.
-                  </span>
-                </div>
-                <p className="mt-1 text-[11px]">
-                  تم تخطي {uploadResult.skippedRows} صفاً لكونها مطابقة تماماً لما تم استيراده مسبقاً لنفس التاريخ.
-                </p>
+          {uploadResult && uploadResult.issues && uploadResult.issues.length > 0 && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800 space-y-2">
+              <div className="font-bold flex items-center gap-1">
+                <AlertTriangle className="h-4 w-4" />
+                تم رفض الملف لوجود ملاحظات وأخطاء:
               </div>
-            )}
-
-          {/* All-or-nothing Issues Table */}
-          {uploadResult && uploadResult.issues.length > 0 && (
-            <div className="rounded-xl border border-red-300 bg-red-50 p-4 space-y-3 dark:border-red-900/50 dark:bg-red-950/40">
-              <div className="flex items-center gap-2 text-red-800 dark:text-red-200">
-                <XCircle className="h-5 w-5 shrink-0 text-red-600" />
-                <span className="font-bold text-sm">
-                  لم يتم حفظ أي صف بسبب وجود ملاحظات في الملف ({uploadResult.issues.length} ملاحظة)
-                </span>
-              </div>
-              <p className="text-xs text-red-700 dark:text-red-300">
-                الاستيراد يعمل بمبدأ الكل أو لا شيء (All-or-nothing). يرجى تصحيح الملاحظات وإعادة رفع الملف.
-              </p>
-
-              <div className="max-h-56 overflow-y-auto rounded-lg border border-red-200 bg-white dark:bg-slate-900 text-xs">
-                <table className="w-full text-right">
-                  <thead className="bg-red-50 dark:bg-slate-800 font-bold border-b border-red-200 text-red-900 dark:text-red-300">
-                    <tr>
-                      <th className="p-2">رقم الصف</th>
-                      <th className="p-2">كابتن ID</th>
-                      <th className="p-2">سبب التعذر / الخطأ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-red-100 dark:divide-slate-800">
-                    {uploadResult.issues.map((iss, idx) => (
-                      <tr key={idx} className="hover:bg-red-50/50">
-                        <td className="p-2 font-mono" dir="ltr">
-                          {iss.rowNumber === 0 ? "الملف" : `صف ${iss.rowNumber}`}
-                        </td>
-                        <td className="p-2 font-mono font-bold" dir="ltr">
-                          {iss.captainId || "—"}
-                        </td>
-                        <td className="p-2 text-red-700 dark:text-red-300 font-medium">{iss.message}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="max-h-40 overflow-y-auto space-y-1 font-mono text-[11px]">
+                {uploadResult.issues.map((iss, i) => (
+                  <div key={i}>
+                    • [صف {iss.rowNumber}{iss.captainId ? ` - كابتن ${iss.captainId}` : ""}]: {iss.message}
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsUploadOpen(false)}
-              disabled={uploading}
-            >
-              إغلاق
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+            <Button type="button" variant="secondary" onClick={() => setIsUploadOpen(false)} disabled={uploading}>
+              إلغاء
             </Button>
             <Button
               type="submit"
+              variant="primary"
               disabled={uploading || !uploadFile}
-              className="bg-purple-600 text-white hover:bg-purple-700 min-w-[140px]"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold gap-2"
             >
-              {uploading ? "جارٍ التحقق والاستيراد..." : "رفع واستيراد التقرير"}
+              {uploading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              رفع وفحص الملف
             </Button>
           </div>
         </form>

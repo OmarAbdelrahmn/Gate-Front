@@ -15,6 +15,8 @@ export const chefzPaths = {
     `${CHEFZ_BASE_PATH}/accounts?${new URLSearchParams({ page: String(page), pageSize: String(pageSize) })}`,
   account: (accountId: string) => `${CHEFZ_BASE_PATH}/accounts/${encodeURIComponent(accountId)}`,
   accountStatus: (accountId: string) => `${CHEFZ_BASE_PATH}/accounts/${encodeURIComponent(accountId)}/status`,
+  assignmentStartDate: (assignmentId: string) =>
+    `${CHEFZ_BASE_PATH}/assignments/${encodeURIComponent(assignmentId)}/start-date`,
   performanceImport: `${CHEFZ_BASE_PATH}/performance/import`,
   settings: `${CHEFZ_BASE_PATH}/settings/performance`,
   reminders: (page = 1, pageSize = 50) =>

@@ -11,6 +11,7 @@ import {
   getChefzAccount,
   updateChefzAccountDetails,
   updateChefzAccountStatus,
+  updateChefzAssignmentStartDate,
   setChefzPassword,
   getChefzPassword,
   getAllChefzReminders,
@@ -41,6 +42,7 @@ import { listOperatingCities, listSponsors, listRiders, type OperatingCity, type
 import type { Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { DateInput } from "@/components/ui/DateInput";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
@@ -59,6 +61,7 @@ import {
   UserMinus,
   KeyRound,
   History,
+  Calendar,
   AlertTriangle,
   ExternalLink,
   Lock,
@@ -74,6 +77,7 @@ import {
   ShieldAlert,
   Building2,
   MapPin,
+  Save,
   X,
 } from "lucide-react";
 
@@ -181,6 +185,12 @@ export default function ChefzAccountsPage() {
   const [historyAccount, setHistoryAccount] = useState<AccountResponse | null>(null);
   const [assignmentHistoryList, setAssignmentHistoryList] = useState<AssignmentResponse[]>([]);
   const [assignmentHistoryLoading, setAssignmentHistoryLoading] = useState(false);
+
+  // Edit Assignment Start Date Modal / State
+  const [editingAssignment, setEditingAssignment] = useState<AssignmentResponse | null>(null);
+  const [editStartDate, setEditStartDate] = useState("");
+  const [isSavingStartDate, setIsSavingStartDate] = useState(false);
+  const [startDateError, setStartDateError] = useState<string | null>(null);
 
   // Load everything
   const loadData = async () => {
@@ -1200,6 +1210,84 @@ export default function ChefzAccountsPage() {
       setAssignmentHistoryList([]);
     } finally {
       setAssignmentHistoryLoading(false);
+    }
+  };
+
+  const openEditStartDateModal = (asgn: AssignmentResponse) => {
+    setEditingAssignment(asgn);
+    setEditStartDate(asgn.effectiveFrom ? asgn.effectiveFrom.slice(0, 10) : "");
+    setStartDateError(null);
+  };
+
+  const handleSaveStartDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAssignment || !editStartDate.trim()) return;
+
+    if (!editingAssignment.rowVersion) {
+      setStartDateError("رمز التزامن (rowVersion) الخاص بالتكليف غير متوفر.");
+      return;
+    }
+
+    setIsSavingStartDate(true);
+    setStartDateError(null);
+
+    try {
+      const res = await updateChefzAssignmentStartDate(editingAssignment.id, {
+        effectiveFrom: editStartDate.trim(),
+        rowVersion: editingAssignment.rowVersion,
+      });
+
+      const updatedEffectiveFrom = res?.effectiveFrom || editStartDate.trim();
+      const updatedRowVersion = res?.rowVersion || editingAssignment.rowVersion;
+
+      setAssignmentHistoryList((prev) =>
+        prev.map((a) =>
+          a.id === editingAssignment.id
+            ? { ...a, effectiveFrom: updatedEffectiveFrom, rowVersion: updatedRowVersion }
+            : a
+        )
+      );
+
+      toast.success("تم بنجاح", `تم تعديل تاريخ بدء التكليف إلى ${updatedEffectiveFrom}`);
+      setEditingAssignment(null);
+
+      // Reload accounts table data in background
+      loadData();
+    } catch (err: unknown) {
+      const e = err as {
+        status?: number;
+        details?: { detail?: string; message?: string; errors?: Record<string, string[]> };
+        message?: string;
+      };
+
+      if (e?.status === 409) {
+        setStartDateError(
+          "تعارض في التحديث بالتزامن (Concurrency Conflict): تم تعديل هذا التكليف مسبقاً أو تغير رمز التزامن. تم تحديث سجل التكليفات تلقائياً، يرجى إعادة المحاولة."
+        );
+        if (historyAccount) {
+          getAccountAssignmentHistory(historyAccount.id)
+            .then((fresh) => {
+              if (fresh) {
+                setAssignmentHistoryList(fresh);
+                const freshItem = fresh.find((a) => a.id === editingAssignment.id);
+                if (freshItem) {
+                  setEditingAssignment(freshItem);
+                }
+              }
+            })
+            .catch(() => {});
+        }
+      } else {
+        const errorDetail =
+          e?.details?.detail ||
+          e?.details?.message ||
+          (e?.details?.errors ? Object.values(e.details.errors).flat().join(", ") : null) ||
+          e?.message ||
+          "فشل تعديل تاريخ بدء التكليف.";
+        setStartDateError(errorDetail);
+      }
+    } finally {
+      setIsSavingStartDate(false);
     }
   };
 
@@ -2796,6 +2884,11 @@ export default function ChefzAccountsPage() {
                     <th className="px-3 py-2.5">إلى تاريخ</th>
                     <th className="px-3 py-2.5">الحالة</th>
                     <th className="px-3 py-2.5">السبب</th>
+                    {(can("chefz.accounts.update") ||
+                      can("platform_assignments.update") ||
+                      can("platform_accounts.update")) && (
+                      <th className="px-3 py-2.5 text-center">الإجراءات</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
@@ -2822,6 +2915,21 @@ export default function ChefzAccountsPage() {
                       <td className="px-3 py-2 text-[var(--muted)]">
                         {asgn.startReason || asgn.endReason || "—"}
                       </td>
+                      {(can("chefz.accounts.update") ||
+                        can("platform_assignments.update") ||
+                        can("platform_accounts.update")) && (
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => openEditStartDateModal(asgn)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-[var(--brand)] hover:bg-[var(--brand)]/10 transition-colors"
+                            title="تعديل تاريخ البدء"
+                          >
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>تعديل تاريخ البدء</span>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -2999,6 +3107,113 @@ export default function ChefzAccountsPage() {
                 className="bg-[var(--brand)] text-white hover:opacity-90 min-w-[120px]"
               >
                 {statusSubmitting ? "جارٍ الحفظ..." : "حفظ الحالة"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* 6. Modal: Edit Assignment Start Date */}
+      <Modal
+        isOpen={Boolean(editingAssignment)}
+        onClose={() => setEditingAssignment(null)}
+        title="تعديل تاريخ بدء التكليف (Start Date)"
+        maxWidth="max-w-md"
+      >
+        {editingAssignment && (
+          <form onSubmit={handleSaveStartDate} className="space-y-4" dir="rtl">
+            {startDateError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <p className="font-semibold">{startDateError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Context Info Box */}
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--muted)]">المندوب الفعلي:</span>
+                <span className="font-bold text-[var(--foreground)]">
+                  {editingAssignment.actualRiderNameAr || "مندوب سابق"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--muted)]">تاريخ البدء الحالي:</span>
+                <span className="font-mono font-bold text-[var(--foreground)]" dir="ltr">
+                  {editingAssignment.effectiveFrom}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--muted)]">تاريخ الانتهاء:</span>
+                <span className="font-mono text-[var(--muted)]" dir="ltr">
+                  {editingAssignment.effectiveTo || "مستمر حتى الآن"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--muted)]">الحالة:</span>
+                <span>
+                  {editingAssignment.status === "Active" ? (
+                    <Badge tone="green">نشط</Badge>
+                  ) : editingAssignment.status === "Ended" ? (
+                    <Badge tone="gray">منتهي</Badge>
+                  ) : (
+                    <Badge tone="red">ملغي</Badge>
+                  )}
+                </span>
+              </div>
+              {editingAssignment.rowVersion && (
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--border)]">
+                  <span className="text-[var(--muted)]">رمز التزامن (rowVersion):</span>
+                  <span
+                    className="font-mono text-[var(--muted)] truncate max-w-[180px]"
+                    dir="ltr"
+                    title={editingAssignment.rowVersion}
+                  >
+                    {editingAssignment.rowVersion.slice(0, 16)}...
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Date Input */}
+            <div className="space-y-1.5">
+              <DateInput
+                label="تاريخ البدء الجديد (Effective From)"
+                value={editStartDate}
+                onChange={(val) => {
+                  setEditStartDate(val);
+                  setStartDateError(null);
+                }}
+                required
+              />
+              <p className="text-[11px] text-[var(--muted)]">
+                سيتم إرسال رمز التزامن الحالي (rowVersion) مع التحديث لمنع التعارض بالتزامن.
+              </p>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setEditingAssignment(null)}
+                disabled={isSavingStartDate}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isSavingStartDate ||
+                  !editStartDate.trim() ||
+                  editStartDate === editingAssignment.effectiveFrom
+                }
+                className="gap-2 bg-[var(--brand)] text-white hover:opacity-90 min-w-[130px]"
+              >
+                <Save className="h-4 w-4" />
+                {isSavingStartDate ? "جارٍ التحديث..." : "حفظ تاريخ البدء"}
               </Button>
             </div>
           </form>

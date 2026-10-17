@@ -377,7 +377,15 @@ export const navigation: NavItem[] = [
         permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
       },
       {
-        label: "الأداء اليومي",
+        label: "فحص ومراجعة الشيتات",
+        labelKey: "nav.ninjaSheetUpdates",
+        href: "/admin/ninja/sheet-updates",
+        icon: FileSpreadsheet,
+        roles: ["admin", "manager", "member", "accountant"],
+        permissionsAny: ["platform_accounts.read", "platform_accounts.update"],
+      },
+      {
+        label: "الأداء والتقارير",
         labelKey: "nav.ninjaPerformance",
         href: "/admin/ninja/performance",
         icon: BarChart3,
