@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
@@ -34,15 +33,12 @@ import {
   RefreshCw,
   Search,
   Building2,
-  Users,
   Upload,
   Download,
   AlertTriangle,
   CheckCircle2,
-  TrendingUp,
   Check,
   Eye,
-  Info,
   UserCheck,
   User,
   MapPin,
@@ -50,9 +46,10 @@ import {
   Award,
   ChevronLeft,
   ChevronRight,
+  TrendingUp,
 } from "lucide-react";
 
-export default function JahezPerformancePage() {
+export default function JahezOrderPerformancePage() {
   const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
@@ -64,7 +61,7 @@ export default function JahezPerformancePage() {
   const [loading, setLoading] = useState(true);
 
   // Performance Filters & View State
-  const [subView, setSubView] = useState<"accounts" | "sponsors" | "imports">("accounts");
+  const [activeTab, setActiveTab] = useState<"orders" | "batches">("orders");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | "WITH_ORDERS" | "ZERO_ORDERS" | "ASSIGNED" | "UNASSIGNED"
@@ -101,7 +98,7 @@ export default function JahezPerformancePage() {
       if (impRes.status === "fulfilled") setImportBatches(impRes.value.items || []);
       if (accRes.status === "fulfilled") setAccounts(accRes.value.items || []);
     } catch {
-      toast.error("خطأ", "تعذر جلب بيانات الأداء والتقارير");
+      toast.error("خطأ", "تعذر جلب بيانات أداء الطلبات");
     } finally {
       setLoading(false);
     }
@@ -198,6 +195,7 @@ export default function JahezPerformancePage() {
           a.actualRider?.nameAr?.toLowerCase().includes(q) ||
           a.actualRider?.nameEn?.toLowerCase().includes(q) ||
           a.actualRider?.iqamaNo?.includes(q) ||
+          a.actualRider?.mobile?.includes(q) ||
           a.owner?.nameAr?.toLowerCase().includes(q) ||
           a.owner?.iqamaNo?.includes(q)
         );
@@ -216,42 +214,6 @@ export default function JahezPerformancePage() {
   }, [filteredAccounts, page, pageSize]);
 
   const totalPages = Math.ceil(filteredAccounts.length / pageSize) || 1;
-
-  // Sponsors Performance Summary List
-  const sponsorPerformanceList = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        sponsorId: string;
-        nameAr: string;
-        accountsCount: number;
-        assignedCount: number;
-        yesterdayOrders: number;
-        actualRidersCount: number;
-      }
-    >();
-
-    for (const a of accounts) {
-      const key = a.sponsorId || "unknown";
-      const existing = map.get(key) || {
-        sponsorId: key,
-        nameAr: a.sponsorNameAr || "بدون كفيل",
-        accountsCount: 0,
-        assignedCount: 0,
-        yesterdayOrders: 0,
-        actualRidersCount: 0,
-      };
-
-      existing.accountsCount++;
-      if (a.isAssigned) existing.assignedCount++;
-      existing.yesterdayOrders += a.yesterdayOrders ?? 0;
-      if (a.actualRider) existing.actualRidersCount++;
-
-      map.set(key, existing);
-    }
-
-    return Array.from(map.values()).sort((a, b) => b.yesterdayOrders - a.yesterdayOrders);
-  }, [accounts]);
 
   // Daily orders batches
   const dailyOrdersBatches = useMemo(() => {
@@ -278,7 +240,7 @@ export default function JahezPerformancePage() {
       "تاريخ آخر طلب مسجل": a.lastOrderDate || "-",
       "عدد طلبات آخر تاريخ": a.lastOrderCount ?? "-",
     }));
-    exportToExcel(data, `تقرير_أداء_جاهز_${statistics?.yesterday || getRiyadhTodayDate()}`);
+    exportToExcel(data, `تقرير_أداء_الطلبات_جاهز_${statistics?.yesterday || getRiyadhTodayDate()}`);
   };
 
   // Upload handler
@@ -328,7 +290,7 @@ export default function JahezPerformancePage() {
     setCommitSubmitting(true);
     try {
       await commitJahezImport(batchId, { allocations: [] });
-      toast.success("تم الاعتماد", "تم اعتماد وتحديث بيانات الأداء بنجاح");
+      toast.success("تم الاعتماد", "تم اعتماد وتحديث بيانات أداء الطلبات بنجاح");
       setIsPreviewOpen(false);
       loadAll();
     } catch (err: unknown) {
@@ -365,10 +327,10 @@ export default function JahezPerformancePage() {
           </div>
           <div>
             <h1 className="text-2xl font-black text-gray-900 dark:text-white">
-              تقارير وأداء مناديب جاهز
+              أداء الطلبات — جاهز
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              متابعة الطلبات اليومية، أداء المناديب الفعليين، التغطية، واستيراد ملفات الإنجاز
+              متابعة أداء الطلبات اليومية للمناديب والحسابات، مؤشرات الإنجاز، ورفع شيتات الطلبات اليومية
             </p>
           </div>
         </div>
@@ -392,7 +354,7 @@ export default function JahezPerformancePage() {
             className="gap-2"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            تصدير تقرير الأداء
+            تصدير أداء الطلبات
           </Button>
 
           <Button
@@ -498,47 +460,35 @@ export default function JahezPerformancePage() {
         </div>
       </div>
 
-      {/* Sub-views Selector */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
-        <div className="flex items-center gap-2 text-xs font-bold">
-          <button
-            onClick={() => {
-              setSubView("accounts");
-              setPage(1);
-            }}
-            className={`px-3.5 py-1.5 rounded-xl transition-all ${
-              subView === "accounts"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"
-            }`}
-          >
-            جدول أداء الحسابات والمناديب ({filteredAccounts.length})
-          </button>
-          <button
-            onClick={() => setSubView("sponsors")}
-            className={`px-3.5 py-1.5 rounded-xl transition-all ${
-              subView === "sponsors"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"
-            }`}
-          >
-            ملخص أداء الكفلاء ({sponsorPerformanceList.length})
-          </button>
-          <button
-            onClick={() => setSubView("imports")}
-            className={`px-3.5 py-1.5 rounded-xl transition-all ${
-              subView === "imports"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"
-            }`}
-          >
-            دفعات استيراد الطلبات ({dailyOrdersBatches.length})
-          </button>
-        </div>
+      {/* Tabs Selector: Orders Table vs Daily Orders Batches */}
+      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 text-xs font-bold">
+        <button
+          onClick={() => {
+            setActiveTab("orders");
+            setPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl transition-all ${
+            activeTab === "orders"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+          }`}
+        >
+          جدول أداء طلبات الحسابات والمناديب ({filteredAccounts.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("batches")}
+          className={`px-4 py-2 rounded-xl transition-all ${
+            activeTab === "batches"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+          }`}
+        >
+          شيتات الطلبات اليومية المرفوعة ({dailyOrdersBatches.length})
+        </button>
       </div>
 
-      {/* Sub-view 1: Accounts & Riders Performance Table */}
-      {subView === "accounts" && (
+      {/* Tab 1: Orders Performance Table */}
+      {activeTab === "orders" && (
         <div className="space-y-4">
           {/* Filters Bar */}
           <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 md:flex-row md:items-center md:justify-between">
@@ -550,7 +500,7 @@ export default function JahezPerformancePage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="ابحث برقم الحساب، اسم المندوب الفعلي، رقم الإقامة، المالك، الكفيل أو المدينة..."
+                placeholder="ابحث برقم الحساب، اسم المندوب الفعلي، رقم الإقامة، الجوال، المالك، الكفيل أو المدينة..."
                 className="pr-10 text-xs"
               />
             </div>
@@ -639,7 +589,7 @@ export default function JahezPerformancePage() {
                     <tr>
                       <td colSpan={7} className="py-12 text-center text-gray-500">
                         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-500 mb-2" />
-                        جارٍ تحميل بيانات أداء الحسابات...
+                        جارٍ تحميل بيانات أداء الطلبات...
                       </td>
                     </tr>
                   ) : paginatedAccounts.length === 0 ? (
@@ -672,7 +622,7 @@ export default function JahezPerformancePage() {
                             {a.actualRider ? (
                               <div>
                                 <div className="font-semibold text-indigo-700 dark:text-indigo-400 flex items-center gap-1">
-                                  <UserCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <UserCheck className="h-3.5 w-3.5 shrink-0" />
                                   <span>
                                     {a.actualRider.nameAr || a.actualRider.nameEn || "-"}
                                   </span>
@@ -694,7 +644,7 @@ export default function JahezPerformancePage() {
                             {a.owner ? (
                               <div>
                                 <div className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                                  <User className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                                  <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                                   <span>{a.owner.nameAr || a.owner.nameEn || "-"}</span>
                                 </div>
                                 <div className="text-[10px] text-gray-400 font-mono">
@@ -710,13 +660,13 @@ export default function JahezPerformancePage() {
                           {/* الكفيل والمدينة */}
                           <td className="py-3 px-3">
                             <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
-                              <Building2 className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                              <Building2 className="h-3 w-3 text-gray-400 shrink-0" />
                               <span className="truncate max-w-[120px]">
                                 {a.sponsorNameAr || "بدون كفيل"}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                              <MapPin className="h-2.5 w-2.5 text-gray-400 flex-shrink-0" />
+                              <MapPin className="h-2.5 w-2.5 text-gray-400 shrink-0" />
                               <span>{a.cityNameAr || "-"}</span>
                             </div>
                           </td>
@@ -800,7 +750,7 @@ export default function JahezPerformancePage() {
                     size="sm"
                     variant="secondary"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
+                    disabled={page === 1}
                     className="h-7 w-7 p-0"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -812,7 +762,7 @@ export default function JahezPerformancePage() {
                     size="sm"
                     variant="secondary"
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
+                    disabled={page === totalPages}
                     className="h-7 w-7 p-0"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -824,59 +774,8 @@ export default function JahezPerformancePage() {
         </div>
       )}
 
-      {/* Sub-view 2: Sponsors Performance Summary */}
-      {subView === "sponsors" && (
-        <div className="space-y-4">
-          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
-                  <tr>
-                    <th className="py-3 px-3">اسم الكفيل</th>
-                    <th className="py-3 px-3 text-center">إجمالي الحسابات</th>
-                    <th className="py-3 px-3 text-center">الحسابات المسندة</th>
-                    <th className="py-3 px-3 text-center">إجمالي طلبات الأمس</th>
-                    <th className="py-3 px-3 text-center">متوسط الطلبات / مسند</th>
-                    <th className="py-3 px-3 text-center">المناديب الفعليون</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {sponsorPerformanceList.map((s) => {
-                    const avg =
-                      s.assignedCount > 0
-                        ? (s.yesterdayOrders / s.assignedCount).toFixed(1)
-                        : "0";
-                    return (
-                      <tr key={s.sponsorId} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
-                        <td className="py-3 px-3 font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
-                          <Building2 className="h-3.5 w-3.5 text-gray-400" />
-                          <span>{s.nameAr}</span>
-                        </td>
-                        <td className="py-3 px-3 text-center font-bold">{s.accountsCount}</td>
-                        <td className="py-3 px-3 text-center font-bold text-indigo-700">
-                          {s.assignedCount}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono font-black text-sm text-purple-700 dark:text-purple-300">
-                          {s.yesterdayOrders}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono font-bold text-blue-700">
-                          {avg}
-                        </td>
-                        <td className="py-3 px-3 text-center font-bold text-emerald-700">
-                          {s.actualRidersCount}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sub-view 3: Daily Orders Import Batches */}
-      {subView === "imports" && (
+      {/* Tab 2: Daily Orders Import Batches */}
+      {activeTab === "batches" && (
         <div className="space-y-4">
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
             <div className="overflow-x-auto">
@@ -940,7 +839,7 @@ export default function JahezPerformancePage() {
       )}
 
       {/* ================================================================= */}
-      {/* Upload Modal                                                       */}
+      {/* Upload Modal (Strictly Daily Orders XLSX)                         */}
       {/* ================================================================= */}
       <Modal
         isOpen={isUploadOpen}
@@ -951,7 +850,7 @@ export default function JahezPerformancePage() {
         <div className="space-y-4 text-xs" dir="rtl">
           <div>
             <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              اختر ملفات XLSX (من 1 إلى 10 ملفات بحد أقصى 10MB لكل ملف) *
+              اختر ملفات إكسل الطلبات اليومية (XLSX) *
             </label>
             <input
               type="file"
@@ -1021,7 +920,7 @@ export default function JahezPerformancePage() {
       <Modal
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
-        title="معاينة دفعة الاستيراد"
+        title="معاينة شيت الطلبات اليومية"
         maxWidth="max-w-3xl"
       >
         <div className="space-y-4 text-xs" dir="rtl">
@@ -1038,10 +937,7 @@ export default function JahezPerformancePage() {
                     الدفعة #{selectedPreview.batchId.slice(0, 8)}
                   </span>
                   <div className="text-gray-500">
-                    النوع:{" "}
-                    {selectedPreview.kind === ImportKind.DailyOrders
-                      ? "طلبات يومية"
-                      : "معاملات منصة"}
+                    النوع: طلبات يومية (Daily Orders)
                   </div>
                 </div>
                 <Badge tone={selectedPreview.committed ? "green" : "orange"}>
@@ -1088,17 +984,17 @@ export default function JahezPerformancePage() {
                 </div>
               )}
 
-              {/* ملخص الحسابات إن وجد */}
+              {/* ملخص الحسابات في الدفعة */}
               {selectedPreview.accounts && selectedPreview.accounts.length > 0 && (
                 <div>
-                  <div className="font-bold mb-1">ملخص الحسابات في الدفعة:</div>
+                  <div className="font-bold mb-1">ملخص الحسابات والطلبات في الشيت:</div>
                   <div className="max-h-48 overflow-y-auto rounded-xl border">
                     <table className="w-full text-right text-xs">
                       <thead className="bg-gray-50 border-b font-bold">
                         <tr>
                           <th className="py-1.5 px-2">معرف السائق</th>
                           <th className="py-1.5 px-2 text-center">الصفوف الصالحة</th>
-                          <th className="py-1.5 px-2 text-center">الصافي / الطلبات</th>
+                          <th className="py-1.5 px-2 text-center">الطلبات المسجلة</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -1107,7 +1003,7 @@ export default function JahezPerformancePage() {
                             <td className="py-1.5 px-2 font-mono">{acc.driverId}</td>
                             <td className="py-1.5 px-2 text-center">{acc.validRowCount}</td>
                             <td className="py-1.5 px-2 text-center font-bold">
-                              {acc.netAmount ? `${acc.netAmount} ر.س` : `${acc.dispatches} طلب`}
+                              {acc.dispatches ?? 0} طلب
                             </td>
                           </tr>
                         ))}
@@ -1132,7 +1028,7 @@ export default function JahezPerformancePage() {
                     ) : (
                       <Check className="h-4 w-4" />
                     )}
-                    اعتماد بيانات الدفعة (Commit)
+                    اعتماد بيانات الطلبات (Commit)
                   </Button>
                 )}
               </div>
