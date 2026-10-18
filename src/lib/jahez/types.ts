@@ -150,6 +150,7 @@ export interface Operation extends Audit {
   approvedRequestId: Id | null;
   executedAtUtc: Instant | null;
   executedByUserId: Id | null;
+  commissionStartDate?: DateOnly | null;
 }
 
 export interface OperationUpdate {
@@ -162,6 +163,35 @@ export interface OperationPaymentMethodUpdate {
   paymentReference: string;
   reason: string;
   rowVersion: string;
+}
+
+export interface OperationCommissionStartUpdate {
+  startDate: DateOnly;
+  reason: string;
+  rowVersion: string;
+  fund?: Fund | null;
+  paymentReference?: string | null;
+}
+
+export function canCorrectCommissionStart(
+  operation: Operation | null | undefined,
+  canSettle: boolean,
+  canApproveAdjustment: boolean,
+  canReceive: boolean,
+  canDisburse: boolean,
+): boolean {
+  if (!canSettle || !canApproveAdjustment || !canReceive || !canDisburse) {
+    return false;
+  }
+  if (!operation) return true;
+  return (
+    (operation.status === OperationStatus.Ready ||
+      operation.status === OperationStatus.Executed) &&
+    operation.purpose === Purpose.Settlement &&
+    (operation.mode === OperationMode.Settle ||
+      operation.mode === OperationMode.SettleAndWithdraw) &&
+    operation.transferToRider === false
+  );
 }
 
 export function canEditPaymentMethod(
@@ -302,6 +332,7 @@ export interface MoneyMovement {
   calculatedCommission?: number | null;
   startDate?: string | null;
   endDate?: string | null;
+  operationRowVersion?: string | null;
 }
 
 export type Movement = MoneyMovement;

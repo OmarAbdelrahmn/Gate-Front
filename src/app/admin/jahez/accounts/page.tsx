@@ -1,7 +1,7 @@
 // src/app/admin/jahez/accounts/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -24,7 +24,6 @@ import {
 import {
   OperationMode,
   OperationStatus,
-  Direction,
   Fund,
   Purpose,
   ApprovalKind,
@@ -86,6 +85,10 @@ import {
   X,
   Edit3,
 } from "lucide-react";
+
+function riyadhDateTimeInput(value: string): string {
+  return new Date(new Date(value).getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
+}
 
 export default function JahezAccountsPage() {
   const { user, can, locale } = useAuth();
@@ -198,7 +201,41 @@ export default function JahezAccountsPage() {
   const [opPreview, setOpPreview] = useState<Preview | null>(null);
   const [savedOperation, setSavedOperation] = useState<Operation | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [opPreviewError, setOpPreviewError] = useState<string | null>(null);
   const [opSubmitting, setOpSubmitting] = useState(false);
+  const previewRequestId = useRef(0);
+
+  const opNeedsPayment =
+    opMode !== OperationMode.Withdraw &&
+    !opTransferToRider &&
+    opPreview !== null &&
+    opPreview.remaining !== 0;
+  const trimmedOpPaymentRef = opPaymentRef.trim();
+  const opPaymentReferenceError = opNeedsPayment
+    ? !trimmedOpPaymentRef
+      ? "أدخل رقم إيصال القبض أو الصرف أو مرجع التحويل الفعلي قبل حفظ المسودة."
+      : trimmedOpPaymentRef.length > 500
+        ? "مرجع الحركة يجب ألا يتجاوز 500 حرف."
+        : null
+    : null;
+  const opPaymentFundInvalid =
+    opNeedsPayment && (opFund === "" || !opPreview?.allowedFunds.includes(opFund));
+  const savedOperationNeedsPayment =
+    savedOperation !== null &&
+    savedOperation.mode !== OperationMode.Withdraw &&
+    !savedOperation.transferToRider &&
+    savedOperation.remaining !== 0;
+  const savedPaymentReferenceInvalid =
+    savedOperationNeedsPayment &&
+    (!(savedOperation?.paymentReference ?? "").trim() ||
+      (savedOperation?.paymentReference ?? "").length > 500);
+  const opPaymentDetailsChanged =
+    savedOperationNeedsPayment &&
+    (trimmedOpPaymentRef !== (savedOperation?.paymentReference ?? "") ||
+      opFund !== savedOperation?.fund);
+  const opSaveDisabled =
+    opSubmitting || previewLoading || !opPreview ||
+    Boolean(opPaymentReferenceError) || opPaymentFundInvalid;
 
   // Last Settlement information for the selected account/handover
   interface LastSettlementInfo {
@@ -442,7 +479,7 @@ export default function JahezAccountsPage() {
       setOpThroughDate(existingOpToResume.throughDate);
       setOpEffectiveAt(
         existingOpToResume.effectiveAtUtc
-          ? existingOpToResume.effectiveAtUtc.slice(0, 16)
+          ? riyadhDateTimeInput(existingOpToResume.effectiveAtUtc)
           : getRiyadhNowIso().slice(0, 16),
       );
       setOpNet(existingOpToResume.net);
@@ -522,12 +559,12 @@ export default function JahezAccountsPage() {
             setOpMode(pendingOp.mode);
             setOpThroughDate(pendingOp.throughDate);
             if (pendingOp.effectiveAtUtc) {
-              setOpEffectiveAt(pendingOp.effectiveAtUtc.slice(0, 16));
+              setOpEffectiveAt(riyadhDateTimeInput(pendingOp.effectiveAtUtc));
             }
             setOpNet(pendingOp.net);
             setOpReason(pendingOp.reason || "تصفية من داشبورد جاهز");
-            if (pendingOp.fund) setOpFund(pendingOp.fund);
-            if (pendingOp.paymentReference) setOpPaymentRef(pendingOp.paymentReference);
+            setOpFund(pendingOp.fund ?? Fund.Cashbox);
+            setOpPaymentRef(pendingOp.paymentReference ?? "");
             setOpTransferToRider(pendingOp.transferToRider ?? false);
 
             runPreview(
@@ -535,6 +572,7 @@ export default function JahezAccountsPage() {
               pendingOp.mode,
               pendingOp.throughDate,
               pendingOp.net,
+              pendingOp.effectiveAtUtc,
             );
             return;
           }
@@ -557,13 +595,14 @@ export default function JahezAccountsPage() {
 
     // Initial preview if not resuming
     if (!existingOpToResume && acc.currentHandoverId) {
-      runPreview(acc.currentHandoverId, OperationMode.Settle, getRiyadhTodayDate(), 0);
+      runPreview(acc.currentHandoverId, OperationMode.Settle, getRiyadhTodayDate(), 0, getRiyadhNowIso());
     } else if (existingOpToResume && (existingOpToResume.handoverId || acc.currentHandoverId)) {
       runPreview(
         existingOpToResume.handoverId || acc.currentHandoverId || "",
         existingOpToResume.mode,
         existingOpToResume.throughDate,
         existingOpToResume.net,
+        existingOpToResume.effectiveAtUtc,
       );
     }
   };
@@ -573,24 +612,31 @@ export default function JahezAccountsPage() {
     mode: OperationMode,
     throughDate: string,
     netValue: number,
+    effectiveAtValue?: string,
   ) => {
+    const requestId = ++previewRequestId.current;
     setPreviewLoading(true);
+    setOpPreview(null);
+    setOpPreviewError(null);
     try {
-      const effectiveAtUtc = new Date(opEffectiveAt || getRiyadhNowIso()).toISOString();
+      const effectiveAtUtc = effectiveAtValue
+        ?? (opEffectiveAt ? new Date(`${opEffectiveAt}+03:00`).toISOString() : getRiyadhNowIso());
       const res = await previewJahezOperation({
         handoverId,
         mode,
         throughDate,
         effectiveAtUtc,
-        net: Number(netValue) || 0,
+        net: mode === OperationMode.Withdraw ? 0 : Number(netValue) || 0,
         reason: opReason,
       });
-      setOpPreview(res);
+      if (requestId === previewRequestId.current) setOpPreview(res);
     } catch (err: unknown) {
-      // preview error handled silently or with subtle badge
-      setOpPreview(null);
+      if (requestId === previewRequestId.current) {
+        setOpPreview(null);
+        setOpPreviewError(err instanceof Error ? err.message : "تعذر حساب معاينة التصفية.");
+      }
     } finally {
-      setPreviewLoading(false);
+      if (requestId === previewRequestId.current) setPreviewLoading(false);
     }
   };
 
@@ -604,6 +650,7 @@ export default function JahezAccountsPage() {
 
   const handleModeChange = (newMode: OperationMode) => {
     setOpMode(newMode);
+    if (newMode !== OperationMode.SettleAndWithdraw) setOpTransferToRider(false);
     if (newMode === OperationMode.Withdraw) {
       setOpThroughDate(getRiyadhTodayDate());
     }
@@ -611,39 +658,57 @@ export default function JahezAccountsPage() {
       runPreview(
         opAccount.currentHandoverId,
         newMode,
-        opThroughDate,
+        newMode === OperationMode.Withdraw ? getRiyadhTodayDate() : opThroughDate,
         opNet === "" ? 0 : Number(opNet),
       );
     }
   };
 
   const handleSaveOperationDraft = async () => {
+    if (opSubmitting) return;
     if (!opAccount?.currentHandoverId && !savedOperation?.handoverId) {
       toast.error("خطأ", "لا توجد فترة تسليم نشطة لهذا الحساب");
       return;
     }
+    if (previewLoading || !opPreview) {
+      toast.warning("المعاينة مطلوبة", "انتظر اكتمال معاينة الحساب المالي قبل الحفظ.");
+      return;
+    }
+    if (opPaymentReferenceError) {
+      toast.warning("مرجع الحركة مطلوب", opPaymentReferenceError);
+      return;
+    }
     setOpSubmitting(true);
     try {
-      const effectiveAtUtc = new Date(opEffectiveAt).toISOString();
-      const needsFund =
-        opPreview &&
-        opPreview.remaining !== 0 &&
-        !opTransferToRider &&
-        opMode !== OperationMode.Withdraw;
-
+      const effectiveAtUtc = new Date(`${opEffectiveAt}+03:00`).toISOString();
       const targetHandoverId = opAccount?.currentHandoverId || savedOperation?.handoverId || "";
-
-      const opPayload = {
+      const calculationPayload = {
         handoverId: targetHandoverId,
         mode: opMode,
         throughDate: opThroughDate,
         effectiveAtUtc,
-        net: opNet === "" ? 0 : Number(opNet),
+        net: opMode === OperationMode.Withdraw || opNet === "" ? 0 : Number(opNet),
         reason: opReason.trim() || "تصفية من داشبورد جاهز",
-        fund: needsFund && opFund ? (Number(opFund) as Fund) : null,
         purpose: Purpose.Settlement,
         transferToRider: opTransferToRider,
-        paymentReference: needsFund ? opPaymentRef.trim() || null : null,
+      };
+      // Recheck the submitted values instead of relying on a possibly older preview.
+      const freshPreview = await previewJahezOperation(calculationPayload);
+      setOpPreview(freshPreview);
+      const needsFund =
+        opMode !== OperationMode.Withdraw && !opTransferToRider && freshPreview.remaining !== 0;
+      if (needsFund && (!trimmedOpPaymentRef || trimmedOpPaymentRef.length > 500)) {
+        toast.warning("مرجع الحركة مطلوب", "أدخل مرجع الحركة الفعلية، بحد أقصى 500 حرف، ثم احفظ المسودة.");
+        return;
+      }
+      if (needsFund && (opFund === "" || !freshPreview.allowedFunds.includes(opFund))) {
+        toast.warning("الجهة المالية مطلوبة", "اختر جهة مالية تسمح بالقبض أو الصرف وفق المعاينة الحالية.");
+        return;
+      }
+      const opPayload = {
+        ...calculationPayload,
+        fund: needsFund && opFund !== "" ? opFund : null,
+        paymentReference: needsFund ? trimmedOpPaymentRef : null,
       };
 
       let op: Operation;
@@ -687,7 +752,11 @@ export default function JahezAccountsPage() {
   };
 
   const handleExecuteOperation = async () => {
-    if (!savedOperation) return;
+    if (!savedOperation || opSubmitting) return;
+    if (savedPaymentReferenceInvalid || opPaymentDetailsChanged) {
+      toast.warning("حدّث المسودة أولاً", "أدخل مرجع الحركة الفعلية ثم اضغط تحديث المسودة لحفظه قبل التنفيذ.");
+      return;
+    }
     setOpSubmitting(true);
     try {
       await executeJahezOperation(savedOperation.id);
@@ -1699,7 +1768,9 @@ export default function JahezAccountsPage() {
               <p className="mt-1 text-[11px] text-blue-800 dark:text-blue-300">
                 {savedOperation.status === OperationStatus.UnderReview
                   ? "العملية قيد المراجعة بانتظار اعتماد الإدارة لطلب التعديل أو الترحيل."
-                  : "تم استرجاع المسودة الحالية. لإنهاء التصفية، يمكنك الضغط مباشرة على زر \"تنفيذ الحركة المالية\" بالأسفل لصرف/قبض المبلغ وإغلاق العملية."}
+                  : savedPaymentReferenceInvalid || opPaymentDetailsChanged
+                  ? "أدخل مرجع الحركة الفعلية ثم اضغط تحديث المسودة لحفظ بيانات الدفع قبل تنفيذ التصفية."
+                  : "تم استرجاع المسودة الحالية. راجع بيانات الدفع المحفوظة ثم اضغط تنفيذ الحركة المالية لإنهاء التصفية."}
               </p>
             </div>
           )}
@@ -1857,7 +1928,14 @@ export default function JahezAccountsPage() {
                 <Input
                   type="datetime-local"
                   value={opEffectiveAt}
-                  onChange={(e) => setOpEffectiveAt(e.target.value)}
+                  onChange={(e) => {
+                    setOpEffectiveAt(e.target.value);
+                    const handoverId = savedOperation?.handoverId || opAccount?.currentHandoverId;
+                    if (handoverId && e.target.value) {
+                      runPreview(handoverId, opMode, opThroughDate, Number(opNet) || 0,
+                        new Date(`${e.target.value}+03:00`).toISOString());
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -1976,40 +2054,71 @@ export default function JahezAccountsPage() {
                   opMode !== OperationMode.Withdraw && (
                     <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
                       <div>
-                        <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="operation-payment-fund" className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                           الجهة المالية المسموحة *
                         </label>
                         <select
-                          value={opFund}
+                          id="operation-payment-fund"
+                          required
+                          disabled={opSubmitting}
+                          value={opFund !== "" && opPreview.allowedFunds.includes(opFund) ? opFund : ""}
                           onChange={(e) => setOpFund(Number(e.target.value) as Fund)}
                           className="w-full rounded-xl border border-gray-300 bg-white p-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800"
                         >
-                          {opPreview.direction === Direction.Receipt ? (
-                            <>
-                              <option value={Fund.Cashbox}>الخزنة (Cashbox)</option>
-                              <option value={Fund.PetroApp}>بترو آب (PetroApp - للوقود فقط)</option>
-                            </>
-                          ) : (
-                            <>
-                              <option value={Fund.Cashbox}>الخزنة (Cashbox)</option>
-                              <option value={Fund.Bank}>البنك (Bank - تحويل فعلي)</option>
-                            </>
-                          )}
+                          <option value="" disabled>اختر الجهة المالية</option>
+                          {opPreview.allowedFunds.map((fund) => (
+                            <option key={fund} value={fund}>
+                              {fund === Fund.Cashbox ? "الخزنة (Cashbox)"
+                                : fund === Fund.Bank ? "البنك (Bank - تحويل فعلي)"
+                                  : "بترو آب (PetroApp)"}
+                            </option>
+                          ))}
                         </select>
                       </div>
 
                       <div>
-                        <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                          مرجع الحركة الفعلية *
-                        </label>
                         <Input
+                          id="operation-payment-reference"
+                          label="مرجع الحركة الفعلية"
+                          required
+                          maxLength={500}
+                          disabled={opSubmitting}
                           value={opPaymentRef}
                           onChange={(e) => setOpPaymentRef(e.target.value)}
                           placeholder="رقم إيصال الخزنة أو مرجع التحويل"
+                          aria-invalid={Boolean(opPaymentReferenceError)}
+                          aria-describedby="operation-payment-reference-help"
                         />
+                        <p
+                          id="operation-payment-reference-help"
+                          aria-live="polite"
+                          className={`mt-1 text-xs ${opPaymentReferenceError ? "text-rose-600 dark:text-rose-400" : "text-gray-500 dark:text-gray-400"}`}
+                        >
+                          {opPaymentReferenceError || "سيُحفظ المرجع مع المسودة ويُستخدم عند تنفيذ القبض أو الصرف."}
+                        </p>
+                        <p className="mt-1 text-[10px] text-gray-500" dir="ltr">
+                          {opPaymentRef.length}/500
+                        </p>
                       </div>
                     </div>
                   )}
+              </div>
+            ) : opPreviewError ? (
+              <div className="space-y-2 py-2 text-center">
+                <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
+                  {opPreviewError}
+                </p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={previewLoading || opSubmitting}
+                  onClick={() => runPreview(
+                    savedOperation?.handoverId || opAccount?.currentHandoverId || "",
+                    opMode, opThroughDate, opNet === "" ? 0 : Number(opNet),
+                  )}
+                >
+                  إعادة حساب المعاينة
+                </Button>
               </div>
             ) : (
               <div className="text-center text-gray-400 py-2">
@@ -2076,7 +2185,7 @@ export default function JahezAccountsPage() {
                 <Button
                   size="sm"
                   onClick={handleSaveOperationDraft}
-                  disabled={opSubmitting || previewLoading}
+                  disabled={opSaveDisabled}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-1.5"
                 >
                   {opSubmitting ? (
@@ -2093,7 +2202,7 @@ export default function JahezAccountsPage() {
                       size="sm"
                       variant="secondary"
                       onClick={handleSaveOperationDraft}
-                      disabled={opSubmitting || previewLoading}
+                      disabled={opSaveDisabled}
                       className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold gap-1.5"
                       title="تحديث قيم مسودة العملية المسجلة حالياً"
                     >
@@ -2112,6 +2221,10 @@ export default function JahezAccountsPage() {
                       onClick={handleExecuteOperation}
                       disabled={
                         opSubmitting ||
+                        previewLoading ||
+                        !opPreview ||
+                        savedPaymentReferenceInvalid ||
+                        opPaymentDetailsChanged ||
                         opTransferToRider ||
                         savedOperation.status === OperationStatus.UnderReview
                       }
@@ -2119,6 +2232,8 @@ export default function JahezAccountsPage() {
                       title={
                         savedOperation.status === OperationStatus.UnderReview
                           ? "العملية قيد المراجعة وتتطلب اعتماد الإدارة أولاً"
+                          : savedPaymentReferenceInvalid || opPaymentDetailsChanged
+                          ? "أدخل مرجع الحركة الفعلية واحفظ تحديث المسودة أولاً"
                           : opTransferToRider
                           ? "عملية الترحيل تتطلب اعتماد المدير أولاً"
                           : "تنفيذ الحركة المالية وإنهاء التصفية"

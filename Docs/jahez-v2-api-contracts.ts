@@ -38,8 +38,9 @@ export interface Operation extends Audit { handoverId: Id; mode: OperationMode; 
   paymentStatus: PaymentStatus; throughDate: DateOnly; effectiveAtUtc: Instant; net: number; commission: number;
   calculatedCommission: number; remaining: number; calculationJson: string; fund: Fund | null; purpose: Purpose;
   transferToRider: boolean; paymentReference: string | null; reason: string; approvedRequestId: Id | null;
-  executedAtUtc: Instant | null; executedByUserId: Id | null }
+  executedAtUtc: Instant | null; executedByUserId: Id | null; commissionStartDate?: DateOnly | null }
 export interface OperationUpdate { values: OperationCreate; rowVersion: string }
+export interface OperationCommissionStartUpdate { startDate: DateOnly; reason: string; rowVersion: string; fund?: Fund | null; paymentReference?: string | null }
 export interface RequestCreate { handoverId: Id; kind: ApprovalKind; reason: string; operationId?: Id | null;
   targetAccountId?: Id | null; waiverAmount?: number; fromDate?: DateOnly | null; toDate?: DateOnly | null;
   effectiveAtUtc?: Instant | null; adjustmentTarget?: AdjustmentTarget | null; proposedNet?: number | null;
@@ -61,7 +62,7 @@ export interface TransferredDebt extends Audit { operationId: Id; riderProfileId
 export interface Movement { id: Id; handoverId: Id; riderProfileId: Id; operationId: Id | null;
   transferredDebtId: Id | null; fund: Fund; direction: Direction; purpose: Purpose;
   amount: number; actorUserId: Id; occurredAtUtc: Instant; reference: string; reason: string;
-  createdAtUtc: Instant; createdByUserId: Id | null }
+  createdAtUtc: Instant; createdByUserId: Id | null; operationRowVersion?: string | null }
 export interface FundBalance { fund: Fund; receipts: number; disbursements: number; balance: number }
 export interface AccountStatusUpdate { status: Account['status']; reason: string; rowVersion: string }
 export interface AccountFee extends Audit { handoverId: Id; amount: number; waivedAmount: number; approvalRequestId: Id | null }
@@ -99,5 +100,6 @@ export const routes = {
   accounts: '/api/jahez/v2/accounts', statistics: '/api/jahez/v2/statistics', operations: '/api/jahez/v2/operations',
   preview: '/api/jahez/v2/operations/preview', requests: '/api/jahez/v2/requests',
   transferredDebts: '/api/jahez/v2/transferred-debts', feeReceipts: '/api/jahez/v2/fees/receipts',
-  moneyMovements: '/api/jahez/v2/money-movements', funds: '/api/jahez/v2/funds', handovers: '/api/jahez/v2/handovers', earnings: '/api/jahez/v2/earnings', imports: '/api/jahez/v2/imports', administrativeDebts: '/api/jahez/v2/administrative-debts'
+  moneyMovements: '/api/jahez/v2/money-movements', funds: '/api/jahez/v2/funds', handovers: '/api/jahez/v2/handovers', earnings: '/api/jahez/v2/earnings', imports: '/api/jahez/v2/imports', administrativeDebts: '/api/jahez/v2/administrative-debts',
+  commissionStart: (opId: string) => `/api/jahez/v2/operations/${encodeURIComponent(opId)}/commission-start`
 } as const;

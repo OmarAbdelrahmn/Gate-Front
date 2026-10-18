@@ -136,6 +136,10 @@ export const PERMISSIONS = [
   "jahez.cashbox.submit",
   "jahez.cashbox.confirm",
   "jahez.cashbox.approve",
+  "jahez.settle",
+  "jahez.requests.adjustment.approve",
+  "jahez.money.receive",
+  "jahez.money.disburse",
 
   // Chefz Platform
   "chefz.read",
@@ -317,6 +321,10 @@ export const PERMISSIONS = [
   "jahez.adjustments.create",
   "jahez.adjustments.update",
   "jahez.adjustments.delete",
+  "jahez.settle",
+  "jahez.requests.adjustment.approve",
+  "jahez.money.receive",
+  "jahez.money.disburse",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

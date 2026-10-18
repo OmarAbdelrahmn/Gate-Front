@@ -46,10 +46,21 @@ export interface EditPaymentMethodModalProps {
   };
   canSettle?: boolean;
   canDisburse?: boolean;
+  onOpenCorrectCommission?: () => void;
   onSuccess?: (updatedOperation: Operation) => void;
 }
 
-export function EditPaymentMethodModal({
+export function EditPaymentMethodModal(props: EditPaymentMethodModalProps) {
+  if (!props.isOpen) return null;
+  return (
+    <EditPaymentMethodDialogBody
+      {...props}
+      key={props.operationId || props.initialOperation?.id || "edit-payment-dialog"}
+    />
+  );
+}
+
+function EditPaymentMethodDialogBody({
   isOpen,
   onClose,
   operationId,
@@ -57,18 +68,25 @@ export function EditPaymentMethodModal({
   contextInfo,
   canSettle = true,
   canDisburse = true,
+  onOpenCorrectCommission,
   onSuccess,
 }: EditPaymentMethodModalProps) {
-  // Loading & operation state
-  const [operation, setOperation] = useState<Operation | null>(null);
+  // Loading & operation state initialized immediately from initialOperation if present
+  const [operation, setOperation] = useState<Operation | null>(() => initialOperation || null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Form states
-  const [selectedFund, setSelectedFund] = useState<Fund>(Fund.Cashbox);
-  const [initialFund, setInitialFund] = useState<Fund | null>(null);
-  const [paymentReference, setPaymentReference] = useState<string>("");
-  const [initialReference, setInitialReference] = useState<string>("");
+  const [selectedFund, setSelectedFund] = useState<Fund>(() => {
+    return initialOperation?.fund === Fund.Bank ? Fund.Bank : Fund.Cashbox;
+  });
+  const [initialFund, setInitialFund] = useState<Fund | null>(() => initialOperation?.fund ?? null);
+  const [paymentReference, setPaymentReference] = useState<string>(
+    () => initialOperation?.paymentReference || "",
+  );
+  const [initialReference, setInitialReference] = useState<string>(
+    () => initialOperation?.paymentReference || "",
+  );
   const [reason, setReason] = useState<string>("");
 
   // Submission & Retry states
@@ -94,6 +112,7 @@ export function EditPaymentMethodModal({
     setRequiresReload(false);
     setActiveCommandKey(null);
     setLastSubmittedPayload(null);
+    setLoading(false);
   };
 
   const loadOperationData = async (opId: string) => {
@@ -103,27 +122,27 @@ export function EditPaymentMethodModal({
       const op = await getJahezOperation(opId);
       initFormWithOperation(op);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "تعذر تحميل بيانات التصفية";
-      setLoadError(msg);
+      if (initialOperation) {
+        initFormWithOperation(initialOperation);
+      } else {
+        const msg = err instanceof Error ? err.message : "تعذر تحميل بيانات التصفية";
+        setLoadError(msg);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!isOpen || !operationId) {
-      setOperation(null);
-      setLoadError(null);
-      setSubmitError(null);
+    if (initialOperation) {
+      initFormWithOperation(initialOperation);
       return;
     }
 
-    if (initialOperation && initialOperation.id === operationId) {
-      initFormWithOperation(initialOperation);
-    } else {
+    if (operationId) {
       loadOperationData(operationId);
     }
-  }, [isOpen, operationId, initialOperation]);
+  }, [operationId, initialOperation]);
 
   // ----------------------------------------------------------------------
   // Validation
@@ -268,6 +287,28 @@ export function EditPaymentMethodModal({
         {/* Main Form */}
         {!loading && operation && (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Bridge Notice for Commission Date Correction */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 text-xs text-indigo-900 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-200">
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span>
+                  هذا النموذج مخصص لتعديل <strong>طريقة الدفع (الخزنة ↔ البنك)</strong>.
+                </span>
+              </div>
+              {onOpenCorrectCommission && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenCorrectCommission();
+                  }}
+                  className="font-bold underline text-emerald-700 dark:text-emerald-300 hover:opacity-80 shrink-0 text-[11px]"
+                >
+                  الانتقال لتصحيح تاريخ بداية احتساب العمولة ←
+                </button>
+              )}
+            </div>
+
             {/* 1. Settlement Context Card */}
             <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3.5 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-300">
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
