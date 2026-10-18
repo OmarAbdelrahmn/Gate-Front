@@ -21,9 +21,37 @@ export const chefzPaths = {
   settings: `${CHEFZ_BASE_PATH}/settings/performance`,
   reminders: (page = 1, pageSize = 50) =>
     `${CHEFZ_BASE_PATH}/reminders?${new URLSearchParams({ page: String(page), pageSize: String(pageSize) })}`,
+  riderReport: (query: { accountId?: string; riderId?: string; year: number; month: number; half: number; halves: number }) => {
+    const params = new URLSearchParams({
+      year: String(query.year),
+      month: String(query.month),
+      half: String(query.half),
+      halves: String(query.halves),
+    });
+    if (query.accountId) params.set("accountId", query.accountId);
+    if (query.riderId) params.set("riderId", query.riderId);
+    return `${CHEFZ_BASE_PATH}/reports/riders?${params}`;
+  },
+  allRidersReport: (query: { year: number; month: number; half: 1 | 2; halves?: number }) => {
+    const params = new URLSearchParams({
+      year: String(query.year),
+      month: String(query.month),
+      half: String(query.half),
+      halves: String(query.halves ?? 1),
+    });
+    return `${CHEFZ_BASE_PATH}/reports/riders/all?${params}`;
+  },
   walletPreview: `${CHEFZ_BASE_PATH}/settlements/preview`,
   walletSave: `${CHEFZ_BASE_PATH}/settlements`,
 } as const;
+
+export type {
+  ChefzAllRidersReportQuery,
+  ChefzRatingCounts,
+  ChefzRiderAccountSummary,
+  ChefzAllRidersItem,
+  ChefzAllRidersReport,
+} from "./types";
 
 export interface ChefzProblemDetails {
   type?: string;

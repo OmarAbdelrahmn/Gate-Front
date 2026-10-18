@@ -15,6 +15,8 @@ import type {
   ChefzPasswordRequest,
   ChefzPerformance,
   ChefzRiderReport,
+  ChefzAllRidersReport,
+  ChefzAllRidersReportQuery,
   ChefzSettlement,
   ChefzSettlementRequest,
   ChefzSettingsRequest,
@@ -564,6 +566,19 @@ export async function getChefzRiderReport(params: {
   query.set("halves", String(params.halves));
 
   return authFetch<ChefzRiderReport>(`/api/chefz/reports/riders?${query.toString()}`, {
+    method: "GET",
+  });
+}
+
+/**
+ * GET /api/chefz/reports/riders/all?year=...&month=...&half=...&halves=...
+ * Chefz all-riders performance report. Returns all matching riders in one request without pagination.
+ */
+export async function getChefzAllRidersReport(
+  params: ChefzAllRidersReportQuery
+): Promise<ChefzAllRidersReport> {
+  const path = chefzPaths.allRidersReport(params);
+  return authFetch<ChefzAllRidersReport>(path, {
     method: "GET",
   });
 }

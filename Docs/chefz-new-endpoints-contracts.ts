@@ -137,6 +137,45 @@ export interface ChefzAccountPerformanceReport {
   daily: ChefzPerformanceResponse[];
 }
 
+export interface ChefzAllRidersReportQuery {
+  year: number;
+  month: number;
+  half: 1 | 2;
+  halves?: number;
+}
+
+export interface ChefzRatingCounts {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  change: number;
+  unrated: number;
+}
+
+export interface ChefzRiderAccountSummary {
+  accountId: Guid;
+  externalAccountId: string;
+  summary: ChefzReportSummary;
+}
+
+export interface ChefzAllRidersItem {
+  riderProfileId: Guid;
+  riderName: string;
+  selectedSummary: ChefzReportSummary;
+  halves: ChefzHalfReport[];
+  accounts: ChefzRiderAccountSummary[];
+}
+
+export interface ChefzAllRidersReport {
+  from: DateOnly;
+  to: DateOnly;
+  requestedHalves: number;
+  totalRiders: number;
+  ratingCounts: ChefzRatingCounts;
+  riders: ChefzAllRidersItem[];
+}
+
 export interface ChefzManagementReport {
   sponsorId: Guid;
   sponsorNameAr: string;
@@ -233,6 +272,15 @@ export const chefzPaths = {
     if (query.accountId) params.set('accountId', query.accountId);
     if (query.riderId) params.set('riderId', query.riderId);
     return `${CHEFZ_BASE_PATH}/reports/riders?${params}`;
+  },
+  allRidersReport: (query: ChefzAllRidersReportQuery) => {
+    const params = new URLSearchParams({
+      year: String(query.year),
+      month: String(query.month),
+      half: String(query.half),
+      halves: String(query.halves ?? 1),
+    });
+    return `${CHEFZ_BASE_PATH}/reports/riders/all?${params}`;
   },
   managementReport: (reportDate: DateOnly, sponsorId?: Guid) => {
     const params = new URLSearchParams({ reportDate });

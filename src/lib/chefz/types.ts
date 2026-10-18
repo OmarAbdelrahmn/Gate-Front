@@ -250,6 +250,45 @@ export interface ChefzRiderReport {
   accounts?: ChefzAccountPerformanceReport[];
 }
 
+export interface ChefzAllRidersReportQuery {
+  year: number;
+  month: number;
+  half: 1 | 2;
+  halves?: number;
+}
+
+export interface ChefzRatingCounts {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  change: number;
+  unrated: number;
+}
+
+export interface ChefzRiderAccountSummary {
+  accountId: Guid;
+  externalAccountId: string;
+  summary: ChefzReportSummary;
+}
+
+export interface ChefzAllRidersItem {
+  riderProfileId: Guid;
+  riderName: string;
+  selectedSummary: ChefzReportSummary;
+  halves: ChefzReportHalf[];
+  accounts: ChefzRiderAccountSummary[];
+}
+
+export interface ChefzAllRidersReport {
+  from: DateOnly;
+  to: DateOnly;
+  requestedHalves: number;
+  totalRiders: number;
+  ratingCounts: ChefzRatingCounts;
+  riders: ChefzAllRidersItem[];
+}
+
 // -------------------------------------------------------------
 // 3. Sponsor Statistics
 // -------------------------------------------------------------
