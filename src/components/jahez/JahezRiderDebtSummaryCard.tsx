@@ -3,7 +3,11 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { getJahezAdministrativeDebts, getJahezTransferredDebts } from "@/lib/jahez/api";
+import {
+  getJahezAdministrativeDebts,
+  getAllJahezAdministrativeDebts,
+  getJahezTransferredDebts,
+} from "@/lib/jahez/api";
 import type { AdministrativeDebt, TransferredDebt } from "@/lib/jahez/types";
 import { Coins, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
 
@@ -32,7 +36,7 @@ export function JahezRiderDebtSummaryCard({
 
     try {
       const [debtsRes, transfersRes] = await Promise.allSettled([
-        getJahezAdministrativeDebts(1, 100),
+        getAllJahezAdministrativeDebts(100),
         getJahezTransferredDebts(1, 100),
       ]);
 

@@ -1,13 +1,14 @@
 // src/app/admin/jahez/statistics/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
   getJahezStatistics,
   getJahezAdministrativeDebts,
+  getAllJahezAdministrativeDebts,
   getJahezImports,
   getJahezImportPreview,
   commitJahezImport,
@@ -43,6 +44,8 @@ import {
   Check,
   Eye,
   Info,
+  Coins,
+  X,
 } from "lucide-react";
 
 export default function JahezStatisticsAndReportsPage() {
@@ -82,7 +85,7 @@ export default function JahezStatisticsAndReportsPage() {
     try {
       const [statRes, debtRes, impRes] = await Promise.allSettled([
         getJahezStatistics(),
-        getJahezAdministrativeDebts(1, 100),
+        getAllJahezAdministrativeDebts(100),
         getJahezImports(1, 50),
       ]);
 
@@ -191,6 +194,42 @@ export default function JahezStatisticsAndReportsPage() {
     );
   });
 
+  const totalAdminDebt = useMemo(() => {
+    return adminDebts.reduce((sum, d) => sum + (Number(d.platformDebt) || 0), 0);
+  }, [adminDebts]);
+
+  const filteredAdminDebtTotal = useMemo(() => {
+    return filteredAdminDebts.reduce((sum, d) => sum + (Number(d.platformDebt) || 0), 0);
+  }, [filteredAdminDebts]);
+
+  const uniqueRidersCount = useMemo(() => {
+    return new Set(adminDebts.map((d) => d.riderProfileId || d.riderNameAr).filter(Boolean)).size;
+  }, [adminDebts]);
+
+  const handleExportAdminDebts = async () => {
+    if (filteredAdminDebts.length === 0) {
+      toast.warning("تنبيه", "لا توجد بيانات لتصديرها");
+      return;
+    }
+    try {
+      await exportToExcel({
+        filename: `jahez-admin-debts-${getRiyadhTodayDate()}`,
+        sheetName: "المديونية الإدارية",
+        data: filteredAdminDebts,
+        columns: [
+          { header: "رقم الحساب", accessor: (d) => d.externalAccountId || "-", isText: true },
+          { header: "المندوب الفعلي", accessor: (d) => d.riderNameAr || "-", isText: true },
+          { header: "معرف المندوب", accessor: (d) => d.riderProfileId || "-", isText: true },
+          { header: "معرف فترة التسليم", accessor: (d) => d.handoverId || "-", isText: true },
+          { header: "مديونية المنصة (ر.س)", accessor: (d) => Number(d.platformDebt) || 0 },
+        ],
+      });
+      toast.success("تم التصدير", `تم تصدير ${filteredAdminDebts.length} سجل بنجاح`);
+    } catch {
+      toast.error("خطأ", "تعذر تصدير ملف الإكسل");
+    }
+  };
+
   return (
     <div className="space-y-6 p-4 md:p-8" dir="rtl">
       {/* Header */}
@@ -235,7 +274,10 @@ export default function JahezStatisticsAndReportsPage() {
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 overflow-x-auto text-xs font-bold">
         <button
-          onClick={() => setActiveTab("sponsors")}
+          onClick={() => {
+            setActiveTab("sponsors");
+            setSearch("");
+          }}
           className={`px-4 py-2 rounded-xl transition-all ${
             activeTab === "sponsors"
               ? "bg-purple-600 text-white shadow-xs"
@@ -245,7 +287,10 @@ export default function JahezStatisticsAndReportsPage() {
           إحصائيات الكفلاء ({statistics?.sponsors?.length || 0})
         </button>
         <button
-          onClick={() => setActiveTab("adminDebts")}
+          onClick={() => {
+            setActiveTab("adminDebts");
+            setSearch("");
+          }}
           className={`px-4 py-2 rounded-xl transition-all ${
             activeTab === "adminDebts"
               ? "bg-purple-600 text-white shadow-xs"
@@ -255,7 +300,10 @@ export default function JahezStatisticsAndReportsPage() {
           المديونية الإدارية للمتابعة ({adminDebts.length})
         </button>
         <button
-          onClick={() => setActiveTab("imports")}
+          onClick={() => {
+            setActiveTab("imports");
+            setSearch("");
+          }}
           className={`px-4 py-2 rounded-xl transition-all ${
             activeTab === "imports"
               ? "bg-purple-600 text-white shadow-xs"
@@ -269,6 +317,26 @@ export default function JahezStatisticsAndReportsPage() {
       {/* Tab 1: Sponsors Breakdown Table */}
       {activeTab === "sponsors" && (
         <div className="space-y-4">
+          <div className="relative max-w-xs">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث باسم الكفيل..."
+              className="pr-9 pl-8 text-xs h-9"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
+                title="مسح البحث"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs">
@@ -340,13 +408,103 @@ export default function JahezStatisticsAndReportsPage() {
             </div>
           </div>
 
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  إجمالي سجلات المديونية الإدارية
+                </p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-2xl font-black text-gray-900 dark:text-white">
+                    {adminDebts.length.toLocaleString()}
+                  </span>
+                  {search.trim() && (
+                    <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                      (المطابق: {filteredAdminDebts.length})
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400">
+                <FileCheck className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  إجمالي مبالغ المديونية
+                </p>
+                <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+                  {totalAdminDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                  <span className="text-xs font-normal text-gray-500">ر.س</span>
+                </p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                <Coins className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  عدد المناديب المتأثرين
+                </p>
+                <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+                  {uniqueRidersCount.toLocaleString()}{" "}
+                  <span className="text-xs font-normal text-gray-500">مندوب</span>
+                </p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
+                <Users className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Actions Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="بحث برقم الحساب أو اسم المندوب..."
+                className="pr-9 pl-8 text-xs h-9"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
+                  title="مسح البحث"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleExportAdminDebts}
+                disabled={filteredAdminDebts.length === 0}
+                className="gap-1.5 h-9 text-xs font-bold text-emerald-700 dark:text-emerald-400 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                تصدير إكسل ({filteredAdminDebts.length})
+              </Button>
+            </div>
+          </div>
+
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs">
                 <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
                   <tr>
+                    <th className="py-3 px-3 w-12 text-center">#</th>
                     <th className="py-3 px-3">رقم الحساب</th>
-                    <th className="py-3 px-3">معرف فترة التسليم</th>
                     <th className="py-3 px-3">المندوب الفعلي</th>
                     <th className="py-3 px-3 text-center">مديونية المنصة (Platform Debt)</th>
                   </tr>
@@ -356,37 +514,49 @@ export default function JahezStatisticsAndReportsPage() {
                     <tr>
                       <td colSpan={4} className="py-12 text-center text-gray-500">
                         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-500 mb-2" />
-                        جارٍ تحميل المديونية الإدارية...
+                        جارٍ تحميل كافة سجلات المديونية الإدارية...
                       </td>
                     </tr>
                   ) : filteredAdminDebts.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="py-12 text-center text-gray-500">
-                        لا توجد مديونيات إدارية مسجلة
+                        {search.trim() ? "لا توجد نتائج مطابقة للبحث" : "لا توجد مديونيات إدارية مسجلة"}
                       </td>
                     </tr>
                   ) : (
-                    filteredAdminDebts.map((d) => (
+                    filteredAdminDebts.map((d, idx) => (
                       <tr
-                        key={d.handoverId}
-                        className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40"
+                        key={`${d.handoverId || d.accountId}_${idx}`}
+                        className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40 transition-colors"
                       >
-                        <td className="py-3 px-3 font-mono font-bold">
-                          {d.externalAccountId || "-"}
+                        <td className="py-3 px-3 text-gray-400 font-mono text-[11px] text-center">
+                          {idx + 1}
                         </td>
-                        <td className="py-3 px-3 font-mono text-gray-500 text-[11px]">
-                          {d.handoverId.slice(0, 8)}
+                        <td className="py-3 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
+                          {d.externalAccountId || "-"}
                         </td>
                         <td className="py-3 px-3 font-semibold text-gray-900 dark:text-gray-100">
                           {d.riderNameAr || "مندوب"}
                         </td>
-                        <td className="py-3 px-3 text-center font-mono font-bold text-sm text-gray-900 dark:text-white">
-                          {d.platformDebt.toFixed(2)} ر.س
+                        <td className="py-3 px-3 text-center font-mono font-bold text-sm text-rose-600 dark:text-rose-400">
+                          {Number(d.platformDebt || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
                         </td>
                       </tr>
                     ))
                   )}
                 </tbody>
+                {filteredAdminDebts.length > 0 && (
+                  <tfoot className="border-t bg-gray-50/90 dark:bg-gray-800/60 font-bold text-gray-700 dark:text-gray-300">
+                    <tr>
+                      <td colSpan={3} className="py-3 px-3">
+                        إجمالي السجلات المعروضة ({filteredAdminDebts.length} من أصل {adminDebts.length})
+                      </td>
+                      <td className="py-3 px-3 text-center font-mono text-sm text-rose-700 dark:text-rose-300">
+                        {filteredAdminDebtTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>

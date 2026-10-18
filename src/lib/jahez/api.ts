@@ -681,6 +681,93 @@ export async function getJahezAdministrativeDebts(
   );
 }
 
+/**
+ * Fetch all Jahez administrative debts across all pages.
+ */
+export async function getAllJahezAdministrativeDebts(
+  pageSize = 100,
+  init?: CustomRequestInit,
+): Promise<{ items: AdministrativeDebt[]; totalCount: number }> {
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+  const firstPage = await getJahezAdministrativeDebts(1, safePageSize, init);
+  const items = firstPage?.items || [];
+  const serverTotalCount = firstPage?.totalCount;
+
+  // If there are no items or fewer items than safePageSize, all items are here
+  if (items.length === 0 || items.length < safePageSize) {
+    return { items, totalCount: serverTotalCount ?? items.length };
+  }
+
+  // If totalCount is reported and already covered
+  if (typeof serverTotalCount === "number" && items.length >= serverTotalCount) {
+    return { items, totalCount: serverTotalCount };
+  }
+
+  const all = [...items];
+  const seenKeys = new Set(
+    items.map((x) =>
+      x.handoverId
+        ? `${x.handoverId}_${x.accountId}_${x.riderProfileId}`
+        : `${x.accountId}_${x.riderProfileId}_${x.externalAccountId}_${x.platformDebt}`,
+    ),
+  );
+
+  // If totalCount is known and greater than items.length, parallel fetch remaining pages
+  if (typeof serverTotalCount === "number" && serverTotalCount > safePageSize) {
+    const totalPages = Math.min(Math.ceil(serverTotalCount / safePageSize), 50);
+    const pagePromises: Promise<Page<AdministrativeDebt>>[] = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(getJahezAdministrativeDebts(p, safePageSize, init));
+    }
+
+    const otherPages = await Promise.allSettled(pagePromises);
+    for (const res of otherPages) {
+      if (res.status === "fulfilled" && res.value?.items) {
+        for (const item of res.value.items) {
+          const key = item.handoverId
+            ? `${item.handoverId}_${item.accountId}_${item.riderProfileId}`
+            : `${item.accountId}_${item.riderProfileId}_${item.externalAccountId}_${item.platformDebt}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            all.push(item);
+          }
+        }
+      }
+    }
+    return { items: all, totalCount: serverTotalCount || all.length };
+  }
+
+  // Fallback sequential paging if totalCount wasn't provided or was ambiguous
+  let currentPage = 2;
+  const maxPages = 50;
+  while (currentPage <= maxPages) {
+    try {
+      const pageRes = await getJahezAdministrativeDebts(currentPage, safePageSize, init);
+      const pageItems = pageRes?.items || [];
+      if (pageItems.length === 0) break;
+
+      let newCount = 0;
+      for (const item of pageItems) {
+        const key = item.handoverId
+          ? `${item.handoverId}_${item.accountId}_${item.riderProfileId}`
+          : `${item.accountId}_${item.riderProfileId}_${item.externalAccountId}_${item.platformDebt}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          all.push(item);
+          newCount++;
+        }
+      }
+
+      if (newCount === 0 || pageItems.length < safePageSize) break;
+      currentPage++;
+    } catch {
+      break;
+    }
+  }
+
+  return { items: all, totalCount: all.length };
+}
+
 export async function recordJahezEarnings(
   data: EarningsRequest,
   idempotencyKey?: string,
