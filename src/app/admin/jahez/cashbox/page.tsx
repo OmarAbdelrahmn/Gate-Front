@@ -612,7 +612,7 @@ export default function JahezCashboxPage() {
           <div className="flex items-center justify-between">
             <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
               <BadgeDollarSign className="h-5 w-5 text-emerald-600" />
-              الخزنة النقدية (Cashbox = 1)
+              الخزنة النقدية 
             </span>
             <Badge tone="green">أرصدة معلقة</Badge>
           </div>
@@ -634,7 +634,7 @@ export default function JahezCashboxPage() {
           <div className="flex items-center justify-between">
             <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-2">
               <Fuel className="h-5 w-5 text-blue-600" />
-              بترو آب (PetroApp = 2)
+              بترو آب 
             </span>
             <Badge tone="blue">قبض وقود معلق</Badge>
           </div>
@@ -656,7 +656,7 @@ export default function JahezCashboxPage() {
           <div className="flex items-center justify-between">
             <span className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-purple-600" />
-              البنك (Bank = 3)
+              البنك 
             </span>
             <Badge tone="gray">صرف تحويلات معلق</Badge>
           </div>
