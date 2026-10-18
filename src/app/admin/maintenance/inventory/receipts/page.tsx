@@ -12,8 +12,12 @@ import type {
   InventoryItem,
   Supplier,
 } from "@/lib/maintenance/types";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 export default function MaintenanceInventoryReceiptsPage() {
+  const { locale } = useAuth();
+  const isEn = locale === "en";
+
   const [locations, setLocations] = useState<MaintenanceLocation[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -44,7 +48,7 @@ export default function MaintenanceInventoryReceiptsPage() {
   if (loading) {
     return (
       <div className="p-8 text-center text-xs text-slate-400">
-        جارٍ تحميل بيانات الاستلام والمشتريات...
+        {isEn ? "Loading receipts and purchase invoices..." : "جارٍ تحميل بيانات الاستلام والمشتريات..."}
       </div>
     );
   }

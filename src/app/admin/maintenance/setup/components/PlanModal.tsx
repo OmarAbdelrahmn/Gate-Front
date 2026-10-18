@@ -6,14 +6,15 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { createMaintenancePlan, updateMaintenancePlan } from "@/lib/maintenance/api";
-import type { MaintenancePlan, InventoryItem, VehicleType } from "@/lib/maintenance/types";
+import type { MaintenancePlan, InventoryItem } from "@/lib/maintenance/types";
 import { ItemType } from "@/lib/maintenance/types";
 import {
-  vehicleTypeLabels,
+  getVehicleTypeLabel,
   ALL_VEHICLE_TYPES,
   canUseItem,
   formatCompatibleVehicleTypes,
 } from "@/lib/maintenance/constants";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface PlanModalProps {
   isOpen: boolean;
@@ -24,6 +25,9 @@ interface PlanModalProps {
 }
 
 export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalProps) {
+  const { locale } = useAuth();
+  const isEn = locale === "en";
+
   const [loading, setLoading] = useState(false);
 
   const [code, setCode] = useState("");
@@ -142,32 +146,34 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
     }
   };
 
-  const oilItems = items.filter((i) => i.itemType === ItemType.Oil);
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={plan ? "تعديل خطة الصيانة الدورية" : "إضافة خطة صيانة دورية جديدة"}
+      title={
+        isEn
+          ? (plan ? "Edit Maintenance Plan" : "Add New Preventive Plan")
+          : (plan ? "تعديل خطة الصيانة الدورية" : "إضافة خطة صيانة دورية جديدة")
+      }
       maxWidth="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              رمز الخطة (Code) <span className="text-red-500">*</span>
+              {isEn ? "Plan Code" : "رمز الخطة (Code)"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="مثال: PLN-OIL-CAR5K"
+              placeholder={isEn ? "e.g. PLN-OIL-CAR5K" : "مثال: PLN-OIL-CAR5K"}
               required
               className="font-mono uppercase text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              نوع المركبة المستهدفة <span className="text-red-500">*</span>
+              {isEn ? "Target Vehicle Type" : "نوع المركبة المستهدفة"} <span className="text-red-500">*</span>
             </label>
             <select
               value={vehicleType}
@@ -177,14 +183,14 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
             >
               {ALL_VEHICLE_TYPES.map((vt) => (
                 <option key={vt} value={vt}>
-                  {vehicleTypeLabels[vt]} ({vt})
+                  {getVehicleTypeLabel(vt, isEn)} ({vt})
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              طريقة التنبيه (Trigger) <span className="text-red-500">*</span>
+              {isEn ? "Trigger Type" : "طريقة التنبيه (Trigger)"} <span className="text-red-500">*</span>
             </label>
             <select
               value={triggerType}
@@ -192,9 +198,9 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
               required
             >
-              <option value={1}>حسب عداد الكيلومترات (Odometer)</option>
-              <option value={2}>حسب عدد الأيام (Time/Days)</option>
-              <option value={3}>الأسبق بين العداد والأيام</option>
+              <option value={1}>{isEn ? "By Odometer (KM)" : "حسب عداد الكيلومترات (Odometer)"}</option>
+              <option value={2}>{isEn ? "By Days / Time" : "حسب عدد الأيام (Time/Days)"}</option>
+              <option value={3}>{isEn ? "Whichever First (KM or Days)" : "الأسبق بين العداد والأيام"}</option>
             </select>
           </div>
         </div>
@@ -202,19 +208,19 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              اسم الخطة بالعربية <span className="text-red-500">*</span>
+              {isEn ? "Plan Name (Arabic)" : "اسم الخطة بالعربية"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={nameAr}
               onChange={(e) => setNameAr(e.target.value)}
-              placeholder="مثال: دورة تغيير زيت السيارات 5000 كم"
+              placeholder={isEn ? "e.g. دورة تغيير زيت السيارات 5000 كم" : "مثال: دورة تغيير زيت السيارات 5000 كم"}
               required
               className="text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              اسم الخطة بالإنجليزية <span className="text-red-500">*</span>
+              {isEn ? "Plan Name (English)" : "اسم الخطة بالإنجليزية"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={nameEn}
@@ -230,40 +236,40 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              بدء التذكير بعد (كم) <span className="text-red-500">*</span>
+              {isEn ? "Reminder Starts At (KM)" : "بدء التذكير بعد (كم)"} <span className="text-red-500">*</span>
             </label>
             <Input
               type="number"
               value={reminderAfterKilometers}
               onChange={(e) => setReminderAfterKilometers(e.target.value)}
-              placeholder="4000 للسيارات / 800 للدراجات"
+              placeholder={isEn ? "4000 for Cars / 800 for Bikes" : "4000 للسيارات / 800 للدراجات"}
               required
               className="text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الحد الأقصى للاستحقاق (كم) <span className="text-red-500">*</span>
+              {isEn ? "Due Threshold (KM)" : "الحد الأقصى للاستحقاق (كم)"} <span className="text-red-500">*</span>
             </label>
             <Input
               type="number"
               value={maximumAfterKilometers}
               onChange={(e) => setMaximumAfterKilometers(e.target.value)}
-              placeholder="5000 للسيارات / 1000 للدراجات"
+              placeholder={isEn ? "5000 for Cars / 1000 for Bikes" : "5000 للسيارات / 1000 للدراجات"}
               required
               className="text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              كمية الزيت الافتراضية (لتر)
+              {isEn ? "Default Oil Qty (L)" : "كمية الزيت الافتراضية (لتر)"}
             </label>
             <Input
               type="number"
               step="0.1"
               value={defaultOilQuantityLiters}
               onChange={(e) => setDefaultOilQuantityLiters(e.target.value)}
-              placeholder="مثال: 4 أو 1"
+              placeholder={isEn ? "e.g. 4 or 1" : "مثال: 4 أو 1"}
               className="text-xs"
             />
           </div>
@@ -271,13 +277,13 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            صنف الزيت المقترن (اختياري)
+            {isEn ? "Linked Oil Item (Optional)" : "صنف الزيت المقترن (اختياري)"}
           </label>
           <SearchableSelect
             value={inventoryItemId}
             onChange={(val) => setInventoryItemId(val)}
             options={[
-              { value: "", label: "بدون تقييد لصنف محدد" },
+              { value: "", label: isEn ? "No specific item restriction" : "بدون تقييد لصنف محدد" },
               ...items
                 .filter(
                   (i) =>
@@ -286,20 +292,20 @@ export function PlanModal({ isOpen, onClose, onSaved, plan, items }: PlanModalPr
                 )
                 .map((i) => ({
                   value: i.id,
-                  label: `${i.nameAr} (${i.sku})`,
-                  sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • SKU: ${i.sku}`,
+                  label: `${isEn ? (i.nameEn || i.nameAr) : (i.nameAr || i.nameEn)} (${i.sku})`,
+                  sublabel: `${isEn ? "Compatibility" : "توافق"}: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes, isEn)} • SKU: ${i.sku}`,
                 })),
             ]}
-            placeholder="اختر صنف الزيت المقترن..."
+            placeholder={isEn ? "Select linked oil item..." : "اختر صنف الزيت المقترن..."}
           />
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
           <Button variant="ghost" type="button" onClick={onClose} disabled={loading} className="text-xs">
-            إلغاء
+            {isEn ? "Cancel" : "إلغاء"}
           </Button>
           <Button variant="primary" type="submit" loading={loading} className="text-xs">
-            {plan ? "حفظ التعديلات" : "إضافة الخطة"}
+            {isEn ? (plan ? "Save Changes" : "Add Plan") : (plan ? "حفظ التعديلات" : "إضافة الخطة")}
           </Button>
         </div>
       </form>

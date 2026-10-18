@@ -156,33 +156,41 @@ export function Sidebar({
         className={`fixed inset-0 z-40 bg-slate-900/40 md:hidden ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
       />
       <aside
-        className={`fixed inset-y-0 right-0 z-50 flex w-[276px] flex-col border-l border-[var(--border)] bg-[var(--surface)] p-4 shadow-xl transition-all md:sticky md:top-[72px] md:h-[calc(100vh-72px)] md:translate-x-0 ${open ? "translate-x-0" : "translate-x-full"} ${collapsed ? "md:w-[88px]" : ""}`}
+        className={`fixed inset-y-0 z-50 flex w-[280px] flex-col border-e border-[var(--border)] bg-[var(--surface)] p-3 shadow-xl transition-all md:sticky md:top-[72px] md:h-[calc(100vh-72px)] md:translate-x-0 ${
+          locale === "ar" ? "right-0" : "left-0"
+        } ${
+          open
+            ? "translate-x-0"
+            : locale === "ar"
+              ? "translate-x-full"
+              : "-translate-x-full"
+        } ${collapsed ? "md:w-[80px]" : ""}`}
       >
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div
-            className={`px-2 text-xs font-bold tracking-widest text-slate-400 ${collapsed ? "md:hidden" : ""}`}
+            className={`px-2 text-[11px] font-bold tracking-wider text-slate-400 ${collapsed ? "md:hidden" : ""}`}
           >
             {t("nav.mainMenu")}
           </div>
           <button
             onClick={onClose}
             aria-label={t("common.close")}
-            className="grid h-10 w-10 place-items-center rounded-xl md:hidden"
+            className="grid h-9 w-9 place-items-center rounded-xl md:hidden"
           >
-            <X size={19} />
+            <X size={18} />
           </button>
         </div>
         <nav
           className={`flex-1 space-y-1 ${
             collapsed ? "md:overflow-visible" : "overflow-y-auto overflow-x-hidden"
-          } min-h-0 no-scrollbar px-1`}
+          } min-h-0 no-scrollbar px-0.5`}
           aria-label={t("nav.mainMenu")}
         >
           {isLoading && (
-            <div className="space-y-3 px-2" aria-label={t("common.loading")}>
-              <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
-              <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
-              <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+            <div className="space-y-2.5 px-1" aria-label={t("common.loading")}>
+              <div className="h-9 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
+              <div className="h-9 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
+              <div className="h-9 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
             </div>
           )}
           {!isLoading &&
@@ -212,18 +220,19 @@ export function Sidebar({
                       prefetch={false}
                       onClick={onClose}
                       aria-current={active ? "page" : undefined}
-                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-bold transition-colors ${
+                      title={itemLabel}
+                      className={`flex min-h-[36px] items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                         active
-                          ? "bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400"
+                          ? "bg-blue-50 dark:bg-blue-950/60 text-[#1167c9] dark:text-blue-400 font-bold"
                           : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                       } ${collapsed ? "md:justify-center md:px-0" : ""}`}
                     >
-                      <Icon size={19} className="shrink-0" />
-                      <span className={collapsed ? "md:hidden" : ""}>
+                      <Icon size={17} className="shrink-0" />
+                      <span className={`truncate whitespace-nowrap ${collapsed ? "md:hidden" : ""}`}>
                         {itemLabel}
                       </span>
                       {active && !collapsed && (
-                        <span className="h-2 w-2 rounded-full bg-[#f28b35] rtl:mr-auto rtl:ml-0 ltr:ml-auto ltr:mr-0 shrink-0" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#f28b35] rtl:mr-auto rtl:ml-0 ltr:ml-auto ltr:mr-0 shrink-0" />
                       )}
                     </Link>
                     {/* Tooltip when collapsed on desktop */}
@@ -262,18 +271,19 @@ export function Sidebar({
                     type="button"
                     onClick={() => handleToggleNav(itemKey)}
                     aria-expanded={isOpen}
-                    className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-right text-sm font-bold transition-colors ${
+                    title={itemLabel}
+                    className={`flex min-h-[36px] w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-xs font-bold transition-colors ${
                       active
                         ? "text-[#1167c9] dark:text-blue-400 bg-blue-50/60 dark:bg-blue-950/30"
                         : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                     } ${collapsed ? "md:justify-center md:px-0" : ""}`}
                   >
-                    <Icon size={19} className="shrink-0" />
-                    <span className={collapsed ? "md:hidden" : ""}>
+                    <Icon size={17} className="shrink-0" />
+                    <span className={`flex-1 truncate whitespace-nowrap text-start ${collapsed ? "md:hidden" : ""}`}>
                       {itemLabel}
                     </span>
                     <ChevronDown
-                      size={17}
+                      size={15}
                       className={`transition-transform shrink-0 rtl:mr-auto rtl:ml-0 ltr:ml-auto ltr:mr-0 ${isOpen ? "rotate-180" : ""} ${collapsed ? "md:hidden" : ""}`}
                     />
                   </button>
@@ -292,9 +302,9 @@ export function Sidebar({
                       <div className="flex flex-col min-w-[240px] max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
                         <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs font-bold text-slate-400">
                           <Icon size={16} className="shrink-0 text-[#1167c9]" />
-                          <span>{itemLabel}</span>
+                          <span className="truncate">{itemLabel}</span>
                         </div>
-                        <div className="mt-1 space-y-1">
+                        <div className="mt-1 space-y-0.5">
                           {children.map((child, idx) => {
                             const childHref = resolveItemHref(child);
                             if (!childHref) return null;
@@ -313,14 +323,15 @@ export function Sidebar({
                                   onClose();
                                 }}
                                 aria-current={childActive ? "page" : undefined}
-                                className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-xs font-bold transition-all ${
+                                title={childLabel}
+                                className={`flex min-h-[32px] items-center gap-2 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-all ${
                                   childActive
-                                    ? "bg-[#1167c9] text-white shadow-sm"
+                                    ? "bg-[#1167c9] text-white shadow-xs font-bold"
                                     : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                                 }`}
                               >
-                                <ChildIcon size={15} className="shrink-0" />
-                                <span>{childLabel}</span>
+                                <ChildIcon size={14} className="shrink-0" />
+                                <span className="truncate whitespace-nowrap">{childLabel}</span>
                               </Link>
                             );
                           })}
@@ -331,7 +342,7 @@ export function Sidebar({
 
                   {/* Standard In-flow Accordion for Expanded Mode */}
                   {isOpen && !collapsed ? (
-                    <div className="mt-1 space-y-1 border-r-2 rtl:border-r-2 ltr:border-l-2 ltr:border-r-0 border-blue-200/60 dark:border-blue-900/40 rtl:pr-2 ltr:pl-2">
+                    <div className="mt-1 space-y-0.5 border-r-2 rtl:border-r-2 ltr:border-l-2 ltr:border-r-0 border-blue-200/60 dark:border-blue-900/40 rtl:pr-1.5 ltr:pl-1.5 rtl:mr-1 ltr:ml-1">
                       {children.map((child, idx) => {
                         const childHref = resolveItemHref(child);
                         if (!childHref) return null;
@@ -347,14 +358,15 @@ export function Sidebar({
                             prefetch={false}
                             onClick={onClose}
                             aria-current={childActive ? "page" : undefined}
-                            className={`flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm font-bold transition-all ${
+                            title={childLabel}
+                            className={`flex min-h-[32px] items-center gap-2 rounded-md px-2 py-1 text-[11.5px] font-medium transition-all ${
                               childActive
-                                ? "bg-[#1167c9] text-white dark:bg-[#1167c9] dark:text-white shadow-sm"
+                                ? "bg-[#1167c9] text-white dark:bg-[#1167c9] dark:text-white shadow-xs font-bold"
                                 : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80"
                             }`}
                           >
-                            <ChildIcon size={16} className="shrink-0" />
-                            <span>{childLabel}</span>
+                            <ChildIcon size={14} className="shrink-0" />
+                            <span className="truncate whitespace-nowrap">{childLabel}</span>
                           </Link>
                         );
                       })}

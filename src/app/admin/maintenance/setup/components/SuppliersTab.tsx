@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { PlusCircle, Edit2, Phone, Mail } from "lucide-react";
+import { PlusCircle, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SupplierModal } from "./SupplierModal";
 import type { Supplier } from "@/lib/maintenance/types";
@@ -14,7 +14,8 @@ interface SuppliersTabProps {
 }
 
 export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProps) {
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const isEn = locale === "en";
   const canCreate = can("inventory.receipts.create");
   const canUpdate = can("inventory.receipts.update");
 
@@ -36,45 +37,47 @@ export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProp
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-            موردو قطع الغيار والزيوت
+            {isEn ? "Spare Parts & Oils Suppliers" : "موردو قطع الغيار والزيوت"}
           </h2>
           <p className="text-xs text-slate-500">
-            سجل الموردين المعتمدين لتوريد الزيوت، الفلاتر، وقطع الغيار لورش ومستودعات الشركة.
+            {isEn
+              ? "Approved suppliers registry for oils, filters, and spare parts supply."
+              : "سجل الموردين المعتمدين لتوريد الزيوت، الفلاتر، وقطع الغيار لورش ومستودعات الشركة."}
           </p>
         </div>
         {canCreate && (
           <Button variant="primary" onClick={handleCreate} className="text-xs">
             <PlusCircle size={15} />
-            إضافة مورد جديد
+            {isEn ? "Add New Supplier" : "إضافة مورد جديد"}
           </Button>
         )}
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-start text-xs">
           <thead className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 font-bold">
             <tr>
-              <th className="p-3">رقم المورد</th>
-              <th className="p-3">اسم المورد</th>
-              <th className="p-3">الرقم الضريبي</th>
-              <th className="p-3">السجل التجاري</th>
-              <th className="p-3">مسؤول الاتصال</th>
-              <th className="p-3">الهاتف</th>
-              <th className="p-3 text-center">أجل السداد</th>
-              {canUpdate && <th className="p-3 text-center">الإجراءات</th>}
+              <th className="p-3 text-start">{isEn ? "Supplier No." : "رقم المورد"}</th>
+              <th className="p-3 text-start">{isEn ? "Supplier Name" : "اسم المورد"}</th>
+              <th className="p-3 text-start">{isEn ? "VAT No." : "الرقم الضريبي"}</th>
+              <th className="p-3 text-start">{isEn ? "CR No." : "السجل التجاري"}</th>
+              <th className="p-3 text-start">{isEn ? "Contact Person" : "مسؤول الاتصال"}</th>
+              <th className="p-3 text-start">{isEn ? "Phone" : "الهاتف"}</th>
+              <th className="p-3 text-center">{isEn ? "Payment Terms" : "أجل السداد"}</th>
+              {canUpdate && <th className="p-3 text-center">{isEn ? "Actions" : "الإجراءات"}</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {loading ? (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-slate-400">
-                  جارٍ تحميل الموردين...
+                  {isEn ? "Loading suppliers..." : "جارٍ تحميل الموردين..."}
                 </td>
               </tr>
             ) : suppliers.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-slate-400">
-                  لا يوجد موردون مسجلون حتى الآن.
+                  {isEn ? "No suppliers registered yet." : "لا يوجد موردون مسجلون حتى الآن."}
                 </td>
               </tr>
             ) : (
@@ -84,8 +87,12 @@ export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProp
                     {sup.supplierNumber}
                   </td>
                   <td className="p-3 font-bold text-slate-900 dark:text-white">
-                    <div>{sup.legalNameAr}</div>
-                    <div className="text-[11px] text-slate-400 font-normal">{sup.legalNameEn}</div>
+                    <div>{isEn ? (sup.legalNameEn || sup.legalNameAr) : (sup.legalNameAr || sup.legalNameEn)}</div>
+                    {sup.legalNameEn && sup.legalNameAr && (
+                      <div className="text-[11px] text-slate-400 font-normal">
+                        {isEn ? sup.legalNameAr : sup.legalNameEn}
+                      </div>
+                    )}
                   </td>
                   <td className="p-3 font-mono text-slate-600 dark:text-slate-300">
                     {sup.vatNumber || "-"}
@@ -96,11 +103,11 @@ export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProp
                   <td className="p-3 text-slate-700 dark:text-slate-300">
                     {sup.contactName || "-"}
                   </td>
-                  <td className="p-3 font-mono text-slate-700 dark:text-slate-300 dir-ltr text-right">
+                  <td className="p-3 font-mono text-slate-700 dark:text-slate-300 dir-ltr text-start">
                     {sup.phone || "-"}
                   </td>
                   <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                    {sup.paymentTermsDays ? `${sup.paymentTermsDays} يوم` : "-"}
+                    {sup.paymentTermsDays ? `${sup.paymentTermsDays} ${isEn ? "Days" : "يوم"}` : "-"}
                   </td>
                   {canUpdate && (
                     <td className="p-3 text-center">
@@ -110,7 +117,7 @@ export function SuppliersTab({ suppliers, loading, onRefresh }: SuppliersTabProp
                         className="h-8 px-2.5 text-xs"
                       >
                         <Edit2 size={13} />
-                        تعديل
+                        {isEn ? "Edit" : "تعديل"}
                       </Button>
                     </td>
                   )}

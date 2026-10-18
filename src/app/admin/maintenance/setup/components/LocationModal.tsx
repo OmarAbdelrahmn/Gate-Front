@@ -9,6 +9,7 @@ import { createMaintenanceLocation, updateMaintenanceLocation } from "@/lib/main
 import { listOperatingCities } from "@/lib/workforce/api";
 import type { MaintenanceLocation } from "@/lib/maintenance/types";
 import { LocationType } from "@/lib/maintenance/types";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -23,8 +24,11 @@ export function LocationModal({
   onSaved,
   location,
 }: LocationModalProps) {
+  const { locale } = useAuth();
+  const isEn = locale === "en";
+
   const [loading, setLoading] = useState(false);
-  const [cities, setCities] = useState<{ id: string; nameAr: string }[]>([]);
+  const [cities, setCities] = useState<{ id: string; nameAr: string; nameEn?: string }[]>([]);
 
   const [code, setCode] = useState("");
   const [nameAr, setNameAr] = useState("");
@@ -137,26 +141,30 @@ export function LocationModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={location ? "تعديل موقع الصيانة" : "إضافة موقع صيانة أو ورشة"}
+      title={
+        isEn
+          ? (location ? "Edit Maintenance Location" : "Add Maintenance Location / Workshop")
+          : (location ? "تعديل موقع الصيانة" : "إضافة موقع صيانة أو ورشة")
+      }
       maxWidth="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              رمز الموقع (Code) <span className="text-red-500">*</span>
+              {isEn ? "Location Code" : "رمز الموقع (Code)"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="مثال: JED-WH أو RUH-WS"
+              placeholder={isEn ? "e.g. JED-WH or RUH-WS" : "مثال: JED-WH أو RUH-WS"}
               required
               className="font-mono uppercase text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              نوع الموقع <span className="text-red-500">*</span>
+              {isEn ? "Location Type" : "نوع الموقع"} <span className="text-red-500">*</span>
             </label>
             <select
               value={locationType}
@@ -164,10 +172,10 @@ export function LocationModal({
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
               required
             >
-              <option value={LocationType.Warehouse}>مستودع (Warehouse)</option>
-              <option value={LocationType.Workshop}>ورشة صيانة (Workshop)</option>
+              <option value={LocationType.Warehouse}>{isEn ? "Warehouse" : "مستودع (Warehouse)"}</option>
+              <option value={LocationType.Workshop}>{isEn ? "Workshop" : "ورشة صيانة (Workshop)"}</option>
               <option value={LocationType.WarehouseAndWorkshop}>
-                مستودع وورشة (Warehouse & Workshop)
+                {isEn ? "Warehouse & Workshop" : "مستودع وورشة (Warehouse & Workshop)"}
               </option>
             </select>
           </div>
@@ -176,24 +184,24 @@ export function LocationModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الاسم بالعربية <span className="text-red-500">*</span>
+              {isEn ? "Arabic Name" : "الاسم بالعربية"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={nameAr}
               onChange={(e) => setNameAr(e.target.value)}
-              placeholder="مثال: ورشة الرياض المركزية"
+              placeholder={isEn ? "e.g. ورشة الرياض المركزية" : "مثال: ورشة الرياض المركزية"}
               required
               className="text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الاسم بالإنجليزية <span className="text-red-500">*</span>
+              {isEn ? "English Name" : "الاسم بالإنجليزية"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={nameEn}
               onChange={(e) => setNameEn(e.target.value)}
-              placeholder="Example: Riyadh Workshop"
+              placeholder={isEn ? "Example: Riyadh Central Workshop" : "Example: Riyadh Central Workshop"}
               required
               dir="ltr"
               className="text-xs"
@@ -203,13 +211,16 @@ export function LocationModal({
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            مدينة التشغيل <span className="text-red-500">*</span>
+            {isEn ? "Operating City" : "مدينة التشغيل"} <span className="text-red-500">*</span>
           </label>
           <SearchableSelect
             value={operatingCityId}
             onChange={(val) => setOperatingCityId(val)}
-            options={cities.map((c) => ({ value: c.id, label: c.nameAr }))}
-            placeholder="اختر مدينة التشغيل..."
+            options={cities.map((c) => ({
+              value: c.id,
+              label: isEn ? (c.nameEn || c.nameAr) : (c.nameAr || c.nameEn || c.id),
+            }))}
+            placeholder={isEn ? "Select operating city..." : "اختر مدينة التشغيل..."}
             required
           />
         </div>
@@ -217,7 +228,7 @@ export function LocationModal({
         {/* Operational Flags */}
         <div className="rounded-xl border border-[var(--border)] p-4 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
           <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-            الصلاحيات والإمكانيات التشغيلية للموقع
+            {isEn ? "Operational Capabilities & Permissions" : "الصلاحيات والإمكانيات التشغيلية للموقع"}
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700 dark:text-slate-300">
@@ -227,7 +238,7 @@ export function LocationModal({
                 onChange={(e) => setInventoryEnabled(e.target.checked)}
                 className="size-4 rounded text-[#1167c9]"
               />
-              <span>تفعيل إدارة المخزون (Inventory Enabled)</span>
+              <span>{isEn ? "Inventory Management Enabled" : "تفعيل إدارة المخزون (Inventory Enabled)"}</span>
             </label>
 
             <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700 dark:text-slate-300">
@@ -237,7 +248,7 @@ export function LocationModal({
                 onChange={(e) => setAllowsCompanyVehicles(e.target.checked)}
                 className="size-4 rounded text-[#1167c9]"
               />
-              <span>صيانة مركبات الشركة</span>
+              <span>{isEn ? "Service Company Fleet Vehicles" : "صيانة مركبات الشركة"}</span>
             </label>
 
             <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700 dark:text-slate-300">
@@ -247,7 +258,7 @@ export function LocationModal({
                 onChange={(e) => setAllowsExternalVehicles(e.target.checked)}
                 className="size-4 rounded text-[#1167c9]"
               />
-              <span>استقبال مركبات العملاء الخارجيين</span>
+              <span>{isEn ? "Receive External Customer Vehicles" : "استقبال مركبات العملاء الخارجيين"}</span>
             </label>
 
             <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700 dark:text-slate-300">
@@ -257,7 +268,7 @@ export function LocationModal({
                 onChange={(e) => setAllowsPaidExternalRepairs(e.target.checked)}
                 className="size-4 rounded text-[#1167c9]"
               />
-              <span>إصلاحات خارجية مدفوعة بأجور يد</span>
+              <span>{isEn ? "Paid External Repairs (Labor Fees)" : "إصلاحات خارجية مدفوعة بأجور يد"}</span>
             </label>
 
             <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700 dark:text-slate-300 sm:col-span-2">
@@ -267,7 +278,7 @@ export function LocationModal({
                 onChange={(e) => setAllowsSparePartSales(e.target.checked)}
                 className="size-4 rounded text-[#1167c9]"
               />
-              <span>بيع قطع الغيار لعملاء الورشة</span>
+              <span>{isEn ? "Sell Spare Parts to Customers" : "بيع قطع الغيار لعملاء الورشة"}</span>
             </label>
           </div>
         </div>
@@ -275,27 +286,27 @@ export function LocationModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              خط العرض (Latitude)
+              {isEn ? "Latitude" : "خط العرض (Latitude)"}
             </label>
             <Input
               type="number"
               step="any"
               value={latitude}
               onChange={(e) => setLatitude(e.target.value)}
-              placeholder="مثال: 24.7136"
+              placeholder={isEn ? "e.g. 24.7136" : "مثال: 24.7136"}
               className="text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              خط الطول (Longitude)
+              {isEn ? "Longitude" : "خط الطول (Longitude)"}
             </label>
             <Input
               type="number"
               step="any"
               value={longitude}
               onChange={(e) => setLongitude(e.target.value)}
-              placeholder="مثال: 46.6753"
+              placeholder={isEn ? "e.g. 46.6753" : "مثال: 46.6753"}
               className="text-xs"
             />
           </div>
@@ -303,28 +314,28 @@ export function LocationModal({
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            العنوان وملاحظات
+            {isEn ? "Address & Notes" : "العنوان وملاحظات"}
           </label>
           <Input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="وصف العنوان أو الحي..."
+            placeholder={isEn ? "Address description or district..." : "وصف العنوان أو الحي..."}
             className="text-xs mb-2"
           />
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="أي ملاحظات إضافية..."
+            placeholder={isEn ? "Any additional notes..." : "أي ملاحظات إضافية..."}
             className="text-xs"
           />
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
           <Button variant="ghost" type="button" onClick={onClose} disabled={loading} className="text-xs">
-            إلغاء
+            {isEn ? "Cancel" : "إلغاء"}
           </Button>
           <Button variant="primary" type="submit" loading={loading} className="text-xs">
-            {location ? "حفظ التعديلات" : "إضافة الموقع"}
+            {isEn ? (location ? "Save Changes" : "Add Location") : (location ? "حفظ التعديلات" : "إضافة الموقع")}
           </Button>
         </div>
       </form>

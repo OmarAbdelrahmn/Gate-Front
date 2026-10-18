@@ -16,9 +16,8 @@ import {
   UnitOfMeasure,
 } from "@/lib/maintenance/types";
 import {
-  unitOfMeasureLabels,
   formatCurrency,
-  itemTypeLabels,
+  getItemTypeLabel,
   formatCompatibleVehicleTypes,
 } from "@/lib/maintenance/constants";
 import {
@@ -26,9 +25,8 @@ import {
   Trash2,
   UploadCloud,
   FileText,
-  AlertTriangle,
-  Info,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface CreateReceiptModalProps {
   isOpen: boolean;
@@ -47,6 +45,9 @@ export function CreateReceiptModal({
   suppliers,
   items,
 }: CreateReceiptModalProps) {
+  const { locale } = useAuth();
+  const isEn = locale === "en";
+
   const [loading, setLoading] = useState(false);
 
   // Form Fields
@@ -130,7 +131,7 @@ export function CreateReceiptModal({
 
     const maxBytes = 10 * 1024 * 1024;
     if (file.size > maxBytes) {
-      alert("حجم الملف يتجاوز 10 ميجابايت.");
+      alert(isEn ? "File size exceeds 10MB." : "حجم الملف يتجاوز 10 ميجابايت.");
       return;
     }
 
@@ -144,7 +145,11 @@ export function CreateReceiptModal({
       "image/bmp",
     ];
     if (!allowedTypes.includes(file.type.toLowerCase())) {
-      alert("صيغة الملف غير مدعومة. الصيغ المقبولة: PDF أو صور (PNG, JPG, WebP, GIF, BMP).");
+      alert(
+        isEn
+          ? "Unsupported file format. Accepted: PDF or images (PNG, JPG, WebP, GIF, BMP)."
+          : "صيغة الملف غير مدعومة. الصيغ المقبولة: PDF أو صور (PNG, JPG, WebP, GIF, BMP)."
+      );
       return;
     }
 
@@ -164,17 +169,17 @@ export function CreateReceiptModal({
     e.preventDefault();
 
     if (!billFile) {
-      alert("يرجى إرفاق ملف الفاتورة الأصلي (مطلوب وإلزامي).");
+      alert(isEn ? "Please attach the original invoice file (mandatory)." : "يرجى إرفاق ملف الفاتورة الأصلي (مطلوب وإلزامي).");
       return;
     }
 
     if (!supplierId) {
-      alert("يرجى اختيار المورد.");
+      alert(isEn ? "Please select a supplier." : "يرجى اختيار المورد.");
       return;
     }
 
     if (!inventoryLocationId) {
-      alert("يرجى اختيار موقع الاستلام والمخزن.");
+      alert(isEn ? "Please select a receiving warehouse location." : "يرجى اختيار موقع الاستلام والمخزن.");
       return;
     }
 
@@ -182,11 +187,11 @@ export function CreateReceiptModal({
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (!line.inventoryItemId) {
-        alert(`يرجى تحديد الصنف في السطر رقم ${i + 1}.`);
+        alert(isEn ? `Please select an item on line #${i + 1}.` : `يرجى تحديد الصنف في السطر رقم ${i + 1}.`);
         return;
       }
       if (!line.packageCount || line.packageCount <= 0 || !Number.isInteger(line.packageCount)) {
-        alert(`عدد الطرود في السطر رقم ${i + 1} يجب أن يكون عدداً صحيحاً وموجباً.`);
+        alert(isEn ? `Package count on line #${i + 1} must be a positive integer.` : `عدد الطرود في السطر رقم ${i + 1} يجب أن يكون عدداً صحيحاً وموجباً.`);
         return;
       }
 
@@ -194,15 +199,15 @@ export function CreateReceiptModal({
       if (item?.itemType === ItemType.Oil) {
         // Oil barrel validation
         if (!line.grossWeightKg || line.grossWeightKg <= 0) {
-          alert(`الوزن الإجمالي لبراميل الزيت في السطر ${i + 1} مطلوب وقيمة موجبة.`);
+          alert(isEn ? `Gross weight for oil barrel on line #${i + 1} is required and must be positive.` : `الوزن الإجمالي لبراميل الزيت في السطر ${i + 1} مطلوب وقيمة موجبة.`);
           return;
         }
         if (!line.netWeightKg || line.netWeightKg <= 0) {
-          alert(`الوزن الصافي لبراميل الزيت في السطر ${i + 1} مطلوب وقيمة موجبة.`);
+          alert(isEn ? `Net oil weight for barrel on line #${i + 1} is required and must be positive.` : `الوزن الصافي لبراميل الزيت في السطر ${i + 1} مطلوب وقيمة موجبة.`);
           return;
         }
         if (line.netWeightKg > line.grossWeightKg) {
-          alert(`الوزن الصافي لا يمكن أن يتجاوز الوزن الإجمالي في السطر ${i + 1}.`);
+          alert(isEn ? `Net weight cannot exceed gross weight on line #${i + 1}.` : `الوزن الصافي لا يمكن أن يتجاوز الوزن الإجمالي في السطر ${i + 1}.`);
           return;
         }
       }
@@ -268,43 +273,43 @@ export function CreateReceiptModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="تسجيل إيصال استلام مشتريات (مع الفاتورة الإلزامية)"
+      title={isEn ? "Record Purchase Receipt (Mandatory Invoice Attachment)" : "تسجيل إيصال استلام مشتريات (مع الفاتورة الإلزامية)"}
       maxWidth="max-w-4xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} dir={isEn ? "ltr" : "rtl"} className="space-y-5 text-start">
         {/* Header Metadata */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/30 border border-[var(--border)]">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              المورد <span className="text-red-500">*</span>
+              {isEn ? "Supplier" : "المورد"} <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
               value={supplierId}
               onChange={(val) => setSupplierId(val)}
               options={suppliers.map((s) => ({
                 value: s.id,
-                label: s.legalNameAr,
+                label: isEn ? (s.legalNameEn || s.legalNameAr) : (s.legalNameAr || s.legalNameEn),
                 sublabel: s.supplierNumber,
               }))}
-              placeholder="اختر المورد..."
+              placeholder={isEn ? "Select supplier..." : "اختر المورد..."}
               required
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              رقم فاتورة المورد <span className="text-red-500">*</span>
+              {isEn ? "Supplier Invoice #" : "رقم فاتورة المورد"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={supplierInvoiceNumber}
               onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
-              placeholder="مثال: INV-2026-99"
+              placeholder={isEn ? "e.g. INV-2026-99" : "مثال: INV-2026-99"}
               required
               className="text-xs font-mono"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              تاريخ الفاتورة <span className="text-red-500">*</span>
+              {isEn ? "Invoice Date" : "تاريخ الفاتورة"} <span className="text-red-500">*</span>
             </label>
             <Input
               type="date"
@@ -316,16 +321,16 @@ export function CreateReceiptModal({
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              مستودع الاستلام <span className="text-red-500">*</span>
+              {isEn ? "Receiving Warehouse" : "مستودع الاستلام"} <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
               value={inventoryLocationId}
               onChange={(val) => setInventoryLocationId(val)}
               options={receivingLocations.map((l) => ({
                 value: l.id,
-                label: `${l.nameAr} (${l.code})`,
+                label: `${isEn ? (l.nameEn || l.nameAr) : (l.nameAr || l.nameEn)} (${l.code})`,
               }))}
-              placeholder="اختر موقع المستودع..."
+              placeholder={isEn ? "Select warehouse location..." : "اختر موقع المستودع..."}
               required
             />
           </div>
@@ -340,17 +345,19 @@ export function CreateReceiptModal({
               </div>
               <div>
                 <span className="font-bold text-slate-900 dark:text-white block">
-                  ملف الفاتورة الأصلية (إلزامي) <span className="text-red-500">*</span>
+                  {isEn ? "Original Invoice File (Mandatory)" : "ملف الفاتورة الأصلية (إلزامي)"} <span className="text-red-500">*</span>
                 </span>
                 <span className="text-slate-500 text-[11px]">
-                  صيغ مسموحة: PDF, PNG, JPG, WebP, GIF, BMP بحجم أقصى 10 ميجابايت.
+                  {isEn
+                    ? "Allowed formats: PDF, PNG, JPG, WebP, GIF, BMP (Max 10MB)."
+                    : "صيغ مسموحة: PDF, PNG, JPG, WebP, GIF, BMP بحجم أقصى 10 ميجابايت."}
                 </span>
               </div>
             </div>
 
             <div>
               <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-[var(--border)] rounded-xl font-bold text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-xs">
-                <span>{billFile ? "تغيير الملف المحدد" : "اختر ملف الفاتورة..."}</span>
+                <span>{billFile ? (isEn ? "Change Selected File" : "تغيير الملف المحدد") : (isEn ? "Choose Invoice File..." : "اختر ملف الفاتورة...")}</span>
                 <input
                   type="file"
                   onChange={handleFileChange}
@@ -375,7 +382,7 @@ export function CreateReceiptModal({
                 onClick={() => setBillFile(null)}
                 className="text-red-600 hover:underline font-bold"
               >
-                إلغاء
+                {isEn ? "Remove" : "إلغاء"}
               </button>
             </div>
           )}
@@ -385,7 +392,9 @@ export function CreateReceiptModal({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              بنود وأصناف الإيصال (كل عبوة زيت تُنشئ برميلاً مستقلاً في المخزون)
+              {isEn
+                ? "Receipt Items & Packages (each oil package creates an individual barrel in stock)"
+                : "بنود وأصناف الإيصال (كل عبوة زيت تُنشئ برميلاً مستقلاً في المخزون)"}
             </h3>
             <Button
               type="button"
@@ -394,7 +403,7 @@ export function CreateReceiptModal({
               className="h-8 text-xs px-2.5"
             >
               <Plus size={14} />
-              إضافة سطر
+              {isEn ? "Add Item" : "إضافة سطر"}
             </Button>
           </div>
 
@@ -410,10 +419,10 @@ export function CreateReceiptModal({
                 >
                   <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
                     <span className="font-bold text-slate-700 dark:text-slate-300">
-                      بند #{idx + 1}
+                      {isEn ? `Item #${idx + 1}` : `بند #${idx + 1}`}
                       {isOil && (
-                        <span className="mr-2 px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 font-bold text-[10px]">
-                          برميل زيت (أوزان مطلوبة)
+                        <span className="mx-2 px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 font-bold text-[10px]">
+                          {isEn ? "Oil Barrel (weights required)" : "برميل زيت (أوزان مطلوبة)"}
                         </span>
                       )}
                     </span>
@@ -422,7 +431,7 @@ export function CreateReceiptModal({
                         type="button"
                         onClick={() => removeLine(idx)}
                         className="text-red-500 hover:text-red-700 p-1 rounded-md"
-                        title="حذف البند"
+                        title={isEn ? "Delete item" : "حذف البند"}
                       >
                         <Trash2 size={15} />
                       </button>
@@ -432,25 +441,25 @@ export function CreateReceiptModal({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="sm:col-span-2">
                       <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        الصنف <span className="text-red-500">*</span>
+                        {isEn ? "Item" : "الصنف"} <span className="text-red-500">*</span>
                       </label>
                       <SearchableSelect
                         value={line.inventoryItemId}
                         onChange={(val) => handleItemSelect(idx, val)}
                         options={items.map((i) => ({
                           value: i.id,
-                          label: `${i.nameAr} (${i.sku})`,
-                          sublabel: `توافق: ${formatCompatibleVehicleTypes(i.compatibleVehicleTypes)} • ${itemTypeLabels[i.itemType] || ""} • SKU: ${i.sku}`,
-                          keywords: `${itemTypeLabels[i.itemType] || ""} ${i.sku} ${i.nameEn || ""}`,
+                          label: `${isEn ? (i.nameEn || i.nameAr) : (i.nameAr || i.nameEn)} (${i.sku})`,
+                          sublabel: `${isEn ? "Compatibility: " : "توافق: "}${formatCompatibleVehicleTypes(i.compatibleVehicleTypes, isEn)} • ${getItemTypeLabel(i.itemType, isEn)} • SKU: ${i.sku}`,
+                          keywords: `${getItemTypeLabel(i.itemType, isEn)} ${i.sku} ${i.nameEn || ""} ${i.nameAr || ""}`,
                         }))}
-                        placeholder="اختر الصنف..."
+                        placeholder={isEn ? "Select item..." : "اختر الصنف..."}
                         required
                       />
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        عدد الطرود / البراميل <span className="text-red-500">*</span>
+                        {isEn ? "Package / Barrel Count" : "عدد الطرود / البراميل"} <span className="text-red-500">*</span>
                       </label>
                       <Input
                         type="number"
@@ -467,7 +476,7 @@ export function CreateReceiptModal({
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        سعر الطرد قبل الضريبة (ر.س) <span className="text-red-500">*</span>
+                        {isEn ? "Package Price Excl. VAT (SAR)" : "سعر الطرد قبل الضريبة (ر.س)"} <span className="text-red-500">*</span>
                       </label>
                       <Input
                         type="number"
@@ -488,7 +497,7 @@ export function CreateReceiptModal({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        سعة الطرد (لتر/حبة)
+                        {isEn ? "Package Capacity (L/Unit)" : "سعة الطرد (لتر/حبة)"}
                       </label>
                       <Input
                         type="number"
@@ -505,7 +514,7 @@ export function CreateReceiptModal({
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        الضريبة المضافة (VAT)
+                        {isEn ? "Value Added Tax (VAT)" : "الضريبة المضافة (VAT)"}
                       </label>
                       <Input
                         type="number"
@@ -521,7 +530,7 @@ export function CreateReceiptModal({
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        رقم التشغيلة (Lot No.)
+                        {isEn ? "Lot Number (Lot No.)" : "رقم التشغيلة (Lot No.)"}
                       </label>
                       <Input
                         value={line.lotNumber || ""}
@@ -533,7 +542,7 @@ export function CreateReceiptModal({
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                        تاريخ الانتهاء
+                        {isEn ? "Expiry Date" : "تاريخ الانتهاء"}
                       </label>
                       <Input
                         type="date"
@@ -549,7 +558,7 @@ export function CreateReceiptModal({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 rounded-lg bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/50">
                       <div>
                         <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1">
-                          الوزن الإجمالي القائم (Gross Kg) <span className="text-red-500">*</span>
+                          {isEn ? "Gross Weight (Kg)" : "الوزن الإجمالي القائم (Gross Kg)"} <span className="text-red-500">*</span>
                         </label>
                         <Input
                           type="number"
@@ -561,7 +570,7 @@ export function CreateReceiptModal({
                               grossWeightKg: parseFloat(e.target.value) || null,
                             })
                           }
-                          placeholder="مثال: 210 كجم"
+                          placeholder={isEn ? "e.g. 210 kg" : "مثال: 210 كجم"}
                           required
                           className="text-xs font-mono"
                         />
@@ -569,7 +578,7 @@ export function CreateReceiptModal({
 
                       <div>
                         <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1">
-                          الوزن الصافي للزيت (Net Kg) <span className="text-red-500">*</span>
+                          {isEn ? "Net Oil Weight (Kg)" : "الوزن الصافي للزيت (Net Kg)"} <span className="text-red-500">*</span>
                         </label>
                         <Input
                           type="number"
@@ -581,7 +590,7 @@ export function CreateReceiptModal({
                               netWeightKg: parseFloat(e.target.value) || null,
                             })
                           }
-                          placeholder="مثال: 208 كجم (يجب ألا يتجاوز القائم)"
+                          placeholder={isEn ? "e.g. 208 kg (cannot exceed gross)" : "مثال: 208 كجم (يجب ألا يتجاوز القائم)"}
                           required
                           className="text-xs font-mono"
                         />
@@ -597,27 +606,28 @@ export function CreateReceiptModal({
         {/* Financial Summary */}
         <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs">
           <div className="space-y-1">
-            <span className="text-slate-500 block">إجمالي الفاتورة:</span>
+            <span className="text-slate-500 block">{isEn ? "Invoice Total:" : "إجمالي الفاتورة:"}</span>
             <span className="text-base font-black text-[#1167c9] dark:text-blue-400 font-mono">
-              {formatCurrency(totalAmount)}
+              {formatCurrency(totalAmount, isEn)}
             </span>
           </div>
           <div className="flex items-center gap-4 text-slate-600 dark:text-slate-300">
-            <span>المجموع قبل الضريبة: {formatCurrency(subtotal)}</span>
-            <span>إجمالي الضريبة: {formatCurrency(totalTax)}</span>
+            <span>{isEn ? "Subtotal: " : "المجموع قبل الضريبة: "}{formatCurrency(subtotal, isEn)}</span>
+            <span>{isEn ? "Total VAT: " : "إجمالي الضريبة: "}{formatCurrency(totalTax, isEn)}</span>
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
           <Button variant="ghost" type="button" onClick={onClose} disabled={loading} className="text-xs">
-            إلغاء
+            {isEn ? "Cancel" : "إلغاء"}
           </Button>
           <Button variant="primary" type="submit" loading={loading} className="text-xs">
-            تسجيل الإيصال وحفظ المشتريات
+            {isEn ? "Save & Receive Purchase" : "تسجيل الإيصال وحفظ المشتريات"}
           </Button>
         </div>
       </form>
     </Modal>
   );
 }
+

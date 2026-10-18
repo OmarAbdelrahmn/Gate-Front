@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Download, Loader2, FileText, AlertCircle } from "lucide-react";
 import { downloadReceiptBillFile, previewReceiptBillFile } from "@/lib/maintenance/api";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface BillViewerModalProps {
   isOpen: boolean;
@@ -21,6 +22,9 @@ export function BillViewerModal({
   receiptNumber,
   originalFileName,
 }: BillViewerModalProps) {
+  const { locale } = useAuth();
+  const isEn = locale === "en";
+
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -47,7 +51,7 @@ export function BillViewerModal({
       })
       .catch((err) => {
         console.error(err);
-        setError(err.message || "تعذر تحميل ملف الفاتورة.");
+        setError(err.message || (isEn ? "Failed to load invoice file." : "تعذر تحميل ملف الفاتورة."));
       })
       .finally(() => {
         setLoading(false);
@@ -58,7 +62,7 @@ export function BillViewerModal({
         URL.revokeObjectURL(blobUrl);
       }
     };
-  }, [isOpen, receiptId]);
+  }, [isOpen, receiptId, isEn]);
 
   const handleDownload = async () => {
     if (!receiptId) return;
@@ -74,7 +78,7 @@ export function BillViewerModal({
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(err.message || "تعذر تنزيل الملف.");
+      alert(err.message || (isEn ? "Failed to download file." : "تعذر تنزيل الملف."));
     } finally {
       setDownloading(false);
     }
@@ -87,7 +91,7 @@ export function BillViewerModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`فاتورة الشراء المرفقة: ${receiptNumber || ""}`}
+      title={isEn ? `Attached Purchase Bill: ${receiptNumber || ""}` : `فاتورة الشراء المرفقة: ${receiptNumber || ""}`}
       maxWidth="max-w-4xl"
     >
       <div className="space-y-4">
@@ -95,7 +99,9 @@ export function BillViewerModal({
         <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-[var(--border)] text-xs">
           <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
             <FileText size={16} className="text-[#1167c9]" />
-            <span className="font-bold font-mono">{originalFileName || "فاتورة الشراء"}</span>
+            <span className="font-bold font-mono">
+              {originalFileName || (isEn ? "Purchase Bill" : "فاتورة الشراء")}
+            </span>
           </div>
           <Button
             variant="secondary"
@@ -104,7 +110,7 @@ export function BillViewerModal({
             className="h-8 text-xs"
           >
             <Download size={14} />
-            تنزيل الملف
+            {isEn ? "Download File" : "تنزيل الملف"}
           </Button>
         </div>
 
@@ -113,7 +119,7 @@ export function BillViewerModal({
           {loading && (
             <div className="flex flex-col items-center gap-2 text-slate-500 text-xs">
               <Loader2 size={28} className="animate-spin text-[#1167c9]" />
-              <span>جارٍ تحميل وثيقة الفاتورة المؤمنة...</span>
+              <span>{isEn ? "Loading secured invoice document..." : "جارٍ تحميل وثيقة الفاتورة المؤمنة..."}</span>
             </div>
           )}
 
@@ -122,7 +128,7 @@ export function BillViewerModal({
               <AlertCircle size={28} className="mx-auto text-red-500" />
               <p className="font-bold">{error}</p>
               <Button variant="secondary" onClick={handleDownload} className="text-xs mt-2">
-                محاولة التنزيل المباشر
+                {isEn ? "Try Direct Download" : "محاولة التنزيل المباشر"}
               </Button>
             </div>
           )}
@@ -145,9 +151,13 @@ export function BillViewerModal({
               ) : (
                 <div className="p-8 text-center text-xs text-slate-500 space-y-3">
                   <FileText size={36} className="mx-auto text-slate-400" />
-                  <p>نوع الملف لا يدعم المعاينة المباشرة في المتصفح ({contentType}).</p>
+                  <p>
+                    {isEn
+                      ? `File type does not support in-browser preview (${contentType}).`
+                      : `نوع الملف لا يدعم المعاينة المباشرة في المتصفح (${contentType}).`}
+                  </p>
                   <Button variant="primary" onClick={handleDownload} loading={downloading} className="text-xs">
-                    تنزيل الملف لفتحه
+                    {isEn ? "Download File to Open" : "تنزيل الملف لفتحه"}
                   </Button>
                 </div>
               )}

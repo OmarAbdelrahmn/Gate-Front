@@ -9,7 +9,8 @@ export default function MaintenanceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const isEn = locale === "en";
 
   const canAccessAny =
     can("maintenance.locations.read") ||
@@ -28,12 +29,16 @@ export default function MaintenanceLayout({
 
   if (!canAccessAny) {
     return (
-      <div className="p-8 text-center" dir="rtl">
+      <div className="p-8 text-center" dir={isEn ? "ltr" : "rtl"}>
         <div className="max-w-md mx-auto p-6 rounded-2xl border border-red-200 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 space-y-3">
           <ShieldAlert size={40} className="mx-auto text-red-600" />
-          <h2 className="text-lg font-bold">عفواً، لا تملك صلاحية الوصول</h2>
+          <h2 className="text-lg font-bold">
+            {isEn ? "Access Denied" : "عفواً، لا تملك صلاحية الوصول"}
+          </h2>
           <p className="text-xs">
-            تتطلب هذه الوحدة إحدى صلاحيات إدارة الصيانة أو المخزون أو الورش. يرجى التواصل مع مسؤول النظام لمنحك الصلاحيات المناسبة.
+            {isEn
+              ? "This module requires maintenance, inventory, or workshop management permissions. Please contact your system administrator to grant you the appropriate permissions."
+              : "تتطلب هذه الوحدة إحدى صلاحيات إدارة الصيانة أو المخزون أو الورش. يرجى التواصل مع مسؤول النظام لمنحك الصلاحيات المناسبة."}
           </p>
         </div>
       </div>
@@ -41,7 +46,7 @@ export default function MaintenanceLayout({
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={isEn ? "ltr" : "rtl"}>
       {children}
     </div>
   );

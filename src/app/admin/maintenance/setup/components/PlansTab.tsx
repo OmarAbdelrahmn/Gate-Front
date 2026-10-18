@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { PlusCircle, Edit2, Clock, Gauge, Droplets } from "lucide-react";
+import { PlusCircle, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { PlanModal } from "./PlanModal";
 import type { MaintenancePlan, InventoryItem } from "@/lib/maintenance/types";
@@ -15,15 +15,16 @@ interface PlansTabProps {
 }
 
 export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const isEn = locale === "en";
   const canCreate = can("maintenance.work_orders.create");
   const canEdit = can("maintenance.work_orders.update");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<MaintenancePlan | null>(null);
 
-  const handleEdit = (p: MaintenancePlan) => {
-    setSelectedPlan(p);
+  const handleEdit = (plan: MaintenancePlan) => {
+    setSelectedPlan(plan);
     setModalOpen(true);
   };
 
@@ -37,44 +38,46 @@ export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-            خطط الصيانة الوقائية والزيوت
+            {isEn ? "Preventive Maintenance & Oil Service Plans" : "خطط الصيانة الوقائية والزيوت"}
           </h2>
           <p className="text-xs text-slate-500">
-            قواعد تذكيرات الزيوت للسيارات (تذكير عند 4,000 كم / استحقاق عند 5,000 كم) والدراجات (تذكير عند 800 كم / استحقاق عند 1,000 كم).
+            {isEn
+              ? "Oil reminder rules for cars (reminder at 4,000 KM / due at 5,000 KM) and motorcycles (reminder at 800 KM / due at 1,000 KM)."
+              : "قواعد تذكيرات الزيوت للسيارات (تذكير عند 4,000 كم / استحقاق عند 5,000 كم) والدراجات (تذكير عند 800 كم / استحقاق عند 1,000 كم)."}
           </p>
         </div>
         {canCreate && (
           <Button variant="primary" onClick={handleCreate} className="text-xs">
             <PlusCircle size={15} />
-            إضافة خطة دورية جديدة
+            {isEn ? "Add New Plan" : "إضافة خطة دورية جديدة"}
           </Button>
         )}
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-start text-xs">
           <thead className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 font-bold">
             <tr>
-              <th className="p-3">رمز الخطة</th>
-              <th className="p-3">اسم الخطة</th>
-              <th className="p-3">المركبة المستهدفة</th>
-              <th className="p-3">بدء التذكير</th>
-              <th className="p-3">الحد الأقصى للاستحقاق</th>
-              <th className="p-3 text-center">كمية الزيت</th>
-              {canEdit && <th className="p-3 text-center">الإجراءات</th>}
+              <th className="p-3 text-start">{isEn ? "Plan Code" : "رمز الخطة"}</th>
+              <th className="p-3 text-start">{isEn ? "Plan Name" : "اسم الخطة"}</th>
+              <th className="p-3 text-start">{isEn ? "Target Vehicle" : "المركبة المستهدفة"}</th>
+              <th className="p-3 text-start">{isEn ? "Reminder Start" : "بدء التذكير"}</th>
+              <th className="p-3 text-start">{isEn ? "Due Threshold" : "الحد الأقصى للاستحقاق"}</th>
+              <th className="p-3 text-center">{isEn ? "Oil Qty" : "كمية الزيت"}</th>
+              {canEdit && <th className="p-3 text-center">{isEn ? "Actions" : "الإجراءات"}</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {loading ? (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-400">
-                  جارٍ تحميل خطط الصيانة...
+                  {isEn ? "Loading maintenance plans..." : "جارٍ تحميل خطط الصيانة..."}
                 </td>
               </tr>
             ) : plans.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-400">
-                  لا توجد خطط مسجلة حتى الآن.
+                  {isEn ? "No maintenance plans registered yet." : "لا توجد خطط مسجلة حتى الآن."}
                 </td>
               </tr>
             ) : (
@@ -84,8 +87,12 @@ export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
                     {plan.code}
                   </td>
                   <td className="p-3 font-bold text-slate-900 dark:text-white">
-                    <div>{plan.nameAr}</div>
-                    <div className="text-[11px] text-slate-400 font-normal">{plan.nameEn}</div>
+                    <div>{isEn ? (plan.nameEn || plan.nameAr) : (plan.nameAr || plan.nameEn)}</div>
+                    {plan.nameEn && plan.nameAr && (
+                      <div className="text-[11px] text-slate-400 font-normal">
+                        {isEn ? plan.nameAr : plan.nameEn}
+                      </div>
+                    )}
                   </td>
                   <td className="p-3">
                     <span
@@ -95,21 +102,25 @@ export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
                           : "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
                       }`}
                     >
-                      {plan.vehicleType === 1 ? "دراجة نارية (1,000 كم)" : "سيارة (5,000 كم)"}
+                      {plan.vehicleType === 1
+                        ? (isEn ? "Motorcycle (1,000 KM)" : "دراجة نارية (1,000 كم)")
+                        : (isEn ? "Car (5,000 KM)" : "سيارة (5,000 كم)")}
                     </span>
                   </td>
                   <td className="p-3 text-slate-600 dark:text-slate-300 font-mono">
                     {plan.reminderAfterKilometers
-                      ? `${plan.reminderAfterKilometers.toLocaleString()} كم`
+                      ? `${plan.reminderAfterKilometers.toLocaleString()} ${isEn ? "KM" : "كم"}`
                       : "-"}
                   </td>
                   <td className="p-3 text-slate-600 dark:text-slate-300 font-mono font-bold">
                     {plan.maximumAfterKilometers
-                      ? `${plan.maximumAfterKilometers.toLocaleString()} كم`
+                      ? `${plan.maximumAfterKilometers.toLocaleString()} ${isEn ? "KM" : "كم"}`
                       : "-"}
                   </td>
                   <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
-                    {plan.defaultOilQuantityLiters ? `${plan.defaultOilQuantityLiters} لتر` : "-"}
+                    {plan.defaultOilQuantityLiters
+                      ? `${plan.defaultOilQuantityLiters} ${isEn ? "L" : "لتر"}`
+                      : "-"}
                   </td>
                   {canEdit && (
                     <td className="p-3 text-center">
@@ -119,7 +130,7 @@ export function PlansTab({ plans, items, loading, onRefresh }: PlansTabProps) {
                         className="h-8 px-2.5 text-xs"
                       >
                         <Edit2 size={13} />
-                        تعديل
+                        {isEn ? "Edit" : "تعديل"}
                       </Button>
                     </td>
                   )}

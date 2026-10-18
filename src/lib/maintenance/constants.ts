@@ -22,10 +22,29 @@ export const locationTypeLabels: Record<LocationType, string> = {
   [LocationType.WarehouseAndWorkshop]: "مستودع وورشة",
 };
 
+export const locationTypeLabelsEn: Record<LocationType, string> = {
+  [LocationType.Warehouse]: "Warehouse",
+  [LocationType.Workshop]: "Workshop",
+  [LocationType.WarehouseAndWorkshop]: "Warehouse & Workshop",
+};
+
+export function getLocationTypeLabel(type: LocationType, isEn = false): string {
+  return (isEn ? locationTypeLabelsEn[type] : locationTypeLabels[type]) || String(type);
+}
+
 export const serviceSubjectTypeLabels: Record<ServiceSubjectType, string> = {
   [ServiceSubjectType.CompanyVehicle]: "مركبة شركة",
   [ServiceSubjectType.ExternalVehicle]: "مركبة عميل خارجي",
 };
+
+export const serviceSubjectTypeLabelsEn: Record<ServiceSubjectType, string> = {
+  [ServiceSubjectType.CompanyVehicle]: "Company Vehicle",
+  [ServiceSubjectType.ExternalVehicle]: "External Vehicle",
+};
+
+export function getServiceSubjectTypeLabel(type: ServiceSubjectType, isEn = false): string {
+  return (isEn ? serviceSubjectTypeLabelsEn[type] : serviceSubjectTypeLabels[type]) || String(type);
+}
 
 export const maintenanceTypeLabels: Record<MaintenanceType, string> = {
   [MaintenanceType.Preventive]: "صيانة دورية وقائية",
@@ -35,6 +54,19 @@ export const maintenanceTypeLabels: Record<MaintenanceType, string> = {
   [MaintenanceType.OilChange]: "تغيير زيت",
   [MaintenanceType.PartSaleOnly]: "بيع قطع غيار فقط",
 };
+
+export const maintenanceTypeLabelsEn: Record<MaintenanceType, string> = {
+  [MaintenanceType.Preventive]: "Preventive Maintenance",
+  [MaintenanceType.Corrective]: "Corrective Repair",
+  [MaintenanceType.Inspection]: "Inspection",
+  [MaintenanceType.AccidentRepair]: "Accident Repair",
+  [MaintenanceType.OilChange]: "Oil Change",
+  [MaintenanceType.PartSaleOnly]: "Spare Part Sale Only",
+};
+
+export function getMaintenanceTypeLabel(type: MaintenanceType, isEn = false): string {
+  return (isEn ? maintenanceTypeLabelsEn[type] : maintenanceTypeLabels[type]) || String(type);
+}
 
 export const workOrderStatusConfig: Record<
   WorkOrderStatus,
@@ -72,27 +104,65 @@ export const workOrderStatusConfig: Record<
   },
 };
 
+export const workOrderStatusConfigEn: Record<
+  WorkOrderStatus,
+  { label: string; bg: string; text: string; border: string }
+> = {
+  [WorkOrderStatus.Open]: {
+    label: "Open (New)",
+    bg: "bg-blue-50 dark:bg-blue-950/40",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  [WorkOrderStatus.InProgress]: {
+    label: "In Progress",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+  },
+  [WorkOrderStatus.Completed]: {
+    label: "Completed",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+  },
+  [WorkOrderStatus.Closed]: {
+    label: "Closed",
+    bg: "bg-slate-100 dark:bg-slate-800/60",
+    text: "text-slate-700 dark:text-slate-300",
+    border: "border-slate-200 dark:border-slate-700",
+  },
+  [WorkOrderStatus.Cancelled]: {
+    label: "Cancelled",
+    bg: "bg-red-50 dark:bg-red-950/40",
+    text: "text-red-700 dark:text-red-300",
+    border: "border-red-200 dark:border-red-800",
+  },
+};
+
 export function getWorkOrderEffectiveStatus(
   status: WorkOrderStatus,
   supplyRequest?: { status: SupplyRequestStatus } | null,
+  isEn = false,
 ): { label: string; bg: string; text: string; border: string } {
+  const config = isEn ? workOrderStatusConfigEn : workOrderStatusConfig;
   if (status === WorkOrderStatus.Cancelled) {
-    return workOrderStatusConfig[WorkOrderStatus.Cancelled];
+    return config[WorkOrderStatus.Cancelled];
   }
   if (status === WorkOrderStatus.Completed) {
-    return workOrderStatusConfig[WorkOrderStatus.Completed];
+    return config[WorkOrderStatus.Completed];
   }
   if (status === WorkOrderStatus.Closed) {
-    return workOrderStatusConfig[WorkOrderStatus.Closed];
+    return config[WorkOrderStatus.Closed];
   }
   if (status === WorkOrderStatus.InProgress) {
-    return workOrderStatusConfig[WorkOrderStatus.InProgress];
+    return config[WorkOrderStatus.InProgress];
   }
 
   if (supplyRequest) {
     if (supplyRequest.status === SupplyRequestStatus.Rejected) {
       return {
-        label: "مرفوض",
+        label: isEn ? "Rejected" : "مرفوض",
         bg: "bg-red-50 dark:bg-red-950/40",
         text: "text-red-700 dark:text-red-300",
         border: "border-red-200 dark:border-red-800",
@@ -100,7 +170,7 @@ export function getWorkOrderEffectiveStatus(
     }
     if (supplyRequest.status === SupplyRequestStatus.PendingWarehouseApproval) {
       return {
-        label: "بانتظار موافقة المستودع",
+        label: isEn ? "Awaiting Warehouse Approval" : "بانتظار موافقة المستودع",
         bg: "bg-amber-50 dark:bg-amber-950/40",
         text: "text-amber-700 dark:text-amber-300",
         border: "border-amber-200 dark:border-amber-800",
@@ -108,7 +178,7 @@ export function getWorkOrderEffectiveStatus(
     }
     if (supplyRequest.status === SupplyRequestStatus.Cancelled) {
       return {
-        label: "ملغي (طلب مواد)",
+        label: isEn ? "Cancelled (Material Request)" : "ملغي (طلب مواد)",
         bg: "bg-slate-100 dark:bg-slate-800/60",
         text: "text-slate-700 dark:text-slate-300",
         border: "border-slate-200 dark:border-slate-700",
@@ -116,7 +186,7 @@ export function getWorkOrderEffectiveStatus(
     }
   }
 
-  return workOrderStatusConfig[status] || workOrderStatusConfig[WorkOrderStatus.Open];
+  return config[status] || config[WorkOrderStatus.Open];
 }
 
 export const itemTypeLabels: Record<ItemType, string> = {
@@ -125,6 +195,17 @@ export const itemTypeLabels: Record<ItemType, string> = {
   [ItemType.Oil]: "زيت ومواد تشحيم",
   [ItemType.Consumable]: "مستهلكات وورشة",
 };
+
+export const itemTypeLabelsEn: Record<ItemType, string> = {
+  [ItemType.SparePart]: "Spare Part",
+  [ItemType.RiderAccessory]: "Rider Equipment & Items",
+  [ItemType.Oil]: "Oil & Lubricants",
+  [ItemType.Consumable]: "Workshop Consumables",
+};
+
+export function getItemTypeLabel(type: ItemType, isEn = false): string {
+  return (isEn ? itemTypeLabelsEn[type] : itemTypeLabels[type]) || String(type);
+}
 
 export const itemTypeBadgeStyles: Record<
   ItemType,
@@ -155,6 +236,14 @@ export const itemTypeBadgeStyles: Record<
     border: "border-emerald-200 dark:border-emerald-800",
   },
 };
+
+export function getItemTypeBadgeStyle(type: ItemType, isEn = false) {
+  const base = itemTypeBadgeStyles[type] || itemTypeBadgeStyles[ItemType.SparePart];
+  return {
+    ...base,
+    label: isEn ? (itemTypeLabelsEn[type] || base.label) : base.label,
+  };
+}
 
 export const RIDER_ASSIGNABLE_ITEM_TYPES = [ItemType.RiderAccessory];
 
@@ -230,15 +319,31 @@ export function canUseItem(
     : compatibleVehicleTypes.includes(vehicleType as VehicleType);
 }
 
+export function getVehicleTypeLabel(type: VehicleType | number, isEn = false): string {
+  const vt = type as VehicleType;
+  return (isEn ? vehicleTypeLabelsEn[vt] : vehicleTypeLabels[vt]) || String(type);
+}
+
+export function getVehicleTypeBadgeStyle(type: VehicleType | number, isEn = false) {
+  const vt = type as VehicleType;
+  const base = vehicleTypeBadgeStyles[vt] || vehicleTypeBadgeStyles[VehicleType.Other];
+  return {
+    ...base,
+    label: isEn ? (vehicleTypeLabelsEn[vt] || base.label) : base.label,
+  };
+}
+
 export function formatCompatibleVehicleTypes(
   types?: VehicleType[] | null,
-  locale: "ar" | "en" = "ar",
+  localeOrIsEn: "ar" | "en" | boolean = "ar",
 ): string {
+  const isEn = typeof localeOrIsEn === "boolean" ? localeOrIsEn : localeOrIsEn === "en";
   if (!types || types.length === 0 || types.length === 5) {
-    return locale === "ar" ? "كافة أنواع المركبات" : "All vehicle types";
+    return isEn ? "All vehicle types" : "كافة أنواع المركبات";
   }
-  const labels = locale === "ar" ? vehicleTypeLabels : vehicleTypeLabelsEn;
-  return types.map((t) => labels[t] || String(t)).join("، ");
+  const labels = isEn ? vehicleTypeLabelsEn : vehicleTypeLabels;
+  const separator = isEn ? ", " : "، ";
+  return types.map((t) => labels[t] || String(t)).join(separator);
 }
 
 
@@ -250,6 +355,18 @@ export const unitOfMeasureLabels: Record<UnitOfMeasure, string> = {
   [UnitOfMeasure.Set]: "طقم",
 };
 
+export const unitOfMeasureLabelsEn: Record<UnitOfMeasure, string> = {
+  [UnitOfMeasure.Piece]: "Piece",
+  [UnitOfMeasure.Liter]: "Liter",
+  [UnitOfMeasure.Barrel]: "Barrel",
+  [UnitOfMeasure.Box]: "Box / Pack",
+  [UnitOfMeasure.Set]: "Set",
+};
+
+export function getUnitOfMeasureLabel(unit: UnitOfMeasure, isEn = false): string {
+  return (isEn ? unitOfMeasureLabelsEn[unit] : unitOfMeasureLabels[unit]) || String(unit);
+}
+
 export const materialUsageTypeLabels: Record<MaterialUsageType, string> = {
   [MaterialUsageType.SparePart]: "قطعة غيار",
   [MaterialUsageType.Oil]: "زيت",
@@ -258,12 +375,35 @@ export const materialUsageTypeLabels: Record<MaterialUsageType, string> = {
   [MaterialUsageType.ExternalPartSale]: "مبيع خارجي",
 };
 
+export const materialUsageTypeLabelsEn: Record<MaterialUsageType, string> = {
+  [MaterialUsageType.SparePart]: "Spare Part",
+  [MaterialUsageType.Oil]: "Oil",
+  [MaterialUsageType.OilFilter]: "Oil Filter",
+  [MaterialUsageType.Consumable]: "Consumable",
+  [MaterialUsageType.ExternalPartSale]: "External Part Sale",
+};
+
+export function getMaterialUsageTypeLabel(type: MaterialUsageType, isEn = false): string {
+  return (isEn ? materialUsageTypeLabelsEn[type] : materialUsageTypeLabels[type]) || String(type);
+}
+
 export const paymentMethodLabels: Record<PaymentMethod, string> = {
   [PaymentMethod.Cash]: "نقداً (كاش)",
   [PaymentMethod.Card]: "بطاقة بنكية (مدى/فيزا)",
   [PaymentMethod.BankTransfer]: "تحويل بنكي",
   [PaymentMethod.Other]: "أخرى",
 };
+
+export const paymentMethodLabelsEn: Record<PaymentMethod, string> = {
+  [PaymentMethod.Cash]: "Cash",
+  [PaymentMethod.Card]: "Bank Card (Mada/Visa)",
+  [PaymentMethod.BankTransfer]: "Bank Transfer",
+  [PaymentMethod.Other]: "Other",
+};
+
+export function getPaymentMethodLabel(method: PaymentMethod, isEn = false): string {
+  return (isEn ? paymentMethodLabelsEn[method] : paymentMethodLabels[method]) || String(method);
+}
 
 export const oilBarrelStatusConfig: Record<
   OilBarrelStatus,
@@ -294,6 +434,41 @@ export const oilBarrelStatusConfig: Record<
     border: "border-purple-200 dark:border-purple-800",
   },
 };
+
+export const oilBarrelStatusConfigEn: Record<
+  OilBarrelStatus,
+  { label: string; bg: string; text: string; border: string }
+> = {
+  [OilBarrelStatus.Sealed]: {
+    label: "Sealed (New)",
+    bg: "bg-slate-100 dark:bg-slate-800",
+    text: "text-slate-700 dark:text-slate-300",
+    border: "border-slate-200 dark:border-slate-700",
+  },
+  [OilBarrelStatus.Open]: {
+    label: "Open (Active)",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-300 dark:border-emerald-700",
+  },
+  [OilBarrelStatus.Depleted]: {
+    label: "Depleted",
+    bg: "bg-zinc-100 dark:bg-zinc-900",
+    text: "text-zinc-500 dark:text-zinc-400",
+    border: "border-zinc-300 dark:border-zinc-800",
+  },
+  [OilBarrelStatus.Returned]: {
+    label: "Returned to Supplier",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    text: "text-purple-700 dark:text-purple-300",
+    border: "border-purple-200 dark:border-purple-800",
+  },
+};
+
+export function getOilBarrelStatusLabel(status: OilBarrelStatus, isEn = false): string {
+  const config = isEn ? oilBarrelStatusConfigEn : oilBarrelStatusConfig;
+  return config[status]?.label || String(status);
+}
 
 export const oilBarrelVehicleTypeConfig: Record<
   number,
@@ -411,6 +586,52 @@ export const oilReminderStatusConfig: Record<
   },
 };
 
+export const oilReminderStatusConfigEn: Record<
+  OilReminderStatus,
+  { label: string; bg: string; text: string; border: string; level: number }
+> = {
+  [OilReminderStatus.OK]: {
+    label: "OK / Normal",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+    level: 1,
+  },
+  [OilReminderStatus.Due]: {
+    label: "Due Now",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+    level: 2,
+  },
+  [OilReminderStatus.Overdue]: {
+    label: "Overdue!",
+    bg: "bg-red-50 dark:bg-red-950/40",
+    text: "text-red-700 dark:text-red-300",
+    border: "border-red-200 dark:border-red-800",
+    level: 3,
+  },
+  [OilReminderStatus.NeverDone]: {
+    label: "Never Changed",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    text: "text-purple-700 dark:text-purple-300",
+    border: "border-purple-200 dark:border-purple-800",
+    level: 2,
+  },
+  [OilReminderStatus.OdometerMissing]: {
+    label: "Odometer Missing",
+    bg: "bg-slate-100 dark:bg-slate-800",
+    text: "text-slate-600 dark:text-slate-400",
+    border: "border-slate-200 dark:border-slate-700",
+    level: 0,
+  },
+};
+
+export function getOilReminderStatusLabel(status: OilReminderStatus, isEn = false): string {
+  const config = isEn ? oilReminderStatusConfigEn : oilReminderStatusConfig;
+  return config[status]?.label || String(status);
+}
+
 export const externalPaymentStatusConfig: Record<
   ExternalPaymentStatus,
   { label: string; bg: string; text: string; border: string }
@@ -441,17 +662,55 @@ export const externalPaymentStatusConfig: Record<
   },
 };
 
-export function formatCurrency(amount: number | null | undefined): string {
-  if (amount === null || amount === undefined || isNaN(amount)) return "0.00 ر.س";
-  return `${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`;
+export const externalPaymentStatusConfigEn: Record<
+  ExternalPaymentStatus,
+  { label: string; bg: string; text: string; border: string }
+> = {
+  [ExternalPaymentStatus.Unpaid]: {
+    label: "Unpaid",
+    bg: "bg-red-50 dark:bg-red-950/40",
+    text: "text-red-700 dark:text-red-300",
+    border: "border-red-200 dark:border-red-800",
+  },
+  [ExternalPaymentStatus.PartiallyPaid]: {
+    label: "Partially Paid",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+  },
+  [ExternalPaymentStatus.Paid]: {
+    label: "Paid",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+  },
+  [ExternalPaymentStatus.Refunded]: {
+    label: "Refunded",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    text: "text-purple-700 dark:text-purple-300",
+    border: "border-purple-200 dark:border-purple-800",
+  },
+};
+
+export function getExternalPaymentStatusLabel(status: ExternalPaymentStatus, isEn = false): string {
+  const config = isEn ? externalPaymentStatusConfigEn : externalPaymentStatusConfig;
+  return config[status]?.label || String(status);
 }
 
-export function formatDateTime(isoString: string | null | undefined): string {
+export function formatCurrency(amount: number | null | undefined, isEn = false): string {
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return isEn ? "0.00 SAR" : "0.00 ر.س";
+  }
+  const formatted = amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return isEn ? `${formatted} SAR` : `${formatted} ر.س`;
+}
+
+export function formatDateTime(isoString: string | null | undefined, isEn = false): string {
   if (!isoString) return "-";
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
-    return d.toLocaleString("ar-SA", {
+    return d.toLocaleString(isEn ? "en-US" : "ar-SA", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -463,12 +722,12 @@ export function formatDateTime(isoString: string | null | undefined): string {
   }
 }
 
-export function formatDate(dateString: string | null | undefined): string {
+export function formatDate(dateString: string | null | undefined, isEn = false): string {
   if (!dateString) return "-";
   try {
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return dateString;
-    return d.toLocaleDateString("ar-SA", {
+    return d.toLocaleDateString(isEn ? "en-US" : "ar-SA", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -512,10 +771,58 @@ export const supplyRequestStatusConfig: Record<
   },
 };
 
+export const supplyRequestStatusConfigEn: Record<
+  SupplyRequestStatus,
+  { label: string; bg: string; text: string; border: string; dot: string }
+> = {
+  [SupplyRequestStatus.PendingWarehouseApproval]: {
+    label: "Awaiting Warehouse Approval",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+    dot: "bg-amber-500",
+  },
+  [SupplyRequestStatus.ApprovedAndIssued]: {
+    label: "Approved & Issued",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+    dot: "bg-emerald-500",
+  },
+  [SupplyRequestStatus.Rejected]: {
+    label: "Rejected",
+    bg: "bg-red-50 dark:bg-red-950/40",
+    text: "text-red-700 dark:text-red-300",
+    border: "border-red-200 dark:border-red-800",
+    dot: "bg-red-500",
+  },
+  [SupplyRequestStatus.Cancelled]: {
+    label: "Cancelled",
+    bg: "bg-slate-100 dark:bg-slate-800/60",
+    text: "text-slate-600 dark:text-slate-400",
+    border: "border-slate-200 dark:border-slate-700",
+    dot: "bg-slate-400",
+  },
+};
+
+export function getSupplyRequestStatusLabel(status: SupplyRequestStatus, isEn = false): string {
+  const config = isEn ? supplyRequestStatusConfigEn : supplyRequestStatusConfig;
+  return config[status]?.label || String(status);
+}
+
 export const supplyRequestSubjectLabels: Record<SupplyRequestSubjectType, string> = {
   [SupplyRequestSubjectType.VehicleMaintenance]: "صيانة مركبة",
   [SupplyRequestSubjectType.Rider]: "مستلزمات مندوب",
 };
+
+export const supplyRequestSubjectLabelsEn: Record<SupplyRequestSubjectType, string> = {
+  [SupplyRequestSubjectType.VehicleMaintenance]: "Vehicle Maintenance",
+  [SupplyRequestSubjectType.Rider]: "Rider Items",
+};
+
+export function getSupplyRequestSubjectLabel(subject: SupplyRequestSubjectType, isEn = false): string {
+  return (isEn ? supplyRequestSubjectLabelsEn[subject] : supplyRequestSubjectLabels[subject]) || String(subject);
+}
 
 // ==========================================
 // Maintenance Work Site & Stock Location Mapping

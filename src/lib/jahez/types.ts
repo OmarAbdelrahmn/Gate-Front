@@ -295,6 +295,10 @@ export interface MoneyMovement {
   isHandedToAccountant: boolean;
   userRider: RiderPerson | null;
   ownerRider: RiderPerson | null;
+  platformAccountId?: string | null;
+  net?: number | null;
+  commission?: number | null;
+  calculatedCommission?: number | null;
 }
 
 export type Movement = MoneyMovement;

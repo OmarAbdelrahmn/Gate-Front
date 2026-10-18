@@ -46,7 +46,8 @@ interface ReceiptsViewProps {
 const STORAGE_KEY = "maintenance_recent_receipts";
 
 export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps) {
-  const { can } = useAuth();
+  const { can, locale } = useAuth();
+  const isEn = locale === "en";
   const canCreate = can("inventory.receipts.create");
 
   // Receipts data
@@ -87,22 +88,26 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
         receiptNumber:
           rcpt.receiptNumber || rcpt.number || rcpt.code || (rcpt.id ? rcpt.id.slice(0, 8) : "—"),
         supplierNameAr:
+          (isEn ? (rcpt.supplierNameEn || rcpt.supplierName) : rcpt.supplierNameAr) ||
           rcpt.supplierNameAr ||
           rcpt.supplierName ||
+          (isEn ? (rcpt.supplier?.legalNameEn || rcpt.supplier?.nameEn) : rcpt.supplier?.legalNameAr) ||
           rcpt.supplier?.legalNameAr ||
           rcpt.supplier?.nameAr ||
-          sup?.legalNameAr ||
-          "مورد غير محدد",
+          (isEn ? (sup?.legalNameEn || sup?.legalNameAr) : (sup?.legalNameAr || sup?.legalNameEn)) ||
+          (isEn ? "Unspecified Supplier" : "مورد غير محدد"),
         supplierInvoiceNumber:
           rcpt.supplierInvoiceNumber || rcpt.invoiceNumber || "—",
         invoiceDate: rcpt.invoiceDate || rcpt.receivedAtUtc || rcpt.createdAtUtc,
         inventoryLocationNameAr:
+          (isEn ? (rcpt.inventoryLocationNameEn || rcpt.inventoryLocationName) : rcpt.inventoryLocationNameAr) ||
           rcpt.inventoryLocationNameAr ||
           rcpt.inventoryLocationName ||
+          (isEn ? (rcpt.inventoryLocation?.nameEn || rcpt.location?.nameEn) : rcpt.inventoryLocation?.nameAr) ||
           rcpt.inventoryLocation?.nameAr ||
           rcpt.location?.nameAr ||
-          loc?.nameAr ||
-          "مستودع غير محدد",
+          (isEn ? (loc?.nameEn || loc?.nameAr) : (loc?.nameAr || loc?.nameEn)) ||
+          (isEn ? "Unspecified Warehouse" : "مستودع غير محدد"),
         inventoryValuationAmount:
           rcpt.inventoryValuationAmount ?? rcpt.valuationAmount ?? 0,
         totalAmount: rcpt.totalAmount ?? rcpt.total ?? 0,
@@ -113,7 +118,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
         attachment: rcpt.attachment || null,
       };
     },
-    [suppliers, locations],
+    [suppliers, locations, isEn],
   );
 
   // Load receipts from API and merge with cached receipts
@@ -160,11 +165,16 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
       setReceipts(Array.from(mergedMap.values()));
     } catch (err: any) {
       console.error("Failed to load receipts:", err);
-      setError(err?.message || "تعذر تحميل فواتير وإيصالات المشتريات من الخادم.");
+      setError(
+        err?.message ||
+          (isEn
+            ? "Could not load purchase invoices and receipts from server."
+            : "تعذر تحميل فواتير وإيصالات المشتريات من الخادم."),
+      );
     } finally {
       setLoading(false);
     }
-  }, [selectedLocationId, selectedSupplierId, enrichReceipt]);
+  }, [selectedLocationId, selectedSupplierId, enrichReceipt, isEn]);
 
   // Initial load on mount and when location/supplier filters change
   useEffect(() => {
@@ -188,8 +198,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
       return updated;
     });
     toast.success(
-      "تم تسجيل الإيصال بنجاح",
-      `تم إصدار إيصال الاستلام رقم ${enriched.receiptNumber}`,
+      isEn ? "Receipt recorded successfully" : "تم تسجيل الإيصال بنجاح",
+      isEn
+        ? `Purchase receipt #${enriched.receiptNumber} has been issued`
+        : `تم إصدار إيصال الاستلام رقم ${enriched.receiptNumber}`,
     );
     // Also trigger server reload
     loadReceipts();
@@ -210,17 +222,23 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
           ...prev.filter((r) => r.id !== enriched.id),
         ]);
         toast.success(
-          "تم العثور على الإيصال",
-          `إيصال رقم: ${enriched.receiptNumber || enriched.id}`,
+          isEn ? "Receipt found" : "تم العثور على الإيصال",
+          isEn
+            ? `Receipt #: ${enriched.receiptNumber || enriched.id}`
+            : `إيصال رقم: ${enriched.receiptNumber || enriched.id}`,
         );
       } else {
-        toast.error("غير موجود", "لم يتم العثور على إيصال بالمعرّف المدخل.");
+        toast.error(
+          isEn ? "Not found" : "غير موجود",
+          isEn ? "No receipt found for the provided ID." : "لم يتم العثور على إيصال بالمعرّف المدخل.",
+        );
       }
     } catch (err: any) {
       console.error("Failed to lookup receipt:", err);
       toast.error(
-        "فشل الاستعلام",
-        err?.message || "تعذر العثور على الإيصال بالمعرف المدخل.",
+        isEn ? "Query failed" : "فشل الاستعلام",
+        err?.message ||
+          (isEn ? "Failed to find receipt by ID." : "تعذر العثور على الإيصال بالمعرف المدخل."),
       );
     } finally {
       setLookupLoading(false);
@@ -233,7 +251,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
       await navigator.clipboard.writeText(id);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
-      toast.info("تم النسخ", "تم نسخ معرف الإيصال إلى الحافظة");
+      toast.info(
+        isEn ? "Copied" : "تم النسخ",
+        isEn ? "Receipt ID copied to clipboard" : "تم نسخ معرف الإيصال إلى الحافظة",
+      );
     } catch {
       // Fallback
     }
@@ -318,17 +339,17 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
     try {
       await exportToExcel({
         filename: `purchase-receipts-${new Date().toISOString().split("T")[0]}`,
-        sheetName: "فواتير واستلام المشتريات",
+        sheetName: isEn ? "Purchase Receipts" : "فواتير واستلام المشتريات",
         data: filteredReceipts,
         columns: [
           { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
-          { header: "رقم الإيصال", accessor: (r) => r.receiptNumber || r.id?.slice(0, 8) || "—", width: 16, isText: true },
-          { header: "رقم فاتورة المورد", accessor: (r) => r.supplierInvoiceNumber || "—", width: 18, isText: true },
-          { header: "المورد", accessor: (r) => r.supplierNameAr || "—", width: 24 },
-          { header: "المستودع / الموقع", accessor: (r) => r.inventoryLocationNameAr || "—", width: 22 },
-          { header: "تاريخ الفاتورة", accessor: (r) => r.invoiceDate ? r.invoiceDate.split("T")[0] : "—", width: 16 },
-          { header: "إجمالي الفاتورة (ر.س)", accessor: (r) => r.totalAmount ?? 0, width: 18 },
-          { header: "قيمة المخزون المقيم (ر.س)", accessor: (r) => r.inventoryValuationAmount ?? 0, width: 20 },
+          { header: isEn ? "Receipt No." : "رقم الإيصال", accessor: (r) => r.receiptNumber || r.id?.slice(0, 8) || "—", width: 16, isText: true },
+          { header: isEn ? "Supplier Invoice #" : "رقم فاتورة المورد", accessor: (r) => r.supplierInvoiceNumber || "—", width: 18, isText: true },
+          { header: isEn ? "Supplier" : "المورد", accessor: (r) => r.supplierNameAr || "—", width: 24 },
+          { header: isEn ? "Warehouse / Location" : "المستودع / الموقع", accessor: (r) => r.inventoryLocationNameAr || "—", width: 22 },
+          { header: isEn ? "Invoice Date" : "تاريخ الفاتورة", accessor: (r) => r.invoiceDate ? r.invoiceDate.split("T")[0] : "—", width: 16 },
+          { header: isEn ? "Invoice Total (SAR)" : "إجمالي الفاتورة (ر.س)", accessor: (r) => r.totalAmount ?? 0, width: 18 },
+          { header: isEn ? "Inventory Valuation (SAR)" : "قيمة المخزون المقيم (ر.س)", accessor: (r) => r.inventoryValuationAmount ?? 0, width: 20 },
         ],
       });
     } catch (err) {
@@ -345,10 +366,12 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
         <div>
           <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Receipt size={18} className="text-[#1167c9]" />
-            فواتير واستلام المشتريات
+            {isEn ? "Purchase Invoices & Receipts" : "فواتير واستلام المشتريات"}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            تسجيل فواتير المشتريات، وتحديث تكلفة ومخزون الأصناف، وعرض فواتير التوريد المرفقة.
+            {isEn
+              ? "Record purchase invoices, update item cost and inventory levels, and view attached supply bills."
+              : "تسجيل فواتير المشتريات، وتحديث تكلفة ومخزون الأصناف، وعرض فواتير التوريد المرفقة."}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -360,7 +383,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
             className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold text-xs"
           >
             <FileSpreadsheet size={14} />
-            تصدير إكسل
+            {isEn ? "Export Excel" : "تصدير إكسل"}
           </Button>
 
           <Button
@@ -368,10 +391,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
             onClick={loadReceipts}
             disabled={loading}
             className="text-xs text-slate-600 dark:text-slate-300"
-            title="تحديث البيانات من الخادم"
+            title={isEn ? "Refresh data from server" : "تحديث البيانات من الخادم"}
           >
             <RefreshCw size={14} className={loading ? "animate-spin text-[#1167c9]" : ""} />
-            تحديث
+            {isEn ? "Refresh" : "تحديث"}
           </Button>
 
           {canCreate && (
@@ -381,7 +404,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
               className="text-xs shrink-0"
             >
               <PlusCircle size={15} />
-              تسجيل إيصال مشتريات جديد
+              {isEn ? "Record New Purchase Receipt" : "تسجيل إيصال مشتريات جديد"}
             </Button>
           )}
         </div>
@@ -392,7 +415,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
         <div className="p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold text-slate-500 block mb-0.5">
-              إجمالي فواتير وإيصالات الشراء
+              {isEn ? "Total Purchase Invoices & Receipts" : "إجمالي فواتير وإيصالات الشراء"}
             </span>
             <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
               {stats.totalCount}
@@ -406,10 +429,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
         <div className="p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold text-slate-500 block mb-0.5">
-              إجمالي قيمة الفواتير
+              {isEn ? "Total Invoices Value" : "إجمالي قيمة الفواتير"}
             </span>
             <span className="text-lg font-black text-[#1167c9] dark:text-blue-400 font-mono">
-              {formatCurrency(stats.totalInvoices)}
+              {formatCurrency(stats.totalInvoices, isEn)}
             </span>
           </div>
           <div className="size-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center">
@@ -420,10 +443,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
         <div className="p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold text-slate-500 block mb-0.5">
-              قيمة تقييم المخزون
+              {isEn ? "Inventory Valuation Value" : "قيمة تقييم المخزون"}
             </span>
             <span className="text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono">
-              {formatCurrency(stats.totalValuation)}
+              {formatCurrency(stats.totalValuation, isEn)}
             </span>
           </div>
           <div className="size-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center">
@@ -439,14 +462,20 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
           <div className="relative flex-1">
             <Search
               size={15}
-              className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              className={`absolute top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none ${isEn ? "left-3" : "right-3"}`}
             />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ابحث برقم الإيصال، رقم فاتورة المورد، اسم المورد، أو المعرف (ID)..."
-              className="w-full h-9.5 ps-9 pe-3 text-xs rounded-xl border border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/50 text-[var(--foreground)] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1167c9]/30 focus:border-[#1167c9]"
+              placeholder={
+                isEn
+                  ? "Search by receipt #, supplier invoice #, supplier name, or ID..."
+                  : "ابحث برقم الإيصال، رقم فاتورة المورد، اسم المورد، أو المعرف (ID)..."
+              }
+              className={`w-full h-9.5 text-xs rounded-xl border border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/50 text-[var(--foreground)] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1167c9]/30 focus:border-[#1167c9] ${
+                isEn ? "pl-9 pr-3" : "pr-9 pl-3"
+              }`}
             />
           </div>
 
@@ -457,10 +486,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
               onChange={(e) => setSelectedLocationId(e.target.value)}
               className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/50 text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[#1167c9]/30 focus:border-[#1167c9]"
             >
-              <option value="">جميع المستودعات</option>
+              <option value="">{isEn ? "All Warehouses" : "جميع المستودعات"}</option>
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>
-                  {loc.nameAr}
+                  {isEn ? (loc.nameEn || loc.nameAr) : (loc.nameAr || loc.nameEn)}
                 </option>
               ))}
             </select>
@@ -473,10 +502,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
               onChange={(e) => setSelectedSupplierId(e.target.value)}
               className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border)] bg-slate-50/70 dark:bg-slate-900/50 text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[#1167c9]/30 focus:border-[#1167c9]"
             >
-              <option value="">جميع الموردين</option>
+              <option value="">{isEn ? "All Suppliers" : "جميع الموردين"}</option>
               {suppliers.map((sup) => (
                 <option key={sup.id} value={sup.id}>
-                  {sup.legalNameAr}
+                  {isEn ? (sup.legalNameEn || sup.legalNameAr) : (sup.legalNameAr || sup.legalNameEn)}
                 </option>
               ))}
             </select>
@@ -488,10 +517,10 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
               variant="ghost"
               onClick={resetFilters}
               className="h-9.5 text-xs px-2.5 text-slate-500 hover:text-red-500 shrink-0"
-              title="إلغاء جميع الفلاتر"
+              title={isEn ? "Clear all filters" : "إلغاء جميع الفلاتر"}
             >
               <X size={14} />
-              مسح التصفية
+              {isEn ? "Clear Filters" : "مسح التصفية"}
             </Button>
           )}
         </div>
@@ -501,7 +530,9 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
           filteredReceipts.length === 0 && (
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-xs">
               <span className="text-blue-800 dark:text-blue-300">
-                يبدو أنك تبحث عن معرف إيصال محدد (ID). هل ترغب في جلب بياناته مباشرة من الخادم؟
+                {isEn
+                  ? "It looks like you're searching for a specific receipt ID. Would you like to fetch it directly from the server?"
+                  : "يبدو أنك تبحث عن معرف إيصال محدد (ID). هل ترغب في جلب بياناته مباشرة من الخادم؟"}
               </span>
               <Button
                 variant="secondary"
@@ -509,7 +540,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                 onClick={() => handleDirectLookup(searchTerm)}
                 className="h-8 text-xs shrink-0"
               >
-                جلب الإيصال بالمعرّف
+                {isEn ? "Fetch Receipt by ID" : "جلب الإيصال بالمعرّف"}
               </Button>
             </div>
           )}
@@ -524,25 +555,25 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
             onClick={loadReceipts}
             className="text-xs text-red-700 dark:text-red-300 hover:underline"
           >
-            إعادة المحاولة
+            {isEn ? "Retry" : "إعادة المحاولة"}
           </Button>
         </div>
       )}
 
       {/* Receipts Table */}
-      <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-        <table className="w-full text-right text-xs">
+      <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xs">
+        <table className="w-full text-start text-xs">
           <thead className="border-b border-[var(--border)] bg-slate-50/80 dark:bg-slate-800/50 text-slate-700 dark:text-slate-200 font-bold">
             <tr>
-              <th className="p-3.5">رقم الإيصال / المعرّف</th>
-              <th className="p-3.5">المورد</th>
-              <th className="p-3.5">رقم فاتورة المورد</th>
-              <th className="p-3.5">تاريخ الفاتورة</th>
-              <th className="p-3.5">المستودع المستلم</th>
-              <th className="p-3.5 text-center">عدد الأصناف</th>
-              <th className="p-3.5 text-left">قيمة تقييم المخزون</th>
-              <th className="p-3.5 text-left">إجمالي الفاتورة</th>
-              <th className="p-3.5 text-center">وثيقة وتفاصيل الفاتورة</th>
+              <th className="p-3.5 text-start">{isEn ? "Receipt No. / ID" : "رقم الإيصال / المعرّف"}</th>
+              <th className="p-3.5 text-start">{isEn ? "Supplier" : "المورد"}</th>
+              <th className="p-3.5 text-start">{isEn ? "Supplier Invoice #" : "رقم فاتورة المورد"}</th>
+              <th className="p-3.5 text-start">{isEn ? "Invoice Date" : "تاريخ الفاتورة"}</th>
+              <th className="p-3.5 text-start">{isEn ? "Receiving Warehouse" : "المستودع المستلم"}</th>
+              <th className="p-3.5 text-center">{isEn ? "Items Count" : "عدد الأصناف"}</th>
+              <th className="p-3.5 text-start">{isEn ? "Inventory Valuation" : "قيمة تقييم المخزون"}</th>
+              <th className="p-3.5 text-start">{isEn ? "Invoice Total" : "إجمالي الفاتورة"}</th>
+              <th className="p-3.5 text-center">{isEn ? "Bill Document & Details" : "وثيقة وتفاصيل الفاتورة"}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -551,7 +582,11 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                 <td colSpan={9} className="p-12 text-center text-slate-400">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Loader2 size={20} className="animate-spin text-[#1167c9]" />
-                    <span className="font-medium">جارٍ تحميل فواتير وإيصالات المشتريات من الخادم...</span>
+                    <span className="font-medium">
+                      {isEn
+                        ? "Loading purchase invoices and receipts from server..."
+                        : "جارٍ تحميل فواتير وإيصالات المشتريات من الخادم..."}
+                    </span>
                   </div>
                 </td>
               </tr>
@@ -565,26 +600,30 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                     {hasActiveFilters ? (
                       <>
                         <p className="font-bold text-slate-700 dark:text-slate-200">
-                          لا توجد نتائج مطابقة لخيارات البحث والتصفية
+                          {isEn ? "No matching records found for current filters" : "لا توجد نتائج مطابقة لخيارات البحث والتصفية"}
                         </p>
                         <p className="text-xs text-slate-500">
-                          جرّب تغيير كلمات البحث أو إعادة ضبط خيارات المستودع والمورد.
+                          {isEn
+                            ? "Try changing search terms or resetting warehouse and supplier filters."
+                            : "جرّب تغيير كلمات البحث أو إعادة ضبط خيارات المستودع والمورد."}
                         </p>
                         <Button
                           variant="secondary"
                           onClick={resetFilters}
                           className="text-xs mt-2"
                         >
-                          إعادة تعيين خيارات البحث
+                          {isEn ? "Reset Search Filters" : "إعادة تعيين خيارات البحث"}
                         </Button>
                       </>
                     ) : (
                       <>
                         <p className="font-bold text-slate-700 dark:text-slate-200">
-                          لا توجد إيصالات مشتريات مسجلة حتى الآن
+                          {isEn ? "No purchase receipts registered yet" : "لا توجد إيصالات مشتريات مسجلة حتى الآن"}
                         </p>
                         <p className="text-xs text-slate-500 leading-relaxed">
-                          يمكنك البدء بتسجيل أول إيصال استلام مشتريات وإرفاق الفاتورة ليتم تحديث تكلفة ومخزون الأصناف تلقائياً.
+                          {isEn
+                            ? "Start by recording the first purchase receipt to automatically update inventory levels and item costs."
+                            : "يمكنك البدء بتسجيل أول إيصال استلام مشتريات وإرفاق الفاتورة ليتم تحديث تكلفة ومخزون الأصناف تلقائياً."}
                         </p>
                         {canCreate && (
                           <Button
@@ -593,7 +632,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                             className="text-xs mt-2"
                           >
                             <PlusCircle size={14} />
-                            تسجيل إيصال مشتريات جديد الآن
+                            {isEn ? "Record New Purchase Receipt Now" : "تسجيل إيصال مشتريات جديد الآن"}
                           </Button>
                         )}
                       </>
@@ -618,7 +657,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                           type="button"
                           onClick={() => handleCopyId(rcpt.id)}
                           className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
-                          title={`نسخ المعرف: ${rcpt.id}`}
+                          title={isEn ? `Copy ID: ${rcpt.id}` : `نسخ المعرف: ${rcpt.id}`}
                         >
                           {copiedId === rcpt.id ? (
                             <Check size={12} className="text-green-500" />
@@ -650,7 +689,7 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
 
                   {/* Invoice Date */}
                   <td className="p-3.5 text-slate-600 dark:text-slate-300 font-mono">
-                    {rcpt.invoiceDate ? formatDate(rcpt.invoiceDate) : "—"}
+                    {rcpt.invoiceDate ? formatDate(rcpt.invoiceDate, isEn) : "—"}
                   </td>
 
                   {/* Location */}
@@ -664,18 +703,18 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                   {/* Lines Count */}
                   <td className="p-3.5 text-center">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                      {rcpt.lines?.length || 0} بنود
+                      {rcpt.lines?.length || 0} {isEn ? "items" : "بنود"}
                     </span>
                   </td>
 
                   {/* Valuation Amount */}
-                  <td className="p-3.5 text-left font-mono font-bold text-slate-700 dark:text-slate-300">
-                    {formatCurrency(rcpt.inventoryValuationAmount || 0)}
+                  <td className="p-3.5 text-start font-mono font-bold text-slate-700 dark:text-slate-300">
+                    {formatCurrency(rcpt.inventoryValuationAmount || 0, isEn)}
                   </td>
 
                   {/* Total Amount */}
-                  <td className="p-3.5 text-left font-mono font-black text-slate-900 dark:text-white">
-                    {formatCurrency(rcpt.totalAmount || 0)}
+                  <td className="p-3.5 text-start font-mono font-black text-slate-900 dark:text-white">
+                    {formatCurrency(rcpt.totalAmount || 0, isEn)}
                   </td>
 
                   {/* Attached Bill & Details Buttons */}
@@ -685,20 +724,20 @@ export function ReceiptsView({ locations, suppliers, items }: ReceiptsViewProps)
                         variant="secondary"
                         onClick={() => handleOpenBill(rcpt)}
                         className="h-8 px-2.5 text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
-                        title={rcpt.attachment?.originalFileName || "عرض وثيقة الفاتورة المرفقة"}
+                        title={rcpt.attachment?.originalFileName || (isEn ? "View attached bill document" : "عرض وثيقة الفاتورة المرفقة")}
                       >
                         <FileText size={13} className="text-[#1167c9]" />
-                        <span>عرض الفاتورة</span>
+                        <span>{isEn ? "View Bill" : "عرض الفاتورة"}</span>
                       </Button>
 
                       <Button
                         variant="secondary"
                         onClick={() => handleOpenDetails(rcpt)}
                         className="h-8 px-2.5 text-xs inline-flex items-center gap-1.5 whitespace-nowrap bg-blue-50 text-[#1167c9] hover:bg-blue-100 hover:text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800"
-                        title="عرض تفاصيل الفاتورة والأصناف"
+                        title={isEn ? "View invoice lines and details" : "عرض تفاصيل الفاتورة والأصناف"}
                       >
                         <Receipt size={13} />
-                        <span>تفاصيل الفاتورة</span>
+                        <span>{isEn ? "Details" : "تفاصيل الفاتورة"}</span>
                       </Button>
                     </div>
                   </td>

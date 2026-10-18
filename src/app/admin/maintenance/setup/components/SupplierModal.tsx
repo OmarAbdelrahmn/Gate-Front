@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createSupplier, updateSupplier } from "@/lib/maintenance/api";
 import type { Supplier } from "@/lib/maintenance/types";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface SupplierModalProps {
   isOpen: boolean;
@@ -20,6 +21,9 @@ export function SupplierModal({
   onSaved,
   supplier,
 }: SupplierModalProps) {
+  const { locale } = useAuth();
+  const isEn = locale === "en";
+
   const [loading, setLoading] = useState(false);
 
   const [supplierNumber, setSupplierNumber] = useState("");
@@ -110,42 +114,46 @@ export function SupplierModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={supplier ? "تعديل بيانات المورد" : "إضافة مورد جديد"}
+      title={
+        isEn
+          ? (supplier ? "Edit Supplier Details" : "Add New Supplier")
+          : (supplier ? "تعديل بيانات المورد" : "إضافة مورد جديد")
+      }
       maxWidth="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              رقم المورد (Supplier No.) <span className="text-red-500">*</span>
+              {isEn ? "Supplier No." : "رقم المورد (Supplier No.)"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={supplierNumber}
               onChange={(e) => setSupplierNumber(e.target.value.toUpperCase())}
-              placeholder="مثال: SUP-001"
+              placeholder={isEn ? "e.g. SUP-001" : "مثال: SUP-001"}
               required
               className="font-mono text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الرقم الضريبي (VAT No.)
+              {isEn ? "VAT No." : "الرقم الضريبي (VAT No.)"}
             </label>
             <Input
               value={vatNumber}
               onChange={(e) => setVatNumber(e.target.value)}
-              placeholder="15 رقم"
+              placeholder={isEn ? "15 digits" : "15 رقم"}
               className="font-mono text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              السجل التجاري (CR No.)
+              {isEn ? "CR No." : "السجل التجاري (CR No.)"}
             </label>
             <Input
               value={commercialRegistrationNumber}
               onChange={(e) => setCommercialRegistrationNumber(e.target.value)}
-              placeholder="10 أرقام"
+              placeholder={isEn ? "10 digits" : "10 أرقام"}
               className="font-mono text-xs"
             />
           </div>
@@ -154,19 +162,19 @@ export function SupplierModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الاسم التجاري بالعربية <span className="text-red-500">*</span>
+              {isEn ? "Trade Name (Arabic)" : "الاسم التجاري بالعربية"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={legalNameAr}
               onChange={(e) => setLegalNameAr(e.target.value)}
-              placeholder="مثال: شركة التوزيع المتحدة للزيوت"
+              placeholder={isEn ? "e.g. شركة التوزيع المتحدة للزيوت" : "مثال: شركة التوزيع المتحدة للزيوت"}
               required
               className="text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الاسم التجاري بالإنجليزية <span className="text-red-500">*</span>
+              {isEn ? "Trade Name (English)" : "الاسم التجاري بالإنجليزية"} <span className="text-red-500">*</span>
             </label>
             <Input
               value={legalNameEn}
@@ -182,18 +190,18 @@ export function SupplierModal({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              اسم مسؤول الاتصال
+              {isEn ? "Contact Person Name" : "اسم مسؤول الاتصال"}
             </label>
             <Input
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
-              placeholder="اسم المندوب أو المدير"
+              placeholder={isEn ? "Manager or representative name" : "اسم المندوب أو المدير"}
               className="text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              رقم الهاتف
+              {isEn ? "Phone Number" : "رقم الهاتف"}
             </label>
             <Input
               value={phone}
@@ -205,7 +213,7 @@ export function SupplierModal({
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              شروط السداد (أيام)
+              {isEn ? "Payment Terms (Days)" : "شروط السداد (أيام)"}
             </label>
             <Input
               type="number"
@@ -220,7 +228,7 @@ export function SupplierModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              البريد الإلكتروني
+              {isEn ? "Email Address" : "البريد الإلكتروني"}
             </label>
             <Input
               type="email"
@@ -233,12 +241,12 @@ export function SupplierModal({
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              العنوان
+              {isEn ? "Address" : "العنوان"}
             </label>
             <Input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="المدينة، الحي..."
+              placeholder={isEn ? "City, District..." : "المدينة، الحي..."}
               className="text-xs"
             />
           </div>
@@ -246,22 +254,22 @@ export function SupplierModal({
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            ملاحظات
+            {isEn ? "Notes" : "ملاحظات"}
           </label>
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="أي ملاحظات حول المورد..."
+            placeholder={isEn ? "Any notes regarding supplier..." : "أي ملاحظات حول المورد..."}
             className="text-xs"
           />
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
           <Button variant="ghost" type="button" onClick={onClose} disabled={loading} className="text-xs">
-            إلغاء
+            {isEn ? "Cancel" : "إلغاء"}
           </Button>
           <Button variant="primary" type="submit" loading={loading} className="text-xs">
-            {supplier ? "حفظ التعديلات" : "إضافة المورد"}
+            {isEn ? (supplier ? "Save Changes" : "Add Supplier") : (supplier ? "حفظ التعديلات" : "إضافة المورد")}
           </Button>
         </div>
       </form>

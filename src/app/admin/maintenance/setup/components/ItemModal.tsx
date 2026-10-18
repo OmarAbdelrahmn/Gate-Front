@@ -8,12 +8,13 @@ import { createInventoryItem, updateInventoryItem } from "@/lib/maintenance/api"
 import type { InventoryItem } from "@/lib/maintenance/types";
 import { ItemType, UnitOfMeasure, VehicleType } from "@/lib/maintenance/types";
 import {
-  itemTypeLabels,
-  unitOfMeasureLabels,
-  vehicleTypeLabels,
+  getItemTypeLabel,
+  getUnitOfMeasureLabel,
+  getVehicleTypeLabel,
   ALL_VEHICLE_TYPES,
 } from "@/lib/maintenance/constants";
 import { Sparkles, Info, Check, AlertCircle } from "lucide-react";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -23,6 +24,9 @@ interface ItemModalProps {
 }
 
 export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
+  const { locale } = useAuth();
+  const isEn = locale === "en";
+
   const [loading, setLoading] = useState(false);
 
   const [sku, setSku] = useState("");
@@ -48,7 +52,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
       setBarcode(item.barcode || "");
       setItemType(item.itemType || ItemType.SparePart);
       setNameAr(item.nameAr || "");
-      setNameEn(item.nameAr || item.nameEn || "");
+      setNameEn(item.nameEn || item.nameAr || "");
       setDescriptionAr(item.descriptionAr || "");
       setDescriptionEn(item.descriptionEn || "");
       setBaseUnitOfMeasure(item.baseUnitOfMeasure || UnitOfMeasure.Piece);
@@ -94,7 +98,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     setIsLotTracked(true);
     if (!nameAr) {
       setNameAr("زيت محرك 10W-40 (برميل)");
-      setNameEn("زيت محرك 10W-40 (برميل)");
+      setNameEn("Engine Oil 10W-40 (Barrel)");
     }
   };
 
@@ -109,7 +113,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     setIsSerialized(true);
     if (!nameAr) {
       setNameAr("خوذة دراجة نارية قياسية");
-      setNameEn("خوذة دراجة نارية قياسية");
+      setNameEn("Standard Motorcycle Helmet");
     }
   };
 
@@ -124,21 +128,25 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (compatibleVehicleTypes.length === 0) {
-      setValidationError("يجب اختيار نوع مركبة واحد على الأقل متوافق مع الصنف.");
+      setValidationError(
+        isEn
+          ? "At least one compatible vehicle type must be selected."
+          : "يجب اختيار نوع مركبة واحد على الأقل متوافق مع الصنف.",
+      );
       return;
     }
     setValidationError(null);
     setLoading(true);
     try {
-      const trimmedName = nameAr.trim();
-      const resolvedNameEn = trimmedName;
+      const trimmedNameAr = nameAr.trim();
+      const resolvedNameEn = (nameEn || trimmedNameAr).trim();
 
       if (item) {
         await updateInventoryItem(item.id, {
           sku: item.sku || sku,
           barcode: barcode || null,
           itemType: Number(itemType),
-          nameAr: trimmedName,
+          nameAr: trimmedNameAr,
           nameEn: resolvedNameEn,
           descriptionAr: descriptionAr || null,
           descriptionEn: descriptionEn || null,
@@ -157,7 +165,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           ...(sku ? { sku } : {}),
           barcode: barcode || null,
           itemType: Number(itemType),
-          nameAr: trimmedName,
+          nameAr: trimmedNameAr,
           nameEn: resolvedNameEn,
           descriptionAr: descriptionAr || null,
           descriptionEn: descriptionEn || null,
@@ -185,7 +193,11 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={item ? "تعديل صنف مخزون / قطعة غيار" : "إضافة صنف مخزون جديد"}
+      title={
+        isEn
+          ? (item ? "Edit Inventory Item / Spare Part" : "Add New Inventory Item")
+          : (item ? "تعديل صنف مخزون / قطعة غيار" : "إضافة صنف مخزون جديد")
+      }
       maxWidth="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -194,28 +206,28 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 text-xs">
               <div className="flex items-center gap-1.5 text-purple-800 dark:text-purple-300">
                 <Sparkles size={14} className="shrink-0" />
-                <span className="font-bold text-[11px]">مستلزمات مندوب؟</span>
+                <span className="font-bold text-[11px]">{isEn ? "Rider items?" : "مستلزمات مندوب؟"}</span>
               </div>
               <button
                 type="button"
                 onClick={applyRiderAccessoryPreset}
                 className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[10px] transition-colors cursor-pointer shrink-0"
               >
-                تطبيق قالب المندوب (خوذة)
+                {isEn ? "Apply Rider Preset (Helmet)" : "تطبيق قالب المندوب (خوذة)"}
               </button>
             </div>
 
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs">
               <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
                 <Sparkles size={14} className="shrink-0" />
-                <span className="font-bold text-[11px]">برميل زيت جديد؟</span>
+                <span className="font-bold text-[11px]">{isEn ? "New oil barrel?" : "برميل زيت جديد؟"}</span>
               </div>
               <button
                 type="button"
                 onClick={applyOilBarrelPreset}
                 className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[10px] transition-colors cursor-pointer shrink-0"
               >
-                تطبيق قالب برميل الزيت
+                {isEn ? "Apply Oil Barrel Preset" : "تطبيق قالب برميل الزيت"}
               </button>
             </div>
           </div>
@@ -225,7 +237,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           {item && (
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                رمز الصنف (SKU)
+                {isEn ? "Item SKU" : "رمز الصنف (SKU)"}
               </label>
               <Input
                 value={sku}
@@ -236,18 +248,18 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           )}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الباركود (Barcode)
+              {isEn ? "Barcode" : "الباركود (Barcode)"}
             </label>
             <Input
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
-              placeholder="الباركود إن وجد"
+              placeholder={isEn ? "Barcode if available" : "الباركود إن وجد"}
               className="font-mono text-xs"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              نوع الصنف <span className="text-red-500">*</span>
+              {isEn ? "Item Type" : "نوع الصنف"} <span className="text-red-500">*</span>
             </label>
             <select
               value={itemType}
@@ -255,9 +267,9 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden cursor-pointer"
               required
             >
-              {Object.entries(itemTypeLabels).map(([val, label]) => (
+              {[ItemType.SparePart, ItemType.RiderAccessory, ItemType.Oil, ItemType.Consumable].map((val) => (
                 <option key={val} value={val}>
-                  {label} ({val})
+                  {getItemTypeLabel(val, isEn)} ({val})
                 </option>
               ))}
             </select>
@@ -266,7 +278,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            اسم الصنف <span className="text-red-500">*</span>
+            {isEn ? "Item Name" : "اسم الصنف"} <span className="text-red-500">*</span>
           </label>
           <Input
             value={nameAr}
@@ -274,7 +286,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
               setNameAr(e.target.value);
               setNameEn(e.target.value);
             }}
-            placeholder="مثال: زيت محرك بترولايزر 10W-40"
+            placeholder={isEn ? "e.g. Engine Oil 10W-40" : "مثال: زيت محرك بترولايزر 10W-40"}
             required
             className="text-xs"
           />
@@ -285,10 +297,12 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                أنواع المركبات المتوافقة (Compatible vehicle types) <span className="text-red-500">*</span>
+                {isEn ? "Compatible Vehicle Types" : "أنواع المركبات المتوافقة (Compatible vehicle types)"} <span className="text-red-500">*</span>
               </label>
               <span className="text-[11px] text-slate-500">
-                حدد أنواع المركبات التي يتوافق معها هذا الصنف (يمكن اختيار نوع واحد أو عدة أنواع).
+                {isEn
+                  ? "Select vehicle types compatible with this item (can select one or multiple)."
+                  : "حدد أنواع المركبات التي يتوافق معها هذا الصنف (يمكن اختيار نوع واحد أو عدة أنواع)."}
               </span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -300,7 +314,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
                 }}
                 className="text-[10px] px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 font-bold transition-colors cursor-pointer"
               >
-                تحديد الكل (5)
+                {isEn ? "Select All (5)" : "تحديد الكل (5)"}
               </button>
               <button
                 type="button"
@@ -310,7 +324,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
                 }}
                 className="text-[10px] px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 font-bold transition-colors cursor-pointer"
               >
-                دراجة فقط
+                {isEn ? "Motorcycle Only" : "دراجة فقط"}
               </button>
               <button
                 type="button"
@@ -320,7 +334,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
                 }}
                 className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 font-bold transition-colors cursor-pointer"
               >
-                سيارة فقط
+                {isEn ? "Car Only" : "سيارة فقط"}
               </button>
             </div>
           </div>
@@ -328,7 +342,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
             {ALL_VEHICLE_TYPES.map((type) => {
               const isSelected = compatibleVehicleTypes.includes(type);
-              const label = vehicleTypeLabels[type];
+              const label = getVehicleTypeLabel(type, isEn);
               return (
                 <button
                   key={type}
@@ -369,7 +383,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              وحدة الصرف الأساسية (Base UOM) <span className="text-red-500">*</span>
+              {isEn ? "Base Dispense UOM" : "وحدة الصرف الأساسية (Base UOM)"} <span className="text-red-500">*</span>
             </label>
             <select
               value={baseUnitOfMeasure}
@@ -377,16 +391,16 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
               required
             >
-              {Object.entries(unitOfMeasureLabels).map(([val, label]) => (
+              {[UnitOfMeasure.Piece, UnitOfMeasure.Liter, UnitOfMeasure.Barrel, UnitOfMeasure.Box, UnitOfMeasure.Set].map((val) => (
                 <option key={val} value={val}>
-                  {label}
+                  {getUnitOfMeasureLabel(val, isEn)}
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              وحدة الشراء (Purchase UOM) <span className="text-red-500">*</span>
+              {isEn ? "Purchase UOM" : "وحدة الشراء (Purchase UOM)"} <span className="text-red-500">*</span>
             </label>
             <select
               value={purchaseUnitOfMeasure}
@@ -394,16 +408,16 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
               required
             >
-              {Object.entries(unitOfMeasureLabels).map(([val, label]) => (
+              {[UnitOfMeasure.Piece, UnitOfMeasure.Liter, UnitOfMeasure.Barrel, UnitOfMeasure.Box, UnitOfMeasure.Set].map((val) => (
                 <option key={val} value={val}>
-                  {label}
+                  {getUnitOfMeasureLabel(val, isEn)}
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              سعة العبوة / التعبئة الافتراضية <span className="text-red-500">*</span>
+              {isEn ? "Package Quantity / Capacity" : "سعة العبوة / التعبئة الافتراضية"} <span className="text-red-500">*</span>
             </label>
             <Input
               type="number"
@@ -420,7 +434,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الحد الأدنى للطلب (Reorder Point)
+              {isEn ? "Reorder Point" : "الحد الأدنى للطلب (Reorder Point)"}
             </label>
             <Input
               type="number"
@@ -432,7 +446,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              الحد الأدنى لمخزون الأمان (Min Stock Level)
+              {isEn ? "Min Safety Stock Level" : "الحد الأدنى لمخزون الأمان (Min Stock Level)"}
             </label>
             <Input
               type="number"
@@ -452,7 +466,7 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
               onChange={(e) => setIsLotTracked(e.target.checked)}
               className="size-4 rounded text-[#1167c9]"
             />
-            <span>تتبع برقم التشغيلة (Lot Tracked - مطلوب للزيوت)</span>
+            <span>{isEn ? "Lot Tracked (Required for Oil Barrels)" : "تتبع برقم التشغيلة (Lot Tracked - مطلوب للزيوت)"}</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
             <input
@@ -461,23 +475,25 @@ export function ItemModal({ isOpen, onClose, onSaved, item }: ItemModalProps) {
               onChange={(e) => setIsSerialized(e.target.checked)}
               className="size-4 rounded text-[#1167c9]"
             />
-            <span>تتبع بالرقم التسلسلي (Serialized)</span>
+            <span>{isEn ? "Serialized Tracking" : "تتبع بالرقم التسلسلي (Serialized)"}</span>
           </label>
         </div>
 
         <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-700 dark:text-blue-300">
           <Info size={16} className="shrink-0 mt-0.5" />
           <p>
-            تنويه نظام التكاليف: لا يتم تعيين سعر تكلفة ثابت للأصناف، بل يتم احتساب التكلفة تلقائياً من واقع فواتير وإيصالات الشراء الفعلية.
+            {isEn
+              ? "Costing Notice: Items do not have a fixed cost price; cost is calculated dynamically from actual purchase bills and receipts."
+              : "تنويه نظام التكاليف: لا يتم تعيين سعر تكلفة ثابت للأصناف، بل يتم احتساب التكلفة تلقائياً من واقع فواتير وإيصالات الشراء الفعلية."}
           </p>
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
           <Button variant="ghost" type="button" onClick={onClose} disabled={loading} className="text-xs">
-            إلغاء
+            {isEn ? "Cancel" : "إلغاء"}
           </Button>
           <Button variant="primary" type="submit" loading={loading} className="text-xs">
-            {item ? "حفظ التعديلات" : "إضافة الصنف"}
+            {isEn ? (item ? "Save Changes" : "Add Item") : (item ? "حفظ التعديلات" : "إضافة الصنف")}
           </Button>
         </div>
       </form>

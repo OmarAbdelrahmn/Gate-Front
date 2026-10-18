@@ -297,9 +297,10 @@ export default function JahezCashboxPage() {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
     const spName = getMovementSponsorName(m).toLowerCase();
+    const platformAcc = m.platformAccountId != null ? String(m.platformAccountId).toLowerCase() : "";
     return (
       m.id.toLowerCase().includes(q) ||
-      m.reference.toLowerCase().includes(q) ||
+      (platformAcc ? platformAcc.includes(q) : false) ||
       m.reason.toLowerCase().includes(q) ||
       m.handoverId.toLowerCase().includes(q) ||
       spName.includes(q) ||
@@ -513,12 +514,14 @@ export default function JahezCashboxPage() {
   // Export
   const handleExportMovements = () => {
     const data = filteredMovements.map((m) => ({
-      "رقم الحركة": m.id,
+      "رقم حساب المنصة": m.platformAccountId || "-",
+      "معرف الحركة": m.id,
       "الجهة": getFundLabel(m.fund),
       "الاتجاه": m.direction === Direction.Receipt ? "قبض" : "صرف",
       "الغرض": getPurposeLabel(m.purpose),
       "المبلغ": m.amount,
-      "المرجع": m.reference,
+      "صافي المبلغ المُدخل للتصفية": m.net != null ? m.net : "-",
+      "عمولة الشركة المعتمدة": m.commission != null ? m.commission : "-",
       "التاريخ": m.occurredAtUtc,
       "المندوب الفعلي": m.userRider?.nameAr || m.userRider?.nameEn || "-",
       "إقامة المندوب الفعلي": m.userRider?.iqamaNo || "-",
@@ -778,7 +781,7 @@ export default function JahezCashboxPage() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="بحث برقم الحركة، المرجع، البيان، اسم المندوب، الكفيل، أو رقم الإقامة..."
+                  placeholder="بحث برقم حساب المنصة، البيان، اسم المندوب، الكفيل، أو رقم الإقامة..."
                   className="pr-10 text-xs"
                 />
               </div>
@@ -876,7 +879,7 @@ export default function JahezCashboxPage() {
               <table className="w-full text-right text-xs">
                 <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
                   <tr>
-                    <th className="py-3 px-3">رقم الحركة</th>
+                    <th className="py-3 px-3">رقم حساب المنصة</th>
                     <th className="py-3 px-3">المندوب الفعلي (المستخدم)</th>
                     <th className="py-3 px-3">صاحب الحساب (المالك)</th>
                     <th className="py-3 px-3">الكفيل</th>
@@ -884,8 +887,13 @@ export default function JahezCashboxPage() {
                     <th className="py-3 px-3 text-center">الاتجاه</th>
                     <th className="py-3 px-3">الغرض</th>
                     <th className="py-3 px-3 text-center">المبلغ</th>
+                    <th className="py-3 px-3 text-center" title="صافي المبلغ المُدخل للتصفية">
+                      صافي المبلغ المُدخل للتصفية
+                    </th>
+                    <th className="py-3 px-3 text-center" title="عمولة الشركة المعتمدة">
+                      عمولة الشركة المعتمدة
+                    </th>
                     <th className="py-3 px-3 text-center">تسليم المحاسب</th>
-                    <th className="py-3 px-3">المرجع</th>
                     <th className="py-3 px-3">التاريخ والوقت</th>
                     <th className="py-3 px-3">البيان</th>
                     <th className="py-3 px-3 text-center">الإجراء</th>
@@ -894,14 +902,14 @@ export default function JahezCashboxPage() {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {loading ? (
                     <tr>
-                      <td colSpan={13} className="py-12 text-center text-gray-500">
+                      <td colSpan={14} className="py-12 text-center text-gray-500">
                         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-emerald-500 mb-2" />
                         جارٍ تحميل الحركات المالية...
                       </td>
                     </tr>
                   ) : filteredMovements.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-12 text-center text-gray-500">
+                      <td colSpan={14} className="py-12 text-center text-gray-500">
                         لا توجد حركات مالية مسجلة بعد
                       </td>
                     </tr>
@@ -919,7 +927,13 @@ export default function JahezCashboxPage() {
 
                       return (
                         <tr key={m.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
-                          <td className="py-3 px-3 font-mono font-bold">#{m.id.slice(0, 8)}</td>
+                          <td className="py-3 px-3 font-mono font-bold">
+                            {m.platformAccountId != null && m.platformAccountId !== "" ? (
+                              <span className="text-gray-900 dark:text-gray-100">{m.platformAccountId}</span>
+                            ) : (
+                              <span className="text-gray-400 font-normal">#{m.id.slice(0, 8)}</span>
+                            )}
+                          </td>
 
                           {/* المندوب الفعلي (User Rider) */}
                           <td className="py-3 px-3">
@@ -996,6 +1010,28 @@ export default function JahezCashboxPage() {
                             {m.amount.toFixed(2)} ر.س
                           </td>
 
+                          {/* صافي المبلغ المُدخل للتصفية */}
+                          <td className="py-3 px-3 text-center font-mono">
+                            {m.net != null ? (
+                              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                {Number(m.net).toFixed(2)} ر.س
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+
+                          {/* عمولة الشركة المعتمدة */}
+                          <td className="py-3 px-3 text-center font-mono">
+                            {m.commission != null ? (
+                              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                {Number(m.commission).toFixed(2)} ر.س
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+
                           {/* تسليم المحاسب */}
                           <td className="py-3 px-3 text-center">
                             {m.isHandedToAccountant ? (
@@ -1007,9 +1043,6 @@ export default function JahezCashboxPage() {
                             )}
                           </td>
 
-                          <td className="py-3 px-3 font-mono text-gray-600 dark:text-gray-400">
-                            {m.reference}
-                          </td>
                           <td className="py-3 px-3 text-gray-400">
                             {m.occurredAtUtc?.slice(0, 16).replace("T", " ")}
                           </td>
@@ -1675,28 +1708,35 @@ export default function JahezCashboxPage() {
           setIsDetailsOpen(false);
           setSelectedMovement(null);
         }}
-        title={`تفاصيل الحركة المالية #${selectedMovement?.id.slice(0, 8) || ""}`}
+        title="تفاصيل الحركة المالية"
         maxWidth="max-w-2xl"
       >
         {selectedMovement && (
           <div className="space-y-4 text-xs" dir="rtl">
             {/* Top overview card */}
-            <div className="flex items-center justify-between rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
-              <div>
-                <div className="text-[11px] text-gray-400">معرف الحركة الكامل</div>
-                <div className="font-mono font-bold text-sm text-gray-900 dark:text-white">
-                  {selectedMovement.id}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl bg-gradient-to-l from-gray-50 to-white dark:from-gray-800/80 dark:to-gray-900 p-4 border border-gray-200 dark:border-gray-700 shadow-xs">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="text-base font-black text-gray-900 dark:text-white">
+                    {getPurposeLabel(selectedMovement.purpose)}
+                  </div>
+                  {selectedMovement.platformAccountId && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 font-mono">
+                      حساب: {selectedMovement.platformAccountId}
+                    </span>
+                  )}
                 </div>
-                <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
-                  <Calendar className="h-3 w-3 text-gray-400" />
-                  <span>{selectedMovement.occurredAtUtc?.slice(0, 19).replace("T", " ")}</span>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5 font-medium">
+                  <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                  <span>تاريخ الحركة: {selectedMovement.occurredAtUtc?.slice(0, 16).replace("T", " ")}</span>
                 </div>
               </div>
-              <div className="text-left">
-                <div className="text-xl font-black font-mono text-emerald-700 dark:text-emerald-400">
+
+              <div className="text-right sm:text-left space-y-1.5">
+                <div className="text-2xl font-black font-mono text-emerald-700 dark:text-emerald-400">
                   {selectedMovement.amount.toFixed(2)} ر.س
                 </div>
-                <div className="flex items-center gap-1.5 mt-1 justify-end">
+                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
                   <Badge tone={selectedMovement.direction === Direction.Receipt ? "green" : "red"}>
                     {selectedMovement.direction === Direction.Receipt ? "قبض" : "صرف"}
                   </Badge>
@@ -1712,57 +1752,77 @@ export default function JahezCashboxPage() {
               </div>
             </div>
 
+            {/* تفاصيل مبالغ التصفية والعمولة */}
+            {(selectedMovement.net != null || selectedMovement.commission != null) && (
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-3.5 bg-gray-50/60 dark:bg-gray-800/40">
+                <div className="font-bold text-gray-800 dark:text-gray-200 mb-2.5 flex items-center gap-1.5">
+                  <Coins className="h-4 w-4 text-emerald-600" />
+                  <span>تفاصيل مبالغ التصفية والعمولة</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="rounded-xl bg-white p-3 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-center shadow-xs">
+                    <div className="text-[11px] text-gray-500 font-medium">صافي المبلغ المُدخل للتصفية</div>
+                    <div className="font-mono font-bold text-sm text-gray-900 dark:text-white mt-1">
+                      {selectedMovement.net != null ? `${Number(selectedMovement.net).toFixed(2)} ر.س` : "-"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-white p-3 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-center shadow-xs">
+                    <div className="text-[11px] text-gray-500 font-medium">عمولة الشركة المعتمدة</div>
+                    <div className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-1">
+                      {selectedMovement.commission != null ? `${Number(selectedMovement.commission).toFixed(2)} ر.س` : "-"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Grid details */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* الغرض والبيان */}
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
-                <div className="font-bold text-gray-500 mb-1">الغرض والبيان</div>
-                <div className="font-semibold text-gray-800 dark:text-gray-200">
-                  {getPurposeLabel(selectedMovement.purpose)}
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-3.5 bg-white dark:bg-gray-900 shadow-xs">
+                <div className="font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
+                  <FileCheck className="h-3.5 w-3.5 text-gray-400" />
+                  <span>البيان والملاحظات</span>
                 </div>
-                <div className="text-gray-600 dark:text-gray-400 mt-1">
-                  {selectedMovement.reason || "-"}
-                </div>
-                <div className="text-[11px] text-gray-400 font-mono mt-1">
-                  المرجع: {selectedMovement.reference || "-"}
+                <div className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed font-medium">
+                  {selectedMovement.reason || "لا توجد ملاحظات مسجلة"}
                 </div>
               </div>
 
               {/* الكفيل */}
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
-                <div className="font-bold text-gray-500 mb-1 flex items-center gap-1">
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-3.5 bg-white dark:bg-gray-900 shadow-xs">
+                <div className="font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
                   <Building2 className="h-3.5 w-3.5 text-gray-400" />
-                  الكفيل (Sponsor)
+                  <span>الكفيل</span>
                 </div>
                 <div className="text-sm font-black text-indigo-700 dark:text-indigo-400">
                   {getMovementSponsorName(selectedMovement) || "غير محدد"}
                 </div>
-                {selectedMovement.sponsorId && (
-                  <div className="text-[10px] text-gray-400 font-mono mt-1">
-                    ID: {selectedMovement.sponsorId}
-                  </div>
-                )}
               </div>
 
               {/* المندوب الفعلي المستخدم */}
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
-                <div className="font-bold text-gray-500 mb-1 flex items-center gap-1">
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-3.5 bg-white dark:bg-gray-900 shadow-xs">
+                <div className="font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
                   <UserCheck className="h-3.5 w-3.5 text-indigo-600" />
-                  المندوب الفعلي (المستخدم)
+                  <span>المندوب الفعلي (المستخدم)</span>
                 </div>
                 {selectedMovement.userRider ? (
-                  <div className="space-y-0.5">
-                    <div className="font-semibold text-gray-900 dark:text-white">
+                  <div className="space-y-1">
+                    <div className="font-bold text-sm text-gray-900 dark:text-white">
                       {selectedMovement.userRider.nameAr || selectedMovement.userRider.nameEn || "-"}
                     </div>
-                    <div className="text-[11px] text-gray-500 font-mono">
-                      إقامة: {selectedMovement.userRider.iqamaNo || "-"}
-                    </div>
-                    <div className="text-[11px] text-gray-500 font-mono">
-                      جوال: {selectedMovement.userRider.mobile || "-"}
-                    </div>
+                    {selectedMovement.userRider.iqamaNo && (
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 font-mono">
+                        رقم الإقامة: {selectedMovement.userRider.iqamaNo}
+                      </div>
+                    )}
+                    {selectedMovement.userRider.mobile && (
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 font-mono" dir="ltr">
+                        الجوال: {selectedMovement.userRider.mobile}
+                      </div>
+                    )}
                     {selectedMovement.userRider.sponsorNameAr && (
-                      <div className="text-[11px] text-indigo-600 font-semibold">
+                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold pt-0.5">
                         كفيل المندوب: {selectedMovement.userRider.sponsorNameAr}
                       </div>
                     )}
@@ -1773,24 +1833,28 @@ export default function JahezCashboxPage() {
               </div>
 
               {/* صاحب الحساب المالك */}
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
-                <div className="font-bold text-gray-500 mb-1 flex items-center gap-1">
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-3.5 bg-white dark:bg-gray-900 shadow-xs">
+                <div className="font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
                   <User className="h-3.5 w-3.5 text-gray-500" />
-                  صاحب الحساب الرسمي (المالك)
+                  <span>صاحب الحساب الرسمي (المالك)</span>
                 </div>
                 {selectedMovement.ownerRider ? (
-                  <div className="space-y-0.5">
-                    <div className="font-semibold text-gray-900 dark:text-white">
+                  <div className="space-y-1">
+                    <div className="font-bold text-sm text-gray-900 dark:text-white">
                       {selectedMovement.ownerRider.nameAr || selectedMovement.ownerRider.nameEn || "-"}
                     </div>
-                    <div className="text-[11px] text-gray-500 font-mono">
-                      إقامة: {selectedMovement.ownerRider.iqamaNo || "-"}
-                    </div>
-                    <div className="text-[11px] text-gray-500 font-mono">
-                      جوال: {selectedMovement.ownerRider.mobile || "-"}
-                    </div>
+                    {selectedMovement.ownerRider.iqamaNo && (
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 font-mono">
+                        رقم الإقامة: {selectedMovement.ownerRider.iqamaNo}
+                      </div>
+                    )}
+                    {selectedMovement.ownerRider.mobile && (
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 font-mono" dir="ltr">
+                        الجوال: {selectedMovement.ownerRider.mobile}
+                      </div>
+                    )}
                     {selectedMovement.ownerRider.sponsorNameAr && (
-                      <div className="text-[11px] text-indigo-600 font-semibold">
+                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold pt-0.5">
                         كفيل المالك: {selectedMovement.ownerRider.sponsorNameAr}
                       </div>
                     )}
@@ -1799,21 +1863,6 @@ export default function JahezCashboxPage() {
                   <span className="text-gray-400 font-mono text-[11px]">-</span>
                 )}
               </div>
-            </div>
-
-            {/* المعرفات والربط وتفاصيل تسليم المحاسب */}
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/70 dark:bg-gray-800/40 text-[11px] font-mono space-y-1">
-              <div>معرف فترة التسليم (Handover ID): <span className="text-gray-800 dark:text-gray-200">{selectedMovement.handoverId}</span></div>
-              {selectedMovement.cashboxHandoverId && (
-                <div>معرف تسليم المحاسب (Cashbox Handover ID): <span className="text-indigo-700 dark:text-indigo-300 font-bold">{selectedMovement.cashboxHandoverId}</span></div>
-              )}
-              {selectedMovement.operationId && (
-                <div>معرف العملية الأصلية (Operation ID): <span className="text-gray-800 dark:text-gray-200">{selectedMovement.operationId}</span></div>
-              )}
-              {selectedMovement.transferredDebtId && (
-                <div>معرف الدين المرحل (Debt ID): <span className="text-gray-800 dark:text-gray-200">{selectedMovement.transferredDebtId}</span></div>
-              )}
-              <div>منشئ الحركة: <span className="text-gray-800 dark:text-gray-200">{selectedMovement.createdByUserId || selectedMovement.actorUserId || "-"}</span></div>
             </div>
 
             <div className="flex justify-end pt-3 border-t">
