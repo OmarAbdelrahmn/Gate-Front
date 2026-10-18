@@ -299,6 +299,8 @@ export interface MoneyMovement {
   net?: number | null;
   commission?: number | null;
   calculatedCommission?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export type Movement = MoneyMovement;

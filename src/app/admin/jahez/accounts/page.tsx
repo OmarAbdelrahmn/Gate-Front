@@ -43,6 +43,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { getRiderPlatformHistory } from "@/lib/platforms/api";
+import {
+  capacityAllows,
+  getRiderPlatformCapacitySummary,
+  type AssignmentForCapacity,
+} from "@/lib/platforms/capacity";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
@@ -115,6 +121,66 @@ export default function JahezAccountsPage() {
   const [handoverPaymentRef, setHandoverPaymentRef] = useState("");
   const [handoverReason, setHandoverReason] = useState("تسليم جديد للعمل");
   const [handoverSubmitting, setHandoverSubmitting] = useState(false);
+  const [handoverRiderHistory, setHandoverRiderHistory] = useState<AssignmentForCapacity[]>([]);
+  const [handoverCheckingHistory, setHandoverCheckingHistory] = useState(false);
+
+  useEffect(() => {
+    if (!selectedRiderId || !isHandoverOpen) {
+      setHandoverRiderHistory([]);
+      return;
+    }
+
+    let isMounted = true;
+    setHandoverCheckingHistory(true);
+    getRiderPlatformHistory(selectedRiderId)
+      .then((res) => {
+        if (!isMounted) return;
+        const open: AssignmentForCapacity[] = (res?.assignments || [])
+          .filter((a) => a.effectiveTo === null)
+          .map((a) => ({
+            assignmentId: a.assignmentId,
+            accountId: a.accountId,
+            platformCode: a.platformCode || "",
+            paymentModel: String(a.paymentModel || "PayPerOrder"),
+            effectiveTo: a.effectiveTo || null,
+          }));
+        setHandoverRiderHistory(open);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        const currentJahezAccounts: AssignmentForCapacity[] = accounts
+          .filter(
+            (a) =>
+              (a.actualRider?.employeeId === selectedRiderId ||
+                a.actualRider?.riderProfileId === selectedRiderId) &&
+              Boolean(a.currentHandoverId)
+          )
+          .map((a) => ({
+            assignmentId: a.currentHandoverId || a.accountId,
+            accountId: a.accountId,
+            platformCode: "JAHEZ",
+            paymentModel: "PayPerOrder",
+            effectiveTo: null,
+          }));
+        setHandoverRiderHistory(currentJahezAccounts);
+      })
+      .finally(() => {
+        if (isMounted) setHandoverCheckingHistory(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedRiderId, isHandoverOpen, accounts]);
+
+  const handoverCapacitySummary = useMemo(() => {
+    return getRiderPlatformCapacitySummary(handoverRiderHistory);
+  }, [handoverRiderHistory]);
+
+  const isHandoverCapacityAllowed = useMemo(() => {
+    if (!selectedRiderId) return true;
+    return capacityAllows("JAHEZ", "PayPerOrder", handoverRiderHistory);
+  }, [selectedRiderId, handoverRiderHistory]);
 
   // 2. Comprehensive Operation Modal ("شاشة العملية")
   const [isOpModalOpen, setIsOpModalOpen] = useState(false);
@@ -327,6 +393,13 @@ export default function JahezAccountsPage() {
   const submitHandover = async () => {
     if (!handoverAccount || !selectedRiderId) {
       toast.warning("تنبيه", "يرجى اختيار المندوب الفعلي");
+      return;
+    }
+    if (!isHandoverCapacityAllowed) {
+      toast.warning(
+        "تنبيه السعة",
+        `المندوب لا يمكنه استلام حساب جاهز حالياً (${handoverCapacitySummary.formattedLabelAr}). الحد الأقصى لجاهز هو حساب واحد ولا يمكن الجمع مع منصات أخرى غير شيفز.`
+      );
       return;
     }
     if (handoverInitialFee > 0 && !handoverPaymentRef.trim()) {
@@ -1332,6 +1405,39 @@ export default function JahezAccountsPage() {
               onChange={setSelectedRiderId}
               placeholder="ابحث باسم المندوب أو رقم الإقامة..."
             />
+
+            {selectedRiderId && handoverCheckingHistory && (
+              <div className="mt-2 flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2 text-xs text-gray-500">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                <span>جارٍ فحص سعة وحسابات المندوب عبر المنصات...</span>
+              </div>
+            )}
+
+            {selectedRiderId && !handoverCheckingHistory && (
+              <div className="mt-2 space-y-1.5">
+                {!isHandoverCapacityAllowed ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                    {handoverCapacitySummary.jahezCount >= 1 ? (
+                      <p className="font-bold">
+                        🛑 المندوب يمتلك بالفعل حساب جاهز نشط ({handoverCapacitySummary.jahezCount}/1). الحد الأقصى لجاهز هو حساب واحد فقط.
+                      </p>
+                    ) : handoverCapacitySummary.otherPlatformCount > 0 ? (
+                      <p className="font-bold">
+                        🛑 المندوب مسند له حساب في منصة أخرى. لا يمكن الجمع بين جاهز والمنصات الأخرى غير شيفز.
+                      </p>
+                    ) : (
+                      <p className="font-bold">
+                        🛑 لا يمكن تسليم الحساب للمندوب لتجاوز الحد الأقصى للسعة ({handoverCapacitySummary.formattedLabelAr}).
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                    ✓ المندوب متاح للاستلام — السعة الحالية: ({handoverCapacitySummary.formattedLabelAr}). سيصبح لديه حساب جاهز (1/1) إلى جانب ({handoverCapacitySummary.chefzCount}/2) حسابات شيفز.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
@@ -1395,7 +1501,12 @@ export default function JahezAccountsPage() {
             </Button>
             <Button
               onClick={submitHandover}
-              disabled={handoverSubmitting || !selectedRiderId}
+              disabled={
+                handoverSubmitting ||
+                !selectedRiderId ||
+                !isHandoverCapacityAllowed ||
+                handoverCheckingHistory
+              }
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2"
             >
               {handoverSubmitting ? (

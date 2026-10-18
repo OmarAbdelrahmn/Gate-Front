@@ -11,6 +11,10 @@ import {
 } from "@/lib/platforms/api";
 import { listEmployees } from "@/lib/workforce/api";
 import type { Employee } from "@/lib/workforce/types";
+import {
+  getRiderPlatformCapacitySummary,
+  type AssignmentForCapacity,
+} from "@/lib/platforms/capacity";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
@@ -39,6 +43,19 @@ function RiderPlatformHistoryContent() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedRiderId, setSelectedRiderId] = useState<string>("");
   const [historyData, setHistoryData] = useState<RiderPlatformHistoryResponse | null>(null);
+
+  const capacitySummary = useMemo(() => {
+    if (!historyData?.assignments || historyData.assignments.length === 0) return null;
+    const assignmentsForCap: AssignmentForCapacity[] = historyData.assignments.map((h) => ({
+      assignmentId: h.assignmentId,
+      accountId: h.accountId,
+      platformCode: h.platformCode || "",
+      paymentModel: String(h.paymentModel || "PayPerOrder"),
+      effectiveTo: h.effectiveTo || null,
+      status: String(h.status || ""),
+    }));
+    return getRiderPlatformCapacitySummary(assignmentsForCap);
+  }, [historyData]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -239,7 +256,7 @@ function RiderPlatformHistoryContent() {
               )}
             </div>
 
-            <div className="flex items-center gap-4 text-xs font-semibold text-[var(--foreground)] bg-[var(--surface)] rounded-xl p-3 border border-[var(--border)]">
+            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-[var(--foreground)] bg-[var(--surface)] rounded-xl p-3 border border-[var(--border)]">
               <div>
                 <span className="text-[var(--muted)] block text-[10px]">Rider Profile ID:</span>
                 <span className="font-mono">{historyData.riderProfileId}</span>
@@ -248,8 +265,29 @@ function RiderPlatformHistoryContent() {
                 <span className="text-[var(--muted)] block text-[10px]">إجمالي التعيينات:</span>
                 <span className="font-bold text-[#1167c9] dark:text-blue-400">{historyData.assignments.length}</span>
               </div>
+              <div>
+                <span className="text-[var(--muted)] block text-[10px]">سعة الحسابات النشطة:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                  {capacitySummary ? capacitySummary.formattedLabelAr : "—"}
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* Excess Accounts Alert */}
+          {capacitySummary?.hasExcessJahez && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-bold">
+                  تنبيه: المندوب لديه أكثر من حساب جاهز نشط في نفس الوقت ({capacitySummary.jahezCount} حسابات).
+                </p>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                  تم الإبقاء على كافة الحسابات وعرضها بالكامل؛ ويُرجى معالجة الحساب الزائد عبر مسار التصفية والسحب المعتمد في شاشة عمليات جاهز.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Assignments List */}
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">

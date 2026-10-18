@@ -23,6 +23,12 @@ import {
   type PlatformResponse,
   type AccountStatus,
 } from "@/lib/platforms/api";
+import {
+  capacityAllows,
+  getRiderPlatformCapacitySummary,
+  type AssignmentForCapacity,
+  type PlatformAssignmentLimit,
+} from "@/lib/platforms/capacity";
 import { listEmployees, listOperatingCities, listRiders, listSponsors, type OperatingCity, type Sponsor } from "@/lib/workforce/api";
 import type { Employee, Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
@@ -678,8 +684,21 @@ export default function PlatformAccountsPage() {
           }
         }
         setFormErrors(fieldErrors);
-        const errorDetail = details?.detail || err?.message || "تعذر حفظ حساب المنصة.";
-        toast.error("فشل الحفظ", errorDetail);
+        const errorCode = details?.errorCode || err?.errorCode;
+        if (errorCode === "platform.rider_salary_account_limit_reached") {
+          toast.error(
+            "تجاوز حد حسابات الراتب",
+            details?.detail || "المندوب يملك بالفعل حساب براتب نشط. يُسمح بحساب راتب واحد فقط لكل مندوب."
+          );
+        } else if (errorCode === "platform.rider_account_limit_reached") {
+          toast.error(
+            "تجاوز حد الحسابات",
+            details?.detail || "تم الوصول للحد الأقصى لعدد الحسابات المسموح بها للمندوب."
+          );
+        } else {
+          const errorDetail = details?.detail || err?.message || "تعذر حفظ حساب المنصة.";
+          toast.error("فشل الحفظ", errorDetail);
+        }
       }
     });
   };
@@ -697,19 +716,39 @@ export default function PlatformAccountsPage() {
     }
 
     const selRiderId = assignFormData.actualRiderProfileId;
-    const riderActiveAccounts = accounts.filter(
-      (a) => a.status === "Assigned" && (a.currentAssignment?.actualRiderProfileId === selRiderId || a.currentAssignment?.actualEmployeeId === selRiderId)
-    );
-    if (riderActiveAccounts.length >= 1) {
-      toast.error("تنبيه القيود", "المندوب لديه حساب نشط بالفعل. لا يُسمح بتعيين أكثر من حساب واحد لكل مندوب. (platform.rider_account_limit_reached)");
-      return;
-    }
-    const targetIsSalary = assigningAccount.paymentModel === "Salary";
-    const salaryActive = riderActiveAccounts.filter(
-      (a) => a.paymentModel === "Salary" || a.currentAssignment?.paymentModel === "Salary"
-    ).length;
-    if (targetIsSalary && salaryActive >= 1) {
-      toast.error("تنبيه القيود", "المندوب لديه حساب راتب نشط بالفعل. لا يُسمح بأكثر من حساب براتب واحد (platform.rider_salary_account_limit_reached)");
+    const riderOpenAssignments: AssignmentForCapacity[] = accounts
+      .filter(
+        (a) =>
+          a.status === "Assigned" &&
+          (a.currentAssignment?.actualRiderProfileId === selRiderId ||
+            a.currentAssignment?.actualEmployeeId === selRiderId) &&
+          !a.currentAssignment?.effectiveTo
+      )
+      .map((a) => ({
+        assignmentId: a.currentAssignment?.id || a.id,
+        accountId: a.id,
+        platformCode: a.platformCode || "",
+        paymentModel: a.currentAssignment?.paymentModel || a.paymentModel || "PayPerOrder",
+        effectiveTo: a.currentAssignment?.effectiveTo || null,
+      }));
+
+    const reqPlatform = assigningAccount.platformCode || "";
+    const reqModel = assigningAccount.paymentModel || "PayPerOrder";
+
+    const isAllowed = capacityAllows(reqPlatform, reqModel, riderOpenAssignments);
+    if (!isAllowed) {
+      const summary = getRiderPlatformCapacitySummary(riderOpenAssignments);
+      if (reqModel === "Salary" && summary.salaryCount >= 1) {
+        toast.error(
+          "تنبيه القيود",
+          "المندوب لديه حساب راتب نشط بالفعل. يسمح بحساب راتب واحد فقط كحد أقصى (platform.rider_salary_account_limit_reached)"
+        );
+        return;
+      }
+      toast.error(
+        "تنبيه القيود",
+        `تم الوصول للحد الأقصى المسموح به لحسابات المندوب (${summary.formattedLabelAr}). لا يمكن تعيين الحساب (platform.rider_account_limit_reached)`
+      );
       return;
     }
 
@@ -733,13 +772,35 @@ export default function PlatformAccountsPage() {
         loadData();
       } catch (err: any) {
         console.error("Assign error:", err);
-        if (err?.details?.errorCode === "ninja.use_workflow" || err?.message?.includes("ninja.use_workflow")) {
+        const details = err?.details || err?.problem;
+        const errorCode = details?.errorCode || err?.errorCode;
+        const limit: PlatformAssignmentLimit | undefined = details?.assignmentLimit;
+
+        if (errorCode === "platform.rider_account_limit_reached" || limit) {
+          const max = limit?.maximumActiveAccounts ?? 3;
+          let msg = `تم الوصول للحد الأقصى لعدد الحسابات المسموح بها للمندوب (${max} حسابات).`;
+          if (limit?.activeAccounts && limit.activeAccounts.length > 0) {
+            const accList = limit.activeAccounts
+              .map(
+                (acc) =>
+                  `${acc.platformCode || acc.platformNameAr || "منصة"}: ${acc.externalAccountId || acc.accountId}`
+              )
+              .join("، ");
+            msg += ` الحسابات النشطة الحالية: [${accList}].`;
+          }
+          toast.error("تجاوز حد الحسابات", msg);
+        } else if (errorCode === "platform.rider_salary_account_limit_reached") {
+          toast.error(
+            "تجاوز حد حسابات الراتب",
+            details?.detail || "المندوب لديه بالفعل حساب براتب (Salary). يُسمح بحساب راتب واحد فقط كحد أقصى."
+          );
+        } else if (err?.details?.errorCode === "ninja.use_workflow" || err?.message?.includes("ninja.use_workflow")) {
           toast.warning(
             "مسار نينجا المخصص",
             "هذا الحساب تابع لمنصة نينجا؛ يرجى استخدام شاشة إدارة نينجا لتعيين الحساب وتسجيل الهاتف."
           );
         } else {
-          toast.error("فشل التعيين", err?.message || "تعذر تعيين المندوب للحساب. يرجى مراجعة المدخلات.");
+          toast.error("فشل التعيين", details?.detail || err?.message || "تعذر تعيين المندوب للحساب. يرجى مراجعة المدخلات.");
         }
       }
     });
@@ -1538,37 +1599,45 @@ export default function PlatformAccountsPage() {
             {(() => {
               if (!assignFormData.actualRiderProfileId) return null;
               const selRiderId = assignFormData.actualRiderProfileId;
-              const riderActiveAccounts = accounts.filter(
-                (a) => a.status === "Assigned" && (a.currentAssignment?.actualRiderProfileId === selRiderId || a.currentAssignment?.actualEmployeeId === selRiderId)
-              );
-              const totalActive = riderActiveAccounts.length;
-              const salaryActive = riderActiveAccounts.filter(
-                (a) => a.paymentModel === "Salary" || a.currentAssignment?.paymentModel === "Salary"
-              ).length;
+              const riderOpenAssignments: AssignmentForCapacity[] = accounts
+                .filter(
+                  (a) =>
+                    a.status === "Assigned" &&
+                    (a.currentAssignment?.actualRiderProfileId === selRiderId ||
+                      a.currentAssignment?.actualEmployeeId === selRiderId) &&
+                    !a.currentAssignment?.effectiveTo
+                )
+                .map((a) => ({
+                  assignmentId: a.currentAssignment?.id || a.id,
+                  accountId: a.id,
+                  platformCode: a.platformCode || "",
+                  paymentModel: a.currentAssignment?.paymentModel || a.paymentModel || "PayPerOrder",
+                  effectiveTo: a.currentAssignment?.effectiveTo || null,
+                }));
 
-              const targetIsSalary = assigningAccount?.paymentModel === "Salary";
-              const isLimitReached = totalActive >= 1;
-              const isSalaryLimitReached = targetIsSalary && salaryActive >= 1;
+              const reqPlatform = assigningAccount?.platformCode || "";
+              const reqModel = assigningAccount?.paymentModel || "PayPerOrder";
+              const isAllowed = capacityAllows(reqPlatform, reqModel, riderOpenAssignments);
+              const summary = getRiderPlatformCapacitySummary(riderOpenAssignments);
 
-              if (isLimitReached) {
+              if (!isAllowed) {
+                if (reqModel === "Salary" && summary.salaryCount >= 1) {
+                  return (
+                    <div className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200">
+                      ⚠️ <strong>تنبيه القيود:</strong> المندوب المختار يملك بالفعل حساب براتب نشط ({summary.salaryCount}/1). لا يُسمح بأكثر من حساب براتب واحد (<code>platform.rider_salary_account_limit_reached</code>).
+                    </div>
+                  );
+                }
                 return (
                   <div className="mt-2 rounded-xl bg-red-50 p-2.5 text-xs text-red-800 border border-red-200">
-                    🛑 <strong>تنبيه:</strong> المندوب المختار يملك حالياً حساباً نشطاً ({totalActive}/1). يتسبب هذا في خطأ النظام (<code>platform.rider_account_limit_reached</code>).
-                  </div>
-                );
-              }
-
-              if (isSalaryLimitReached) {
-                return (
-                  <div className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200">
-                    ⚠️ <strong>تنبيه:</strong> المندوب المختار يملك بالفعل حساب براتب نشط ({salaryActive}/1). يتسبب هذا في خطأ النظام (<code>platform.rider_salary_account_limit_reached</code>).
+                    🛑 <strong>تنبيه القيود:</strong> سعة حسابات المندوب: ({summary.formattedLabelAr}). تعيين هذا الحساب يتجاوز الحد المسموح به للمنصة (<code>platform.rider_account_limit_reached</code>).
                   </div>
                 );
               }
 
               return (
                 <div className="mt-2 rounded-xl bg-emerald-50 p-2 text-xs text-emerald-800 border border-emerald-200">
-                  ✓ المندوب متاح للتعيين (الحسابات النشطة الحالية: {totalActive}/1 | حسابات الراتب: {salaryActive}/1)
+                  ✓ المندوب متاح للتعيين — السعة الحالية: ({summary.formattedLabelAr} | حسابات الراتب: {summary.salaryCount}/1)
                 </div>
               );
             })()}

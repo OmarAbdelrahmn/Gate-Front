@@ -522,6 +522,8 @@ export default function JahezCashboxPage() {
       "المبلغ": m.amount,
       "صافي المبلغ المُدخل للتصفية": m.net != null ? m.net : "-",
       "عمولة الشركة المعتمدة": m.commission != null ? m.commission : "-",
+      "بداية احتساب العمولة": m.startDate || "-",
+      "نهاية احتساب العمولة": m.endDate || "-",
       "التاريخ": m.occurredAtUtc,
       "المندوب الفعلي": m.userRider?.nameAr || m.userRider?.nameEn || "-",
       "إقامة المندوب الفعلي": m.userRider?.iqamaNo || "-",
@@ -893,6 +895,9 @@ export default function JahezCashboxPage() {
                     <th className="py-3 px-3 text-center" title="عمولة الشركة المعتمدة">
                       عمولة الشركة المعتمدة
                     </th>
+                    <th className="py-3 px-3 text-center" title="فترة احتساب العمولة (من - إلى)">
+                      فترة احتساب العمولة
+                    </th>
                     <th className="py-3 px-3 text-center">تسليم المحاسب</th>
                     <th className="py-3 px-3">التاريخ والوقت</th>
                     <th className="py-3 px-3">البيان</th>
@@ -902,14 +907,14 @@ export default function JahezCashboxPage() {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {loading ? (
                     <tr>
-                      <td colSpan={14} className="py-12 text-center text-gray-500">
+                      <td colSpan={15} className="py-12 text-center text-gray-500">
                         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-emerald-500 mb-2" />
                         جارٍ تحميل الحركات المالية...
                       </td>
                     </tr>
                   ) : filteredMovements.length === 0 ? (
                     <tr>
-                      <td colSpan={14} className="py-12 text-center text-gray-500">
+                      <td colSpan={15} className="py-12 text-center text-gray-500">
                         لا توجد حركات مالية مسجلة بعد
                       </td>
                     </tr>
@@ -1027,6 +1032,29 @@ export default function JahezCashboxPage() {
                               <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                                 {Number(m.commission).toFixed(2)} ر.س
                               </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+
+                          {/* فترة احتساب العمولة */}
+                          <td className="py-3 px-3 text-center font-mono">
+                            {m.startDate || m.endDate ? (
+                              <div
+                                className="inline-flex flex-col items-center justify-center leading-tight space-y-0.5"
+                                title={
+                                  m.startDate && m.endDate
+                                    ? `فترة الاحتساب: من ${m.startDate} إلى ${m.endDate} (شامل)`
+                                    : undefined
+                                }
+                              >
+                                <span className="font-bold text-gray-900 dark:text-gray-100 text-[11px]">
+                                  {m.startDate || "-"}
+                                </span>
+                                <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                                  {m.endDate || "-"}
+                                </span>
+                              </div>
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}
@@ -1753,13 +1781,16 @@ export default function JahezCashboxPage() {
             </div>
 
             {/* تفاصيل مبالغ التصفية والعمولة */}
-            {(selectedMovement.net != null || selectedMovement.commission != null) && (
+            {(selectedMovement.net != null ||
+              selectedMovement.commission != null ||
+              selectedMovement.startDate ||
+              selectedMovement.endDate) && (
               <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-3.5 bg-gray-50/60 dark:bg-gray-800/40">
                 <div className="font-bold text-gray-800 dark:text-gray-200 mb-2.5 flex items-center gap-1.5">
                   <Coins className="h-4 w-4 text-emerald-600" />
                   <span>تفاصيل مبالغ التصفية والعمولة</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   <div className="rounded-xl bg-white p-3 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-center shadow-xs">
                     <div className="text-[11px] text-gray-500 font-medium">صافي المبلغ المُدخل للتصفية</div>
                     <div className="font-mono font-bold text-sm text-gray-900 dark:text-white mt-1">
@@ -1772,6 +1803,16 @@ export default function JahezCashboxPage() {
                       {selectedMovement.commission != null ? `${Number(selectedMovement.commission).toFixed(2)} ر.س` : "-"}
                     </div>
                   </div>
+                  {(selectedMovement.startDate || selectedMovement.endDate) && (
+                    <div className="rounded-xl bg-white p-3 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-center shadow-xs sm:col-span-2 lg:col-span-1">
+                      <div className="text-[11px] text-gray-500 font-medium">فترة احتساب العمولة (شامل)</div>
+                      <div className="font-mono font-bold text-xs text-indigo-700 dark:text-indigo-400 mt-1 flex items-center justify-center gap-1.5">
+                        <span>{selectedMovement.startDate || "-"}</span>
+                        <span>←</span>
+                        <span>{selectedMovement.endDate || "-"}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

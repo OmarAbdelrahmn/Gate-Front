@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { Layers, Server, ExternalLink, RefreshCw, History } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -14,6 +14,12 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { JahezRiderDebtSummaryCard } from "@/components/jahez/JahezRiderDebtSummaryCard";
+import { AlertTriangle } from "lucide-react";
+import {
+  getRiderPlatformCapacitySummary,
+  isJahezPlatform,
+  type AssignmentForCapacity,
+} from "@/lib/platforms/capacity";
 
 interface PlatformAccountDisplayItem {
   id: string;
@@ -46,6 +52,7 @@ export function EmployeePlatformAccounts({
   const t = (key: string) => translate(locale, key);
 
   const [items, setItems] = useState<PlatformAccountDisplayItem[]>([]);
+  const [historyAssignments, setHistoryAssignments] = useState<RiderPlatformHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -142,6 +149,7 @@ export function EmployeePlatformAccounts({
 
       // 3. Process platform history items
       if (historyRes.status === "fulfilled" && historyRes.value?.assignments) {
+        setHistoryAssignments(historyRes.value.assignments);
         historyRes.value.assignments.forEach((item: RiderPlatformHistoryItem) => {
           const key = `acc-${item.accountId}`;
           if (!displayMap.has(key)) {
@@ -181,6 +189,19 @@ export function EmployeePlatformAccounts({
       setLoading(false);
     }
   };
+
+  const capacitySummary = useMemo(() => {
+    if (!historyAssignments || historyAssignments.length === 0) return null;
+    const assignmentsForCap: AssignmentForCapacity[] = historyAssignments.map((h) => ({
+      assignmentId: h.assignmentId,
+      accountId: h.accountId,
+      platformCode: h.platformCode || "",
+      paymentModel: String(h.paymentModel || "PayPerOrder"),
+      effectiveTo: h.effectiveTo || null,
+      status: String(h.status || ""),
+    }));
+    return getRiderPlatformCapacitySummary(assignmentsForCap);
+  }, [historyAssignments]);
 
   useEffect(() => {
     loadPlatformAccounts();
@@ -279,6 +300,44 @@ export function EmployeePlatformAccounts({
         <JahezRiderDebtSummaryCard riderId={targetRiderId} locale={locale} />
       )}
 
+      {/* Capacity & Limits Breakdown Banner */}
+      {capacitySummary && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 p-2.5 border border-slate-200 dark:border-slate-800 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-slate-700 dark:text-slate-300">
+              {locale === "en" ? "Rider Account Capacity:" : "سعة حسابات المندوب:"}
+            </span>
+            <span className="font-bold font-mono text-[#1167c9] dark:text-blue-400">
+              {locale === "en" ? capacitySummary.formattedLabelEn : capacitySummary.formattedLabelAr}
+            </span>
+          </div>
+          {capacitySummary.salaryCount > 0 && (
+            <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">
+              {locale === "en" ? "Salary Account (1/1)" : "حساب راتب (1/1)"}
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* Excess Accounts Alert (Section 1: Existing-data review for riders with multiple Jahez) */}
+      {capacitySummary?.hasExcessJahez && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+          <div>
+            <p className="font-bold">
+              {locale === "en"
+                ? "Notice: This rider holds multiple open Jahez accounts."
+                : "تنبيه: المندوب لديه أكثر من حساب جاهز نشط في نفس الوقت."}
+            </p>
+            <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+              {locale === "en"
+                ? "All accounts remain preserved and visible. Route any correction through the normal authorized Jahez withdrawal/settlement workflow."
+                : "تم الإبقاء على كافة الحسابات وعرضها بالكامل؛ ويُرجى معالجة الحساب الزائد عبر مسار التصفية والسحب المعتمد في شاشة عمليات جاهز."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="py-4 text-center text-xs text-[var(--muted)]">
           {locale === "en" ? "Loading platform accounts..." : "جارٍ تحميل حسابات المنصات..."}
@@ -325,6 +384,13 @@ export function EmployeePlatformAccounts({
                       </Badge>
                     )}
                     {renderStatusBadge(item.status)}
+                    {capacitySummary?.hasExcessJahez &&
+                      isJahezPlatform(item.platformCode) &&
+                      item.roleType === "assigned" && (
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] px-1 py-0.5">
+                          {locale === "en" ? "Excess Jahez" : "جاهز مكرر"}
+                        </Badge>
+                      )}
                   </div>
                 </div>
 

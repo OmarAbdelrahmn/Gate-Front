@@ -33,11 +33,18 @@ import {
   releasePlatformAccount,
   getAccountAssignmentHistory,
   getAccountCredentialHistory,
+  getRiderPlatformHistory,
   type AccountResponse,
   type AssignmentResponse,
   type CredentialHistoryResponse,
   type PlatformResponse,
 } from "@/lib/platforms/api";
+import {
+  capacityAllows,
+  getRiderPlatformCapacitySummary,
+  isChefzPlatform,
+  type AssignmentForCapacity,
+} from "@/lib/platforms/capacity";
 import {
   listOperatingCities,
   listSponsors,
@@ -185,7 +192,18 @@ export default function ChefzAccountsPage() {
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignLimitDetails, setAssignLimitDetails] = useState<PlatformAssignmentLimit | null>(null);
   const [selectedRiderActiveAccounts, setSelectedRiderActiveAccounts] = useState<AccountResponse[]>([]);
+  const [riderOpenAssignments, setRiderOpenAssignments] = useState<AssignmentForCapacity[]>([]);
   const [checkingRiderAccounts, setCheckingRiderAccounts] = useState(false);
+
+  const capacitySummary = useMemo(() => {
+    return getRiderPlatformCapacitySummary(riderOpenAssignments);
+  }, [riderOpenAssignments]);
+
+  const targetPaymentModel = assigningAccount?.paymentModel || "PayPerOrder";
+  const isCapacityAllowed = useMemo(() => {
+    if (!selectedRiderId) return true;
+    return capacityAllows("CHEFZ", targetPaymentModel, riderOpenAssignments);
+  }, [selectedRiderId, targetPaymentModel, riderOpenAssignments]);
 
   // 4. Status Control Modal
   const [statusAccount, setStatusAccount] = useState<JoinedAccount | null>(null);
@@ -1173,24 +1191,40 @@ export default function ChefzAccountsPage() {
 
     setSelectedRiderActiveAccounts(localAccounts);
 
-    // 2. Query across platforms to catch any active accounts in other platforms
+    // 2. Query across platforms to catch open assignments in any platform
     let isMounted = true;
     setCheckingRiderAccounts(true);
-    getPlatformAccounts({ actualRiderProfileId: selectedRiderId, currentOnly: true })
+    getRiderPlatformHistory(selectedRiderId)
       .then((res) => {
         if (!isMounted) return;
-        const list = Array.isArray(res) ? res : [];
-        const active = list.filter(
-          (acc) =>
-            acc.currentAssignment &&
-            acc.currentAssignment.actualRiderProfileId === selectedRiderId &&
-            acc.currentAssignment.status === "Active" &&
-            acc.id !== assigningAccount?.id
-        );
-        setSelectedRiderActiveAccounts(active);
+        const open: AssignmentForCapacity[] = (res?.assignments || [])
+          .filter((a) => a.effectiveTo === null && a.accountId !== assigningAccount?.id)
+          .map((a) => ({
+            assignmentId: a.assignmentId,
+            accountId: a.accountId,
+            platformCode: a.platformCode || "",
+            paymentModel: String(a.paymentModel || "PayPerOrder"),
+            effectiveTo: a.effectiveTo || null,
+            accountCode: a.accountCode,
+            externalAccountId: a.externalAccountId,
+            platformNameAr: a.platformNameAr,
+            platformNameEn: a.platformNameEn,
+            status: String(a.status || ""),
+          }));
+        setRiderOpenAssignments(open);
       })
       .catch((err) => {
-        console.warn("Could not query platform accounts for rider:", err);
+        console.warn("Could not query rider platform history:", err);
+        const fallbackOpen: AssignmentForCapacity[] = localAccounts.map((a) => ({
+          assignmentId: a.currentAssignment?.id || a.id,
+          accountId: a.id,
+          platformCode: a.platformCode || "CHEFZ",
+          paymentModel: a.currentAssignment?.paymentModel || a.paymentModel || "PayPerOrder",
+          effectiveTo: a.currentAssignment?.effectiveTo || null,
+          accountCode: a.code,
+          externalAccountId: a.externalAccountId,
+        }));
+        setRiderOpenAssignments(fallbackOpen);
       })
       .finally(() => {
         if (isMounted) setCheckingRiderAccounts(false);
@@ -1211,6 +1245,7 @@ export default function ChefzAccountsPage() {
     setProfileEnsureSuccess(false);
     setProfileReadyNotice(null);
     setSelectedRiderActiveAccounts([]);
+    setRiderOpenAssignments([]);
     setCheckingRiderAccounts(false);
     setAssignEffectiveFrom(new Date().toISOString().split("T")[0]);
     setAssignReason("تسليم الحساب للمندوب");
@@ -1358,12 +1393,18 @@ export default function ChefzAccountsPage() {
       return;
     }
 
-    // Hard stop if rider already has 2 active accounts
-    if (selectedRiderActiveAccounts.length >= 2) {
-      setAssignError(
-        `تم إيقاف العملية: المندوب يمتلك بالفعل ${selectedRiderActiveAccounts.length} حسابات نشطة (الحد الأقصى المسموح به حسابان فقط). يجب إنهاء تعيين أحد حساباته أولاً.`
-      );
-      toast.error("إيقاف العملية", "المندوب يمتلك بالفعل حسابين نشطين، لا يمكن تعيين حساب ثالث له.");
+    // Check capacity allows
+    if (!isCapacityAllowed) {
+      let errorMsg = `تم إيقاف العملية: تجاوز حد الحسابات المسموح بها (${capacitySummary.formattedLabelAr}).`;
+      if (targetPaymentModel === "Salary" && capacitySummary.salaryCount >= 1) {
+        errorMsg = "لا يمكن تعيين هذا الحساب لأن المندوب يمتلك بالفعل حساب راتب (Salary). يسمح بحساب راتب واحد فقط كحد أقصى.";
+      } else if (capacitySummary.otherPlatformCount > 0) {
+        errorMsg = "لا يمكن الجمع بين حسابات شيفز وحسابات المنصات الأخرى.";
+      } else if (capacitySummary.chefzCount >= 2) {
+        errorMsg = `المندوب يمتلك بالفعل حسابين شيفز (${capacitySummary.chefzCount}/2). الحد الأقصى لشيفز هو حسابان فقط. يجب إنهاء تعيين أحد حساباته أولاً.`;
+      }
+      setAssignError(errorMsg);
+      toast.error("إيقاف العملية", errorMsg);
       return;
     }
 
@@ -2974,37 +3015,51 @@ export default function ChefzAccountsPage() {
               </div>
             )}
 
-            {/* Case 1: Rider has 1 active account -> NOTICE THE ADMIN */}
-            {selectedRiderId && !checkingRiderAccounts && selectedRiderActiveAccounts.length === 1 && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50/90 dark:border-amber-900/60 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-2">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold text-amber-950 dark:text-amber-100">
-                      تنبيه للمشرف: يمتلك حساباً نشطاً مسبقاً (حساب واحد)
-                    </p>
-                    <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                      المندوب/الموظف <strong>{personMetaMap.get(selectedPersonKey)?.name || "المكلف"}</strong> مرتبط حالياً بحساب نشط. عند إتمام هذا التعيين، سيصبح لديه <strong>حسابان نشطان</strong> وهو <strong>الحد الأقصى المسموح به</strong> نظامياً في شيفز.
-                    </p>
-                  </div>
+            {/* Capacity breakdown banner */}
+            {selectedRiderId && !checkingRiderAccounts && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 p-2.5 border border-slate-200 dark:border-slate-800 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">سعة حسابات المندوب:</span>
+                  <span className="font-bold font-mono text-[#1167c9] dark:text-blue-400">
+                    {capacitySummary.formattedLabelAr}
+                  </span>
                 </div>
-
-                <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-white/80 dark:bg-slate-900/70 p-2.5 text-[11px] space-y-1">
-                  <span className="font-semibold text-amber-950 dark:text-amber-100 block">تفاصيل حسابه النشط الحالي:</span>
-                  {selectedRiderActiveAccounts.map((acc) => (
-                    <div key={acc.id} className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-mono">
-                      <span>كود الحساب: <strong>{acc.code}</strong> {acc.externalAccountId ? `(ID: ${acc.externalAccountId})` : ""}</span>
-                      <span className="text-[10px] text-amber-700 dark:text-amber-400 font-sans font-bold">
-                        {acc.paymentModel === "Salary" ? "حساب راتب" : "لكل طلب"} • {acc.operatingCityNameAr || "المدينة"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                {capacitySummary.salaryCount > 0 && (
+                  <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">
+                    حساب راتب (1/1)
+                  </Badge>
+                )}
               </div>
             )}
 
-            {/* Case 2: Rider has 2 active accounts -> STOP THE OPERATION */}
-            {selectedRiderId && !checkingRiderAccounts && selectedRiderActiveAccounts.length >= 2 && (
+            {/* Incompatible mix warning (e.g. holds Hungerstation or Ninja) */}
+            {selectedRiderId && !checkingRiderAccounts && capacitySummary.otherPlatformCount > 0 && (
+              <div className="rounded-xl border-2 border-red-500 bg-red-50 dark:border-red-700 dark:bg-red-950/60 p-3 text-xs text-red-900 dark:text-red-200 space-y-1">
+                <div className="flex items-center gap-2 font-bold text-red-700 dark:text-red-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>لا يمكن تعيين حساب شيفز: المندوب مسند له حساب في منصة أخرى</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  يسمح النظام بالجمع بين شيفز وجاهز فقط (حتى حسابي شيفز وحساب جاهز واحد). وجود حساب في منصات أخرى يمنع التعيين المشترك.
+                </p>
+              </div>
+            )}
+
+            {/* Salary limit reached */}
+            {selectedRiderId && !checkingRiderAccounts && targetPaymentModel === "Salary" && capacitySummary.salaryCount >= 1 && (
+              <div className="rounded-xl border-2 border-red-500 bg-red-50 dark:border-red-700 dark:bg-red-950/60 p-3 text-xs text-red-900 dark:text-red-200 space-y-1">
+                <div className="flex items-center gap-2 font-bold text-red-700 dark:text-red-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>تجاوز حد حسابات الراتب (Salary)</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  المندوب يمتلك بالفعل حساباً بنمط الدفع (راتب). يحظر النظام امتلاك أكثر من حساب راتب واحد عبر كافة المنصات.
+                </p>
+              </div>
+            )}
+
+            {/* Chefz cap reached (2 Chefz accounts) */}
+            {selectedRiderId && !checkingRiderAccounts && capacitySummary.chefzCount >= 2 && (
               <div className="rounded-xl border-2 border-red-500 bg-red-50 dark:border-red-700 dark:bg-red-950/60 p-3.5 text-xs text-red-900 dark:text-red-200 space-y-2.5 shadow-sm">
                 <div className="flex items-start gap-2.5">
                   <div className="rounded-full bg-red-100 p-1 dark:bg-red-900/60 text-red-600 dark:text-red-400 shrink-0">
@@ -3012,43 +3067,57 @@ export default function ChefzAccountsPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="font-black text-sm text-red-700 dark:text-red-300">
-                      تم إيقاف العملية: لا يمكن التعيين (الحد الأقصى مكتمل)
+                      تم إيقاف العملية: اكتمل الحد الأقصى لحسابات شيفز (2/2)
                     </p>
                     <p className="text-[11px] leading-relaxed text-red-800 dark:text-red-300">
-                      المندوب/الموظف <strong>{personMetaMap.get(selectedPersonKey)?.name || "المكلف"}</strong> يمتلك بالفعل <strong>{selectedRiderActiveAccounts.length} حسابات نشطة</strong> في النظام. يُمنع منعاً باتاً إضافة حساب ثالث للمندوب.
+                      المندوب/الموظف <strong>{personMetaMap.get(selectedPersonKey)?.name || "المكلف"}</strong> يمتلك بالفعل <strong>حسابين شيفز نشطين</strong> (الحد الأقصى المسموح به لشيفز حسابان). يجب إرجاع أحد حسابات شيفز أولاً.
                     </p>
                   </div>
                 </div>
 
                 <div className="rounded-lg border border-red-200 dark:border-red-900/50 bg-white/90 dark:bg-slate-900/80 p-2.5 text-[11px] space-y-1.5">
-                  <span className="font-bold text-red-950 dark:text-red-200 block">الحسابات النشطة المسندة له حالياً ({selectedRiderActiveAccounts.length}):</span>
+                  <span className="font-bold text-red-950 dark:text-red-200 block">حسابات شيفز النشطة حالياً:</span>
                   <div className="space-y-1 font-mono">
-                    {selectedRiderActiveAccounts.map((acc, idx) => (
-                      <div key={acc.id} className="flex items-center justify-between bg-red-50/50 dark:bg-red-950/30 p-1.5 rounded border border-red-100 dark:border-red-900/30">
-                        <span>
-                          {idx + 1}. كود: <strong>{acc.code}</strong> {acc.externalAccountId ? `(${acc.externalAccountId})` : ""}
-                        </span>
-                        <span className="text-[10px] text-red-700 dark:text-red-400 font-sans font-bold">
-                          {acc.paymentModel === "Salary" ? "راتب" : "لكل طلب"} • {acc.operatingCityNameAr || "المدينة"}
-                        </span>
-                      </div>
-                    ))}
+                    {riderOpenAssignments
+                      .filter((a) => isChefzPlatform(a.platformCode))
+                      .map((acc, idx) => (
+                        <div key={acc.assignmentId} className="flex items-center justify-between bg-red-50/50 dark:bg-red-950/30 p-1.5 rounded border border-red-100 dark:border-red-900/30">
+                          <span>
+                            {idx + 1}. كود: <strong>{acc.accountCode || acc.accountId}</strong> {acc.externalAccountId ? `(${acc.externalAccountId})` : ""}
+                          </span>
+                          <span className="text-[10px] text-red-700 dark:text-red-400 font-sans font-bold">
+                            {acc.paymentModel === "Salary" ? "راتب" : "لكل طلب"}
+                          </span>
+                        </div>
+                      ))}
                   </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-red-700 dark:text-red-300 bg-red-100/70 dark:bg-red-900/40 p-2 rounded-lg">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                  <span>الإجراء المطلوب: يجب تحرير أو إنهاء تكليف أحد حساباته الحالية أولاً قبل إمكانية تعيينه على هذا الحساب.</span>
                 </div>
               </div>
             )}
 
-            {/* Case 3: Rider has 0 active accounts */}
-            {selectedRiderId && !checkingRiderAccounts && selectedRiderActiveAccounts.length === 0 && (
+            {/* Allowed: Rider has 1 Chefz account (+ optional 1 Jahez) -> Permitted to take second Chefz */}
+            {selectedRiderId && !checkingRiderAccounts && isCapacityAllowed && capacitySummary.chefzCount === 1 && (
+              <div className="rounded-xl border border-blue-300 bg-blue-50/90 dark:border-blue-900/60 dark:bg-blue-950/40 p-3 text-xs text-blue-900 dark:text-blue-200 space-y-2">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-blue-950 dark:text-blue-100">
+                      متاح للتعيين: سيصبح لديه حساب شيفز ثانٍ (2/2)
+                    </p>
+                    <p className="text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
+                      المندوب لديه حالياً حساب شيفز واحد{capacitySummary.jahezCount > 0 ? " وحساب جاهز نشط" : ""}. يسمح النظام بتعيين حساب شيفز ثانٍ للمندوب.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Allowed: Rider has 0 Chefz accounts (+ optional 1 Jahez) */}
+            {selectedRiderId && !checkingRiderAccounts && isCapacityAllowed && capacitySummary.chefzCount === 0 && (
               <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 px-3 py-1.5 rounded-lg">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                 <span>
-                  {personMetaMap.get(selectedPersonKey)?.isEmployee ? "الموظف" : "المندوب"} لا يمتلك أي حساب نشط حالياً (متاح للتعيين كحساب أول).
+                  متاح للتعيين: لا يمتلك أي حساب شيفز حالياً{capacitySummary.jahezCount > 0 ? " (مع وجود حساب جاهز مسموح به)" : ""} (متبقي له حسابا شيفز).
                 </span>
               </div>
             )}
@@ -3092,13 +3161,13 @@ export default function ChefzAccountsPage() {
                   !selectedPersonKey ||
                   isEnsuringProfile ||
                   !selectedRiderId ||
-                  selectedRiderActiveAccounts.length >= 2 ||
+                  !isCapacityAllowed ||
                   checkingRiderAccounts
                 }
                 className={
-                  selectedRiderActiveAccounts.length >= 2
+                  !isCapacityAllowed
                     ? "bg-red-600/70 text-white cursor-not-allowed opacity-60"
-                    : selectedRiderActiveAccounts.length === 1
+                    : capacitySummary.chefzCount === 1
                     ? "bg-amber-600 text-white hover:bg-amber-700"
                     : isEnsuringProfile
                     ? "bg-blue-600/70 text-white cursor-wait opacity-80"
@@ -3111,10 +3180,10 @@ export default function ChefzAccountsPage() {
                   "جارٍ إنشاء ملف المندوب..."
                 ) : checkingRiderAccounts ? (
                   "جارٍ التحقق..."
-                ) : selectedRiderActiveAccounts.length >= 2 ? (
-                  "العملية متوقفة (مكتمل الحسابات)"
-                ) : selectedRiderActiveAccounts.length === 1 ? (
-                  "تأكيد التعيين (الحساب الثاني للمندوب)"
+                ) : !isCapacityAllowed ? (
+                  "العملية متوقفة (مكتمل السعة)"
+                ) : capacitySummary.chefzCount === 1 ? (
+                  "تأكيد التعيين (الحساب الثاني لشيفز)"
                 ) : (
                   "تأكيد التعيين"
                 )}
