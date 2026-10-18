@@ -94,6 +94,8 @@ export interface ChefzSettlement {
   accountId: Guid;
   assignmentId: Guid;
   riderProfileId: Guid;
+  riderName?: string | null;
+  riderIqamaNo?: string | null;
   accountType: ChefzAccountType;
   periodFrom: DateOnly;
   periodTo: DateOnly;
@@ -135,6 +137,7 @@ export interface ChefzPerformance {
   assignmentId: Guid;
   riderProfileId: Guid;
   riderName?: string;
+  riderIqamaNo?: string | null;
   reportDate: DateOnly;
   reportIdNumber: string;
   totalValidOffers: number;
@@ -152,6 +155,7 @@ export interface ChefzPerformanceResponse extends ChefzPerformance {
 export interface ChefzPerformanceRider {
   riderProfileId: Guid;
   riderName: string;
+  riderIqamaNo?: string | null;
   accounts: ChefzPerformance[];
 }
 
@@ -226,6 +230,7 @@ export interface ChefzReportDaily {
   missedOffers: number;
   acceptanceRate: number | null;
   rating: string | null;
+  riderIqamaNo?: string | null;
 }
 
 export interface ChefzAccountPerformanceReport {
@@ -233,6 +238,7 @@ export interface ChefzAccountPerformanceReport {
   externalAccountId: string;
   riderProfileId: Guid;
   riderName: string;
+  riderIqamaNo?: string | null;
   /** Summary for this account/rider in the requested period. */
   summary: ChefzReportSummary;
   daily: ChefzPerformance[];
@@ -241,6 +247,8 @@ export interface ChefzAccountPerformanceReport {
 export interface ChefzRiderReport {
   accountId: Guid | null;
   riderId: Guid | null;
+  riderName?: string | null;
+  riderIqamaNo?: string | null;
   requestedHalves: number;
   halves: ChefzReportHalf[];
   selectedSummary: ChefzReportSummary;
@@ -275,6 +283,7 @@ export interface ChefzRiderAccountSummary {
 export interface ChefzAllRidersItem {
   riderProfileId: Guid;
   riderName: string;
+  riderIqamaNo?: string | null;
   selectedSummary: ChefzReportSummary;
   halves: ChefzReportHalf[];
   accounts: ChefzRiderAccountSummary[];

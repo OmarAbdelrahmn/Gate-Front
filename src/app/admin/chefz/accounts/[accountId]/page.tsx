@@ -762,6 +762,8 @@ export default function ChefzAccountDetailPage() {
                   <thead className="bg-[var(--table-header-bg)] border-b border-[var(--border)] font-bold text-[var(--muted)]">
                     <tr>
                       <th className="px-3 py-2.5">الفترة</th>
+                      <th className="px-3 py-2.5">المندوب الفعلي</th>
+                      <th className="px-3 py-2.5">رقم الإقامة</th>
                       <th className="px-3 py-2.5">النوع</th>
                       <th className="px-3 py-2.5">أيام التكليف</th>
                       <th className="px-3 py-2.5">أرباح المحفظة</th>
@@ -774,6 +776,12 @@ export default function ChefzAccountDetailPage() {
                       <tr key={s.id} className="hover:bg-[var(--subtle-bg)]">
                         <td className="px-3 py-2 font-mono" dir="ltr">
                           {s.periodFrom} → {s.periodTo}
+                        </td>
+                        <td className="px-3 py-2 font-semibold">
+                          {s.riderName || "—"}
+                        </td>
+                        <td className="px-3 py-2 font-mono" dir="ltr">
+                          {s.riderIqamaNo ?? "—"}
                         </td>
                         <td className="px-3 py-2">
                           <Badge tone={s.accountType === "Freelancer" ? "blue" : "orange"}>

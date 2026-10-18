@@ -45,6 +45,7 @@ import type {
   EmployeeDetails,
   OperationalAssignment,
   Period,
+  Rider,
 } from "../../../../lib/workforce/types";
 import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
@@ -482,6 +483,55 @@ export default function EmployeeDetailsPage({
     if (!employeeId) return;
     getEmployee(employeeId).then((data) => {
       setDetails(data);
+    });
+  };
+
+  const handleRiderProfileCreated = async (newRiderProfileId: string) => {
+    setDetails((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        employee: {
+          ...prev.employee,
+          riderProfileId: newRiderProfileId,
+        },
+        rider: prev.rider
+          ? { ...prev.rider, id: newRiderProfileId }
+          : ({
+              id: newRiderProfileId,
+              employeeId: prev.employee.id,
+              iqamaNo: prev.employee.iqamaNo,
+              fullNameAr: prev.employee.fullNameAr,
+              fullNameEn: prev.employee.fullNameEn,
+              engagementType: prev.employee.engagementType,
+              status: prev.employee.status,
+              tShirtSize: null,
+              operationalNotes: null,
+              rowVersion: "",
+            } as Rider),
+      };
+    });
+
+    if (employeeId) {
+      try {
+        const refreshed = await getEmployee(employeeId);
+        setDetails(refreshed);
+      } catch {
+        // preserve optimistic state
+      }
+    }
+  };
+
+  const handleRiderProfileUpdated = (updatedRider: Rider) => {
+    setDetails((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        rider: {
+          ...(prev.rider || {}),
+          ...updatedRider,
+        } as Rider,
+      };
     });
   };
 
@@ -1359,13 +1409,17 @@ export default function EmployeeDetailsPage({
 
       <EmployeePlatformAccounts
         employeeId={employee.id}
-        riderProfileId={rider?.id ?? null}
+        riderProfileId={rider?.id || employee.riderProfileId || null}
+        isEmployee={employee.isEmployee}
+        riderData={rider}
         onOpenHistoryModal={() => setOpenRiderHistoryModal(true)}
+        onRiderProfileCreated={handleRiderProfileCreated}
+        onRiderProfileUpdated={handleRiderProfileUpdated}
       />
 
       <EmployeeComplianceTabs
         employeeId={employee.id}
-        riderProfileId={rider?.id ?? null}
+        riderProfileId={rider?.id || employee.riderProfileId || null}
       />
 
       <div className="grid gap-6 xl:grid-cols-2">

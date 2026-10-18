@@ -265,13 +265,14 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
         if (searchQuery.trim()) {
           const q = searchQuery.trim().toLowerCase();
           const matchesName = (r.riderName || "").toLowerCase().includes(q);
+          const matchesIqama = (r.riderIqamaNo || "").toLowerCase().includes(q);
           const matchesId = (r.riderProfileId || "").toLowerCase().includes(q);
           const matchesAccounts = (r.accounts || []).some(
             (acc) =>
               (acc.externalAccountId || "").toLowerCase().includes(q) ||
               (acc.accountId || "").toLowerCase().includes(q)
           );
-          if (!matchesName && !matchesId && !matchesAccounts) return false;
+          if (!matchesName && !matchesIqama && !matchesId && !matchesAccounts) return false;
         }
 
         // Rating filter
@@ -319,6 +320,7 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
     const data = filteredRiders.map((r, idx) => ({
       index: idx + 1,
       name: r.riderName || "مندوب مسجل",
+      iqamaNo: r.riderIqamaNo ?? "—",
       profileId: r.riderProfileId,
       accountsCount: r.accounts.length,
       accountsList: r.accounts.map((a) => a.externalAccountId || a.accountId).join(", "),
@@ -345,6 +347,7 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
       columns: [
         { header: "#", accessor: (d) => d.index },
         { header: "اسم المندوب", accessor: (d) => d.name, isText: true },
+        { header: "رقم الإقامة", accessor: (d) => d.iqamaNo, isText: true },
         { header: "معرف المندوب", accessor: (d) => d.profileId, isText: true },
         { header: "عدد الحسابات", accessor: (d) => d.accountsCount },
         { header: "أرقام الحسابات المرتبطة", accessor: (d) => d.accountsList, isText: true },
@@ -365,12 +368,17 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
   const handleExportSingleRiderExcel = () => {
     if (!riderDetailReport || !detailModalRider) return;
 
+    const riderName = riderDetailReport.riderName || detailModalRider.riderName;
+    const riderIqama = riderDetailReport.riderIqamaNo ?? detailModalRider.riderIqamaNo ?? "—";
+
     if (detailSubTab === "halves") {
       exportToExcel({
-        filename: `تقرير-أداء-فترات-${detailModalRider.riderName}-${year}-${month}-H${half}`,
+        filename: `تقرير-أداء-فترات-${riderName}-${year}-${month}-H${half}`,
         sheetName: "ملخص الفترات نصف الشهرية",
         data: riderDetailReport.halves,
         columns: [
+          { header: "اسم المندوب", accessor: () => riderName, isText: true },
+          { header: "رقم الإقامة", accessor: () => riderIqama, isText: true },
           { header: "من تاريخ", accessor: (h) => h.from, isText: true },
           { header: "إلى تاريخ", accessor: (h) => h.to, isText: true },
           { header: "أيام البيانات المسجلة", accessor: (h) => h.daysWithData },
@@ -385,11 +393,13 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
       });
     } else {
       exportToExcel({
-        filename: `تقرير-أداء-يومي-${detailModalRider.riderName}-${year}-${month}-H${half}`,
+        filename: `تقرير-أداء-يومي-${riderName}-${year}-${month}-H${half}`,
         sheetName: "الأداء اليومي المفصل",
         data: riderDetailReport.daily,
         columns: [
           { header: "التاريخ", accessor: (d) => d.date, isText: true },
+          { header: "اسم المندوب", accessor: () => riderName, isText: true },
+          { header: "رقم الإقامة", accessor: (d) => d.riderIqamaNo ?? riderIqama, isText: true },
           { header: "الطلبات المقبولة", accessor: (d) => d.orders },
           { header: "إجمالي العروض الصالحة", accessor: (d) => d.validOffers },
           { header: "العروض الفائتة", accessor: (d) => d.missedOffers },
@@ -898,13 +908,18 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
                                 <span className="font-bold text-sm text-[var(--foreground)] block">
                                   {rider.riderName || "مندوب مسجل"}
                                 </span>
-                                <span
-                                  className="font-mono text-[10px] text-[var(--muted)]"
-                                  dir="ltr"
-                                  title={rider.riderProfileId}
-                                >
-                                  {rider.riderProfileId.slice(0, 13)}...
-                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="font-mono text-[11px] text-[var(--foreground)] font-semibold">
+                                    الإقامة: {rider.riderIqamaNo ?? "—"}
+                                  </span>
+                                  <span
+                                    className="font-mono text-[10px] text-[var(--muted)]"
+                                    dir="ltr"
+                                    title={rider.riderProfileId}
+                                  >
+                                    ({rider.riderProfileId.slice(0, 8)}...)
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </td>
@@ -1151,9 +1166,12 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
             {/* Modal Header Bar with period info & Export */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[var(--border)] pb-3">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-base text-[var(--foreground)]">
-                    {detailModalRider.riderName}
+                    {riderDetailReport?.riderName || detailModalRider.riderName}
+                  </span>
+                  <span className="rounded-lg bg-[var(--subtle-bg)] px-2.5 py-0.5 font-mono text-xs font-bold text-[var(--foreground)] border border-[var(--border)]">
+                    رقم الإقامة: {riderDetailReport?.riderIqamaNo ?? detailModalRider.riderIqamaNo ?? "—"}
                   </span>
                   <span className="font-mono text-xs text-[var(--muted)]" dir="ltr">
                     ({detailModalRider.riderProfileId})
@@ -1422,9 +1440,12 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
                           className="rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-4 space-y-3"
                         >
                           <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 text-xs">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-[var(--foreground)]">
                                 حساب شيفز: {acc.externalAccountId || acc.accountId}
+                              </span>
+                              <span className="font-mono text-[11px] text-[var(--muted)]">
+                                (رقم الإقامة: <strong className="text-[var(--foreground)]">{acc.riderIqamaNo ?? riderDetailReport.riderIqamaNo ?? detailModalRider.riderIqamaNo ?? "—"}</strong>)
                               </span>
                             </div>
                             <div>{renderRatingBadge(acc.summary.rating)}</div>

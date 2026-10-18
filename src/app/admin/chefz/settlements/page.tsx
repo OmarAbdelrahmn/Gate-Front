@@ -490,7 +490,12 @@ export default function ChefzSettlementsPage() {
         },
         {
           header: "المندوب الفعلي",
-          accessor: (s) => riderMap.get(s.riderProfileId)?.fullNameAr || "مندوب سابق",
+          accessor: (s) => s.riderName || riderMap.get(s.riderProfileId)?.fullNameAr || "مندوب سابق",
+        },
+        {
+          header: "رقم الإقامة",
+          accessor: (s) => s.riderIqamaNo ?? "—",
+          isText: true,
         },
         {
           header: "الكفيل",
@@ -831,13 +836,11 @@ export default function ChefzSettlementsPage() {
                       {/* Actual Rider */}
                       <td className="px-4 py-3">
                         <div className="font-semibold text-[var(--foreground)]">
-                          {rider?.fullNameAr || "مندوب سابق"}
+                          {s.riderName || rider?.fullNameAr || "مندوب سابق"}
                         </div>
-                        {rider?.iqamaNo && (
-                          <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
-                            {rider.iqamaNo}
-                          </div>
-                        )}
+                        <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
+                          الإقامة: {s.riderIqamaNo ?? "—"}
+                        </div>
                       </td>
 
                       {/* Sponsor */}
@@ -1349,7 +1352,15 @@ export default function ChefzSettlementsPage() {
           {previewResult && (
             <div className="rounded-2xl border border-[var(--brand)] bg-blue-50/40 dark:bg-blue-950/20 p-4 space-y-3">
               <div className="flex items-center justify-between border-b border-[var(--brand)]/20 pb-2">
-                <span className="font-bold text-sm text-[var(--foreground)]">نتائج المعاينة المعتمدة من الخادم</span>
+                <div>
+                  <span className="font-bold text-sm text-[var(--foreground)]">نتائج المعاينة المعتمدة من الخادم</span>
+                  {(previewResult.riderName || previewResult.riderIqamaNo) && (
+                    <div className="text-xs text-[var(--muted)] mt-0.5">
+                      {previewResult.riderName && <strong className="text-[var(--foreground)] ml-2">{previewResult.riderName}</strong>}
+                      <span>رقم الإقامة: <strong className="font-mono text-[var(--foreground)]">{previewResult.riderIqamaNo ?? "—"}</strong></span>
+                    </div>
+                  )}
+                </div>
                 <Badge tone={previewResult.accountType === "Freelancer" ? "blue" : "orange"}>
                   {previewResult.accountType === "Freelancer" ? "فريلانسر (15%)" : "دوام كامل (25 ر.س/يوم)"}
                 </Badge>
@@ -1459,7 +1470,13 @@ export default function ChefzSettlementsPage() {
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">المندوب الفعلي:</span>
                 <span className="font-bold text-[var(--foreground)]">
-                  {riderMap.get(selectedSettlement.riderProfileId)?.fullNameAr || "مندوب سابق"}
+                  {selectedSettlement.riderName || riderMap.get(selectedSettlement.riderProfileId)?.fullNameAr || "مندوب سابق"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--muted)]">رقم الإقامة:</span>
+                <span className="font-mono font-bold text-[var(--foreground)]" dir="ltr">
+                  {selectedSettlement.riderIqamaNo ?? "—"}
                 </span>
               </div>
               {selectedSettlement.sponsorNameAr && (

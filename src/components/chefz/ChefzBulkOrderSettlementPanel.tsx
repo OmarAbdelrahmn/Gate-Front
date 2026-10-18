@@ -19,6 +19,7 @@ import type {
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
+import { exportToExcel } from "@/lib/export-excel";
 import {
   ArrowRight,
   Upload,
@@ -315,13 +316,102 @@ export function ChefzBulkOrderSettlementPanel({
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((r) => {
         const nameMatch = r.riderName.toLowerCase().includes(q);
-        const driverIdMatch = r.accounts.some((a) => a.driverId.toLowerCase().includes(q));
-        return nameMatch || driverIdMatch;
+        const iqamaMatch = (r.riderIqamaNo || "").toLowerCase().includes(q);
+        const driverIdMatch = r.accounts.some(
+          (a) =>
+            a.driverId.toLowerCase().includes(q) ||
+            (a.riderIqamaNo || "").toLowerCase().includes(q)
+        );
+        return nameMatch || iqamaMatch || driverIdMatch;
       });
     }
 
     return list;
   }, [response?.riders, selectedCycleKey, searchQuery]);
+
+  // Export order settlements to Excel
+  const handleExportExcel = () => {
+    if (!response?.riders || filteredRiders.length === 0) {
+      toast.warning("لا توجد بيانات متاحة للتصدير");
+      return;
+    }
+
+    const rows: Array<{
+      riderName: string;
+      riderIqamaNo: string;
+      riderProfileId: string;
+      period: string;
+      driverId: string;
+      accountType: string;
+      chargedPeriod: string;
+      assignedDays: number;
+      sourceRows: number;
+      deliveryFees: number;
+      vatAmount: number;
+      deliveryFeesAfterVat: number;
+      tips: number;
+      compensation: number;
+      bonuses: number;
+      deductions: number;
+      netEarnings: number;
+      companyAmount: number;
+      riderAmount: number;
+    }> = [];
+
+    for (const r of filteredRiders) {
+      for (const a of r.accounts) {
+        rows.push({
+          riderName: r.riderName,
+          riderIqamaNo: a.riderIqamaNo ?? r.riderIqamaNo ?? "—",
+          riderProfileId: r.riderProfileId,
+          period: `${r.periodFrom} -> ${r.periodTo}`,
+          driverId: a.driverId,
+          accountType: a.accountType === "Freelancer" ? "فريلانسر" : "دوام كامل",
+          chargedPeriod: `${a.chargedFrom} -> ${a.chargedTo}`,
+          assignedDays: a.assignedDays,
+          sourceRows: a.sourceRows,
+          deliveryFees: a.deliveryFees,
+          vatAmount: a.vatAmount,
+          deliveryFeesAfterVat: a.deliveryFeesAfterVat,
+          tips: a.tips,
+          compensation: a.compensation,
+          bonuses: a.bonuses,
+          deductions: a.deductions,
+          netEarnings: a.netEarnings,
+          companyAmount: a.companyAmount,
+          riderAmount: a.riderAmount,
+        });
+      }
+    }
+
+    exportToExcel({
+      filename: `تصفية-طلبات-شيفز-${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Order Settlements",
+      data: rows,
+      columns: [
+        { header: "المندوب الفعلي", accessor: (d) => d.riderName, isText: true },
+        { header: "رقم الإقامة", accessor: (d) => d.riderIqamaNo, isText: true },
+        { header: "معرف المندوب", accessor: (d) => d.riderProfileId, isText: true },
+        { header: "دورة التصفية", accessor: (d) => d.period, isText: true },
+        { header: "رقم الحساب في التقرير", accessor: (d) => d.driverId, isText: true },
+        { header: "نوع الحساب", accessor: (d) => d.accountType, isText: true },
+        { header: "فترة التكليف", accessor: (d) => d.chargedPeriod, isText: true },
+        { header: "أيام التكليف", accessor: (d) => d.assignedDays },
+        { header: "صفوف التقرير", accessor: (d) => d.sourceRows },
+        { header: "رسوم التوصيل", accessor: (d) => d.deliveryFees },
+        { header: "خصم الضريبة", accessor: (d) => d.vatAmount },
+        { header: "التوصيل بعد الضريبة", accessor: (d) => d.deliveryFeesAfterVat },
+        { header: "الإكراميات", accessor: (d) => d.tips },
+        { header: "التعويض", accessor: (d) => d.compensation },
+        { header: "البونص", accessor: (d) => d.bonuses },
+        { header: "الخصومات", accessor: (d) => d.deductions },
+        { header: "صافي الدخل", accessor: (d) => d.netEarnings },
+        { header: "حصة الشركة", accessor: (d) => d.companyAmount },
+        { header: "حصة المندوب", accessor: (d) => d.riderAmount },
+      ],
+    });
+    toast.success("تم استخراج ملف إكسل بنجاح");
+  };
 
   // Filtered cycle subtotal (for local view only, keeping whole batch total distinct)
   const cycleSubtotals = useMemo(() => {
@@ -419,6 +509,17 @@ export function ChefzBulkOrderSettlementPanel({
         </div>
 
         <div className="flex items-center gap-2">
+          {response && response.riders && response.riders.length > 0 && (
+            <Button
+              variant="secondary"
+              onClick={handleExportExcel}
+              className="gap-2 text-xs font-semibold"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              تصدير إكسل
+            </Button>
+          )}
+
           {viewImportId && (
             <Button
               variant="secondary"
@@ -954,8 +1055,13 @@ export function ChefzBulkOrderSettlementPanel({
                               <div className="font-bold text-[var(--foreground)]">
                                 {rider.riderName}
                               </div>
-                              <div className="font-mono text-[10px] text-[var(--muted)]" dir="ltr">
-                                {rider.riderProfileId.slice(0, 8)}...
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="font-mono text-[11px] text-[var(--foreground)] font-semibold">
+                                  رقم الإقامة: {rider.riderIqamaNo ?? "—"}
+                                </span>
+                                <span className="font-mono text-[10px] text-[var(--muted)]" dir="ltr">
+                                  ({rider.riderProfileId.slice(0, 8)}...)
+                                </span>
                               </div>
                             </td>
 
@@ -1078,6 +1184,7 @@ export function ChefzBulkOrderSettlementPanel({
                                         <thead className="bg-[var(--subtle-bg)] font-bold text-[var(--muted)] border-b border-[var(--border)]">
                                           <tr>
                                             <th className="p-2.5">رقم الحساب في التقرير</th>
+                                            <th className="p-2.5">رقم الإقامة</th>
                                             <th className="p-2.5">نوع الحساب</th>
                                             <th className="p-2.5">فترة التكليف المحتسبة</th>
                                             <th className="p-2.5 text-center">أيام التكليف</th>
@@ -1096,6 +1203,11 @@ export function ChefzBulkOrderSettlementPanel({
                                                 {/* Driver ID */}
                                                 <td className="p-2.5 font-mono font-bold text-[var(--foreground)]" dir="ltr">
                                                   {acc.driverId}
+                                                </td>
+
+                                                {/* Rider Iqama */}
+                                                <td className="p-2.5 font-mono font-semibold text-[var(--foreground)]" dir="ltr">
+                                                  {acc.riderIqamaNo ?? rider.riderIqamaNo ?? "—"}
                                                 </td>
 
                                                 {/* Account Type */}

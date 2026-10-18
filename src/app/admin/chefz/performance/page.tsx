@@ -222,6 +222,7 @@ export default function ChefzPerformancePage() {
         riderKey: string;
         riderId: string;
         riderName: string;
+        riderIqamaNo: string | null;
         idNumber: string;
         accountCodesSet: Set<string>;
         daysMap: Map<
@@ -246,6 +247,7 @@ export default function ChefzPerformancePage() {
       const riderLookup = effectiveRiderId ? riderMap.get(effectiveRiderId) : undefined;
       const name = p.riderName || riderLookup?.fullNameAr || "مندوب غير محدد";
       const idNo = p.reportIdNumber || riderLookup?.iqamaNo || "—";
+      const iqama = p.riderIqamaNo !== undefined ? p.riderIqamaNo : (riderLookup?.iqamaNo ?? null);
 
       const key = effectiveRiderId || (idNo !== "—" ? idNo : name);
 
@@ -255,11 +257,14 @@ export default function ChefzPerformancePage() {
           riderKey: key,
           riderId: effectiveRiderId,
           riderName: name,
+          riderIqamaNo: iqama,
           idNumber: idNo,
           accountCodesSet: new Set<string>(),
           daysMap: new Map(),
         };
         groupMap.set(key, group);
+      } else if (group.riderIqamaNo === null && iqama !== null) {
+        group.riderIqamaNo = iqama;
       }
 
       const acc = baseAccountMap.get(p.accountId);
@@ -316,6 +321,7 @@ export default function ChefzPerformancePage() {
         riderKey: g.riderKey,
         riderId: g.riderId,
         riderName: g.riderName,
+        riderIqamaNo: g.riderIqamaNo,
         idNumber: g.idNumber,
         accountCodes: Array.from(g.accountCodesSet),
         daysData: g.daysMap,
@@ -340,6 +346,7 @@ export default function ChefzPerformancePage() {
     return matrixRiderRows.filter(
       (r) =>
         r.riderName.toLowerCase().includes(q) ||
+        (r.riderIqamaNo && r.riderIqamaNo.toLowerCase().includes(q)) ||
         r.idNumber.toLowerCase().includes(q) ||
         r.accountCodes.some((c) => c.toLowerCase().includes(q))
     );
@@ -421,7 +428,8 @@ export default function ChefzPerformancePage() {
         columns: [
           { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
           { header: "المندوب", accessor: (r) => r.riderName, width: 25 },
-          { header: "رقم الهوية / الإقامة", accessor: (r) => r.idNumber, isText: true, width: 16 },
+          { header: "رقم الإقامة", accessor: (r) => r.riderIqamaNo ?? "—", isText: true, width: 16 },
+          { header: "رقم الهوية بالتقرير", accessor: (r) => r.idNumber, isText: true, width: 16 },
           {
             header: "الحسابات",
             accessor: (r) => r.accountCodes.join(" / ") || "—",
@@ -466,6 +474,7 @@ export default function ChefzPerformancePage() {
             header: "المندوب الفعلي",
             accessor: (p) => p.riderName || riderMap.get(p.riderProfileId)?.fullNameAr || "مندوب سابق",
           },
+          { header: "رقم الإقامة", accessor: (p) => p.riderIqamaNo ?? "—", isText: true },
           { header: "رقم الهوية بالتقرير", accessor: (p) => p.reportIdNumber, isText: true },
           { header: "إجمالي الطلبات الصالحة", accessor: (p) => p.totalValidOffers },
           { header: "الطلبات المقبولة", accessor: (p) => p.acceptedOffers },
@@ -888,7 +897,7 @@ export default function ChefzPerformancePage() {
                     <tr>
                       <th className="px-3 py-3.5 text-center w-10">#</th>
                       <th className="px-4 py-3.5 min-w-[170px]">المندوب</th>
-                      <th className="px-3 py-3.5 min-w-[110px] text-center font-mono">الهوية / الإقامة</th>
+                      <th className="px-3 py-3.5 min-w-[110px] text-center font-mono">رقم الإقامة</th>
                       <th className="px-3 py-3.5 min-w-[110px] text-center">كود الحساب</th>
                       <th className="px-3 py-3.5 text-center min-w-[90px] bg-[var(--brand)]/5 text-[var(--brand)] font-black">
                         المجموع
@@ -951,9 +960,16 @@ export default function ChefzPerformancePage() {
                             </div>
                           </td>
 
-                          {/* Iqama / Report ID */}
-                          <td className="px-3 py-2.5 text-center font-mono text-xs text-[var(--muted)]" dir="ltr">
-                            {r.idNumber}
+                          {/* Iqama */}
+                          <td className="px-3 py-2.5 text-center font-mono text-xs" dir="ltr">
+                            <span className="font-semibold text-[var(--foreground)]">
+                              {r.riderIqamaNo ?? "—"}
+                            </span>
+                            {r.idNumber && r.idNumber !== "—" && r.idNumber !== r.riderIqamaNo && (
+                              <div className="text-[10px] text-[var(--muted)]" title="رقم الهوية في التقرير">
+                                تقرير: {r.idNumber}
+                              </div>
+                            )}
                           </td>
 
                           {/* Account Codes */}
@@ -1114,6 +1130,7 @@ export default function ChefzPerformancePage() {
                       <th className="px-4 py-3.5">تاريخ التقرير</th>
                       <th className="px-4 py-3.5">الحساب</th>
                       <th className="px-4 py-3.5">المندوب الفعلي التاريخي</th>
+                      <th className="px-4 py-3.5">رقم الإقامة</th>
                       <th className="px-4 py-3.5">رقم الهوية بالتقرير</th>
                       <th className="px-4 py-3.5 text-center">إجمالي الطلبات الصالحة</th>
                       <th className="px-4 py-3.5 text-center">الطلبات المقبولة</th>
@@ -1125,14 +1142,14 @@ export default function ChefzPerformancePage() {
                   <tbody className="divide-y divide-[var(--border)]">
                     {dailyLoading ? (
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-sm text-[var(--muted)]">
+                        <td colSpan={10} className="py-12 text-center text-sm text-[var(--muted)]">
                           <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
                           جارٍ تحميل سجلات الأداء اليومي...
                         </td>
                       </tr>
                     ) : performanceRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-sm text-[var(--muted)]">
+                        <td colSpan={10} className="py-12 text-center text-sm text-[var(--muted)]">
                           لا توجد بيانات أداء مستوردة في نطاق التواريخ المحدد.
                         </td>
                       </tr>
@@ -1167,7 +1184,10 @@ export default function ChefzPerformancePage() {
                                 {p.riderName || rider?.fullNameAr || "مندوب سابق"}
                               </div>
                             </td>
-                            <td className="px-4 py-3 font-mono text-xs font-semibold" dir="ltr">
+                            <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--foreground)]" dir="ltr">
+                              {p.riderIqamaNo ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-[var(--muted)]" dir="ltr">
                               {p.reportIdNumber}
                             </td>
                             <td className="px-4 py-3 text-center font-bold font-mono" dir="ltr">
@@ -1359,6 +1379,9 @@ export default function ChefzPerformancePage() {
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-[var(--brand)]" />
                         <span className="font-bold text-[var(--foreground)]">{r.riderName || "مندوب مسجل"}</span>
+                        <span className="font-mono text-[11px] text-[var(--muted)]">
+                          (رقم الإقامة: <strong className="text-[var(--foreground)]">{r.riderIqamaNo ?? "—"}</strong>)
+                        </span>
                       </div>
                       <Badge tone={r.accounts.length > 1 ? "blue" : "gray"}>
                         {r.accounts.length} {r.accounts.length > 1 ? "حسابات شيفز" : "حساب شيفز"}
@@ -1370,6 +1393,7 @@ export default function ChefzPerformancePage() {
                         <thead className="bg-[var(--table-header-bg)] border-b border-[var(--border)] font-bold text-[var(--muted)]">
                           <tr>
                             <th className="p-2">معرف الحساب</th>
+                            <th className="p-2">رقم الإقامة</th>
                             <th className="p-2">رقم الهوية بالتقرير</th>
                             <th className="p-2 text-center">الصالحة</th>
                             <th className="p-2 text-center">المقبولة</th>
@@ -1384,7 +1408,10 @@ export default function ChefzPerformancePage() {
                               <td className="p-2 font-mono font-bold text-[var(--brand)]" dir="ltr">
                                 {acc.externalAccountId || acc.accountId.slice(0, 8)}
                               </td>
-                              <td className="p-2 font-mono" dir="ltr">
+                              <td className="p-2 font-mono font-semibold" dir="ltr">
+                                {acc.riderIqamaNo ?? r.riderIqamaNo ?? "—"}
+                              </td>
+                              <td className="p-2 font-mono text-[var(--muted)]" dir="ltr">
                                 {acc.reportIdNumber}
                               </td>
                               <td className="p-2 text-center font-mono font-bold" dir="ltr">

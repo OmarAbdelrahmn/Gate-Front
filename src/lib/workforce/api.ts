@@ -9,6 +9,7 @@ import type {
   UpdateRiderProfileRequest,
   RoleTransitionRequest,
   EmployeeVehicleProfileResponse,
+  EmployeeRiderProfileResponse,
 } from "./types";
 export function listEmployees() {
   return authFetch<Employee[]>("/api/employees");
@@ -291,6 +292,21 @@ export function ensureEmployeeVehicleProfile(employeeId: string) {
 }
 
 /**
+ * PUT /api/employees/{employeeId}/rider-profile
+ * No request body. Requires employees.update.
+ * Creates a rider profile or returns the existing one for an employee.
+ * Keeps isEmployee: true and preserves employee data.
+ * Returns the profile ID as rider.id.
+ * Allows that profile to own platform accounts and keeps the employee out of the dedicated rider list.
+ */
+export function createEmployeeRiderProfile(employeeId: string) {
+  return authFetch<EmployeeRiderProfileResponse>(
+    `/api/employees/${encodeURIComponent(employeeId)}/rider-profile`,
+    { method: "PUT" },
+  );
+}
+
+/**
  * Ensures an employee has a rider profile (used across vehicle take, fuel cards, and platform assignments).
  * First checks existing via GET /api/employees/{id}/vehicle-profile; if missing, calls PUT /api/employees/{id}/vehicle-profile.
  */
@@ -309,3 +325,4 @@ export async function resolveEmployeeRiderProfile(employeeId: string): Promise<s
     return null;
   }
 }
+

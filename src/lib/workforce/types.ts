@@ -233,8 +233,28 @@ export type UpdateEmployeeRequest = EmployeeUpsertPayload & { rowVersion: string
 export type UpdateRiderProfileRequest = {
   tShirtSize?: string | null;
   operationalNotes?: string | null;
-  rowVersion: string;
+  rowVersion?: string | null;
+  status?: EmployeeStatus | string;
+  preferredCityId?: string | null;
+  riderStartDate?: string | null;
+  riderEndDate?: string | null;
 };
+
+export interface EmployeeRiderProfileResponse {
+  rider?: {
+    id: string;
+    employeeId?: string | null;
+    tShirtSize?: string | null;
+    operationalNotes?: string | null;
+    rowVersion?: string | null;
+    [key: string]: unknown;
+  } | null;
+  riderProfileId?: string | null;
+  id?: string | null;
+  employee?: Employee | null;
+  [key: string]: unknown;
+}
+
 
 export type ChangeEmployeeStatusRequest = {
   status: EmployeeStatus | string;

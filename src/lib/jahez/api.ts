@@ -294,7 +294,7 @@ export async function executeJahezOperation(
   idempotencyKey?: string,
   init?: CustomRequestInit,
 ): Promise<Operation> {
-  const key = idempotencyKey?.trim() || generateIdempotencyKey("op-exec");
+  const key = idempotencyKey?.trim() || `op-exec-${operationId}`;
   const headers = new Headers(init?.headers);
   headers.set("Idempotency-Key", key);
 

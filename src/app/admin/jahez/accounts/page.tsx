@@ -429,18 +429,33 @@ export default function JahezAccountsPage() {
   // -----------------------------------------------------------------
   // Operation Action ("شاشة العملية")
   // -----------------------------------------------------------------
-  const openOperationModal = (acc: Account) => {
+  const openOperationModal = (acc: Account, existingOpToResume?: Operation) => {
     setOpAccount(acc);
-    setOpMode(OperationMode.Settle);
-    setOpThroughDate(getRiyadhTodayDate());
-    setOpEffectiveAt(getRiyadhNowIso().slice(0, 16));
-    setOpNet(0);
-    setOpReason("تصفية من داشبورد جاهز");
-    setOpTransferToRider(false);
-    setOpFund(Fund.Cashbox);
-    setOpPaymentRef("");
+    setOpTransferToRider(existingOpToResume?.transferToRider ?? false);
+    setOpPaymentRef(existingOpToResume?.paymentReference || "");
+    setOpFund(existingOpToResume?.fund ?? Fund.Cashbox);
     setOpPreview(null);
-    setSavedOperation(null);
+
+    if (existingOpToResume) {
+      setSavedOperation(existingOpToResume);
+      setOpMode(existingOpToResume.mode);
+      setOpThroughDate(existingOpToResume.throughDate);
+      setOpEffectiveAt(
+        existingOpToResume.effectiveAtUtc
+          ? existingOpToResume.effectiveAtUtc.slice(0, 16)
+          : getRiyadhNowIso().slice(0, 16),
+      );
+      setOpNet(existingOpToResume.net);
+      setOpReason(existingOpToResume.reason || "تصفية من داشبورد جاهز");
+    } else {
+      setSavedOperation(null);
+      setOpMode(OperationMode.Settle);
+      setOpThroughDate(getRiyadhTodayDate());
+      setOpEffectiveAt(getRiyadhNowIso().slice(0, 16));
+      setOpNet(0);
+      setOpReason("تصفية من داشبورد جاهز");
+    }
+
     setIsOpModalOpen(true);
 
     // Load last settlement info for this account/handover
@@ -494,6 +509,36 @@ export default function JahezAccountsPage() {
           commissionStartsOn: currentHandover?.commissionStartsOn || null,
           totalSettlementsCount: settlements.length,
         });
+
+        // Check if there is already an unexecuted draft/pending operation
+        if (!existingOpToResume) {
+          const pendingOp = (details.operations?.items || []).find(
+            (op) =>
+              op.status === OperationStatus.Ready || op.status === OperationStatus.UnderReview,
+          );
+
+          if (pendingOp) {
+            setSavedOperation(pendingOp);
+            setOpMode(pendingOp.mode);
+            setOpThroughDate(pendingOp.throughDate);
+            if (pendingOp.effectiveAtUtc) {
+              setOpEffectiveAt(pendingOp.effectiveAtUtc.slice(0, 16));
+            }
+            setOpNet(pendingOp.net);
+            setOpReason(pendingOp.reason || "تصفية من داشبورد جاهز");
+            if (pendingOp.fund) setOpFund(pendingOp.fund);
+            if (pendingOp.paymentReference) setOpPaymentRef(pendingOp.paymentReference);
+            setOpTransferToRider(pendingOp.transferToRider ?? false);
+
+            runPreview(
+              pendingOp.handoverId || acc.currentHandoverId || "",
+              pendingOp.mode,
+              pendingOp.throughDate,
+              pendingOp.net,
+            );
+            return;
+          }
+        }
       })
       .catch((err) => {
         console.warn("Could not load last settlement details", err);
@@ -510,9 +555,16 @@ export default function JahezAccountsPage() {
         });
       });
 
-    // Initial preview
-    if (acc.currentHandoverId) {
+    // Initial preview if not resuming
+    if (!existingOpToResume && acc.currentHandoverId) {
       runPreview(acc.currentHandoverId, OperationMode.Settle, getRiyadhTodayDate(), 0);
+    } else if (existingOpToResume && (existingOpToResume.handoverId || acc.currentHandoverId)) {
+      runPreview(
+        existingOpToResume.handoverId || acc.currentHandoverId || "",
+        existingOpToResume.mode,
+        existingOpToResume.throughDate,
+        existingOpToResume.net,
+      );
     }
   };
 
@@ -566,7 +618,7 @@ export default function JahezAccountsPage() {
   };
 
   const handleSaveOperationDraft = async () => {
-    if (!opAccount?.currentHandoverId) {
+    if (!opAccount?.currentHandoverId && !savedOperation?.handoverId) {
       toast.error("خطأ", "لا توجد فترة تسليم نشطة لهذا الحساب");
       return;
     }
@@ -579,8 +631,10 @@ export default function JahezAccountsPage() {
         !opTransferToRider &&
         opMode !== OperationMode.Withdraw;
 
-      const op = await createJahezOperation({
-        handoverId: opAccount.currentHandoverId,
+      const targetHandoverId = opAccount?.currentHandoverId || savedOperation?.handoverId || "";
+
+      const opPayload = {
+        handoverId: targetHandoverId,
         mode: opMode,
         throughDate: opThroughDate,
         effectiveAtUtc,
@@ -590,11 +644,43 @@ export default function JahezAccountsPage() {
         purpose: Purpose.Settlement,
         transferToRider: opTransferToRider,
         paymentReference: needsFund ? opPaymentRef.trim() || null : null,
-      });
+      };
+
+      let op: Operation;
+      if (savedOperation && savedOperation.status === OperationStatus.Ready) {
+        op = await updateJahezOperation(savedOperation.id, {
+          values: opPayload,
+          rowVersion: savedOperation.rowVersion,
+        });
+        toast.success("تم التحديث", `تم تحديث مسودة العملية #${op.id.slice(0, 8)} بنجاح`);
+      } else {
+        op = await createJahezOperation(opPayload);
+        toast.success("تم الحفظ", `تم حفظ مسودة العملية #${op.id.slice(0, 8)} بحالة جاهزة (Ready)`);
+      }
       setSavedOperation(op);
-      toast.success("تم الحفظ", `تم حفظ مسودة العملية #${op.id.slice(0, 8)} بحالة جاهزة (Ready)`);
     } catch (err: unknown) {
-      toast.error("فشل الحفظ", err instanceof Error ? err.message : "تعذر حفظ العملية");
+      const msg = err instanceof Error ? err.message : "تعذر حفظ العملية";
+      if (msg.includes("غير مكتملة") && opAccount) {
+        try {
+          const freshDetails = await getJahezAccountDetails(opAccount.accountId, 1, 50, {
+            suppressErrorToast: true,
+          });
+          const recovered = (freshDetails.operations?.items || []).find(
+            (o) => o.status === OperationStatus.Ready || o.status === OperationStatus.UnderReview,
+          );
+          if (recovered) {
+            setSavedOperation(recovered);
+            toast.info(
+              "تم استرجاع المسودة الحالية",
+              `توجد مسودة مسجلة مسبقاً لهذه الفترة (#${recovered.id.slice(0, 8)}). يمكنك الآن مراجعتها وتنفيذ الحركة المالية لإنهاء التصفية.`,
+            );
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      toast.error("فشل الحفظ", msg);
     } finally {
       setOpSubmitting(false);
     }
@@ -605,10 +691,50 @@ export default function JahezAccountsPage() {
     setOpSubmitting(true);
     try {
       await executeJahezOperation(savedOperation.id);
+      toast.success("تم التنفيذ بنجاح", "تم تنفيذ العملية المالية وإغلاق التصفية.");
       setIsOpModalOpen(false);
       loadData();
     } catch (err: unknown) {
-      toast.error("فشل التنفيذ", err instanceof Error ? err.message : "تعذر تنفيذ العملية المالية");
+      const msg = err instanceof Error ? err.message : "تعذر تنفيذ العملية المالية";
+      // Handle 409 conflict: reload the record as requested by the server
+      if (
+        msg.includes("تعارض") ||
+        msg.includes("conflict") ||
+        msg.includes("409") ||
+        msg.includes("المفتاح نفسه")
+      ) {
+        try {
+          const freshDetails = await getJahezAccountDetails(
+            opAccount?.accountId || "",
+            1,
+            50,
+            { suppressErrorToast: true },
+          );
+          const currentOp = (freshDetails.operations?.items || []).find(
+            (o) => o.id === savedOperation.id,
+          );
+
+          if (currentOp?.status === OperationStatus.Executed || currentOp?.executedAtUtc) {
+            toast.success(
+              "العملية منفذة بالفعل",
+              "تم التحقق من السجل: تم تنفيذ العملية المالية بنجاح في النظام.",
+            );
+            setIsOpModalOpen(false);
+            loadData();
+            return;
+          } else if (currentOp) {
+            setSavedOperation(currentOp);
+            toast.info(
+              "تم تحديث السجل",
+              "تم إعادة تحميل أحدث نسخة من السجل. اضغط مجدداً لتأكيد التنفيذ بالمفتاح نفسه.",
+            );
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      toast.error("فشل التنفيذ", msg);
     } finally {
       setOpSubmitting(false);
     }
@@ -1545,6 +1671,39 @@ export default function JahezAccountsPage() {
             </div>
           )}
 
+          {savedOperation && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 text-xs text-blue-950 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-100">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-blue-600 shrink-0" />
+                  <span className="font-bold">
+                    توجد مسودة مسجلة مسبقاً لهذه الفترة (العملية #{savedOperation.id.slice(0, 8)})
+                  </span>
+                </div>
+                <Badge
+                  tone={
+                    savedOperation.status === OperationStatus.UnderReview
+                      ? "orange"
+                      : savedOperation.status === OperationStatus.Executed
+                      ? "green"
+                      : "blue"
+                  }
+                >
+                  {savedOperation.status === OperationStatus.UnderReview
+                    ? "قيد المراجعة"
+                    : savedOperation.status === OperationStatus.Executed
+                    ? "منفذة"
+                    : "جاهزة للتنفيذ (Ready)"}
+                </Badge>
+              </div>
+              <p className="mt-1 text-[11px] text-blue-800 dark:text-blue-300">
+                {savedOperation.status === OperationStatus.UnderReview
+                  ? "العملية قيد المراجعة بانتظار اعتماد الإدارة لطلب التعديل أو الترحيل."
+                  : "تم استرجاع المسودة الحالية. لإنهاء التصفية، يمكنك الضغط مباشرة على زر \"تنفيذ الحركة المالية\" بالأسفل لصرف/قبض المبلغ وإغلاق العملية."}
+              </p>
+            </div>
+          )}
+
           {/* 1. مسار العملية */}
           <div>
             <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1.5">
@@ -1928,24 +2087,52 @@ export default function JahezAccountsPage() {
                   حفظ مسودة (Ready)
                 </Button>
               ) : (
-                <Button
-                  size="sm"
-                  onClick={handleExecuteOperation}
-                  disabled={opSubmitting || opTransferToRider}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5"
-                  title={
-                    opTransferToRider
-                      ? "عملية الترحيل تتطلب اعتماد المدير أولاً"
-                      : "تنفيذ الحركة المالية وسحب الحساب إن وجد"
-                  }
-                >
-                  {opSubmitting ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <PlayCircle className="h-4 w-4" />
+                <div className="flex items-center gap-2">
+                  {savedOperation.status === OperationStatus.Ready && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleSaveOperationDraft}
+                      disabled={opSubmitting || previewLoading}
+                      className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold gap-1.5"
+                      title="تحديث قيم مسودة العملية المسجلة حالياً"
+                    >
+                      {opSubmitting ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      تحديث المسودة
+                    </Button>
                   )}
-                  تنفيذ الحركة المالية
-                </Button>
+
+                  {savedOperation.status !== OperationStatus.Executed && (
+                    <Button
+                      size="sm"
+                      onClick={handleExecuteOperation}
+                      disabled={
+                        opSubmitting ||
+                        opTransferToRider ||
+                        savedOperation.status === OperationStatus.UnderReview
+                      }
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5"
+                      title={
+                        savedOperation.status === OperationStatus.UnderReview
+                          ? "العملية قيد المراجعة وتتطلب اعتماد الإدارة أولاً"
+                          : opTransferToRider
+                          ? "عملية الترحيل تتطلب اعتماد المدير أولاً"
+                          : "تنفيذ الحركة المالية وإنهاء التصفية"
+                      }
+                    >
+                      {opSubmitting ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <PlayCircle className="h-4 w-4" />
+                      )}
+                      تنفيذ الحركة المالية (إنهاء التصفية)
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -2140,33 +2327,52 @@ export default function JahezAccountsPage() {
                                   {op.effectiveAtUtc?.slice(0, 10)}
                                 </td>
                                 <td className="py-2 px-3 text-center">
-                                  {canEditThisOp ? (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => {
-                                        setEditPaymentOpId(op.id);
-                                        setEditPaymentInitialOp(op);
-                                        setEditPaymentContext({
-                                          riderName:
-                                            accountDetails.account.actualRider?.nameAr ||
-                                            accountDetails.account.owner?.nameAr,
-                                          accountCode: accountDetails.account.code,
-                                          settlementDate: op.throughDate,
-                                        });
-                                        setIsEditPaymentOpen(true);
-                                      }}
-                                      className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900 shadow-2xs"
-                                      title="تعديل طريقة صرف التصفية (الخزنة ↔ الحساب البنكي)"
-                                    >
-                                      <Edit3 className="h-3 w-3" />
-                                      تعديل طريقة الدفع
-                                    </Button>
-                                  ) : (
-                                    <span className="text-gray-400 font-mono text-[11px]">
-                                      {op.fund === 1 ? "الخزنة" : op.fund === 3 ? "البنك" : "-"}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {op.status === OperationStatus.Ready && (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          setIsDetailsOpen(false);
+                                          openOperationModal(accountDetails.account, op);
+                                        }}
+                                        className="h-6 px-2 text-[10px] font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                                        title="فتح هذه المسودة لإنهاء وتنفيذ الحركة المالية"
+                                      >
+                                        <PlayCircle className="h-3 w-3" />
+                                        تنفيذ وإنهاء
+                                      </Button>
+                                    )}
+
+                                    {canEditThisOp && (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => {
+                                          setEditPaymentOpId(op.id);
+                                          setEditPaymentInitialOp(op);
+                                          setEditPaymentContext({
+                                            riderName:
+                                              accountDetails.account.actualRider?.nameAr ||
+                                              accountDetails.account.owner?.nameAr,
+                                            accountCode: accountDetails.account.code,
+                                            settlementDate: op.throughDate,
+                                          });
+                                          setIsEditPaymentOpen(true);
+                                        }}
+                                        className="h-6 px-2 text-[10px] font-bold gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900 shadow-2xs"
+                                        title="تعديل طريقة صرف التصفية (الخزنة ↔ الحساب البنكي)"
+                                      >
+                                        <Edit3 className="h-3 w-3" />
+                                        تعديل طريقة الدفع
+                                      </Button>
+                                    )}
+
+                                    {!canEditThisOp && op.status !== OperationStatus.Ready && (
+                                      <span className="text-gray-400 font-mono text-[11px]">
+                                        {op.fund === 1 ? "الخزنة" : op.fund === 3 ? "البنك" : "-"}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             );
