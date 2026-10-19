@@ -140,6 +140,15 @@ export const PERMISSIONS = [
   "jahez.requests.adjustment.approve",
   "jahez.money.receive",
   "jahez.money.disburse",
+  "jahez.treasury.read",
+  "jahez.treasury.accounts.create",
+  "jahez.treasury.accounts.update",
+  "jahez.treasury.transfers.create",
+  "jahez.treasury.entries.create",
+  "jahez.treasury.adjust",
+  "jahez.treasury.petroapp-evidence.create",
+  "jahez.financial-reports.read",
+  "jahez.financial-reports.export",
 
   // Chefz Platform
   "chefz.read",
@@ -325,6 +334,15 @@ export const PERMISSIONS = [
   "jahez.requests.adjustment.approve",
   "jahez.money.receive",
   "jahez.money.disburse",
+  "jahez.treasury.read",
+  "jahez.treasury.accounts.create",
+  "jahez.treasury.accounts.update",
+  "jahez.treasury.transfers.create",
+  "jahez.treasury.entries.create",
+  "jahez.treasury.adjust",
+  "jahez.treasury.petroapp-evidence.create",
+  "jahez.financial-reports.read",
+  "jahez.financial-reports.export",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

@@ -40,6 +40,7 @@ import {
   Scale,
   UtensilsCrossed,
   Zap,
+  Landmark,
   type LucideIcon,
 } from "lucide-react";
 
@@ -63,20 +64,17 @@ export const navigation: NavItem[] = [
     labelKey: "nav.dashboard",
     href: "/admin",
     icon: LayoutDashboard,
-    roles: ["admin", "manager", "member", "accountant"],
   },
   {
     label: "الموارد البشرية",
     labelKey: "nav.hr",
     icon: BriefcaseBusiness,
-    roles: ["admin", "manager", "member", "accountant"],
     children: [
       {
         label: "لوحة مؤشرات الموارد البشرية",
         labelKey: "nav.hrDashboard",
         href: "/admin/hr/dashboard",
         icon: LayoutDashboard,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "reports.read",
       },
       {
@@ -84,7 +82,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.peopleComplianceDashboard",
         href: "/admin/people-compliance",
         icon: ShieldCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "reports.read",
       },
       {
@@ -92,7 +89,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.employees",
         href: "/admin/employees",
         icon: Users,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "employees.read",
       },
       {
@@ -100,7 +96,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.terminatedEmployees",
         href: "/admin/hr/terminated-employees",
         icon: UserX,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "employees.read",
       },
       {
@@ -108,7 +103,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.catalogs",
         href: "/admin/hr/catalogs",
         icon: BriefcaseBusiness,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "employees.read",
           "residency.read",
@@ -122,7 +116,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.documents",
         href: "/admin/hr/documents",
         icon: FileText,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "documents.read",
       },
       {
@@ -130,7 +123,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.insurance",
         href: "/admin/hr/insurance",
         icon: ShieldCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "insurance.read",
       },
       {
@@ -138,7 +130,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.socialInsurance",
         href: "/admin/hr/payroll-employees",
         icon: Building2,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "employees.read",
       },
       {
@@ -146,7 +137,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.absenceCases",
         href: "/admin/hr/absence-cases",
         icon: ClipboardList,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "absence_cases.read",
       },
       {
@@ -154,7 +144,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.leaveRequests",
         href: "/admin/hr/leave-requests",
         icon: CalendarCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "leave_requests.read",
       },
       {
@@ -162,7 +151,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.hrForms",
         href: "/admin/hr/forms",
         icon: FileText,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "employees.read",
       },
       {
@@ -170,7 +158,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.expiryCompliance",
         href: "/admin/hr/compliance-expiries",
         icon: ShieldAlert,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "employees.read",
       },
       {
@@ -178,7 +165,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.externalRiders",
         href: "/admin/hr/external-riders",
         icon: Users,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "external_riders.read",
       },
       {
@@ -186,7 +172,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.legalCases",
         href: "/admin/hr/legal-cases",
         icon: Scale,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "legal_cases.read",
       },
     ],
@@ -196,14 +181,12 @@ export const navigation: NavItem[] = [
     labelKey: "nav.housing",
     href: "/admin/housing",
     icon: House,
-    roles: ["admin", "manager", "member", "accountant"],
     permission: "housing.read",
   },
   {
     label: "إدارة المنصات",
     labelKey: "nav.platforms",
     icon: Layers,
-    roles: ["admin", "manager", "member", "accountant"],
     permissionsAny: ["platform_accounts.read", "platform_assignments.read"],
     children: [
       {
@@ -211,7 +194,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.operationsDashboard",
         href: "/admin/operations/dashboard",
         icon: LayoutDashboard,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "reports.read",
       },
       {
@@ -219,7 +201,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.platformList",
         href: "/admin/platforms",
         icon: Layers,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "platform_accounts.read",
       },
       {
@@ -227,7 +208,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.platformAccounts",
         href: "/admin/platforms/accounts",
         icon: Server,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "platform_accounts.read",
       },
       {
@@ -235,7 +215,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.riderPlatformHistory",
         href: "/admin/platforms/rider-history",
         icon: History,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "platform_assignments.read",
       },
     ],
@@ -244,7 +223,6 @@ export const navigation: NavItem[] = [
     label: "أدارة جاهز",
     labelKey: "nav.jahezHandling",
     icon: ShoppingBag,
-    roles: ["admin", "manager", "member", "accountant"],
     permissionsAny: [
       "jahez.read",
       "jahez.handovers.read",
@@ -266,7 +244,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.jahezAccounts",
         href: "/admin/jahez/accounts",
         icon: Server,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["jahez.read", "jahez.handovers.create"],
       },
       {
@@ -274,7 +251,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.jahezApprovals",
         href: "/admin/jahez/approvals",
         icon: ShieldCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "jahez.read",
           "jahez.requests.fee.create",
@@ -294,7 +270,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.jahezFunds",
         href: "/admin/jahez/cashbox",
         icon: BadgeDollarSign,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "jahez.read",
           "jahez.cashbox.read",
@@ -307,7 +282,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.jahezPerformance",
         href: "/admin/jahez/performance",
         icon: BarChart3,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["jahez.read", "jahez.imports.read"],
       },
       {
@@ -315,8 +289,85 @@ export const navigation: NavItem[] = [
         labelKey: "nav.jahezStatistics",
         href: "/admin/jahez/statistics",
         icon: FileSpreadsheet,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["jahez.read", "jahez.imports.read"],
+      },
+    ],
+  },
+  {
+    label: "خزائن ومحاسبة جاهز",
+    labelKey: "nav.jahezTreasury",
+    icon: Landmark,
+    permissionsAny: [
+      "jahez.treasury.read",
+      "jahez.treasury.accounts.create",
+      "jahez.treasury.transfers.create",
+      "jahez.treasury.entries.create",
+      "jahez.treasury.adjust",
+      "jahez.cashbox.read",
+      "jahez.cashbox.submit",
+      "jahez.cashbox.confirm",
+      "jahez.financial-reports.read",
+    ],
+    children: [
+      {
+        label: "الأرصدة الفعلية والدفتر",
+        labelKey: "nav.jahezTreasuryBalances",
+        href: "/admin/jahez/treasury/balances",
+        icon: BadgeDollarSign,
+        permissionsAny: ["jahez.treasury.read"],
+      },
+      {
+        label: "شجرة الحسابات",
+        labelKey: "nav.jahezTreasuryAccounts",
+        href: "/admin/jahez/treasury/accounts",
+        icon: GitBranch,
+        permissionsAny: ["jahez.treasury.read"],
+      },
+      {
+        label: "التمويل والتحويلات",
+        labelKey: "nav.jahezTreasuryTransfers",
+        href: "/admin/jahez/treasury/transfers",
+        icon: ArrowLeftRight,
+        permissionsAny: [
+          "jahez.treasury.transfers.create",
+          "jahez.treasury.entries.create",
+          "jahez.treasury.adjust",
+        ],
+      },
+      {
+        label: "تسليم العهدة ",
+        labelKey: "nav.jahezTreasuryHandovers",
+        href: "/admin/jahez/treasury/handovers",
+        icon: CalendarCheck,
+        permissionsAny: [
+          "jahez.cashbox.read",
+          "jahez.cashbox.submit",
+          "jahez.cashbox.confirm",
+        ],
+      },
+      {
+        label: "بترو آب والمطابقة",
+        labelKey: "nav.jahezTreasuryPetroApp",
+        href: "/admin/jahez/treasury/petroapp",
+        icon: Fuel,
+        permissionsAny: [
+          "jahez.treasury.read",
+          "jahez.treasury.petroapp-evidence.create",
+        ],
+      },
+      {
+        label: "التقارير المالية والتصدير",
+        labelKey: "nav.jahezTreasuryReports",
+        href: "/admin/jahez/treasury/reports",
+        icon: FileSpreadsheet,
+        permissionsAny: ["jahez.financial-reports.read"],
+      },
+      {
+        label: "مراجعة الجاهزية والترحيل",
+        labelKey: "nav.jahezTreasuryMigration",
+        href: "/admin/jahez/treasury/migration",
+        icon: ShieldAlert,
+        permissionsAny: ["jahez.treasury.adjust"],
       },
     ],
   },
@@ -324,7 +375,6 @@ export const navigation: NavItem[] = [
     label: "إدارة شيفز",
     labelKey: "nav.chefz",
     icon: UtensilsCrossed,
-    roles: ["admin", "manager", "member", "accountant"],
     permissionsAny: [
       "chefz.read",
       "chefz.accounts.update",
@@ -337,7 +387,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.chefzAccounts",
         href: "/admin/chefz/accounts",
         icon: Server,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["chefz.read", "chefz.accounts.update"],
       },
       {
@@ -345,7 +394,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.chefzSettlements",
         href: "/admin/chefz/settlements",
         icon: CreditCard,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["chefz.read", "chefz.settlements.create"],
       },
       {
@@ -353,7 +401,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.chefzPerformance",
         href: "/admin/chefz/performance",
         icon: BarChart3,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["chefz.read", "chefz.performance.import", "chefz.accounts.update"],
       },
       {
@@ -361,7 +408,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.chefzSponsorStatistics",
         href: "/admin/chefz/sponsor-statistics",
         icon: Building2,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["chefz.read", "chefz.accounts.update"],
       },
     ],
@@ -431,7 +477,6 @@ export const navigation: NavItem[] = [
     label: "إدارة الأسطول والمركبات",
     labelKey: "nav.fleet",
     icon: Car,
-    roles: ["admin", "manager", "member", "accountant"],
     permissionsAny: [
       "fleet.vehicles.read",
       "fleet.assignments.read",
@@ -448,7 +493,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.fleetDashboard",
         href: "/admin/fleet/dashboard",
         icon: LayoutDashboard,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "reports.read",
       },
       {
@@ -456,7 +500,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.vehicles",
         href: "/admin/fleet/vehicles",
         icon: Car,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.vehicles.read",
       },
       {
@@ -464,7 +507,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.assignmentPeriodReports",
         href: "/admin/fleet/vehicles/reports",
         icon: FileSpreadsheet,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAll: [
           "reports.read",
           "fleet.assignments.read",
@@ -476,7 +518,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.fuelCards",
         href: "/admin/fleet/fuel-cards",
         icon: Fuel,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["fuel.read", "fuel.import"],
       },
       {
@@ -484,7 +525,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.vehicleAssignments",
         href: "/admin/fleet/assignments",
         icon: Key,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.assignments.read",
       },
       {
@@ -492,7 +532,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.vehicleDailyDistances",
         href: "/admin/fleet/daily-distances",
         icon: Gauge,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["fleet.daily_distances.read", "fleet.vehicles.read", "fleet.assignments.read"],
       },
       {
@@ -500,7 +539,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.vehicleCompliance",
         href: "/admin/fleet/compliance",
         icon: ShieldCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.compliance.read",
       },
       {
@@ -508,7 +546,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.vehicleCatalogs",
         href: "/admin/fleet/catalogs",
         icon: BookOpen,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["fleet.vehicles.read", "licenses.read"],
       },
     ],
@@ -517,7 +554,6 @@ export const navigation: NavItem[] = [
     label: "إدارة الحوادث والمطالبات",
     labelKey: "nav.accidentsManagement",
     icon: AlertTriangle,
-    roles: ["admin", "manager", "member", "accountant"],
     permission: "fleet.accidents.read",
     children: [
       {
@@ -525,7 +561,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.accidentsRegistry",
         href: "/admin/fleet/accidents",
         icon: FileText,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.accidents.read",
       },
       {
@@ -533,7 +568,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.claimWorkflows",
         href: "/admin/fleet/accidents/workflows",
         icon: GitBranch,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.accidents.read",
       },
       {
@@ -541,7 +575,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.overdueClaims",
         href: "/admin/fleet/accidents/overdue",
         icon: Clock,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.accidents.read",
       },
       {
@@ -549,7 +582,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.installmentRefunds",
         href: "/admin/fleet/accidents/installments",
         icon: CreditCard,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.accidents.read",
       },
       {
@@ -557,7 +589,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.towingReceipts",
         href: "/admin/fleet/accidents/towing",
         icon: Truck,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "fleet.accidents.read",
       },
     ],
@@ -566,40 +597,35 @@ export const navigation: NavItem[] = [
     label: "ربط المركبات بالمنصات",
     labelKey: "nav.vehicleAccountAssignments",
     icon: Server,
-    roles: ["admin", "manager", "member", "accountant"],
-    permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+    permission: "fleet.assignments.read",
     children: [
       {
         label: "جميع الربطات النشطة",
         labelKey: "nav.vehicleAccountAssignmentsAll",
         href: "/admin/fleet/vehicle-account-assignments",
         icon: Server,
-        roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+        permission: "fleet.assignments.read",
       },
       {
         label: "طلبات التبديل المعلقة",
         labelKey: "nav.vehicleAccountAssignmentsSwitches",
         href: "/admin/fleet/vehicle-account-assignments/switches",
         icon: Repeat,
-        roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+        permission: "fleet.assignments.read",
       },
       {
         label: "التحذيرات التشغيلية",
         labelKey: "nav.vehicleAccountAssignmentsProblems",
         href: "/admin/fleet/vehicle-account-assignments/problems",
         icon: AlertTriangle,
-        roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+        permission: "fleet.assignments.read",
       },
       {
         label: "عقود تأجير الكفلاء (كيتا)",
         labelKey: "nav.sponsorVehicleLeases",
         href: "/admin/fleet/vehicle-account-assignments/leases",
         icon: FileText,
-        roles: ["admin", "manager", "member", "accountant"],
-        permissionsAny: ["fleet.assignments.read", "fleet.vehicles.read"],
+        permission: "fleet.assignments.read",
       },
     ],
   },
@@ -607,7 +633,6 @@ export const navigation: NavItem[] = [
     label: "إدارة شرائح الاتصال (SIM)",
     labelKey: "nav.phoneSimsGroup",
     icon: Smartphone,
-    roles: ["admin", "manager", "member", "accountant"],
     permission: "phone_sims.read",
     children: [
       {
@@ -615,7 +640,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.phoneSimsAll",
         href: "/admin/fleet/phone-sims",
         icon: Smartphone,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "phone_sims.read",
       },
       {
@@ -623,7 +647,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.phoneSimsAssignments",
         href: "/admin/fleet/phone-sims/assignments",
         icon: UserCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "phone_sims.read",
       },
       {
@@ -631,7 +654,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.phoneSimsTransfers",
         href: "/admin/fleet/phone-sims/transfers",
         icon: ArrowLeftRight,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "phone_sims.read",
       },
       {
@@ -639,7 +661,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.phoneSimsArchived",
         href: "/admin/fleet/phone-sims/archived",
         icon: Archive,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "phone_sims.read",
       },
     ],
@@ -648,7 +669,7 @@ export const navigation: NavItem[] = [
     label: "الصيانة والمخزون والورش",
     labelKey: "nav.maintenanceGroup",
     icon: Wrench,
-    roles: ["admin", "manager", "member", "accountant"],
+    permission: "maintenance.locations.read",
     permissionsAny: [
       "maintenance.locations.read",
       "maintenance.work_orders.read",
@@ -670,7 +691,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceInventoryDashboard",
         href: "/admin/maintenance/dashboard",
         icon: LayoutDashboard,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "reports.read",
       },
       {
@@ -678,7 +698,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceWorkOrders",
         href: "/admin/maintenance/work-orders/orders",
         icon: Wrench,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "maintenance.work_orders.read",
       },
       {
@@ -686,7 +705,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceOilReminders",
         href: "/admin/maintenance/work-orders/reminders",
         icon: Droplets,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "maintenance.oil.read",
       },
       {
@@ -694,7 +712,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceRiyadhWorkshop",
         href: "/admin/maintenance/workshops/orders",
         icon: BadgeDollarSign,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "maintenance.external_jobs.read",
       },
       {
@@ -702,7 +719,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceRiyadhProfit",
         href: "/admin/maintenance/workshops/profit",
         icon: BarChart3,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "maintenance.profit_reports.read",
       },
       {
@@ -710,7 +726,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceReceipts",
         href: "/admin/maintenance/inventory/receipts",
         icon: FileSpreadsheet,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "inventory.receipts.read",
           "inventory.stock.read",
@@ -721,7 +736,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceBalances",
         href: "/admin/maintenance/inventory/balances",
         icon: Layers,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "inventory.stock.read",
       },
       {
@@ -729,7 +743,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceBarrels",
         href: "/admin/maintenance/inventory/barrels",
         icon: Droplets,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "maintenance.oil.read",
           "inventory.stock.read",
@@ -740,7 +753,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceTransfers",
         href: "/admin/maintenance/inventory/transfers",
         icon: ArrowLeftRight,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "inventory.returns.read",
           "inventory.receipts.read",
@@ -752,7 +764,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceSupplyRequests",
         href: "/admin/maintenance/inventory/supply-requests",
         icon: PackageCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "inventory.supply_requests.read",
           "inventory.supply_requests.approve",
@@ -764,7 +775,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceRequestRiderItems",
         href: "/admin/maintenance/inventory/request-rider-items",
         icon: ShoppingBag,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "inventory.supply_requests.submit",
       },
       {
@@ -772,7 +782,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceItemsCatalog",
         href: "/admin/maintenance/setup/items",
         icon: Package,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "inventory.items.read",
       },
       {
@@ -780,7 +789,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceLocations",
         href: "/admin/maintenance/setup/locations",
         icon: Building2,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "maintenance.locations.read",
       },
       {
@@ -788,7 +796,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenanceSuppliers",
         href: "/admin/maintenance/setup/suppliers",
         icon: Users,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "maintenance.locations.read",
       },
       {
@@ -796,7 +803,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.maintenancePlans",
         href: "/admin/maintenance/setup/plans",
         icon: CalendarCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: [
           "maintenance.locations.read",
           "inventory.items.read",
@@ -808,14 +814,13 @@ export const navigation: NavItem[] = [
     label: "إدارة النظام",
     labelKey: "nav.systemManagement",
     icon: ShieldCheck,
-    roles: ["admin", "manager", "member", "accountant"],
+    permission: "users.read",
     children: [
       {
         label: "المستخدمون",
         labelKey: "nav.users",
         href: "/admin/users",
         icon: Users,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "users.read",
       },
       {
@@ -823,7 +828,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.rolesAndPermissions",
         href: "/admin/users/roles",
         icon: ShieldCheck,
-        roles: ["admin", "manager", "member", "accountant"],
         permissionsAny: ["roles.read", "permissions.read"],
       },
       {
@@ -831,7 +835,6 @@ export const navigation: NavItem[] = [
         labelKey: "nav.auditLogs",
         href: "/admin/audit",
         icon: History,
-        roles: ["admin", "manager", "member", "accountant"],
         permission: "audit.read",
       },
     ],
@@ -841,6 +844,5 @@ export const navigation: NavItem[] = [
     labelKey: "nav.profile",
     href: "/admin/profile",
     icon: CircleUserRound,
-    roles: ["admin", "manager", "member", "accountant"],
   },
 ];

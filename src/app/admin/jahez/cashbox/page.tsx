@@ -408,7 +408,15 @@ export default function JahezCashboxPage() {
       setIsSubmitHandoverOpen(false);
       loadAllData(page);
     } catch (err: unknown) {
-      toast.error("فشل التسليم", err instanceof Error ? err.message : "تعذر تسليم الأموال للمحاسب");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("treasury_upgrade_required")) {
+        toast.error(
+          "تم تفعيل خزائن جاهز V3",
+          "تمت ترقية المنظومة؛ يرجى استخدام شاشة تسليم العهدة V3 الجديدة لإتمام التسليم.",
+        );
+      } else {
+        toast.error("فشل التسليم", msg || "تعذر تسليم الأموال للمحاسب");
+      }
     } finally {
       setHandoverSubmitting(false);
     }
@@ -439,7 +447,15 @@ export default function JahezCashboxPage() {
       setIsConfirmHandoverOpen(false);
       loadAllData(page);
     } catch (err: unknown) {
-      toast.error("فشل الاعتماد", err instanceof Error ? err.message : "تعذر اعتماد تسليم الأموال");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("treasury_upgrade_required")) {
+        toast.error(
+          "تم تفعيل خزائن جاهز V3",
+          "تمت ترقية المنظومة؛ يرجى استخدام شاشة تسليم العهدة V3 الجديدة لاعتماد المحضر.",
+        );
+      } else {
+        toast.error("فشل الاعتماد", msg || "تعذر اعتماد تسليم الأموال");
+      }
     } finally {
       setConfirmSubmitting(false);
     }
@@ -510,7 +526,7 @@ export default function JahezCashboxPage() {
 
   const submitFeeReceipt = async () => {
     if (!feeHandoverId.trim()) {
-      toast.warning("تنبيه", "يرجى إدخال معرف فترة التسليم (Handover ID)");
+      toast.warning("تنبيه", "يرجى إدخال رقم محضر فترة التسليم");
       return;
     }
     setFeeSubmitting(true);
@@ -661,8 +677,40 @@ export default function JahezCashboxPage() {
 
           <Button variant="secondary" size="sm" onClick={handleExportMovements} className="gap-2">
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            تصدير الحركات (Excel)
+            تصدير الحركات إلى Excel
           </Button>
+
+          <Link href="/admin/jahez/treasury/balances">
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white font-bold gap-2">
+              <BadgeDollarSign className="h-4 w-4" />
+              <span>خزائن جاهز V3</span>
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* V3 Upgrade Notice Banner */}
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs">
+        <div className="space-y-1">
+          <div className="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 text-sm">
+            <span>منظومة خزائن جاهز V3 الجديدة مفعلة</span>
+          </div>
+          <p className="text-muted-foreground leading-relaxed">
+            البطاقات أدناه تمثل <strong>حركات النشاط التي لم تعتمد بمحضر تسليم بعد</strong>. للاطلاع على
+            الأرصدة الفعلية للأصول، شجرة الحسابات، تسليم العهدة المعتمد، ومطابقة بترو آب، يرجى الانتقال إلى شاشات الخزائن الجديدة.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Link href="/admin/jahez/treasury/handovers">
+            <Button size="sm" variant="secondary" className="text-xs font-semibold gap-1.5">
+              <span>تسليم العهدة V3</span>
+            </Button>
+          </Link>
+          <Link href="/admin/jahez/treasury/balances">
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold gap-1.5">
+              <span>الأرصدة الفعلية V3</span>
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -673,9 +721,9 @@ export default function JahezCashboxPage() {
           <div className="flex items-center justify-between">
             <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
               <BadgeDollarSign className="h-5 w-5 text-emerald-600" />
-              الخزنة النقدية 
+              حركات الخزنة غير المسلّمة
             </span>
-            <Badge tone="green">أرصدة معلقة</Badge>
+            <Badge tone="green">نشاط غير معتمد</Badge>
           </div>
           <div className="mt-3 flex items-baseline justify-between">
             <div>
@@ -1587,7 +1635,7 @@ export default function JahezCashboxPage() {
 
           <div>
             <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              تاريخ يوم العمل المحاسبي (Riyadh Business Date) *
+              تاريخ يوم العمل المحاسبي *
             </label>
             <Input
               type="date"
@@ -1651,7 +1699,7 @@ export default function JahezCashboxPage() {
 
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-xl border p-2.5 bg-gray-50 dark:bg-gray-800">
-                <span className="text-[10px] text-gray-500 font-bold block mb-1">الخزنة (Cashbox)</span>
+                <span className="text-[10px] text-gray-500 font-bold block mb-1">صندوق الخزنة</span>
                 <Input
                   type="number"
                   step="any"
@@ -1661,7 +1709,7 @@ export default function JahezCashboxPage() {
                 />
               </div>
               <div className="rounded-xl border p-2.5 bg-gray-50 dark:bg-gray-800">
-                <span className="text-[10px] text-gray-500 font-bold block mb-1">بترو آب (PetroApp)</span>
+                <span className="text-[10px] text-gray-500 font-bold block mb-1">محفظة بترو آب</span>
                 <Input
                   type="number"
                   step="any"
@@ -1671,7 +1719,7 @@ export default function JahezCashboxPage() {
                 />
               </div>
               <div className="rounded-xl border p-2.5 bg-gray-50 dark:bg-gray-800">
-                <span className="text-[10px] text-gray-500 font-bold block mb-1">البنك (Bank)</span>
+                <span className="text-[10px] text-gray-500 font-bold block mb-1">الحساب البنكي</span>
                 <Input
                   type="number"
                   step="any"
@@ -1818,7 +1866,7 @@ export default function JahezCashboxPage() {
               onChange={(e) => setRepayFund(Number(e.target.value) as Fund)}
               className="w-full rounded-xl border border-gray-300 bg-white p-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800"
             >
-              <option value={Fund.Cashbox}>الخزنة (Cashbox)</option>
+              <option value={Fund.Cashbox}>صندوق الخزنة</option>
             </select>
           </div>
 
@@ -2121,7 +2169,7 @@ export default function JahezCashboxPage() {
               onChange={(e) => setFeeFund(Number(e.target.value) as Fund)}
               className="w-full rounded-xl border border-gray-300 bg-white p-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800"
             >
-              <option value={Fund.Cashbox}>الخزنة (Cashbox)</option>
+              <option value={Fund.Cashbox}>صندوق الخزنة</option>
             </select>
           </div>
 
