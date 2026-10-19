@@ -1,0 +1,7 @@
+
+> future-gateway-logistics@0.1.0 build:next
+> next build --webpack
+
+▲ Next.js 16.3.5 (webpack)
+- Environments: .env.local
+✓ Running next.config.mjs took 57ms

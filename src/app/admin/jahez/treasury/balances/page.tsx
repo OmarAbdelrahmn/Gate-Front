@@ -14,7 +14,6 @@ import {
   type TreasuryFilter,
   TreasuryLocation,
   TreasuryPurpose,
-  TreasuryEntryKind,
 } from "@/lib/jahez/treasury/api";
 import {
   formatSAR,
@@ -22,7 +21,6 @@ import {
   getRiyadhFirstDayOfMonth,
   formatRiyadhDateTime,
   displayPersonName,
-  getTreasuryLocationLabel,
   getTreasuryEntryKindLabel,
   getSponsorDisplayName,
 } from "@/lib/jahez/treasury/utils";
@@ -32,29 +30,11 @@ import { listSponsors, type Sponsor } from "@/lib/workforce/api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/jahez/treasury/TreasuryModal";
 import { toast } from "@/components/ui/Toast";
 import {
-  BadgeDollarSign,
-  Building2,
-  Wallet,
-  Landmark,
-  CreditCard,
-  Fuel,
-  ArrowDownLeft,
-  ArrowUpRight,
-  RefreshCw,
-  Search,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  AlertCircle,
-  FileText,
-  Clock,
-  Layers,
-  CheckCircle2,
+  Building2, Wallet, Landmark, Fuel, ArrowDownLeft, ArrowUpRight,
+  RefreshCw, Search, ChevronLeft, ChevronRight, Eye, AlertCircle, FileText,
 } from "lucide-react";
 
 export default function TreasuryBalancesPage() {
@@ -75,6 +55,7 @@ export default function TreasuryBalancesPage() {
   const [journalRows, setJournalRows] = useState<TreasuryJournalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [journalLoading, setJournalLoading] = useState(false);
+  const [journalError, setJournalError] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Journal Filters
@@ -102,11 +83,11 @@ export default function TreasuryBalancesPage() {
       const [balancesRes, accountsRes, sponsorsRes] = await Promise.all([
         getTreasuryBalances().catch((err) => {
           console.error("Failed to fetch balances", err);
-          throw new Error("تعذر جلب الأرصدة الفعلية للخزائن. تأكد من تفعيل V3 وصلاحياتك.");
+          throw new Error("تعذر تحميل الأرصدة. تحقق من الاتصال وصلاحية عرض الخزينة.");
         }),
         getTreasuryAccounts().catch((err) => {
           console.error("Failed to fetch accounts", err);
-          return [] as TreasuryAccount[];
+          throw new Error("تعذر تحميل حسابات الخزينة. أعد المحاولة لعرض الأرصدة بشكل صحيح.");
         }),
         listSponsors().catch(() => [] as Sponsor[]),
       ]);
@@ -136,6 +117,7 @@ export default function TreasuryBalancesPage() {
   const loadJournal = useCallback(async () => {
     if (!canReadTreasury) return;
     setJournalLoading(true);
+    setJournalError(null);
     try {
       const filter: TreasuryFilter = {
         fromDate: fromDate || firstOfMonth,
@@ -150,7 +132,7 @@ export default function TreasuryBalancesPage() {
       const res = await getTreasuryJournal(filter);
       setJournalRows(res?.items || []);
     } catch (err: any) {
-      toast.error(err.message || "تعذر جلب قيود دفتر الخزينة");
+      setJournalError(err.message || "تعذر تحميل حركة الأموال. حاول مرة أخرى.");
       setJournalRows([]);
     } finally {
       setJournalLoading(false);
@@ -211,7 +193,7 @@ export default function TreasuryBalancesPage() {
       }
 
       const g = groups.get(spId)!;
-      g.totalActual += b.balance;
+      if (b.location !== TreasuryLocation.PetroApp) g.totalActual += b.balance;
       g.postingCount++;
 
       // Distinguish locations and purposes
@@ -237,7 +219,7 @@ export default function TreasuryBalancesPage() {
   // Grand Total of All Posting Accounts
   const grandTotalActual = useMemo(() => {
     return balances
-      .filter((b) => b.isPosting)
+      .filter((b) => b.isPosting && b.location !== TreasuryLocation.PetroApp)
       .reduce((acc, curr) => acc + curr.balance, 0);
   }, [balances]);
 
@@ -261,8 +243,8 @@ export default function TreasuryBalancesPage() {
   return (
     <div className="space-y-6">
       <TreasuryNavHeader
-        title="الأرصدة الفعلية ودفتر الخزائن"
-        description="عرض الأرصدة الحقيقية المفصولة حسب الكفيل والغرض، مع تتبع كامل لقيود اليومية."
+        title="الأرصدة وحركة الأموال"
+        description="تابع أموال كل شركة، وما لدى المشرف، وما تم تسليمه للمحاسب."
         onRefresh={() => {
           loadCoreData();
           loadJournal();
@@ -284,78 +266,53 @@ export default function TreasuryBalancesPage() {
         </div>
       )}
 
-      {/* Clean KPI Summary Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-border bg-card p-3.5 space-y-1">
-          <span className="text-xs font-medium text-muted-foreground block">إجمالي رصيد الخزائن</span>
-          <div className="text-xl font-bold tracking-tight text-foreground font-mono">
-            {formatSAR(grandTotalActual)}
+      <section className="treasury-summary" aria-label="ملخص الأرصدة" aria-busy={loading}>
+        <div className="treasury-summary-top">
+          <div>
+            <p className="treasury-total-label">إجمالي النقدية والبنك المسجل</p>
+            <p className="treasury-total">{loading ? "جارٍ التحميل…" : fetchError ? "غير متاح" : formatSAR(grandTotalActual)}</p>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            {balances.filter((b) => b.isPosting).length} حساب فرعي نشط
-          </p>
+          <p className="treasury-summary-note">رصيد مسجل، وقد يشمل مبالغ بانتظار التسليم. تحصيلات بترو آب تظهر منفصلة أدناه، ولا تدخل في هذا الإجمالي.</p>
         </div>
-
-        <div className="rounded-xl border border-border bg-card p-3.5 space-y-1">
-          <span className="text-xs font-medium text-muted-foreground block">عهدة التصفيات (المشرف)</span>
-          <div className="text-xl font-bold tracking-tight text-foreground font-mono">
-            {formatSAR(
-              sponsorCardGroups.reduce((acc, curr) => acc + curr.settlementCustody, 0),
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">مخصصة لصرف تصفيات المناديب</p>
+        <div className="treasury-metrics">
+          {[
+            { label: "تصفيات لدى المشرف", icon: Wallet, amount: sponsorCardGroups.reduce((sum, g) => sum + g.settlementCustody, 0), help: "رصيد التصفيات لكل شركة" },
+            { label: "رسوم لدى المشرف", icon: FileText, amount: sponsorCardGroups.reduce((sum, g) => sum + g.feeCustody, 0), help: "رسوم محصلة بانتظار التسليم" },
+            { label: "الخزينة الرئيسية", icon: Building2, amount: sponsorCardGroups.reduce((sum, g) => sum + g.centralBalance, 0), help: "المبالغ المسجلة لدى المحاسب" },
+            { label: "الحسابات البنكية", icon: Landmark, amount: sponsorCardGroups.reduce((sum, g) => sum + g.bankBalance, 0), help: "الرصيد البنكي المسجل لكل شركة" },
+          ].map(metric => <div className="treasury-metric" key={metric.label}>
+            <span className="treasury-metric-label"><metric.icon size={17} aria-hidden="true" />{metric.label}</span>
+            <strong>{loading ? "…" : fetchError ? "غير متاح" : formatSAR(metric.amount)}</strong>
+            <p>{metric.help}</p>
+          </div>)}
         </div>
-
-        <div className="rounded-xl border border-border bg-card p-3.5 space-y-1">
-          <span className="text-xs font-medium text-muted-foreground block">عهدة الرسوم المحصلة</span>
-          <div className="text-xl font-bold tracking-tight text-foreground font-mono">
-            {formatSAR(
-              sponsorCardGroups.reduce((acc, curr) => acc + curr.feeCustody, 0),
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">أمانة حتى تسليمها للمحاسب</p>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-3.5 space-y-1">
-          <span className="text-xs font-medium text-muted-foreground block">بترو آب والبنك</span>
-          <div className="text-xl font-bold tracking-tight text-foreground font-mono">
-            {formatSAR(
-              sponsorCardGroups.reduce(
-                (acc, curr) => acc + curr.bankBalance + curr.petroAppClearing,
-                0,
-              ),
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">أرصدة الوقود والمقاصة الإلكترونية</p>
-        </div>
-      </div>
-
-
+      </section>
 
       {/* Sponsor-by-Sponsor Balances Table */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20">
-          <h2 className="text-xs font-bold text-foreground">الأرصدة الفعلية حسب الكفيل المالي</h2>
-          <span className="text-[11px] text-muted-foreground font-mono">
-            {sponsorCardGroups.length} كفيل
+        <div className="treasury-section-heading border-b border-border">
+          <div><h2>رصيد كل شركة</h2><p>أموال كل شركة مستقلة عن الشركات الأخرى.</p></div>
+          <span className="treasury-count">
+            {sponsorCardGroups.length} شركات
           </span>
         </div>
 
         {sponsorCardGroups.length === 0 && !loading ? (
           <div className="p-8 text-center text-xs text-muted-foreground">
-            لا توجد أرصدة مسجلة حالياً.
+            لا توجد حسابات لعرض أرصدتها حالياً.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
               <thead className="bg-muted/40 text-muted-foreground font-medium border-b border-border">
                 <tr>
-                  <th className="py-2.5 px-3.5">الكفيل المالي</th>
-                  <th className="py-2.5 px-3 text-left">عهدة تصفيات</th>
-                  <th className="py-2.5 px-3 text-left">عهدة رسوم</th>
-                  <th className="py-2.5 px-3 text-left">صندوق المركز</th>
-                  <th className="py-2.5 px-3 text-left">بترو آب والبنك</th>
-                  <th className="py-2.5 px-3.5 text-left font-bold text-foreground">الرصيد الفعلي</th>
+                  <th className="py-2.5 px-3.5">الشركة (كفيل الحساب)</th>
+                  <th className="py-2.5 px-3 text-left">تصفيات المشرف</th>
+                  <th className="py-2.5 px-3 text-left">رسوم المشرف</th>
+                  <th className="py-2.5 px-3 text-left">الخزينة الرئيسية</th>
+                  <th className="py-2.5 px-3 text-left">البنك</th>
+                  <th className="py-2.5 px-3 text-left">تحصيلات بترو آب</th>
+                  <th className="py-2.5 px-3.5 text-left font-bold text-foreground">النقدية والبنك</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -364,7 +321,7 @@ export default function TreasuryBalancesPage() {
                     <td className="py-2.5 px-3.5 font-medium text-foreground">
                       {group.sponsorName}
                       <span className="text-[10px] text-muted-foreground block font-normal">
-                        {group.postingCount} حسابات ترحيل
+                        {group.postingCount} حسابات
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-left font-mono">
@@ -377,7 +334,10 @@ export default function TreasuryBalancesPage() {
                       {formatSAR(group.centralBalance)}
                     </td>
                     <td className="py-2.5 px-3 text-left font-mono">
-                      {formatSAR(group.bankBalance + group.petroAppClearing)}
+                      {formatSAR(group.bankBalance)}
+                    </td>
+                    <td className="py-2.5 px-3 text-left font-mono">
+                      {formatSAR(group.petroAppClearing)}
                     </td>
                     <td className="py-2.5 px-3.5 text-left font-mono font-bold text-foreground">
                       {formatSAR(group.totalActual)}
@@ -390,16 +350,19 @@ export default function TreasuryBalancesPage() {
         )}
       </div>
 
+      <div className="treasury-info"><Fuel size={18} aria-hidden="true" /><p>تحصيلات بترو آب هي المبالغ المسجلة من المناديب، وليست رصيد محفظة الوقود. راجع صفحة بترو آب لمعرفة الشحن وكشف الرصيد.</p></div>
+      {legacyFunds.length > 0 && <details className="treasury-legacy"><summary>حركات بانتظار التسليم — النظام السابق</summary><p>هذه مبالغ الحركات غير المسلّمة في النظام السابق، وليست رصيد الخزينة الحالي.</p><div className="flex flex-wrap gap-4 mt-3">{legacyFunds.map((fund, index) => <span key={index}>{fund.fund === 1 ? "نقدية" : fund.fund === 2 ? "بترو آب" : "بنك"}: {formatSAR(fund.balance)}</span>)}</div></details>}
+
       {/* Treasury Journal Section */}
       <div className="space-y-4 pt-6 border-t border-border/80">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="treasury-journal-heading">
           <div>
             <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
-              <span>دفتر حركات وقيود الخزينة</span>
+              <span>حركة الأموال</span>
             </h2>
             <p className="text-xs text-muted-foreground">
-              سجل تدقيق مالي دائم وموثق لجميع القيود والتحويلات والتسويات.
+              راجع المقبوضات والمصروفات والتحويلات خلال الفترة التي تختارها.
             </p>
           </div>
 
@@ -412,89 +375,26 @@ export default function TreasuryBalancesPage() {
               className="gap-2"
             >
               <RefreshCw className={`h-4 w-4 ${journalLoading ? "animate-spin" : ""}`} />
-              <span>تحديث القيود</span>
+              <span>تحديث الحركات</span>
             </Button>
           </div>
         </div>
 
-        {/* Filters Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm text-xs">
-          <div>
-            <label className="block font-medium text-muted-foreground mb-1">من تاريخ</label>
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="h-9 text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium text-muted-foreground mb-1">إلى تاريخ</label>
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="h-9 text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium text-muted-foreground mb-1">الكفيل</label>
-            <SearchableSelect
-              value={selectedSponsorId}
-              onChange={setSelectedSponsorId}
-              options={[
-                { value: "", label: "جميع الكفلاء" },
-                ...sponsors.map((s) => ({
-                  value: s.id,
-                  label: getSponsorDisplayName(s),
-                })),
-              ]}
-              placeholder="تصفية حسب الكفيل"
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium text-muted-foreground mb-1">الحساب الفرعي</label>
-            <SearchableSelect
-              value={selectedAccountId}
-              onChange={setSelectedAccountId}
-              options={[
-                { value: "", label: "جميع الحسابات" },
-                ...accounts
-                  .filter((a) => a.isPosting)
-                  .map((a) => ({
-                    value: a.id,
-                    label: `${a.code} - ${a.nameAr}`,
-                  })),
-              ]}
-              placeholder="تصفية حسب الحساب"
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium text-muted-foreground mb-1">غرض الحساب</label>
-            <SearchableSelect
-              value={selectedPurpose}
-              onChange={setSelectedPurpose}
-              options={[
-                { value: "", label: "جميع الأغراض" },
-                { value: "1", label: "تصفيات" },
-                { value: "2", label: "رسوم الحساب" },
-                { value: "3", label: "مشترك / عام" },
-              ]}
-              placeholder="الغرض المالي"
-            />
-          </div>
+        <div className="treasury-filters">
+          <div><label htmlFor="treasury-from">من تاريخ</label><Input id="treasury-from" type="date" value={fromDate} max={toDate || undefined} onChange={e => { setFromDate(e.target.value); setPage(1); }} /></div>
+          <div><label htmlFor="treasury-to">إلى تاريخ</label><Input id="treasury-to" type="date" value={toDate} min={fromDate || undefined} onChange={e => { setToDate(e.target.value); setPage(1); }} /></div>
+          <div><label htmlFor="treasury-sponsor">الشركة (كفيل الحساب)</label><select id="treasury-sponsor" value={selectedSponsorId} onChange={e => { setSelectedSponsorId(e.target.value); setPage(1); }}><option value="">جميع الشركات</option>{sponsors.map(sponsor => <option key={sponsor.id} value={sponsor.id}>{getSponsorDisplayName(sponsor)}</option>)}</select></div>
+          <div><label htmlFor="treasury-account">الحساب</label><select id="treasury-account" value={selectedAccountId} onChange={e => { setSelectedAccountId(e.target.value); setPage(1); }}><option value="">جميع الحسابات</option>{accounts.filter(account => account.isPosting).map(account => <option key={account.id} value={account.id}>{account.nameAr}</option>)}</select></div>
+          <div><label htmlFor="treasury-purpose">نوع المبلغ</label><select id="treasury-purpose" value={selectedPurpose} onChange={e => { setSelectedPurpose(e.target.value); setPage(1); }}><option value="">جميع الأنواع</option><option value="1">تصفيات</option><option value="2">رسوم الحساب</option><option value="3">رسوم وتصفيات</option></select></div>
         </div>
 
         {/* Table Search */}
-        <div className="flex items-center justify-between gap-3">
+        <div className="treasury-table-toolbar">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="بحث بالمرجع، السبب، اسم المندوب، المنفذ..."
+              aria-label="بحث في حركات الصفحة الحالية"
+              placeholder="بحث في هذه الصفحة بالاسم أو المرجع…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pr-9 h-9 text-xs"
@@ -526,6 +426,7 @@ export default function TreasuryBalancesPage() {
           </div>
         </div>
 
+        {journalError && <div className="treasury-info" role="alert"><AlertCircle size={18} /><p>{journalError}</p><Button variant="secondary" size="sm" onClick={loadJournal}>إعادة المحاولة</Button></div>}
         {/* Journal Rows Table */}
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -535,7 +436,7 @@ export default function TreasuryBalancesPage() {
                   <th className="py-3 px-3">التاريخ والوقت (الرياض)</th>
                   <th className="py-3 px-3">الحساب</th>
                   <th className="py-3 px-3">الكفيل</th>
-                  <th className="py-3 px-3">نوع القيد</th>
+                  <th className="py-3 px-3">نوع الحركة</th>
                   <th className="py-3 px-3">الاتجاه</th>
                   <th className="py-3 px-3">المبلغ</th>
                   <th className="py-3 px-3">المرجع</th>
@@ -551,16 +452,16 @@ export default function TreasuryBalancesPage() {
                     <td colSpan={11} className="py-12 text-center text-muted-foreground">
                       <div className="flex items-center justify-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-                        <span>جاري تحميل حركات الدفتر...</span>
+                        <span>جارٍ تحميل الحركات…</span>
                       </div>
                     </td>
                   </tr>
                 )}
 
-                {!journalLoading && filteredJournalRows.length === 0 && (
+                {!journalLoading && !journalError && filteredJournalRows.length === 0 && (
                   <tr>
                     <td colSpan={11} className="py-12 text-center text-muted-foreground">
-                      لا توجد قيود تطابق معايير التصفية المحددة.
+                      <div className="treasury-empty"><FileText size={28} aria-hidden="true" /><strong>لا توجد حركات لعرضها</strong><p>ستظهر المقبوضات والمصروفات هنا بعد تسجيلها. يمكنك تغيير الفترة أو خيارات البحث.</p></div>
                     </td>
                   </tr>
                 )}
@@ -638,7 +539,8 @@ export default function TreasuryBalancesPage() {
                               setSelectedRow(row);
                               setIsDetailModalOpen(true);
                             }}
-                            title="عرض تفاصيل القيد"
+                            title="عرض تفاصيل الحركة"
+                            aria-label="عرض تفاصيل الحركة"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -657,7 +559,7 @@ export default function TreasuryBalancesPage() {
         <Modal
           isOpen={isDetailModalOpen}
           onClose={() => setIsDetailModalOpen(false)}
-          title="تفاصيل قيد الخزينة"
+          title="تفاصيل الحركة"
         >
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3 border-b border-border pb-3">
@@ -668,7 +570,7 @@ export default function TreasuryBalancesPage() {
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground block">الكفيل المثبت:</span>
+                <span className="text-muted-foreground block">الشركة صاحبة المبلغ:</span>
                 <span className="font-bold text-foreground">
                   {selectedRow.sponsorNameAr || "—"}
                 </span>
@@ -686,7 +588,7 @@ export default function TreasuryBalancesPage() {
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground block">نوع القيد:</span>
+                <span className="text-muted-foreground block">نوع الحركة:</span>
                 <span>{getTreasuryEntryKindLabel(selectedRow.posting.kind)}</span>
               </div>
               <div>

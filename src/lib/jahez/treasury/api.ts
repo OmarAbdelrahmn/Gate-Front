@@ -364,7 +364,12 @@ export async function exportTreasuryReport(
   params.append("format", format);
   if (handoverId) params.append("handoverId", handoverId);
 
-  return authDownload(`${ROOT}/reports/${encodeURIComponent(type)}/export?${params.toString()}`);
+  const download = await authDownload(`${ROOT}/reports/${encodeURIComponent(type)}/export?${params.toString()}`);
+  // Content-Disposition may be hidden by CORS. Keep the downloaded file usable.
+  const fileName = download.fileName?.toLowerCase().endsWith(`.${format}`)
+    ? download.fileName
+    : `jahez-${type}-${filter.fromDate}-${filter.toDate}.${format}`;
+  return { ...download, fileName };
 }
 
 // ----------------------------------------------------------------------

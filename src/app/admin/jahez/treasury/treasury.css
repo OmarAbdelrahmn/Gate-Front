@@ -1,0 +1,96 @@
+/* Scoped to treasury: reuse the ERP palette in both themes. */
+.treasury-workspace { --treasury-accent-soft: color-mix(in srgb, var(--brand) 9%, var(--surface)); color: var(--foreground); font-size: 14px; line-height: 1.7; min-width: 0; }
+.treasury-workspace .bg-card { background: var(--surface); }
+.treasury-workspace .text-foreground { color: var(--foreground); }
+.treasury-workspace .text-muted-foreground { color: var(--muted); }
+.treasury-workspace .text-primary { color: var(--brand); }
+.treasury-workspace [class*="border-border"] { border-color: var(--border); }
+.treasury-workspace [class*="divide-border"] > :not(:last-child) { border-color: var(--border); }
+.treasury-workspace :is(.bg-muted, [class~="bg-muted/20"], [class~="bg-muted/40"], [class~="bg-muted/50"], [class~="bg-muted/60"]) { background-color: var(--subtle-bg); }
+.treasury-workspace [class*="hover:bg-muted"]:hover { background-color: var(--subtle-hover); }
+.treasury-workspace [class*="text-xs"] { font-size: .8125rem; }
+.treasury-workspace [class*="text-[10px]"], .treasury-workspace [class*="text-[11px]"] { font-size: .75rem; }
+.treasury-workspace .font-mono { font-family: inherit; font-variant-numeric: tabular-nums; }
+.treasury-workspace td.font-mono { white-space: nowrap; }
+.treasury-workspace button { min-height: 40px; }
+.treasury-workspace :is(button, a, input, select, summary):focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
+.treasury-workspace input { min-height: 44px; }
+.treasury-workspace table { font-size: .8125rem; }
+.treasury-workspace th { background: var(--subtle-bg); color: var(--muted); font-weight: 600; white-space: nowrap; }
+.treasury-workspace :is(th, td) { padding-block: 14px; padding-inline: 16px; }
+.treasury-header { margin-block-end: 28px; }
+.treasury-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-block-end: 24px; }
+.treasury-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.treasury-brand-icon { display: grid; place-items: center; flex-shrink: 0; width: 54px; height: 54px; border-radius: 16px; background: var(--treasury-accent-soft); color: var(--brand); }
+.treasury-eyebrow { font-size: 12px; color: var(--muted); margin-block-end: 2px; }
+.treasury-eyebrow span { margin-inline: 8px; opacity: .6; }
+.treasury-heading h1 { font-size: clamp(21px, 2vw, 27px); line-height: 1.5; font-weight: 750; }
+.treasury-description { color: var(--muted); font-size: 13px; margin-block-start: 4px; max-width: 70ch; }
+.treasury-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+.treasury-navigation { display: flex; gap: 4px; overflow-x: auto; padding: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 15px; }
+.treasury-navigation a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border-radius: 10px; white-space: nowrap; font-size: 13px; color: var(--muted); min-height: 44px; flex: 1 0 auto; transition: background-color .15s; }
+.treasury-navigation a:hover { background: var(--subtle-hover); color: var(--foreground); }
+.treasury-navigation a[aria-current="page"] { background: var(--treasury-accent-soft); color: var(--brand); font-weight: 700; box-shadow: inset 0 -2px var(--brand); }
+.treasury-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+.treasury-summary-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding: 24px; border-block-end: 1px solid var(--border); }
+.treasury-total-label { color: var(--muted); font-size: 13px; }
+.treasury-total { font-size: clamp(26px, 3vw, 36px); font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.5; }
+.treasury-summary-note { max-width: 38ch; color: var(--muted); font-size: 12px; }
+.treasury-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.treasury-metric { padding: 22px; border-inline-end: 1px solid var(--border); }
+.treasury-metric:last-child { border-inline-end: 0; }
+.treasury-metric-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.treasury-metric-label svg { color: var(--brand); }
+.treasury-metric strong { display: block; font-size: clamp(19px, 2vw, 25px); font-variant-numeric: tabular-nums; margin-block: 8px 4px; }
+.treasury-metric p { color: var(--muted); font-size: 12px; }
+.treasury-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px; }
+.treasury-section-heading h2, .treasury-journal-heading h2 { font-size: 17px; font-weight: 700; }
+.treasury-section-heading p, .treasury-journal-heading p { font-size: 13px; color: var(--muted); margin-block-start: 3px; }
+.treasury-count { font-size: 12px; color: var(--brand); background: var(--treasury-accent-soft); border-radius: 8px; padding: 4px 10px; white-space: nowrap; }
+.treasury-info { display: flex; align-items: flex-start; gap: 10px; padding: 14px 18px; border-radius: 12px; background: var(--treasury-accent-soft); color: var(--foreground); font-size: 13px; }
+.treasury-info svg { color: var(--brand); flex-shrink: 0; margin-block-start: 3px; }
+.treasury-journal-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.treasury-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.treasury-filters label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-block-end: 7px; }
+.treasury-filters select { min-height: 44px; width: 100%; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--foreground); padding-inline: 10px; }
+.treasury-table-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.treasury-empty { padding: 42px 20px; text-align: center; color: var(--muted); }
+.treasury-empty svg { margin-inline: auto; margin-block-end: 12px; color: var(--brand); }
+.treasury-empty strong { display: block; color: var(--foreground); font-size: 15px; margin-block-end: 4px; }
+.treasury-legacy { border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; color: var(--muted); font-size: 13px; background: var(--surface); }
+.treasury-legacy summary { cursor: pointer; color: var(--foreground); font-weight: 600; }
+.treasury-legacy p { margin-block-start: 10px; }
+.treasury-handover-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.treasury-handover-steps li { display: flex; gap: 12px; align-items: flex-start; }
+.treasury-handover-steps li > span { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: var(--treasury-accent-soft); color: var(--brand); font-weight: 700; }
+.treasury-handover-steps strong { font-size: 14px; }
+.treasury-handover-steps p { font-size: 12px; color: var(--muted); }
+.treasury-dialog { margin: auto; width: calc(100% - 32px); max-height: 90dvh; overflow-y: auto; border: 1px solid var(--border); border-radius: 18px; padding: 24px; background: var(--surface); color: var(--foreground); box-shadow: 0 24px 64px #0003; }
+.treasury-dialog::backdrop { background: #0d172880; }
+@media (max-width: 1100px) {
+  .treasury-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .treasury-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .treasury-metric:nth-child(2) { border-inline-end: 0; }
+  .treasury-metric:nth-child(-n+2) { border-block-end: 1px solid var(--border); }
+}
+@media (max-width: 640px) {
+  .treasury-handover-steps { grid-template-columns: 1fr; padding: 16px; }
+  .treasury-heading-row { align-items: flex-start; flex-direction: column; gap: 14px; margin-block-end: 18px; }
+  .treasury-heading { align-items: flex-start; gap: 10px; }
+  .treasury-brand-icon { width: 44px; height: 44px; border-radius: 12px; }
+  .treasury-header-actions { width: 100%; }
+  .treasury-header-actions > button { flex: 1; }
+  .treasury-navigation a { padding-inline: 12px; }
+  .treasury-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px; }
+  .treasury-filters > :last-child { grid-column: 1 / -1; }
+  .treasury-summary-top { padding: 18px; }
+  .treasury-metric { padding: 16px 12px; }
+  .treasury-metric-label { font-size: 12px; gap: 5px; }
+  .treasury-metric strong { font-size: 19px; overflow-wrap: anywhere; }
+  .treasury-section-heading { padding: 16px; align-items: flex-start; }
+  .treasury-journal-heading { flex-wrap: wrap; }
+  .treasury-table-toolbar > div:first-child { min-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .treasury-workspace *, .treasury-workspace *::before, .treasury-workspace *::after { animation: none !important; transition: none !important; }
+}

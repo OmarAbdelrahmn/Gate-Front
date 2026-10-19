@@ -29,7 +29,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/jahez/treasury/TreasuryModal";
 import { toast } from "@/components/ui/Toast";
 import {
   Plus,
@@ -280,8 +280,8 @@ export default function TreasuryAccountsPage() {
   return (
     <div className="space-y-6">
       <TreasuryNavHeader
-        title="شجرة وإدارة حسابات الخزينة"
-        description="دليل شجرة الحسابات المالية مقسمة إلى حسابات رئيسية وحسابات فرعية للعمليات حسب الموقع والكفيل والغرض."
+        title="حسابات الخزينة"
+        description="أضف حسابات الشركات، ورتبها حسب مكان الأموال ونوعها."
         onRefresh={loadData}
         isRefreshing={loading}
         extraActions={
@@ -572,7 +572,7 @@ export default function TreasuryAccountsPage() {
 
             <div>
               <label className="block font-medium text-muted-foreground mb-1">
-                الكفيل المالي
+                الشركة (كفيل الحساب)
               </label>
               <SearchableSelect
                 value={createForm.sponsorId || ""}

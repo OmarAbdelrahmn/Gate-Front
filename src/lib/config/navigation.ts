@@ -294,7 +294,7 @@ export const navigation: NavItem[] = [
     ],
   },
   {
-    label: "خزائن ومحاسبة جاهز",
+    label: "خزينة جاهز",
     labelKey: "nav.jahezTreasury",
     icon: Landmark,
     permissionsAny: [
@@ -310,21 +310,21 @@ export const navigation: NavItem[] = [
     ],
     children: [
       {
-        label: "الأرصدة الفعلية والدفتر",
+        label: "الأرصدة والحركات",
         labelKey: "nav.jahezTreasuryBalances",
         href: "/admin/jahez/treasury/balances",
         icon: BadgeDollarSign,
         permissionsAny: ["jahez.treasury.read"],
       },
       {
-        label: "شجرة الحسابات",
+        label: "حسابات الخزينة",
         labelKey: "nav.jahezTreasuryAccounts",
         href: "/admin/jahez/treasury/accounts",
         icon: GitBranch,
         permissionsAny: ["jahez.treasury.read"],
       },
       {
-        label: "التمويل والتحويلات",
+        label: "تحويل وقبض وصرف",
         labelKey: "nav.jahezTreasuryTransfers",
         href: "/admin/jahez/treasury/transfers",
         icon: ArrowLeftRight,
@@ -335,7 +335,7 @@ export const navigation: NavItem[] = [
         ],
       },
       {
-        label: "تسليم العهدة ",
+        label: "تسليم النقدية",
         labelKey: "nav.jahezTreasuryHandovers",
         href: "/admin/jahez/treasury/handovers",
         icon: CalendarCheck,
@@ -346,7 +346,7 @@ export const navigation: NavItem[] = [
         ],
       },
       {
-        label: "بترو آب والمطابقة",
+        label: "بترو آب",
         labelKey: "nav.jahezTreasuryPetroApp",
         href: "/admin/jahez/treasury/petroapp",
         icon: Fuel,
@@ -356,14 +356,14 @@ export const navigation: NavItem[] = [
         ],
       },
       {
-        label: "التقارير المالية والتصدير",
+        label: "التقارير",
         labelKey: "nav.jahezTreasuryReports",
         href: "/admin/jahez/treasury/reports",
         icon: FileSpreadsheet,
         permissionsAny: ["jahez.financial-reports.read"],
       },
       {
-        label: "مراجعة الجاهزية والترحيل",
+        label: "إعداد الخزينة",
         labelKey: "nav.jahezTreasuryMigration",
         href: "/admin/jahez/treasury/migration",
         icon: ShieldAlert,

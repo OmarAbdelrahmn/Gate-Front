@@ -32,7 +32,7 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/jahez/treasury/TreasuryModal";
 import { toast } from "@/components/ui/Toast";
 import {
   CalendarCheck,
@@ -157,7 +157,7 @@ export default function TreasuryHandoversPage() {
   const handleSubmitHandover = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!submissionDate) {
-      toast.error("يرجى اختيار يوم العمل المحاسبي");
+      toast.error("يرجى اختيار يوم العمل");
       return;
     }
     if (!submissionReason.trim()) {
@@ -369,8 +369,8 @@ export default function TreasuryHandoversPage() {
   return (
     <div className="space-y-6">
       <TreasuryNavHeader
-        title="تسليم عهدة المشرف واعتماد المحاسب"
-        description="دورة حجز وتجميد عهدة المشرف، العد النقدي الفعلي المنفصل لكل حساب، والاعتماد المحاسبي الموثق."
+        title="تسليم النقدية"
+        description="جهّز طلب التسليم، ثم يراجع المحاسب المبالغ المستلمة لكل شركة ويؤكد الاستلام."
         onRefresh={loadData}
         isRefreshing={loading}
         extraActions={
@@ -381,20 +381,25 @@ export default function TreasuryHandoversPage() {
               className="gap-2 shadow-sm font-semibold"
             >
               <Plus className="h-4 w-4" />
-              <span>تقديم تسليم عهدة جديد</span>
+              <span>طلب تسليم جديد</span>
             </Button>
           )
         }
       />
 
+      <ol className="treasury-handover-steps" aria-label="خطوات تسليم النقدية">
+        <li><span>1</span><div><strong>جهّز طلب التسليم</strong><p>راجع مبالغ كل شركة والحركات المشمولة.</p></div></li>
+        <li><span>2</span><div><strong>المحاسب يعدّ النقدية</strong><p>يسجل المستلم لكل حساب، مع فصل الرسوم عن التصفيات.</p></div></li>
+        <li><span>3</span><div><strong>تأكيد الاستلام</strong><p>يتم التسليم بعد تطابق المبالغ بالكامل.</p></div></li>
+      </ol>
       {/* Handovers Table */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
             <thead className="bg-muted/60 text-muted-foreground font-semibold border-b border-border">
               <tr>
-                <th className="py-3 px-3">رقم المحضر الرسمي</th>
-                <th className="py-3 px-3">يوم العمل المحاسبي</th>
+                <th className="py-3 px-3">رقم التسليم</th>
+                <th className="py-3 px-3">يوم العمل</th>
                 <th className="py-3 px-3">المشرف المسلّم</th>
                 <th className="py-3 px-3">نقدية العهدة</th>
                 <th className="py-3 px-3">بترو آب (غير نقدي)</th>
@@ -420,7 +425,7 @@ export default function TreasuryHandoversPage() {
               {!loading && handovers.length === 0 && (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-muted-foreground">
-                    لا توجد محاضر تسليم مسجلة حالياً.
+                    لا توجد طلبات تسليم بعد. عند تجهيز طلب جديد سيظهر هنا ليراجعه المحاسب.
                   </td>
                 </tr>
               )}
@@ -507,7 +512,7 @@ export default function TreasuryHandoversPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block font-medium text-muted-foreground mb-1">
-                يوم العمل المحاسبي *
+                يوم العمل *
               </label>
               <Input
                 type="date"
@@ -619,7 +624,7 @@ export default function TreasuryHandoversPage() {
         <Modal
           isOpen={isDetailModalOpen}
           onClose={() => setIsDetailModalOpen(false)}
-          title={`محضر تسليم العهدة: ${selectedDetail.handover.documentNumber || selectedDetail.handover.id}`}
+          title={`تفاصيل التسليم: ${selectedDetail.handover.documentNumber || "محضر سابق بدون رقم"}`}
         >
           <div className="space-y-5 text-xs max-h-[80vh] overflow-y-auto pr-1">
             {/* Header Summary */}

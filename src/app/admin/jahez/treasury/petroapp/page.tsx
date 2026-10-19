@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/jahez/treasury/TreasuryModal";
 import { toast } from "@/components/ui/Toast";
 import {
   Fuel,
@@ -217,8 +217,8 @@ export default function TreasuryPetroAppPage() {
   return (
     <div className="space-y-6">
       <TreasuryNavHeader
-        title="بترو آب ومطابقة الوقود"
-        description="تسجيل أدلة تمويل المحفظة وكشوف الأرصدة، ومطابقة استهلاك الوقود وفق معادلات الخزينة المعتمدة."
+        title="بترو آب"
+        description="سجّل شحن المحفظة وكشف الرصيد، وقارنها بالمبالغ المحصلة واستهلاك الوقود."
         onRefresh={() => {
           if (activeTab === "reconciliation") loadReconciliation();
           else loadEvidence();
@@ -232,7 +232,7 @@ export default function TreasuryPetroAppPage() {
               className="gap-2 shadow-sm font-semibold"
             >
               <Plus className="h-4 w-4" />
-              <span>تسجيل دليل تمويل / بيان</span>
+              <span>إضافة شحن أو كشف رصيد</span>
             </Button>
           )
         }
@@ -249,7 +249,7 @@ export default function TreasuryPetroAppPage() {
           }`}
         >
           <Scale className="h-3.5 w-3.5" />
-          <span>مطابقة استهلاك الوقود والتحصيل</span>
+          <span>التحصيل والشحن والاستهلاك</span>
         </button>
 
         <button
@@ -261,7 +261,7 @@ export default function TreasuryPetroAppPage() {
           }`}
         >
           <Fuel className="h-3.5 w-3.5" />
-          <span>سجل أدلة التمويل والبيانات</span>
+          <span>الشحن وكشوف الرصيد</span>
         </button>
       </div>
 
@@ -288,7 +288,7 @@ export default function TreasuryPetroAppPage() {
         </div>
 
         <div>
-          <label className="block font-medium text-muted-foreground mb-1">الكفيل المالي</label>
+          <label className="block font-medium text-muted-foreground mb-1">الشركة (كفيل الحساب)</label>
           <SearchableSelect
             value={selectedSponsorId}
             onChange={setSelectedSponsorId}

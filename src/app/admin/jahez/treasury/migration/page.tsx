@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/jahez/treasury/TreasuryModal";
 import { toast } from "@/components/ui/Toast";
 import {
   ShieldAlert,
@@ -284,8 +284,8 @@ export default function TreasuryMigrationPage() {
   return (
     <div className="space-y-6">
       <TreasuryNavHeader
-        title="مراجعة الجاهزية والترحيل المالي"
-        description="أدوات الإشراف المالي للتحقق من أصل ملكية الحركات، ترحيل البيانات التاريخية، وإثبات الأرصدة قبل التفعيل."
+        title="إعداد الخزينة"
+        description="راجع البيانات السابقة وحدد أصحاب المبالغ، ثم طابق الأرصدة قبل تفعيل الخزينة."
         onRefresh={loadData}
         isRefreshing={loading}
         extraActions={

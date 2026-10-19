@@ -1,7 +1,7 @@
 // src/app/admin/jahez/treasury/reports/page.tsx
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { TreasuryNavHeader } from "@/components/jahez/treasury/TreasuryNavHeader";
 import {
@@ -35,10 +35,7 @@ import {
   FileSpreadsheet,
   FileDown,
   RefreshCw,
-  Search,
-  Filter,
   Building2,
-  Calendar,
   Layers,
   Fuel,
   Printer,
@@ -46,14 +43,6 @@ import {
   ChevronRight,
   ShieldCheck,
 } from "lucide-react";
-
-const reportTabs: { type: TreasuryReportType; label: string; icon: React.ElementType }[] = [
-  { type: "movements", label: "حركات الخزينة اليومية", icon: Calendar },
-  { type: "subaccounts", label: "أرصدة الحسابات الفرعية", icon: Layers },
-  { type: "trading", label: "المتاجرة والتسويات المالية", icon: Building2 },
-  { type: "petroapp", label: "مطابقة رصيد بترو آب", icon: Fuel },
-  { type: "handover", label: "محضر تسليم عهدة معتمد", icon: ShieldCheck },
-];
 
 export default function TreasuryReportsPage() {
   const { can, user } = useAuth();
@@ -84,6 +73,7 @@ export default function TreasuryReportsPage() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [handovers, setHandovers] = useState<TreasuryHandover[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<"xlsx" | "pdf" | null>(null);
 
   // Pagination for movements inside report
@@ -106,9 +96,13 @@ export default function TreasuryReportsPage() {
     }
   }, []);
 
+  const reportRequest = useRef(0);
+
   // Load Report Data
   const loadReport = useCallback(async () => {
     if (!canReadReport) return;
+    const requestId = ++reportRequest.current;
+    setReportError(null);
     if (reportType === "handover" && !selectedHandoverId) {
       setReportData(null);
       setLoading(false);
@@ -131,12 +125,14 @@ export default function TreasuryReportsPage() {
       }
 
       const res = await getTreasuryReport(reportType, filter, selectedHandoverId);
-      setReportData(res);
+      if (requestId === reportRequest.current) setReportData(res);
     } catch (err: any) {
+      if (requestId !== reportRequest.current) return;
+      setReportError(err.message || "تعذر تحميل التقرير. حاول مرة أخرى.");
       toast.error(err.message || "تعذر جلب التقرير المالي");
       setReportData(null);
     } finally {
-      setLoading(false);
+      if (requestId === reportRequest.current) setLoading(false);
     }
   }, [canReadReport, reportType, fromDate, toDate, page, pageSize, selectedSponsorId, selectedAccountId, selectedHandoverId]);
 
@@ -198,17 +194,17 @@ export default function TreasuryReportsPage() {
 
   const reportTabs = [
     { type: "movements" as const, label: "حركة الخزائن", icon: FileSpreadsheet },
-    { type: "subaccounts" as const, label: "أرصدة الحسابات الفرعية", icon: Layers },
-    { type: "trading" as const, label: "كشف التجارية (7038745530)", icon: Building2 },
-    { type: "petroapp" as const, label: "مطابقة بترو آب للوقود", icon: Fuel },
+    { type: "subaccounts" as const, label: "أرصدة الحسابات", icon: Layers },
+    { type: "trading" as const, label: "كشف شركة التجارية", icon: Building2 },
+    { type: "petroapp" as const, label: "تقرير بترو آب", icon: Fuel },
     { type: "handover" as const, label: "محضر التسليم المعتمد", icon: ShieldCheck },
   ];
 
   return (
     <div className="space-y-6">
       <TreasuryNavHeader
-        title="التقارير المالية والتصدير المركزي"
-        description="التقارير المحاسبية الخمسة المعتمدة لخزائن جاهز مع التنزيل المباشر بصيغتي Excel و PDF من الخادم."
+        title="تقارير الخزينة"
+        description="اختر التقرير والفترة والشركة، ثم اعرض النتائج أو نزّلها بصيغة Excel أو PDF."
         onRefresh={loadReport}
         isRefreshing={loading}
         extraActions={
@@ -312,7 +308,7 @@ export default function TreasuryReportsPage() {
           </div>
         ) : (
           <div>
-            <label className="block font-medium text-muted-foreground mb-1">الكفيل المالي</label>
+            <label className="block font-medium text-muted-foreground mb-1">الشركة (كفيل الحساب)</label>
             <SearchableSelect
               value={selectedSponsorId}
               onChange={setSelectedSponsorId}
@@ -344,6 +340,7 @@ export default function TreasuryReportsPage() {
 
       {/* Report Content View */}
       <div className="space-y-6">
+        {reportError && <div className="treasury-info" role="alert"><p>{reportError}</p><Button variant="secondary" size="sm" onClick={loadReport}>إعادة المحاولة</Button></div>}
         {loading && (
           <div className="rounded-2xl border border-border bg-card p-16 text-center text-muted-foreground">
             <RefreshCw className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
@@ -351,7 +348,7 @@ export default function TreasuryReportsPage() {
           </div>
         )}
 
-        {!loading && !reportData && (
+        {!loading && !reportError && !reportData && (
           <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
             {reportType === "handover" && !selectedHandoverId ? (
               <p>يرجى اختيار محضر تسليم معتمد من القائمة أعلاه لعرض بياناته.</p>
@@ -362,15 +359,16 @@ export default function TreasuryReportsPage() {
         )}
 
         {/* 1. Accounts Summary Table (for Movements, Subaccounts, Trading) */}
-        {!loading && reportData && reportData.accounts && reportData.accounts.length > 0 && (
+        {!loading && reportType !== "petroapp" && reportData && reportData.accounts && reportData.accounts.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-foreground text-sm flex items-center gap-2">
                 <Layers className="h-4 w-4 text-primary" />
-                <span>ملخص أرصدة وحركات الحسابات للفترة الكاملة</span>
+                <span>ملخص الأرصدة خلال الفترة</span>
               </h3>
             </div>
 
+            <p className="text-sm text-muted-foreground">الحساب الرئيسي يجمع الحسابات التابعة له؛ لا تجمع رصيده معها مرة أخرى.</p>
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-xs">
@@ -397,15 +395,16 @@ export default function TreasuryReportsPage() {
                           <span className={!acc.isPosting ? "text-foreground font-bold" : "text-foreground font-medium"}>
                             {acc.nameAr}
                           </span>
+                          {!acc.isPosting && <span className="treasury-count ms-2">إجمالي مجموعة</span>}
                         </td>
                         <td className="py-2.5 px-3 font-mono text-muted-foreground">
-                          {formatSAR(acc.openingBalance)}
+                          {formatSAR(acc.opening)}
                         </td>
                         <td className="py-2.5 px-3 font-mono text-foreground">
                           {acc.receipts ? formatSAR(acc.receipts) : <span className="text-muted-foreground/40 font-mono">—</span>}
                         </td>
                         <td className="py-2.5 px-3 font-mono text-foreground">
-                          {acc.disbursements ? formatSAR(acc.disbursements) : <span className="text-muted-foreground/40 font-mono">—</span>}
+                          {acc.payments ? formatSAR(acc.payments) : <span className="text-muted-foreground/40 font-mono">—</span>}
                         </td>
                         <td className="py-2.5 px-3 font-mono text-foreground">
                           {acc.transfersIn ? formatSAR(acc.transfersIn) : <span className="text-muted-foreground/40 font-mono">—</span>}
@@ -414,7 +413,7 @@ export default function TreasuryReportsPage() {
                           {acc.transfersOut ? formatSAR(acc.transfersOut) : <span className="text-muted-foreground/40 font-mono">—</span>}
                         </td>
                         <td className="py-2.5 px-4 font-mono font-bold text-foreground">
-                          {formatSAR(acc.closingBalance)}
+                          {formatSAR(acc.closing)}
                         </td>
                       </tr>
                     ))}
@@ -511,6 +510,22 @@ export default function TreasuryReportsPage() {
         )}
 
         {/* 3. Handover Report View */}
+        {!loading && reportType === "petroapp" && reportData && (
+          <section className="rounded-xl border border-border bg-card overflow-hidden" aria-label="تقرير بترو آب">
+            <div className="treasury-section-heading"><div><h2>التحصيل والشحن ورصيد المحفظة</h2><p>القيمة غير المثبتة تظهر «غير متحقق» حتى يتوفر إثباتها.</p></div></div>
+            <div className="overflow-x-auto"><table className="w-full text-right"><thead><tr>
+              {["الشركة", "المبالغ المحصلة", "شحن المحفظة", "المخصص من التحصيل", "التحصيل غير المخصص", "فرق الشحن", "رصيد أول الفترة", "رصيد آخر الفترة", "استهلاك الوقود", "الحالة"].map(label => <th key={label} scope="col">{label}</th>)}
+            </tr></thead><tbody className="divide-y divide-border">
+              {reportData.fuel.map(row => <tr key={row.sponsorId}>
+                <th scope="row">{row.sponsorNameAr}</th>
+                {[row.collections, row.funding, row.allocatedCollections, row.unallocatedCollections, row.fundingDifference, row.openingStatement, row.closingStatement, row.importedConsumption].map((amount, index) => <td key={index} className="whitespace-nowrap">{amount == null ? "غير متحقق" : formatSAR(amount)}</td>)}
+                <td><Badge tone={row.status === "Matched" ? "green" : "orange"}>{row.status === "Matched" ? "متطابق" : row.status === "Difference" ? "يوجد فرق" : "غير متحقق"}</Badge></td>
+              </tr>)}
+              {reportData.fuel.length === 0 && <tr><td colSpan={10} className="treasury-empty">لا توجد بيانات بترو آب ضمن الفترة المختارة.</td></tr>}
+            </tbody></table></div>
+          </section>
+        )}
+
         {!loading && reportType === "handover" && reportData?.handover && (
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between border-b border-border pb-4">

@@ -131,7 +131,7 @@ export function getTreasuryLocationLabel(loc: TreasuryLocation): string {
     case TreasuryLocation.Bank:
       return "البنك";
     case TreasuryLocation.PetroApp:
-      return "مقاصة بترو آب";
+      return "تحصيلات بترو آب";
     default:
       return "غير محدد";
   }
@@ -144,7 +144,7 @@ export function getTreasuryPurposeLabel(purpose: TreasuryPurpose): string {
     case TreasuryPurpose.AccountFee:
       return "رسوم الحساب";
     case TreasuryPurpose.Combined:
-      return "مشترك / عام";
+      return "رسوم وتصفيات";
     default:
       return "غير محدد";
   }
@@ -166,7 +166,7 @@ export function getTreasuryDirectionsLabel(dir: TreasuryDirections): string {
 export function getTreasuryEntryKindLabel(kind: TreasuryEntryKind): string {
   switch (kind) {
     case TreasuryEntryKind.Business:
-      return "حركة تشغيلية";
+      return "قبض أو صرف";
     case TreasuryEntryKind.Transfer:
       return "تحويل داخلي";
     case TreasuryEntryKind.Opening:
@@ -174,7 +174,7 @@ export function getTreasuryEntryKindLabel(kind: TreasuryEntryKind): string {
     case TreasuryEntryKind.Adjustment:
       return "تسوية مالية";
     case TreasuryEntryKind.Reversal:
-      return "عكس قيد";
+      return "إلغاء أثر الحركة";
     default:
       return "غير محدد";
   }
@@ -183,9 +183,9 @@ export function getTreasuryEntryKindLabel(kind: TreasuryEntryKind): string {
 export function getPetroEvidenceKindLabel(kind: PetroEvidenceKind): string {
   switch (kind) {
     case PetroEvidenceKind.Funding:
-      return "دليل تمويل";
+      return "إثبات شحن";
     case PetroEvidenceKind.Statement:
-      return "رصيد بيان / كشف";
+      return "كشف رصيد";
     default:
       return "غير محدد";
   }
@@ -197,9 +197,9 @@ export function getHandoverStatusLabel(status: TreasuryHandoverStatus): {
 } {
   switch (status) {
     case TreasuryHandoverStatus.Pending:
-      return { label: "قيد المطابقة والاعتماد", tone: "orange" };
+      return { label: "بانتظار الاستلام", tone: "orange" };
     case TreasuryHandoverStatus.Confirmed:
-      return { label: "معتمد ومطابق", tone: "green" };
+      return { label: "تم الاستلام", tone: "green" };
     case TreasuryHandoverStatus.Cancelled:
       return { label: "ملغى", tone: "red" };
     default:

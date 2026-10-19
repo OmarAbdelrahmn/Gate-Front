@@ -36,7 +36,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/jahez/treasury/TreasuryModal";
 import { toast } from "@/components/ui/Toast";
 import {
   ArrowLeftRight,
@@ -436,14 +436,14 @@ export default function TreasuryTransfersPage() {
   return (
     <div className="space-y-6">
       <TreasuryNavHeader
-        title="التمويل والتحويلات والقيود المركزية"
-        description="إدارة حركة التمويل الداخلي بين حسابات الكفيل، وتسجيل القيود والتسويات المصرح بها."
+        title="تحويل وقبض وصرف"
+        description="حوّل الأموال بين حسابات الشركة نفسها، أو سجّل مبلغاً مقبوضاً أو مصروفاً."
         onRefresh={loadData}
         isRefreshing={loading}
       />
 
       {/* Tabs */}
-      <div className="flex border-b border-border/80 gap-3 text-xs">
+      <div className="flex flex-wrap border-b border-border/80 gap-3 text-xs">
         <button
           onClick={() => setActiveTab("transfer")}
           className={`pb-2.5 px-1 border-b-2 transition-colors flex items-center gap-1.5 ${
@@ -453,7 +453,7 @@ export default function TreasuryTransfersPage() {
           }`}
         >
           <ArrowLeftRight className="h-3.5 w-3.5" />
-          <span>التمويل والتحويل الداخلي</span>
+          <span>تحويل بين الحسابات</span>
         </button>
 
         <button
@@ -465,7 +465,7 @@ export default function TreasuryTransfersPage() {
           }`}
         >
           <PlusCircle className="h-3.5 w-3.5" />
-          <span>القبض والصرف المركزي العادي</span>
+          <span>قبض أو صرف</span>
         </button>
 
         {canAdjust && (
@@ -478,7 +478,7 @@ export default function TreasuryTransfersPage() {
             }`}
           >
             <ShieldCheck className="h-3.5 w-3.5" />
-            <span>التسويات والافتتاح وعكس القيود</span>
+            <span>تصحيح ورصيد بداية</span>
           </button>
         )}
       </div>
@@ -487,16 +487,16 @@ export default function TreasuryTransfersPage() {
       {activeTab === "transfer" && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4 max-w-4xl">
           <div>
-            <h2 className="text-sm font-bold text-foreground">نموذج التمويل والتحويل الداخلي</h2>
+            <h2 className="text-sm font-bold text-foreground">تحويل بين الحسابات</h2>
               <p className="text-xs text-muted-foreground">
-                التحويل يتم حصراً بين حسابين نشطين لنفس الكفيل المالي.
+                اختر حسابين نشطين للشركة نفسها، ثم أدخل المبلغ وسبب التحويل.
               </p>
             </div>
 
             <form onSubmit={handleOpenTransferConfirm} className="space-y-4 text-xs">
               <div>
                 <label className="block font-medium text-muted-foreground mb-1">
-                  1. اختر الكفيل المالي *
+                  1. اختر الشركة (كفيل الحساب) *
                 </label>
                 <SearchableSelect
                   value={selectedTransferSponsorId}
@@ -593,7 +593,7 @@ export default function TreasuryTransfersPage() {
 
               <div>
                 <label className="block font-medium text-muted-foreground mb-1">
-                  السبب والغرض الإداري *
+                  سبب العملية *
                 </label>
                 <textarea
                   required
@@ -1008,7 +1008,7 @@ export default function TreasuryTransfersPage() {
               {sourceAccount?.nameAr}] إلى حساب [{destinationAccount?.nameAr}]
             </div>
             <div className="text-[11px] text-muted-foreground">
-              الكفيل المالي: {sponsorsMap.get(selectedTransferSponsorId)}
+              الشركة (كفيل الحساب): {sponsorsMap.get(selectedTransferSponsorId)}
             </div>
           </div>
 

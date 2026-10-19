@@ -314,14 +314,13 @@ export interface TreasuryReportAccountRow {
   nameAr: string;
   parentId: Id | null;
   sponsorId: Id | null;
-  location: TreasuryLocation;
   isPosting: boolean;
-  openingBalance: number;
+  opening: number;
   receipts: number;
-  disbursements: number;
+  payments: number;
   transfersIn: number;
   transfersOut: number;
-  closingBalance: number;
+  closing: number;
 }
 
 export interface PetroReconciliationRow {
