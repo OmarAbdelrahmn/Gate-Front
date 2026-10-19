@@ -145,6 +145,10 @@ export default function JahezCashboxPage() {
   const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
+  // Transferred Debt Details Modal State
+  const [detailDebt, setDetailDebt] = useState<TransferredDebt | null>(null);
+  const [isDebtDetailOpen, setIsDebtDetailOpen] = useState(false);
+
   // Submit Handover Modal State
   const [isSubmitHandoverOpen, setIsSubmitHandoverOpen] = useState(false);
   const [handoverBusinessDate, setHandoverBusinessDate] = useState(todayStr);
@@ -359,10 +363,26 @@ export default function JahezCashboxPage() {
   const filteredDebts = debts.filter((d) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
+    const rNameAr = d.userRider?.nameAr?.toLowerCase() || "";
+    const rNameEn = d.userRider?.nameEn?.toLowerCase() || "";
+    const iqama = d.userRider?.iqamaNo?.toLowerCase() || "";
+    const mobile = d.userRider?.mobile?.toLowerCase() || "";
+    const extAcc = d.assignment?.externalAccountId?.toLowerCase() || "";
+    const opReason = d.sourceOperation?.reason?.toLowerCase() || "";
+    const endReason = d.assignment?.endReason?.toLowerCase() || "";
+    const startReason = d.assignment?.startReason?.toLowerCase() || "";
+    const amt = String(d.amount);
+
     return (
-      d.id.toLowerCase().includes(q) ||
-      d.operationId.toLowerCase().includes(q) ||
-      d.riderProfileId.toLowerCase().includes(q)
+      rNameAr.includes(q) ||
+      rNameEn.includes(q) ||
+      iqama.includes(q) ||
+      mobile.includes(q) ||
+      extAcc.includes(q) ||
+      opReason.includes(q) ||
+      endReason.includes(q) ||
+      startReason.includes(q) ||
+      amt.includes(q)
     );
   });
 
@@ -1389,64 +1409,151 @@ export default function JahezCashboxPage() {
               <table className="w-full text-right text-xs">
                 <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
                   <tr>
-                    <th className="py-3 px-3">رقم الالتزام</th>
-                    <th className="py-3 px-3">رقم العملية الأصلية</th>
-                    <th className="py-3 px-3">معرف المندوب الفعلي</th>
-                    <th className="py-3 px-3 text-center">المبلغ المستحق</th>
+                    <th className="py-3 px-3 text-center">#</th>
+                    <th className="py-3 px-3">المندوب الفعلي</th>
+                    <th className="py-3 px-3">بيانات الحساب والتكليف</th>
+                    <th className="py-3 px-3">بيانات التصفية الأصلية</th>
+                    <th className="py-3 px-3 text-center">المبلغ المستحق المرحل</th>
                     <th className="py-3 px-3 text-center">حالة السداد</th>
-                    <th className="py-3 px-3">تاريخ التسجيل</th>
-                    <th className="py-3 px-3 text-center">الإجراء</th>
+                    <th className="py-3 px-3">تاريخ الترحيل</th>
+                    <th className="py-3 px-3 text-center">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-gray-500">
+                      <td colSpan={8} className="py-12 text-center text-gray-500">
                         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-emerald-500 mb-2" />
                         جارٍ تحميل الالتزامات المرحلة...
                       </td>
                     </tr>
                   ) : filteredDebts.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-gray-500">
+                      <td colSpan={8} className="py-12 text-center text-gray-500">
                         لا توجد مستحقات مرحلة مسجلة
                       </td>
                     </tr>
                   ) : (
-                    filteredDebts.map((d) => (
+                    filteredDebts.map((d, index) => (
                       <tr key={d.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
-                        <td className="py-3 px-3 font-mono font-bold">#{d.id.slice(0, 8)}</td>
-                        <td className="py-3 px-3 font-mono text-gray-500">
-                          {d.operationId.slice(0, 8)}
+                        <td className="py-3 px-3 text-center font-bold text-gray-400">
+                          {index + 1}
                         </td>
-                        <td className="py-3 px-3 font-mono">{d.riderProfileId.slice(0, 8)}</td>
-                        <td className="py-3 px-3 text-center font-mono font-black text-rose-700 text-sm">
+                        <td className="py-3 px-3">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-gray-900 dark:text-gray-100 text-xs">
+                              {d.userRider?.nameAr || d.userRider?.nameEn || "مندوب غير محدد"}
+                            </span>
+                            <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                              <span>الهوية: {d.userRider?.iqamaNo || "-"}</span>
+                              <span>•</span>
+                              <span>الجوال: {d.userRider?.mobile || "-"}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200">
+                              <span>رقم الحساب:</span>
+                              <span className="font-mono text-emerald-700 dark:text-emerald-400">
+                                {d.assignment?.externalAccountId || "-"}
+                              </span>
+                              {d.assignment?.status && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 font-normal">
+                                  {d.assignment.status}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                              <span>من: {d.assignment?.effectiveFrom || "-"}</span>
+                              <span className="mx-1">←</span>
+                              <span>إلى: {d.assignment?.effectiveTo || "مستمر"}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-[11px] font-mono">
+                              <span className="text-gray-600 dark:text-gray-400">
+                                صافي:{" "}
+                                <strong className="text-gray-900 dark:text-gray-100">
+                                  {d.sourceOperation?.net != null
+                                    ? `${Number(d.sourceOperation.net).toFixed(2)} ر.س`
+                                    : "-"}
+                                </strong>
+                              </span>
+                              <span>•</span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                عمولة:{" "}
+                                <strong className="text-emerald-700 dark:text-emerald-400">
+                                  {d.sourceOperation?.commission != null
+                                    ? `${Number(d.sourceOperation.commission).toFixed(2)} ر.س`
+                                    : "-"}
+                                </strong>
+                              </span>
+                              <span>•</span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                متبقي:{" "}
+                                <strong className="text-rose-700 dark:text-rose-400">
+                                  {d.sourceOperation?.remaining != null
+                                    ? `${Number(d.sourceOperation.remaining).toFixed(2)} ر.س`
+                                    : "-"}
+                                </strong>
+                              </span>
+                            </div>
+                            {(d.sourceOperation?.reason || d.assignment?.endReason) && (
+                              <div
+                                className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[220px]"
+                                title={d.sourceOperation?.reason || d.assignment?.endReason || ""}
+                              >
+                                {d.sourceOperation?.reason || d.assignment?.endReason}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-black text-rose-700 dark:text-rose-400 text-sm">
                           {d.amount.toFixed(2)} ر.س
                         </td>
                         <td className="py-3 px-3 text-center">
                           {d.paidAtUtc ? (
-                            <Badge tone="green">مسدد بالكامل</Badge>
+                            <div className="inline-flex flex-col items-center">
+                              <Badge tone="green">مسدد بالكامل</Badge>
+                              <span className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                {d.paidAtUtc.slice(0, 10)}
+                              </span>
+                            </div>
                           ) : (
                             <Badge tone="red">معلق (حظر مالي)</Badge>
                           )}
                         </td>
-                        <td className="py-3 px-3 text-gray-400">
+                        <td className="py-3 px-3 text-gray-500 font-mono text-[11px]">
                           {d.createdAtUtc?.slice(0, 10)}
                         </td>
                         <td className="py-3 px-3 text-center">
-                          {!d.paidAtUtc ? (
+                          <div className="flex items-center justify-center gap-1.5">
                             <Button
                               size="sm"
-                              onClick={() => openRepayModal(d)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 text-xs"
+                              variant="secondary"
+                              onClick={() => {
+                                setDetailDebt(d);
+                                setIsDebtDetailOpen(true);
+                              }}
+                              className="h-7 text-xs font-bold gap-1"
+                              title="عرض تفاصيل الالتزام المرحل"
                             >
-                              سداد كامل المستحق
+                              <Eye className="h-3.5 w-3.5 text-gray-500" />
+                              <span>التفاصيل</span>
                             </Button>
-                          ) : (
-                            <span className="text-[11px] text-gray-400">
-                              تم السداد {d.paidAtUtc.slice(0, 10)}
-                            </span>
-                          )}
+                            {!d.paidAtUtc ? (
+                              <Button
+                                size="sm"
+                                onClick={() => openRepayModal(d)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 text-xs"
+                              >
+                                سداد كامل المستحق
+                              </Button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1669,13 +1776,35 @@ export default function JahezCashboxPage() {
       >
         <div className="space-y-4 text-xs" dir="rtl">
           {selectedDebt && (
-            <div className="rounded-xl bg-rose-50 p-3 text-rose-950 dark:bg-rose-950/40 dark:text-rose-200">
-              <div className="font-bold text-sm">
-                المبلغ الإجمالي للسداد: {selectedDebt.amount.toFixed(2)} ريال
+            <div className="space-y-2 rounded-xl bg-rose-50 p-3 text-rose-950 dark:bg-rose-950/40 dark:text-rose-200 border border-rose-200/60 dark:border-rose-900/40">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm">
+                  المبلغ الإجمالي للسداد: {selectedDebt.amount.toFixed(2)} ريال
+                </span>
+                <Badge tone="red">حظر مالي</Badge>
               </div>
-              <div className="text-[10px] text-rose-700 dark:text-rose-300 mt-0.5">
+
+              {selectedDebt.userRider && (
+                <div className="text-[11px] text-gray-700 dark:text-gray-300 border-t border-rose-200/60 dark:border-rose-900/40 pt-1.5 flex flex-col gap-0.5">
+                  <div>
+                    <strong>المندوب:</strong> {selectedDebt.userRider.nameAr || selectedDebt.userRider.nameEn} (هوية: {selectedDebt.userRider.iqamaNo || "-"} - جوال: {selectedDebt.userRider.mobile || "-"})
+                  </div>
+                  {selectedDebt.assignment?.externalAccountId && (
+                    <div>
+                      <strong>حساب المنصة:</strong> {selectedDebt.assignment.externalAccountId}
+                    </div>
+                  )}
+                  {selectedDebt.sourceOperation && (
+                    <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
+                      تصفية أصلية: صافي ({selectedDebt.sourceOperation.net ?? "-"}) • عمولة ({selectedDebt.sourceOperation.commission ?? "-"}) • متبقي ({selectedDebt.sourceOperation.remaining ?? "-"})
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="text-[10px] text-rose-700 dark:text-rose-300 pt-1">
                 وفق القواعد الصارمة: يُسدد المبلغ بالكامل دون تجزئة. سداد كامل الدين يرفع سبب الحظر
-                المالي عن المندوب.
+                المالي عن المندوب فوراً.
               </div>
             </div>
           )}
@@ -1727,6 +1856,206 @@ export default function JahezCashboxPage() {
               {repaySubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : "تأكيد السداد"}
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* ================================================================= */}
+      {/* Transferred Debt Details Modal                                    */}
+      {/* ================================================================= */}
+      <Modal
+        isOpen={isDebtDetailOpen}
+        onClose={() => setIsDebtDetailOpen(false)}
+        title="تفاصيل الالتزام المالي المرحل"
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-4 text-xs" dir="rtl">
+          {detailDebt && (
+            <div className="space-y-4">
+              {/* Top Banner */}
+              <div className="rounded-2xl bg-rose-50/80 p-4 border border-rose-200/70 dark:bg-rose-950/40 dark:border-rose-900/60">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 block">المبلغ المرحل المستحق</span>
+                    <span className="font-black font-mono text-xl text-rose-700 dark:text-rose-400">
+                      {detailDebt.amount.toFixed(2)} ر.س
+                    </span>
+                  </div>
+                  <div className="text-left">
+                    {detailDebt.paidAtUtc ? (
+                      <div className="flex flex-col items-end">
+                        <Badge tone="green">مسدد بالكامل</Badge>
+                        <span className="text-[10px] text-gray-500 font-mono mt-1">
+                          تاريخ السداد: {detailDebt.paidAtUtc.slice(0, 10)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-end">
+                        <Badge tone="red">معلق (حظر مالي نشط)</Badge>
+                        <span className="text-[10px] text-rose-600 dark:text-rose-300 mt-1">
+                          يمنع تسليم أي حسابات جديدة
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono mt-2 pt-2 border-t border-rose-200/50 dark:border-rose-900/40">
+                  تاريخ الترحيل: {detailDebt.createdAtUtc?.slice(0, 16).replace("T", " ")}
+                </div>
+              </div>
+
+              {/* Rider Details Card */}
+              <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1.5 dark:border-gray-700">
+                  <User className="h-4 w-4 text-indigo-600" />
+                  <span>بيانات المندوب الفعلي</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">الاسم:</span>
+                    <span className="font-bold text-gray-900 dark:text-gray-100">
+                      {detailDebt.userRider?.nameAr || detailDebt.userRider?.nameEn || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">رقم الإقامة / الهوية:</span>
+                    <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                      {detailDebt.userRider?.iqamaNo || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">رقم الجوال:</span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">
+                      {detailDebt.userRider?.mobile || "-"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Assignment Card */}
+              <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1.5 dark:border-gray-700">
+                  <Clock className="h-4 w-4 text-emerald-600" />
+                  <span>بيانات الحساب والتكليف المنتهي</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">رقم حساب المنصة:</span>
+                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                      {detailDebt.assignment?.externalAccountId || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">حالة التكليف:</span>
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">
+                      {detailDebt.assignment?.status || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">تاريخ البداية:</span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">
+                      {detailDebt.assignment?.effectiveFrom || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">تاريخ النهاية:</span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">
+                      {detailDebt.assignment?.effectiveTo || "-"}
+                    </span>
+                  </div>
+                  {detailDebt.assignment?.startReason && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">سبب الاستلام:</span>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {detailDebt.assignment.startReason}
+                      </span>
+                    </div>
+                  )}
+                  {detailDebt.assignment?.endReason && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">سبب السحب والإنهاء:</span>
+                      <span className="text-gray-700 dark:text-gray-300 font-semibold text-rose-700 dark:text-rose-400">
+                        {detailDebt.assignment.endReason}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Source Operation Card */}
+              <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1.5 dark:border-gray-700">
+                  <Coins className="h-4 w-4 text-amber-600" />
+                  <span>تفاصيل التصفية المالية الأصلية</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center p-2 rounded-lg bg-gray-50 dark:bg-gray-900">
+                  <div>
+                    <span className="text-[10px] text-gray-500 block">صافي التصفية</span>
+                    <span className="font-mono font-bold text-xs text-gray-900 dark:text-white">
+                      {detailDebt.sourceOperation?.net != null
+                        ? `${Number(detailDebt.sourceOperation.net).toFixed(2)} ر.س`
+                        : "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 block">عمولة الشركة</span>
+                    <span className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-400">
+                      {detailDebt.sourceOperation?.commission != null
+                        ? `${Number(detailDebt.sourceOperation.commission).toFixed(2)} ر.س`
+                        : "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 block">المبلغ المتبقي</span>
+                    <span className="font-mono font-black text-xs text-rose-700 dark:text-rose-400">
+                      {detailDebt.sourceOperation?.remaining != null
+                        ? `${Number(detailDebt.sourceOperation.remaining).toFixed(2)} ر.س`
+                        : "-"}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">تاريخ الاحتساب:</span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">
+                      {detailDebt.sourceOperation?.throughDate || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">تاريخ التنفيذ:</span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">
+                      {detailDebt.sourceOperation?.executedAtUtc?.slice(0, 10) || "-"}
+                    </span>
+                  </div>
+                  {detailDebt.sourceOperation?.reason && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">بيان العملية:</span>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {detailDebt.sourceOperation.reason}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-2 border-t">
+                <Button variant="secondary" onClick={() => setIsDebtDetailOpen(false)}>
+                  إغلاق
+                </Button>
+                {!detailDebt.paidAtUtc && (
+                  <Button
+                    onClick={() => {
+                      setIsDebtDetailOpen(false);
+                      openRepayModal(detailDebt);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                  >
+                    الانتقال لسداد كامل المستحق
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 

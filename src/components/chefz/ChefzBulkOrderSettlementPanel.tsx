@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
+import { getRiderIqama, ensureRiderIqamaLoaded } from "@/lib/fleet/rider-iqama-cache";
 import {
   ArrowRight,
   Upload,
@@ -78,6 +79,29 @@ export function ChefzBulkOrderSettlementPanel({
 
   // Active in-flight abort controller
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    void ensureRiderIqamaLoaded().catch(() => {});
+  }, []);
+
+  const resolveRiderIqama = (
+    riderProfileId?: string | null,
+    directIqama?: string | null,
+    riderName?: string | null
+  ): string => {
+    const direct = directIqama?.trim();
+    if (direct && direct !== "—" && direct !== "-" && direct !== "null" && direct !== "undefined") {
+      return direct;
+    }
+    const cached = getRiderIqama({
+      riderProfileId,
+      riderNameAr: riderName,
+    });
+    if (cached && cached !== "—" && cached !== "-") {
+      return cached;
+    }
+    return "—";
+  };
 
   // -----------------------------------------------------------------
   // Load saved batch if viewImportId is provided
@@ -360,9 +384,15 @@ export function ChefzBulkOrderSettlementPanel({
 
     for (const r of filteredRiders) {
       for (const a of r.accounts) {
+        const iqama = resolveRiderIqama(
+          r.riderProfileId || a.riderProfileId,
+          a.riderIqamaNo || r.riderIqamaNo,
+          r.riderName || a.riderName
+        );
+
         rows.push({
           riderName: r.riderName,
-          riderIqamaNo: a.riderIqamaNo ?? r.riderIqamaNo ?? "—",
+          riderIqamaNo: iqama,
           riderProfileId: r.riderProfileId,
           period: `${r.periodFrom} -> ${r.periodTo}`,
           driverId: a.driverId,
@@ -1057,7 +1087,7 @@ export function ChefzBulkOrderSettlementPanel({
                               </div>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="font-mono text-[11px] text-[var(--foreground)] font-semibold">
-                                  رقم الإقامة: {rider.riderIqamaNo ?? "—"}
+                                  رقم الإقامة: {resolveRiderIqama(rider.riderProfileId, rider.riderIqamaNo, rider.riderName)}
                                 </span>
                                 <span className="font-mono text-[10px] text-[var(--muted)]" dir="ltr">
                                   ({rider.riderProfileId.slice(0, 8)}...)
@@ -1207,7 +1237,7 @@ export function ChefzBulkOrderSettlementPanel({
 
                                                 {/* Rider Iqama */}
                                                 <td className="p-2.5 font-mono font-semibold text-[var(--foreground)]" dir="ltr">
-                                                  {acc.riderIqamaNo ?? rider.riderIqamaNo ?? "—"}
+                                                  {resolveRiderIqama(rider.riderProfileId, acc.riderIqamaNo || rider.riderIqamaNo, rider.riderName)}
                                                 </td>
 
                                                 {/* Account Type */}

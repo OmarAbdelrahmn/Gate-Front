@@ -134,10 +134,30 @@ export default function JahezApprovalsPage() {
     if (kindFilter !== "" && r.kind !== kindFilter) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
+    const rNameAr = r.userRider?.nameAr?.toLowerCase() || "";
+    const rNameEn = r.userRider?.nameEn?.toLowerCase() || "";
+    const iqama = r.userRider?.iqamaNo?.toLowerCase() || "";
+    const mobile = r.userRider?.mobile?.toLowerCase() || "";
+    const accCode = r.account?.code?.toLowerCase() || "";
+    const extAcc = r.account?.externalAccountId?.toLowerCase() || "";
+    const city = r.account?.cityNameAr?.toLowerCase() || "";
+    const sponsor = r.account?.sponsorNameAr?.toLowerCase() || "";
+    const targetCode = r.targetAccount?.code?.toLowerCase() || "";
+    const targetExtAcc = r.targetAccount?.externalAccountId?.toLowerCase() || "";
+    const reason = r.reason?.toLowerCase() || "";
+
     return (
-      r.id.toLowerCase().includes(q) ||
-      r.handoverId.toLowerCase().includes(q) ||
-      r.reason.toLowerCase().includes(q)
+      rNameAr.includes(q) ||
+      rNameEn.includes(q) ||
+      iqama.includes(q) ||
+      mobile.includes(q) ||
+      accCode.includes(q) ||
+      extAcc.includes(q) ||
+      city.includes(q) ||
+      sponsor.includes(q) ||
+      targetCode.includes(q) ||
+      targetExtAcc.includes(q) ||
+      reason.includes(q)
     );
   });
 
@@ -367,11 +387,12 @@ export default function JahezApprovalsPage() {
           <table className="w-full text-right text-xs">
             <thead className="border-b border-gray-200 bg-gray-50/80 text-[11px] font-bold text-gray-600 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-300">
               <tr>
-                <th className="py-3 px-3">رقم الطلب</th>
+                <th className="py-3 px-3 text-center">#</th>
                 <th className="py-3 px-3">نوع الطلب</th>
-                <th className="py-3 px-3">معرف التسليم / العملية</th>
-                <th className="py-3 px-3">البيانات المقترحة</th>
-                <th className="py-3 px-3">السبب</th>
+                <th className="py-3 px-3">المندوب الفعلي</th>
+                <th className="py-3 px-3">الحساب والتكليف</th>
+                <th className="py-3 px-3">البيانات المالية والمقترحة</th>
+                <th className="py-3 px-3">السبب والمبرر</th>
                 <th className="py-3 px-3 text-center">الحالة</th>
                 <th className="py-3 px-3">تاريخ التقديم</th>
                 <th className="py-3 px-3 text-center">الإجراء</th>
@@ -380,62 +401,117 @@ export default function JahezApprovalsPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-500">
+                  <td colSpan={9} className="py-12 text-center text-gray-500">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-indigo-500 mb-2" />
                     جارٍ تحميل طلبات الاعتماد...
                   </td>
                 </tr>
               ) : filteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-500">
+                  <td colSpan={9} className="py-12 text-center text-gray-500">
                     لا توجد طلبات مطابقة للمعايير الحالية
                   </td>
                 </tr>
               ) : (
-                filteredRequests.map((req) => (
+                filteredRequests.map((req, index) => (
                   <tr key={req.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
-                    <td className="py-3 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
-                      #{req.id.slice(0, 8)}
+                    <td className="py-3 px-3 text-center font-bold text-gray-400">
+                      {index + 1}
                     </td>
                     <td className="py-3 px-3 font-semibold text-indigo-700 dark:text-indigo-400">
-                      {getKindLabel(req.kind)}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-gray-500">
-                      <div>تسليم: {req.handoverId.slice(0, 8)}</div>
-                      {req.operationId && <div>عملية: {req.operationId.slice(0, 8)}</div>}
+                      <Badge tone="blue">{getKindLabel(req.kind)}</Badge>
                     </td>
                     <td className="py-3 px-3">
-                      {req.kind === ApprovalKind.FeeException && (
-                        <span>إعفاء: {req.waiverAmount} ريال</span>
-                      )}
-                      {req.kind === ApprovalKind.AccountSwitch && (
-                        <span>
-                          بديل: {req.targetAccountId?.slice(0, 8)} • إعفاء: {req.waiverAmount}
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-bold text-gray-900 dark:text-gray-100 text-xs">
+                          {req.userRider?.nameAr || req.userRider?.nameEn || "مندوب غير محدد"}
                         </span>
-                      )}
-                      {req.kind === ApprovalKind.PercentageCommission && (
-                        <span>
-                          من: {req.fromDate} إلى: {req.toDate}
-                        </span>
-                      )}
-                      {req.kind === ApprovalKind.SettlementTransfer && (
-                        <span className="text-purple-700 font-bold">ترحيل كامل المستحق وحظر</span>
-                      )}
-                      {req.kind === ApprovalKind.Adjustment && (
-                        <div>
-                          {req.proposedNet !== null && (
-                            <div>صافي مقترح: {req.proposedNet} ر.س</div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                          <span>الهوية: {req.userRider?.iqamaNo || "-"}</span>
+                          <span>•</span>
+                          <span>الجوال: {req.userRider?.mobile || "-"}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200">
+                          <span>{req.account?.code || "حساب"}</span>
+                          {req.account?.externalAccountId && (
+                            <span className="font-mono text-emerald-700 dark:text-emerald-400 text-[11px]">
+                              ({req.account.externalAccountId})
+                            </span>
                           )}
-                          {req.proposedCommission !== null && (
-                            <div>عمولة مقترحة: {req.proposedCommission} ر.س</div>
-                          )}
-                          {req.debtAdjustment !== null && (
-                            <div>تعديل مديونية: {req.debtAdjustment} ر.س</div>
+                          {req.account?.cityNameAr && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-normal">
+                              {req.account.cityNameAr}
+                            </span>
                           )}
                         </div>
-                      )}
+                        {req.targetAccount && (
+                          <div className="text-[11px] text-indigo-600 dark:text-indigo-400">
+                            بديل: {req.targetAccount.code || req.targetAccount.externalAccountId}
+                          </div>
+                        )}
+                        {req.assignment && (
+                          <div className="text-[10px] text-gray-400">
+                            {req.assignment.effectiveFrom || "-"} ← {req.assignment.effectiveTo || "مستمر"}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate">
+                    <td className="py-3 px-3">
+                      <div className="space-y-1">
+                        {req.kind === ApprovalKind.Adjustment && (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 text-[11px]">
+                              <span className="font-bold text-indigo-700 dark:text-indigo-400">المقترح:</span>
+                              {req.proposedNet !== null && <span>صافي {req.proposedNet} ر.س</span>}
+                              {req.proposedCommission !== null && <span>• عمولة {req.proposedCommission} ر.س</span>}
+                              {req.debtAdjustment !== null && <span>• تعديل دين {req.debtAdjustment} ر.س</span>}
+                            </div>
+                            {req.operation && (
+                              <div className="flex items-center gap-1 text-[10px] text-gray-500 font-mono">
+                                <span>الحالي:</span>
+                                <span>صافي {req.operation.net ?? "-"}</span>
+                                <span>•</span>
+                                <span>عمولة {req.operation.commission ?? "-"}</span>
+                                <span>•</span>
+                                <span>متبقي {req.operation.remaining ?? "-"}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {req.kind === ApprovalKind.FeeException && (
+                          <span className="font-bold text-rose-700 dark:text-rose-400">
+                            إعفاء رسوم: {req.waiverAmount} ر.س
+                          </span>
+                        )}
+                        {req.kind === ApprovalKind.AccountSwitch && (
+                          <span className="font-bold text-amber-700 dark:text-amber-400">
+                            تبديل حساب • إعفاء: {req.waiverAmount} ر.س
+                          </span>
+                        )}
+                        {req.kind === ApprovalKind.PercentageCommission && (
+                          <span className="text-gray-700 dark:text-gray-300 font-mono text-[11px]">
+                            من: {req.fromDate || "-"} إلى: {req.toDate || "-"}
+                          </span>
+                        )}
+                        {req.kind === ApprovalKind.SettlementTransfer && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-purple-700 dark:text-purple-400">
+                              ترحيل كامل المستحق وحظر مالي
+                            </span>
+                            {req.operation?.remaining != null && (
+                              <span className="text-[10px] font-mono text-gray-500">
+                                المبلغ المرحل: {req.operation.remaining} ر.س
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={req.reason}>
                       {req.reason}
                     </td>
                     <td className="py-3 px-3 text-center">
@@ -455,7 +531,7 @@ export default function JahezApprovalsPage() {
                           : "قيد الانتظار"}
                       </Badge>
                     </td>
-                    <td className="py-3 px-3 text-gray-400">
+                    <td className="py-3 px-3 text-gray-400 font-mono text-[11px]">
                       {req.createdAtUtc?.slice(0, 16).replace("T", " ")}
                     </td>
                     <td className="py-3 px-3 text-center">
@@ -463,9 +539,10 @@ export default function JahezApprovalsPage() {
                         size="sm"
                         variant={req.status === ApprovalStatus.Pending ? "primary" : "secondary"}
                         onClick={() => openDecisionModal(req.id)}
-                        className="h-7 text-xs font-bold"
+                        className="h-7 text-xs font-bold gap-1"
                       >
-                        {req.status === ApprovalStatus.Pending ? "فحص واتخاذ قرار" : "عرض القرار"}
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>{req.status === ApprovalStatus.Pending ? "فحص واتخاذ قرار" : "عرض التفاصيل"}</span>
                       </Button>
                     </td>
                   </tr>
@@ -767,19 +844,188 @@ export default function JahezApprovalsPage() {
         <div className="space-y-4 text-xs" dir="rtl">
           {selectedApproval && (
             <div className="space-y-3">
-              <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800 space-y-1">
-                <div className="font-bold text-sm">
-                  الطلب #{selectedApproval.request.id.slice(0, 8)} —{" "}
-                  {getKindLabel(selectedApproval.request.kind)}
+              {/* Request Overview Banner */}
+              <div className="rounded-2xl bg-indigo-50/70 p-3.5 border border-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-900/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge tone="blue">{getKindLabel(selectedApproval.request.kind)}</Badge>
+                    <Badge
+                      tone={
+                        selectedApproval.request.status === ApprovalStatus.Approved
+                          ? "green"
+                          : selectedApproval.request.status === ApprovalStatus.Rejected
+                          ? "red"
+                          : "orange"
+                      }
+                    >
+                      {selectedApproval.request.status === ApprovalStatus.Approved
+                        ? "معتمد"
+                        : selectedApproval.request.status === ApprovalStatus.Rejected
+                        ? "مرفوض"
+                        : "قيد الانتظار"}
+                    </Badge>
+                  </div>
+                  <span className="text-[11px] text-gray-500 font-mono">
+                    تاريخ التقديم: {selectedApproval.request.createdAtUtc.slice(0, 10)}
+                  </span>
                 </div>
-                <div className="text-gray-500">
-                  مقدم الطلب: {selectedApproval.request.requestedByUserId.slice(0, 8)} • تاريخ:{" "}
-                  {selectedApproval.request.createdAtUtc.slice(0, 10)}
-                </div>
-                <div className="text-gray-700 dark:text-gray-300 mt-1">
-                  السبب: {selectedApproval.request.reason}
+                <div className="text-xs text-gray-800 dark:text-gray-200">
+                  <strong className="text-gray-900 dark:text-white">المبرر الإداري للطلب: </strong>
+                  {selectedApproval.request.reason}
                 </div>
               </div>
+
+              {/* Rider Details Card */}
+              {selectedApproval.request.userRider && (
+                <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1 dark:border-gray-700">
+                    <User className="h-4 w-4 text-indigo-600" />
+                    <span>بيانات المندوب الفعلي</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">الاسم:</span>
+                      <span className="font-bold text-gray-900 dark:text-gray-100">
+                        {selectedApproval.request.userRider.nameAr || selectedApproval.request.userRider.nameEn || "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">رقم الإقامة / الهوية:</span>
+                      <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                        {selectedApproval.request.userRider.iqamaNo || "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">رقم الجوال:</span>
+                      <span className="font-mono text-gray-800 dark:text-gray-200">
+                        {selectedApproval.request.userRider.mobile || "-"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Account and Assignment Card */}
+              {(selectedApproval.request.account || selectedApproval.request.assignment) && (
+                <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1 dark:border-gray-700">
+                    <Clock className="h-4 w-4 text-emerald-600" />
+                    <span>بيانات الحساب والتكليف</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">كود الحساب:</span>
+                      <span className="font-bold text-gray-900 dark:text-gray-100">
+                        {selectedApproval.request.account?.code || "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">رقم المنصة الخارجي:</span>
+                      <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                        {selectedApproval.request.account?.externalAccountId || selectedApproval.request.assignment?.externalAccountId || "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">المدينة:</span>
+                      <span className="text-gray-800 dark:text-gray-200">
+                        {selectedApproval.request.account?.cityNameAr || "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 block text-[11px]">الكفيل:</span>
+                      <span className="text-gray-800 dark:text-gray-200">
+                        {selectedApproval.request.account?.sponsorNameAr || "-"}
+                      </span>
+                    </div>
+                    {selectedApproval.request.assignment && (
+                      <div className="col-span-2 text-[11px] text-gray-600 dark:text-gray-400 pt-0.5">
+                        فترة التكليف: من {selectedApproval.request.assignment.effectiveFrom || "-"} إلى {selectedApproval.request.assignment.effectiveTo || "مستمر"}
+                      </div>
+                    )}
+                    {selectedApproval.request.targetAccount && (
+                      <div className="col-span-2 text-[11px] font-semibold text-indigo-700 dark:text-indigo-400 pt-0.5">
+                        الحساب البديل المستهدف: {selectedApproval.request.targetAccount.code} ({selectedApproval.request.targetAccount.externalAccountId}) - {selectedApproval.request.targetAccount.cityNameAr}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Financial comparison card */}
+              {(selectedApproval.request.operation || selectedApproval.request.proposedNet !== null || selectedApproval.request.proposedCommission !== null) && (
+                <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1 dark:border-gray-700">
+                    <ArrowRightLeft className="h-4 w-4 text-purple-600" />
+                    <span>المقارنة المالية بين العملية الحالية والمقترح</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Operation current values */}
+                    <div className="rounded-lg bg-gray-50 p-2.5 dark:bg-gray-900 space-y-1">
+                      <div className="font-bold text-[11px] text-gray-700 dark:text-gray-300 border-b pb-1">
+                        القيم الحالية المسجلة
+                      </div>
+                      <div className="text-[11px] flex justify-between">
+                        <span className="text-gray-500">الصافي:</span>
+                        <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                          {selectedApproval.request.operation?.net != null ? `${selectedApproval.request.operation.net} ر.س` : "-"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] flex justify-between">
+                        <span className="text-gray-500">عمولة الشركة:</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                          {selectedApproval.request.operation?.commission != null ? `${selectedApproval.request.operation.commission} ر.س` : "-"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] flex justify-between">
+                        <span className="text-gray-500">المبلغ المتبقي:</span>
+                        <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
+                          {selectedApproval.request.operation?.remaining != null ? `${selectedApproval.request.operation.remaining} ر.س` : "-"}
+                        </span>
+                      </div>
+                      {selectedApproval.request.operation?.throughDate && (
+                        <div className="text-[10px] text-gray-400 font-mono pt-1">
+                          حتى تاريخ: {selectedApproval.request.operation.throughDate}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Proposed values */}
+                    <div className="rounded-lg bg-indigo-50/60 p-2.5 dark:bg-indigo-950/40 space-y-1">
+                      <div className="font-bold text-[11px] text-indigo-800 dark:text-indigo-300 border-b pb-1 border-indigo-200 dark:border-indigo-800">
+                        القيم المقترحة بالطلب
+                      </div>
+                      <div className="text-[11px] flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">الصافي المقترح:</span>
+                        <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
+                          {selectedApproval.request.proposedNet != null ? `${selectedApproval.request.proposedNet} ر.س` : "-"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">العمولة المقترحة:</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                          {selectedApproval.request.proposedCommission != null ? `${selectedApproval.request.proposedCommission} ر.س` : "-"}
+                        </span>
+                      </div>
+                      {selectedApproval.request.debtAdjustment !== null && (
+                        <div className="text-[11px] flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">تعديل المديونية:</span>
+                          <span className="font-mono font-bold text-rose-700 dark:text-rose-300">
+                            {selectedApproval.request.debtAdjustment} ر.س
+                          </span>
+                        </div>
+                      )}
+                      {selectedApproval.request.waiverAmount > 0 && (
+                        <div className="text-[11px] flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">مبلغ الإعفاء:</span>
+                          <span className="font-mono font-bold text-purple-700 dark:text-purple-300">
+                            {selectedApproval.request.waiverAmount} ر.س
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* التحقق من عدم الاعتماد للنفس */}
               {user?.id && selectedApproval.request.requestedByUserId === user.id && (
@@ -794,15 +1040,21 @@ export default function JahezApprovalsPage() {
 
               {/* سجل القرارات السابقة */}
               {selectedApproval.decisions.length > 0 && (
-                <div className="border-t pt-2">
-                  <div className="font-bold text-gray-700 dark:text-gray-300 mb-1">
-                    القرارات السابقة:
+                <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-800/40 space-y-1.5">
+                  <div className="font-bold text-gray-700 dark:text-gray-300 text-xs">
+                    سجل القرارات السابقة:
                   </div>
                   {selectedApproval.decisions.map((d) => (
-                    <div key={d.id} className="text-[11px] text-gray-500">
-                      قرار #{d.id.slice(0, 6)}:{" "}
-                      {d.status === ApprovalStatus.Approved ? "معتمد" : "مرفوض"} بواسطة{" "}
-                      {d.actorUserId.slice(0, 8)} في {d.decidedAtUtc.slice(0, 10)} ({d.reason})
+                    <div key={d.id} className="text-[11px] text-gray-600 dark:text-gray-400 flex items-center justify-between border-t pt-1 first:border-0 first:pt-0">
+                      <div className="flex items-center gap-1.5">
+                        <Badge tone={d.status === ApprovalStatus.Approved ? "green" : "red"}>
+                          {d.status === ApprovalStatus.Approved ? "معتمد" : "مرفوض"}
+                        </Badge>
+                        <span>{d.reason}</span>
+                      </div>
+                      <span className="font-mono text-gray-400 text-[10px]">
+                        {d.decidedAtUtc?.slice(0, 10)}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -226,6 +226,37 @@ export interface RequestCreate {
   debtAdjustment?: number | null;
 }
 
+export interface ApprovalRequestAssignment {
+  assignmentId?: Id | null;
+  handoverId?: Id | null;
+  accountId?: Id | null;
+  externalAccountId?: string | null;
+  riderProfileId?: Id | null;
+  startedAtUtc?: Instant | null;
+  endedAtUtc?: Instant | null;
+  effectiveFrom?: DateOnly | null;
+  effectiveTo?: DateOnly | null;
+  status?: string | null;
+  startReason?: string | null;
+  endReason?: string | null;
+  commissionStartsOn?: DateOnly | null;
+  commissionPostedThrough?: DateOnly | null;
+  lastSettlementPaymentAtUtc?: Instant | null;
+}
+
+export interface ApprovalRequestAccount {
+  accountId?: Id | null;
+  code?: string | null;
+  externalAccountId?: string | null;
+  userName?: string | null;
+  status?: string | null;
+  statusReason?: string | null;
+  operatingCityId?: Id | null;
+  cityNameAr?: string | null;
+  sponsorId?: Id | null;
+  sponsorNameAr?: string | null;
+}
+
 export interface ApprovalRequest extends Audit {
   handoverId: Id;
   kind: ApprovalKind;
@@ -242,6 +273,12 @@ export interface ApprovalRequest extends Audit {
   proposedNet: number | null;
   proposedCommission: number | null;
   debtAdjustment: number | null;
+  // Enriched fields from backend:
+  userRider?: RiderPerson | null;
+  assignment?: ApprovalRequestAssignment | null;
+  account?: ApprovalRequestAccount | null;
+  targetAccount?: ApprovalRequestAccount | null;
+  operation?: (Partial<Operation> & { net?: number; commission?: number; remaining?: number }) | null;
 }
 
 export interface DecisionRequest {
@@ -285,12 +322,44 @@ export interface FeeReceipt {
   reason: string;
 }
 
+export interface TransferredDebtAssignment {
+  assignmentId?: Id | null;
+  handoverId?: Id | null;
+  accountId?: Id | null;
+  externalAccountId?: string | null;
+  riderProfileId?: Id | null;
+  startedAtUtc?: Instant | null;
+  endedAtUtc?: Instant | null;
+  effectiveFrom?: DateOnly | null;
+  effectiveTo?: DateOnly | null;
+  status?: string | null;
+  startReason?: string | null;
+  endReason?: string | null;
+}
+
+export interface TransferredDebtSourceOperation {
+  id?: Id | null;
+  mode?: number | null;
+  throughDate?: DateOnly | null;
+  effectiveAtUtc?: Instant | null;
+  net?: number | null;
+  commission?: number | null;
+  remaining?: number | null;
+  reason?: string | null;
+  approvedRequestId?: Id | null;
+  executedAtUtc?: Instant | null;
+}
+
 export interface TransferredDebt extends Audit {
   operationId: Id;
   riderProfileId: Id;
   amount: number;
   paidAtUtc: Instant | null;
   paidByUserId: Id | null;
+  // Enriched fields from backend:
+  userRider?: RiderPerson | null;
+  assignment?: TransferredDebtAssignment | null;
+  sourceOperation?: TransferredDebtSourceOperation | null;
 }
 
 export interface RiderPerson {

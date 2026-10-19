@@ -1,7 +1,7 @@
 // src/app/admin/chefz/settlements/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -36,6 +36,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
+import { getRiderIqama, ensureRiderIqamaLoaded } from "@/lib/fleet/rider-iqama-cache";
 import { ChefzBulkOrderSettlementPanel } from "@/components/chefz/ChefzBulkOrderSettlementPanel";
 import {
   CreditCard,
@@ -136,6 +137,7 @@ export default function ChefzSettlementsPage() {
         setChefzAccounts(chefzAccs);
         setRiders(riderList);
         setSettlements(settleItems);
+        void ensureRiderIqamaLoaded().catch(() => {});
       }
     } catch (err: unknown) {
       toast.error("خطأ", "تعذر تحميل تصفيات شيفز.");
@@ -163,9 +165,49 @@ export default function ChefzSettlementsPage() {
 
   const riderMap = useMemo(() => {
     const map = new Map<string, Rider>();
-    for (const r of riders) map.set(r.id, r);
+    for (const r of riders) {
+      if (r.id) map.set(r.id, r);
+      if (r.employeeId) map.set(r.employeeId, r);
+    }
     return map;
   }, [riders]);
+
+  // Robust Iqama resolver with multiple fallback sources
+  const resolveSettlementIqama = useCallback(
+    (s?: ChefzSettlement | null): string => {
+      if (!s) return "—";
+      const direct = (s.riderIqamaNo || (s as any).iqamaNo || (s as any).riderIqama)?.toString().trim();
+      if (direct && direct !== "—" && direct !== "-" && direct !== "null" && direct !== "undefined") {
+        return direct;
+      }
+      const rider = riderMap.get(s.riderProfileId);
+      if (rider?.iqamaNo && rider.iqamaNo.trim()) {
+        return rider.iqamaNo.trim();
+      }
+      const acc = baseAccountMap.get(s.accountId);
+      if (acc?.currentAssignment?.actualRiderProfileId) {
+        const assignRider = riderMap.get(acc.currentAssignment.actualRiderProfileId);
+        if (assignRider?.iqamaNo && assignRider.iqamaNo.trim()) {
+          return assignRider.iqamaNo.trim();
+        }
+      }
+      if (acc?.ownerRiderProfileId) {
+        const ownerRider = riderMap.get(acc.ownerRiderProfileId);
+        if (ownerRider?.iqamaNo && ownerRider.iqamaNo.trim()) {
+          return ownerRider.iqamaNo.trim();
+        }
+      }
+      const cached = getRiderIqama({
+        riderProfileId: s.riderProfileId || acc?.currentAssignment?.actualRiderProfileId || acc?.ownerRiderProfileId,
+        riderNameAr: s.riderName || rider?.fullNameAr,
+      });
+      if (cached && cached !== "—" && cached !== "-") {
+        return cached;
+      }
+      return "—";
+    },
+    [riderMap, baseAccountMap]
+  );
 
   // When modalAccountId changes, fetch its assignment history
   useEffect(() => {
@@ -397,7 +439,12 @@ export default function ChefzSettlementsPage() {
   const filteredSettlements = useMemo(() => {
     return settlements.filter((s) => {
       if (filterAccountId && s.accountId !== filterAccountId) return false;
-      if (filterRiderId && s.riderProfileId !== filterRiderId) return false;
+      if (filterRiderId) {
+        const matchDirect = s.riderProfileId === filterRiderId;
+        const rider = riderMap.get(s.riderProfileId);
+        const matchEmployee = rider && (rider.id === filterRiderId || rider.employeeId === filterRiderId);
+        if (!matchDirect && !matchEmployee) return false;
+      }
       if (filterSponsor !== "all" && (s.sponsorNameAr?.trim() || "") !== filterSponsor) return false;
       if (filterYear !== "all") {
         const sYear = s.periodFrom.slice(0, 4);
@@ -494,7 +541,7 @@ export default function ChefzSettlementsPage() {
         },
         {
           header: "رقم الإقامة",
-          accessor: (s) => s.riderIqamaNo ?? "—",
+          accessor: (s) => resolveSettlementIqama(s),
           isText: true,
         },
         {
@@ -839,7 +886,7 @@ export default function ChefzSettlementsPage() {
                           {s.riderName || rider?.fullNameAr || "مندوب سابق"}
                         </div>
                         <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
-                          الإقامة: {s.riderIqamaNo ?? "—"}
+                          الإقامة: {resolveSettlementIqama(s)}
                         </div>
                       </td>
 
@@ -1357,7 +1404,7 @@ export default function ChefzSettlementsPage() {
                   {(previewResult.riderName || previewResult.riderIqamaNo) && (
                     <div className="text-xs text-[var(--muted)] mt-0.5">
                       {previewResult.riderName && <strong className="text-[var(--foreground)] ml-2">{previewResult.riderName}</strong>}
-                      <span>رقم الإقامة: <strong className="font-mono text-[var(--foreground)]">{previewResult.riderIqamaNo ?? "—"}</strong></span>
+                      <span>رقم الإقامة: <strong className="font-mono text-[var(--foreground)]">{resolveSettlementIqama(previewResult)}</strong></span>
                     </div>
                   )}
                 </div>
@@ -1476,7 +1523,7 @@ export default function ChefzSettlementsPage() {
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">رقم الإقامة:</span>
                 <span className="font-mono font-bold text-[var(--foreground)]" dir="ltr">
-                  {selectedSettlement.riderIqamaNo ?? "—"}
+                  {resolveSettlementIqama(selectedSettlement)}
                 </span>
               </div>
               {selectedSettlement.sponsorNameAr && (
