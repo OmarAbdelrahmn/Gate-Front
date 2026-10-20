@@ -836,10 +836,17 @@ export default function ChefzAccountDetailPage() {
 
               <div>
                 <span className="text-[var(--muted)] block">المندوب الفعلي الحالي:</span>
-                {baseAccount.currentAssignment ? (
-                  <span className="font-bold text-emerald-600">
-                    {baseAccount.currentAssignment.actualRiderNameAr}
-                  </span>
+                {baseAccount.currentAssignment || chefzDetail?.riderIqamaNo ? (
+                  <div>
+                    <span className="font-bold text-emerald-600 block">
+                      {baseAccount.currentAssignment?.actualRiderNameAr || "مندوب نشط"}
+                    </span>
+                    {chefzDetail?.riderIqamaNo && (
+                      <span className="text-xs font-mono font-medium text-[var(--foreground)] block mt-0.5" dir="ltr">
+                        هوية: {chefzDetail.riderIqamaNo}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <span className="text-[var(--muted)] font-semibold">لا يوجد تكليف نشط</span>
                 )}

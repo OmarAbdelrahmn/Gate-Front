@@ -345,8 +345,9 @@ export default function ChefzAccountsPage() {
       // 6. Column Filter: Assignment Status & Actual Rider
       if (colFilterAssignments.length > 0) {
         const curr = base.currentAssignment;
-        const isAssigned = Boolean(curr);
-        const riderName = curr?.actualRiderNameAr;
+        const iqama = chefz?.riderIqamaNo;
+        const isAssigned = Boolean(curr || iqama);
+        const riderName = curr?.actualRiderNameAr || (iqama ? `مندوب (${iqama})` : undefined);
         const matchesAny = colFilterAssignments.some((f) => {
           if (f === "STATUS_ASSIGNED") return isAssigned;
           if (f === "STATUS_UNASSIGNED") return !isAssigned;
@@ -396,12 +397,14 @@ export default function ChefzAccountsPage() {
         const reportId = (chefz?.reportIdNumber || "").toLowerCase();
         const owner = (base.ownerRiderNameAr || "").toLowerCase();
         const currentRider = (base.currentAssignment?.actualRiderNameAr || "").toLowerCase();
+        const riderIqama = (chefz?.riderIqamaNo || "").toLowerCase();
         if (
           !code.includes(q) &&
           !ext.includes(q) &&
           !reportId.includes(q) &&
           !owner.includes(q) &&
-          !currentRider.includes(q)
+          !currentRider.includes(q) &&
+          !riderIqama.includes(q)
         ) {
           return false;
         }
@@ -445,7 +448,7 @@ export default function ChefzAccountsPage() {
         if (a.chefz.accountType === "Freelancer") freelancer++;
         if (a.chefz.accountType === "FullTime") fullTime++;
       }
-      if (a.base.currentAssignment) assigned++;
+      if (a.base.currentAssignment || a.chefz?.riderIqamaNo) assigned++;
       if (a.chefz?.hasPassword) withPassword++;
 
       const rem = reminderMap.get(a.base.id);
@@ -524,7 +527,7 @@ export default function ChefzAccountsPage() {
 
       const s = map.get(id)!;
       s.total++;
-      if (a.base.currentAssignment) {
+      if (a.base.currentAssignment || a.chefz?.riderIqamaNo) {
         s.assigned++;
       } else {
         s.unassigned++;
@@ -593,9 +596,10 @@ export default function ChefzAccountsPage() {
 
     for (const a of accounts) {
       const curr = a.base.currentAssignment;
-      if (curr) {
+      const iqama = a.chefz?.riderIqamaNo;
+      if (curr || iqama) {
         assignedCount++;
-        const name = curr.actualRiderNameAr || "مندوب نشط";
+        const name = curr?.actualRiderNameAr || (iqama ? `مندوب (${iqama})` : "مندوب نشط");
         riderCounts.set(name, (riderCounts.get(name) || 0) + 1);
       } else {
         unassignedCount++;
@@ -1642,7 +1646,12 @@ export default function ChefzAccountsPage() {
         { header: "المالك المسجل", accessor: (i) => i.base.ownerRiderNameAr || "—" },
         {
           header: "المندوب الفعلي الحالي",
-          accessor: (i) => i.base.currentAssignment?.actualRiderNameAr || "غير مخصص",
+          accessor: (i) => i.base.currentAssignment?.actualRiderNameAr || (i.chefz?.riderIqamaNo ? "مندوب نشط" : "غير مخصص"),
+        },
+        {
+          header: "رقم هوية/إقامة المندوب",
+          accessor: (i) => i.chefz?.riderIqamaNo || "—",
+          isText: true,
         },
         { header: "المدينة", accessor: (i) => i.base.operatingCityNameAr || "—" },
         { header: "الكفيل", accessor: (i) => i.base.sponsorNameAr || "—" },
@@ -2353,14 +2362,21 @@ export default function ChefzAccountsPage() {
 
                       {/* Actual Rider */}
                       <td className="px-4 py-3">
-                        {currentRider ? (
+                        {currentRider || chefz?.riderIqamaNo ? (
                           <div>
                             <div className="font-semibold text-emerald-700 dark:text-emerald-400">
-                              {currentRider.actualRiderNameAr || "مندوب نشط"}
+                              {currentRider?.actualRiderNameAr || "مندوب نشط"}
                             </div>
-                            <div className="text-xs text-[var(--muted)]" dir="ltr">
-                              من {currentRider.effectiveFrom}
-                            </div>
+                            {chefz?.riderIqamaNo && (
+                              <div className="text-xs font-mono font-medium text-[var(--foreground)] mt-0.5" dir="ltr">
+                                هوية: {chefz.riderIqamaNo}
+                              </div>
+                            )}
+                            {currentRider?.effectiveFrom && (
+                              <div className="text-xs text-[var(--muted)]" dir="ltr">
+                                من {currentRider.effectiveFrom}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-xs text-[var(--muted)]">غير مخصص</span>

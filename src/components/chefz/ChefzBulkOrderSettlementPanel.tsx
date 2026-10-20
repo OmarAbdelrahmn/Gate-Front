@@ -87,7 +87,8 @@ export function ChefzBulkOrderSettlementPanel({
   const resolveRiderIqama = (
     riderProfileId?: string | null,
     directIqama?: string | null,
-    riderName?: string | null
+    riderName?: string | null,
+    accountId?: string | null
   ): string => {
     const direct = directIqama?.trim();
     if (direct && direct !== "—" && direct !== "-" && direct !== "null" && direct !== "undefined") {
@@ -95,6 +96,7 @@ export function ChefzBulkOrderSettlementPanel({
     }
     const cached = getRiderIqama({
       riderProfileId,
+      accountId,
       riderNameAr: riderName,
     });
     if (cached && cached !== "—" && cached !== "-") {
@@ -387,7 +389,8 @@ export function ChefzBulkOrderSettlementPanel({
         const iqama = resolveRiderIqama(
           r.riderProfileId || a.riderProfileId,
           a.riderIqamaNo || r.riderIqamaNo,
-          r.riderName || a.riderName
+          r.riderName || a.riderName,
+          a.accountId
         );
 
         rows.push({
@@ -1237,7 +1240,7 @@ export function ChefzBulkOrderSettlementPanel({
 
                                                 {/* Rider Iqama */}
                                                 <td className="p-2.5 font-mono font-semibold text-[var(--foreground)]" dir="ltr">
-                                                  {resolveRiderIqama(rider.riderProfileId, acc.riderIqamaNo || rider.riderIqamaNo, rider.riderName)}
+                                                  {resolveRiderIqama(rider.riderProfileId, acc.riderIqamaNo || rider.riderIqamaNo, rider.riderName, acc.accountId)}
                                                 </td>
 
                                                 {/* Account Type */}

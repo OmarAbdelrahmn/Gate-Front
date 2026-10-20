@@ -73,6 +73,7 @@ export interface ChefzAccount {
   accountRowVersion: RowVersion;
   isOperationallyBlocked: boolean;
   operationalBlockReason: string | null;
+  riderIqamaNo?: string | null;
 }
 
 export interface ChefzPasswordRequest {

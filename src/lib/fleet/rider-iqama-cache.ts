@@ -7,6 +7,7 @@ import { listExternalRiders } from "@/lib/workforce/external-riders-api";
 export interface RiderIdentifiable {
   riderProfileId?: string | null;
   employeeId?: string | null;
+  accountId?: string | null;
   riderNameAr?: string | null;
   riderNameEn?: string | null;
   iqamaNo?: string | null;
@@ -104,6 +105,7 @@ function isValidId(id?: string | null): boolean {
 export function registerRiderIqama(params: {
   riderProfileId?: string | null;
   employeeId?: string | null;
+  accountId?: string | null;
   iqamaNo?: string | null;
   nameAr?: string | null;
   nameEn?: string | null;
@@ -116,6 +118,9 @@ export function registerRiderIqama(params: {
   }
   if (isValidId(params.employeeId)) {
     idToIqamaMap.set(params.employeeId!.toLowerCase().trim(), iqama);
+  }
+  if (isValidId(params.accountId)) {
+    idToIqamaMap.set(params.accountId!.toLowerCase().trim(), iqama);
   }
   if (params.nameAr && params.nameAr.trim()) {
     nameToIqamaMap.set(params.nameAr.trim(), iqama);
@@ -202,7 +207,13 @@ export function getRiderIqama(person?: RiderIdentifiable | null): string | null 
     if (found) return found;
   }
 
-  // 4. Lookup by Arabic Name
+  // 4. Lookup by accountId
+  if (isValidId(person.accountId)) {
+    const found = idToIqamaMap.get(person.accountId!.toLowerCase().trim());
+    if (found) return found;
+  }
+
+  // 5. Lookup by Arabic Name
   if (person.riderNameAr && person.riderNameAr.trim()) {
     const found = nameToIqamaMap.get(person.riderNameAr.trim());
     if (found) return found;

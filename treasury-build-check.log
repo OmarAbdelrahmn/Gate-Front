@@ -11,3 +11,153 @@
   Running TypeScript ...
   Finished TypeScript in 8.4s ...
   Collecting page data using 13 workers ...
+  Generating static pages using 13 workers (0/118) ...
+  Generating static pages using 13 workers (29/118)
+  Generating static pages using 13 workers (58/118)
+  Generating static pages using 13 workers (88/118)
+✓ Generating static pages using 13 workers (118/118) in 3.8s
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /accountant
+├ ○ /admin
+├ ○ /admin/audit
+├ ƒ /admin/audit/[eventId]
+├ ○ /admin/chefz/accounts
+├ ƒ /admin/chefz/accounts/[accountId]
+├ ○ /admin/chefz/performance
+├ ○ /admin/chefz/settlements
+├ ○ /admin/chefz/sponsor-statistics
+├ ○ /admin/employees
+├ ƒ /admin/employees/[employeeId]
+├ ƒ /admin/employees/[employeeId]/actions
+├ ƒ /admin/employees/[employeeId]/edit
+├ ƒ /admin/employees/[employeeId]/events
+├ ƒ /admin/employees/[employeeId]/history
+├ ○ /admin/employees/cities
+├ ○ /admin/employees/cities/new
+├ ○ /admin/employees/new
+├ ○ /admin/employees/sponsors
+├ ○ /admin/employees/sponsors/new
+├ ○ /admin/fleet
+├ ○ /admin/fleet/accidents
+├ ƒ /admin/fleet/accidents/[id]
+├ ○ /admin/fleet/accidents/installments
+├ ○ /admin/fleet/accidents/overdue
+├ ○ /admin/fleet/accidents/towing
+├ ○ /admin/fleet/accidents/workflows
+├ ○ /admin/fleet/assignments
+├ ƒ /admin/fleet/assignments/[id]
+├ ○ /admin/fleet/catalogs
+├ ○ /admin/fleet/compliance
+├ ○ /admin/fleet/daily-distances
+├ ○ /admin/fleet/daily-distances/missing-records
+├ ○ /admin/fleet/daily-distances/vehicle-report
+├ ○ /admin/fleet/dashboard
+├ ○ /admin/fleet/fuel-cards
+├ ○ /admin/fleet/issues
+├ ○ /admin/fleet/phone-sims
+├ ○ /admin/fleet/phone-sims/archived
+├ ○ /admin/fleet/phone-sims/assignments
+├ ○ /admin/fleet/phone-sims/transfers
+├ ○ /admin/fleet/vehicle-account-assignments
+├ ○ /admin/fleet/vehicle-account-assignments/leases
+├ ƒ /admin/fleet/vehicle-account-assignments/leases/[id]
+├ ○ /admin/fleet/vehicle-account-assignments/problems
+├ ○ /admin/fleet/vehicle-account-assignments/switches
+├ ○ /admin/fleet/vehicles
+├ ƒ /admin/fleet/vehicles/[id]
+├ ƒ /admin/fleet/vehicles/[id]/events
+├ ƒ /admin/fleet/vehicles/[id]/history
+├ ○ /admin/fleet/vehicles/reports
+├ ○ /admin/housing
+├ ƒ /admin/housing/[housingId]
+├ ○ /admin/hr
+├ ƒ /admin/hr/[section]
+├ ƒ /admin/hr/catalogs
+├ ○ /admin/hr/compliance-dashboard
+├ ○ /admin/hr/compliance-expiries
+├ ○ /admin/hr/dashboard
+├ ○ /admin/hr/documents
+├ ○ /admin/hr/external-riders
+├ ƒ /admin/hr/external-riders/[id]
+├ ○ /admin/hr/forms
+├ ○ /admin/hr/insurance
+├ ○ /admin/hr/legal-cases
+├ ƒ /admin/hr/legal-cases/[id]
+├ ○ /admin/hr/payroll-employees
+├ ○ /admin/hr/template-designer
+├ ○ /admin/hr/terminated-employees
+├ ○ /admin/inventory/request-rider-items
+├ ○ /admin/inventory/supply-requests
+├ ○ /admin/jahez/accounts
+├ ○ /admin/jahez/approvals
+├ ○ /admin/jahez/cashbox
+├ ○ /admin/jahez/debts
+├ ○ /admin/jahez/dispatches
+├ ○ /admin/jahez/handovers
+├ ○ /admin/jahez/imports
+├ ○ /admin/jahez/ledger
+├ ○ /admin/jahez/performance
+├ ○ /admin/jahez/settlements
+├ ○ /admin/jahez/statistics
+├ ○ /admin/jahez/treasury
+├ ○ /admin/jahez/treasury/accounts
+├ ○ /admin/jahez/treasury/balances
+├ ○ /admin/jahez/treasury/handovers
+├ ○ /admin/jahez/treasury/migration
+├ ○ /admin/jahez/treasury/petroapp
+├ ○ /admin/jahez/treasury/reports
+├ ○ /admin/jahez/treasury/transfers
+├ ○ /admin/maintenance
+├ ○ /admin/maintenance/dashboard
+├ ○ /admin/maintenance/inventory
+├ ○ /admin/maintenance/inventory/balances
+├ ○ /admin/maintenance/inventory/barrels
+├ ○ /admin/maintenance/inventory/receipts
+├ ○ /admin/maintenance/inventory/request-rider-items
+├ ○ /admin/maintenance/inventory/supply-requests
+├ ○ /admin/maintenance/inventory/transfers
+├ ○ /admin/maintenance/setup
+├ ○ /admin/maintenance/setup/items
+├ ○ /admin/maintenance/setup/locations
+├ ○ /admin/maintenance/setup/plans
+├ ○ /admin/maintenance/setup/suppliers
+├ ƒ /admin/maintenance/work-orders
+├ ○ /admin/maintenance/work-orders/orders
+├ ○ /admin/maintenance/work-orders/reminders
+├ ○ /admin/maintenance/workshops
+├ ○ /admin/maintenance/workshops/orders
+├ ○ /admin/maintenance/workshops/profit
+├ ○ /admin/ninja
+├ ○ /admin/ninja/accounts
+├ ○ /admin/ninja/deductions
+├ ○ /admin/ninja/performance
+├ ○ /admin/ninja/sheet-updates
+├ ○ /admin/operations/dashboard
+├ ○ /admin/people-compliance
+├ ○ /admin/platforms
+├ ○ /admin/platforms/accounts
+├ ƒ /admin/platforms/accounts/[id]
+├ ○ /admin/platforms/dashboard
+├ ○ /admin/platforms/rider-history
+├ ○ /admin/profile
+├ ○ /admin/profile/sessions
+├ ○ /admin/users
+├ ƒ /admin/users/[userId]
+├ ○ /admin/users/roles
+├ ○ /change-password
+├ ○ /dashboard
+├ ƒ /dashboard/[...slug]
+├ ○ /hr
+├ ƒ /hr/[...slug]
+├ ○ /login
+├ ○ /manager
+└ ○ /member
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

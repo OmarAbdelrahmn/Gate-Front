@@ -1,6 +1,7 @@
 // src/lib/chefz/api.ts
 import { authFetch } from "../auth/api";
 import { getPlatforms, type PlatformResponse } from "../platforms/api";
+import { registerRiderIqama } from "@/lib/fleet/rider-iqama-cache";
 import type {
   ChefzAccount,
   ChefzAccountCounts,
@@ -112,6 +113,15 @@ export async function getAllChefzAccountsWithSummary(pageSize = 100): Promise<{
     }
     if (items.length === 0) break;
 
+    items.forEach((item) => {
+      if (item.accountId && item.riderIqamaNo) {
+        registerRiderIqama({
+          accountId: item.accountId,
+          iqamaNo: item.riderIqamaNo,
+        });
+      }
+    });
+
     all.push(...items);
 
     if (typeof res?.totalCount === "number" && all.length >= res.totalCount) {
@@ -138,7 +148,14 @@ export async function getAllChefzAccounts(pageSize = 100): Promise<ChefzAccount[
 
 export async function getChefzAccount(accountId: string): Promise<ChefzAccount | null> {
   try {
-    return await authFetch<ChefzAccount>(`/api/chefz/accounts/${encodeURIComponent(accountId)}`);
+    const acc = await authFetch<ChefzAccount>(`/api/chefz/accounts/${encodeURIComponent(accountId)}`);
+    if (acc?.accountId && acc.riderIqamaNo) {
+      registerRiderIqama({
+        accountId: acc.accountId,
+        iqamaNo: acc.riderIqamaNo,
+      });
+    }
+    return acc;
   } catch (err: unknown) {
     const e = err as { status?: number };
     if (e?.status === 404) return null;

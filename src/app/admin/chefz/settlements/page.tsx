@@ -180,6 +180,10 @@ export default function ChefzSettlementsPage() {
       if (direct && direct !== "—" && direct !== "-" && direct !== "null" && direct !== "undefined") {
         return direct;
       }
+      const chefzAcc = chefzAccountMap.get(s.accountId);
+      if (chefzAcc?.riderIqamaNo && chefzAcc.riderIqamaNo.trim()) {
+        return chefzAcc.riderIqamaNo.trim();
+      }
       const rider = riderMap.get(s.riderProfileId);
       if (rider?.iqamaNo && rider.iqamaNo.trim()) {
         return rider.iqamaNo.trim();
@@ -199,6 +203,7 @@ export default function ChefzSettlementsPage() {
       }
       const cached = getRiderIqama({
         riderProfileId: s.riderProfileId || acc?.currentAssignment?.actualRiderProfileId || acc?.ownerRiderProfileId,
+        accountId: s.accountId,
         riderNameAr: s.riderName || rider?.fullNameAr,
       });
       if (cached && cached !== "—" && cached !== "-") {
@@ -206,7 +211,7 @@ export default function ChefzSettlementsPage() {
       }
       return "—";
     },
-    [riderMap, baseAccountMap]
+    [riderMap, baseAccountMap, chefzAccountMap]
   );
 
   // When modalAccountId changes, fetch its assignment history
