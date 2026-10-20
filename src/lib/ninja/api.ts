@@ -181,7 +181,10 @@ export async function getNinjaAccounts(params?: {
 }): Promise<NinjaPage<NinjaAccountResponse>> {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
-  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  if (params?.pageSize !== undefined) {
+    const clamped = Math.min(100, Math.max(1, params.pageSize));
+    query.set("pageSize", String(clamped));
+  }
   const queryString = query.toString();
 
   const res = await authFetch<NinjaPage<NinjaAccountResponse>>(
@@ -202,7 +205,8 @@ export async function getNinjaAccount(accountId: string): Promise<NinjaAccountRe
   return normalizeAccount(res);
 }
 
-export async function getAllNinjaAccounts(pageSize = 200): Promise<NinjaAccountResponse[]> {
+export async function getAllNinjaAccounts(requestedPageSize = 100): Promise<NinjaAccountResponse[]> {
+  const pageSize = Math.min(100, Math.max(1, requestedPageSize || 100));
   const all: NinjaAccountResponse[] = [];
   const seenIds = new Set<string>();
   let page = 1;

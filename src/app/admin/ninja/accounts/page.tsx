@@ -28,8 +28,10 @@ import {
 } from "@/lib/ninja/api";
 import {
   createPlatformAccount,
+  getAllPlatformAccounts,
   type PlatformResponse,
   type AccountUpsertRequest,
+  type AccountResponse,
 } from "@/lib/platforms/api";
 import {
   listOperatingCities,
@@ -113,6 +115,7 @@ export default function NinjaAccountsPage() {
   const [cities, setCities] = useState<OperatingCity[]>([]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
+  const [platformActiveAccounts, setPlatformActiveAccounts] = useState<AccountResponse[]>([]);
 
   // Pagination (load all by default on the first page, allow user to paginate client-side)
   const [currentPage, setCurrentPage] = useState(1);
@@ -151,6 +154,7 @@ export default function NinjaAccountsPage() {
   // 2. Assign Modal
   const [assigningAccount, setAssigningAccount] = useState<NinjaAccountResponse | null>(null);
   const [assignRiderId, setAssignRiderId] = useState("");
+  const [showAllRidersInAssign, setShowAllRidersInAssign] = useState(false);
   const [assignEffectiveFrom, setAssignEffectiveFrom] = useState(todayRiyadh);
   const [assignPhone, setAssignPhone] = useState("");
   const [assignPassword, setAssignPassword] = useState("");
@@ -197,16 +201,20 @@ export default function NinjaAccountsPage() {
 
   const loadLookups = async () => {
     try {
-      const [plat, cityList, sponsorList, riderList] = await Promise.all([
+      const [plat, cityList, sponsorList, riderList, platformActiveAccs] = await Promise.all([
         ensureNinjaPlatform().catch(() => null),
         listOperatingCities().catch(() => []),
         listSponsors().catch(() => []),
         listRiders().catch(() => []),
+        getAllPlatformAccounts({ status: "Assigned", currentOnly: true }).catch(() => []),
       ]);
       setPlatform(plat);
       setCities(cityList);
       setSponsors(sponsorList);
       setRiders(riderList);
+      if (Array.isArray(platformActiveAccs)) {
+        setPlatformActiveAccounts(platformActiveAccs);
+      }
     } catch (e) {
       console.warn("Could not load lookups", e);
     }
@@ -219,6 +227,12 @@ export default function NinjaAccountsPage() {
     try {
       const items = await getAllNinjaAccounts();
       setAccounts(items);
+      // Quietly update active platform assignments
+      getAllPlatformAccounts({ status: "Assigned", currentOnly: true })
+        .then((res) => {
+          if (Array.isArray(res)) setPlatformActiveAccounts(res);
+        })
+        .catch(() => {});
     } catch (err: any) {
       console.error("Failed to load Ninja accounts", err);
       const msg =
@@ -249,6 +263,153 @@ export default function NinjaAccountsPage() {
   const sponsorMap = useMemo(() => {
     return new Map<string, string>(sponsors.map((s) => [s.id, s.registryNameAr]));
   }, [sponsors]);
+
+  // Active assignments tracking: identifies riders with active assignments in Ninja and other platforms
+  const activeAssignmentRiderSet = useMemo(() => {
+    const activeIds = new Set<string>();
+    const activeIqamas = new Set<string>();
+
+    const addId = (id?: string | null) => {
+      if (id && typeof id === "string" && id.trim()) {
+        activeIds.add(id.trim().toLowerCase());
+      }
+    };
+    const addIqama = (iqama?: string | null) => {
+      if (iqama && typeof iqama === "string" && iqama.trim()) {
+        activeIqamas.add(iqama.trim().toLowerCase());
+      }
+    };
+
+    // 1. From all Ninja accounts loaded in the page
+    for (const acc of accounts) {
+      const isAssigned =
+        (acc.status || "").toLowerCase() === "assigned" ||
+        Boolean(acc.currentAssignmentId) ||
+        Boolean(acc.actualRiderProfileId) ||
+        Boolean(acc.actualRider) ||
+        Boolean(acc.actualEmployeeId);
+
+      if (isAssigned) {
+        addId(acc.actualRiderProfileId);
+        addId(acc.actualEmployeeId);
+        addId(acc.actualRider?.employeeId);
+        addIqama(acc.actualRider?.iqamaNo);
+      }
+    }
+
+    // 2. From global platform accounts
+    for (const pAcc of platformActiveAccounts) {
+      const isAssigned =
+        (pAcc.status || "").toLowerCase() === "assigned" ||
+        Boolean(pAcc.currentAssignment);
+
+      if (isAssigned && pAcc.currentAssignment) {
+        addId(pAcc.currentAssignment.actualRiderProfileId);
+        addId(pAcc.currentAssignment.actualEmployeeId);
+      }
+    }
+
+    return { activeIds, activeIqamas };
+  }, [accounts, platformActiveAccounts]);
+
+  const hasActiveAssignment = useMemo(() => {
+    return (r: Rider): boolean => {
+      const id = (r.id || "").trim().toLowerCase();
+      const empId = (r.employeeId || "").trim().toLowerCase();
+      const iqama = (r.iqamaNo || "").trim().toLowerCase();
+
+      if (id && activeAssignmentRiderSet.activeIds.has(id)) return true;
+      if (empId && activeAssignmentRiderSet.activeIds.has(empId)) return true;
+      if (iqama && activeAssignmentRiderSet.activeIqamas.has(iqama)) return true;
+      return false;
+    };
+  }, [activeAssignmentRiderSet]);
+
+  const assignableRiders = useMemo(() => {
+    return riders.filter((r) => !hasActiveAssignment(r));
+  }, [riders, hasActiveAssignment]);
+
+  const assignRiderOptions = useMemo(() => {
+    const list = showAllRidersInAssign ? riders : assignableRiders;
+    return list.map((r) => {
+      const isActive = hasActiveAssignment(r);
+      const activeTag = isActive ? " [لديه تعيين نشط حالياً ⚠️]" : "";
+      return {
+        value: r.id,
+        label: `${r.fullNameAr || r.fullNameEn} (${r.iqamaNo || r.employeeId})${activeTag}`,
+      };
+    });
+  }, [riders, assignableRiders, showAllRidersInAssign, hasActiveAssignment]);
+
+  // Localized Status Badge & Detail Formatter
+  const getStatusDisplay = (acc: NinjaAccountResponse) => {
+    const raw = (acc.status || "").toLowerCase();
+    const isAssigned = raw === "assigned";
+    const isAvailable = raw === "available";
+    const isSuspended = raw === "suspended";
+    const isRetired = raw === "retired";
+    const isArchived = raw === "archived";
+
+    // 1. Badge label & styling
+    let label = isEn ? "Available" : "متاح للتعيين";
+    let badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/70 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/40";
+    let dotClass = "bg-emerald-500";
+
+    if (isAssigned) {
+      label = isEn ? "Assigned" : "معين لمندوب";
+      badgeClass = "bg-purple-50 text-purple-700 border-purple-200/70 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/40";
+      dotClass = "bg-purple-600";
+    } else if (isAvailable) {
+      label = isEn ? "Available" : "متاح للتعيين";
+      badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/70 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/40";
+      dotClass = "bg-emerald-500";
+    } else if (isSuspended) {
+      label = isEn ? "Suspended" : "موقوف";
+      badgeClass = "bg-amber-50 text-amber-700 border-amber-200/70 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/40";
+      dotClass = "bg-amber-500";
+    } else if (isRetired) {
+      label = isEn ? "Retired" : "مستبعد";
+      badgeClass = "bg-rose-50 text-rose-700 border-rose-200/70 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/40";
+      dotClass = "bg-rose-500";
+    } else if (isArchived) {
+      label = isEn ? "Archived" : "مؤرشف";
+      badgeClass = "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700";
+      dotClass = "bg-gray-500";
+    }
+
+    // 2. Status Detail / Subtitle
+    let detailText = "";
+    let detailClass = "text-[10px] text-[var(--muted)]";
+    const rawReason = (acc.statusReason || "").trim();
+
+    if (isAvailable) {
+      // Fix confusing sheet checkup notes on an Available account
+      if (!rawReason || rawReason === "لا يعمل حسب ملف نينجا" || rawReason.toLowerCase().includes("not working")) {
+        detailText = isEn ? "Vacant (Ready to assign)" : "حساب شاغر (جاهز للتعيين)";
+      } else {
+        detailText = rawReason;
+      }
+    } else if (isAssigned) {
+      if (acc.assignmentEffectiveFrom) {
+        detailText = isEn ? `Since ${acc.assignmentEffectiveFrom}` : `ساري منذ ${acc.assignmentEffectiveFrom}`;
+      } else if (rawReason) {
+        detailText = rawReason;
+      } else {
+        detailText = isEn ? "Active in operations" : "نشط بالتشغيل الميداني";
+      }
+    } else if (isSuspended) {
+      detailClass = "text-[10px] text-amber-700 dark:text-amber-400 font-medium";
+      detailText = rawReason || (isEn ? "Suspended administratively" : "إيقاف إداري يدوي");
+    } else if (isRetired) {
+      detailClass = "text-[10px] text-rose-700 dark:text-rose-400 font-medium";
+      detailText = rawReason || (isEn ? "Retired from service" : "مستبعد من التشغيل");
+    } else if (isArchived) {
+      detailClass = "text-[10px] text-[var(--muted)]";
+      detailText = rawReason || (isEn ? "Archived record" : "سجل مؤرشف");
+    }
+
+    return { label, badgeClass, dotClass, detailText, detailClass, isSuspended };
+  };
 
   // -------------------------------------------------------------
   // Filter Options for Column Headers
@@ -313,7 +474,7 @@ export default function NinjaAccountsPage() {
       },
       {
         value: "Retired",
-        label: "متقاعد (Retired)",
+        label: "مستبعد (Retired)",
         sublabel: "مستبعد من التشغيل",
         count: statusCounts.get("Retired") || 0,
       },
@@ -936,14 +1097,22 @@ export default function NinjaAccountsPage() {
   const openStatusModal = (account: NinjaAccountResponse) => {
     setStatusAccount(account);
     const curr = (account.status || "Available") as any;
+    const rawReason = (account.statusReason || "").trim();
     if (curr === "Assigned" || curr === "Available") {
       setStatusSelected("Active");
+      // Don't pre-fill stale sheet notes on active account
+      if (rawReason === "لا يعمل حسب ملف نينجا" || rawReason === "مشكلة بالحساب حسب ملف نينجا") {
+        setStatusReason("");
+      } else {
+        setStatusReason(rawReason);
+      }
     } else if (["Suspended", "Retired", "Archived"].includes(curr)) {
       setStatusSelected(curr);
+      setStatusReason(rawReason);
     } else {
       setStatusSelected("Active");
+      setStatusReason("");
     }
-    setStatusReason(account.statusReason || "");
   };
 
   const handleStatusSubmit = async (e: React.FormEvent) => {
@@ -955,10 +1124,16 @@ export default function NinjaAccountsPage() {
       const targetId = statusAccount.accountId || statusAccount.id;
       if (!targetId) throw new Error("معرف الحساب غير صالح.");
 
+      const cleanedReason = statusReason.trim();
+      const finalReason =
+        statusSelected === "Active" && (cleanedReason === "لا يعمل حسب ملف نينجا" || cleanedReason === "مشكلة بالحساب حسب ملف نينجا")
+          ? null
+          : cleanedReason || null;
+
       const payload: NinjaAccountStatusRequest = {
         status: statusSelected,
         rowVersion: statusAccount.rowVersion,
-        reason: statusReason.trim() || null,
+        reason: finalReason,
       };
 
       const updated = await setNinjaAccountStatus(targetId, payload);
@@ -986,6 +1161,7 @@ export default function NinjaAccountsPage() {
   const openAssignModal = (account: NinjaAccountResponse) => {
     setAssigningAccount(account);
     setAssignRiderId("");
+    setShowAllRidersInAssign(false);
     setAssignEffectiveFrom(todayRiyadh);
     setAssignPhone(account.phoneNumber || "");
     setAssignPassword("");
@@ -1000,6 +1176,11 @@ export default function NinjaAccountsPage() {
 
     if (!assignRiderId) {
       toast.error("تنبيه", "يرجى اختيار المندوب الفعلي المراد تعيين الحساب له.");
+      return;
+    }
+    const chosenRider = riders.find((r) => r.id === assignRiderId);
+    if (chosenRider && hasActiveAssignment(chosenRider) && !showAllRidersInAssign) {
+      toast.error("تنبيه", "هذا المندوب لديه تعيين نشط حالياً. يرجى اختيار مندوب متاح بدون تعيينات نشطة.");
       return;
     }
     if (assignEffectiveFrom > todayRiyadh) {
@@ -1497,7 +1678,7 @@ export default function NinjaAccountsPage() {
               <option value="Available">متاح (Available)</option>
               <option value="Assigned">معين (Assigned)</option>
               <option value="Suspended">موقوف (Suspended)</option>
-              <option value="Retired">متقاعد (Retired)</option>
+              <option value="Retired">مستبعد (Retired)</option>
               <option value="Archived">مؤرشف (Archived)</option>
             </select>
 
@@ -1945,36 +2126,39 @@ export default function NinjaAccountsPage() {
 
                       {/* Status */}
                       <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold w-fit ${isAssigned
-                                ? "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
-                                : isAvailable
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                  : isSuspended
-                                    ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-                                    : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                              }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${isAssigned
-                                  ? "bg-purple-600"
-                                  : isAvailable
-                                    ? "bg-emerald-600"
-                                    : isSuspended
-                                      ? "bg-amber-600"
-                                      : "bg-gray-500"
-                                }`}
-                            />
-                            {isAssigned ? "معين لمندوب" : acc.status || "متاح"}
-                          </span>
+                        {(() => {
+                          const statusInfo = getStatusDisplay(acc);
+                          return (
+                            <div className="flex flex-col gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold w-fit border ${statusInfo.badgeClass}`}
+                              >
+                                <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dotClass}`} />
+                                {statusInfo.label}
+                              </span>
 
-                          {acc.statusReason && (
-                            <span className="text-[10px] text-[var(--muted)] line-clamp-1" title={acc.statusReason}>
-                              {acc.statusReason}
-                            </span>
-                          )}
-                        </div>
+                              {statusInfo.detailText && (
+                                <span
+                                  className={`line-clamp-1 flex items-center gap-1 ${statusInfo.detailClass}`}
+                                  title={statusInfo.detailText}
+                                >
+                                  {statusInfo.isSuspended && <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />}
+                                  <span>{statusInfo.detailText}</span>
+                                </span>
+                              )}
+
+                              {acc.isOperationallyBlocked && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/40 px-1.5 py-0.5 text-[10px] font-bold w-fit mt-0.5"
+                                  title={acc.operationalBlockReason || "محظور تشغيلياً بسبب مديونية"}
+                                >
+                                  <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
+                                  حظر مديونية
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Registered Owner & City/Sponsor */}
@@ -2258,7 +2442,26 @@ export default function NinjaAccountsPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[var(--muted)]">الحالة الحالية:</span>
-                <Badge tone="gray">{statusAccount.status}</Badge>
+                {(() => {
+                  const s = (statusAccount.status || "").toLowerCase();
+                  if (s === "assigned") {
+                    return (
+                      <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40">
+                        {isEn ? "Assigned" : "معين لمندوب"}
+                      </span>
+                    );
+                  }
+                  if (s === "available") {
+                    return <Badge tone="green">{isEn ? "Available" : "متاح للتعيين"}</Badge>;
+                  }
+                  if (s === "suspended") {
+                    return <Badge tone="orange">{isEn ? "Suspended" : "موقوف"}</Badge>;
+                  }
+                  if (s === "retired") {
+                    return <Badge tone="red">{isEn ? "Retired" : "مستبعد"}</Badge>;
+                  }
+                  return <Badge tone="gray">{isEn ? "Archived" : "مؤرشف"}</Badge>;
+                })()}
               </div>
             </div>
 
@@ -2283,7 +2486,7 @@ export default function NinjaAccountsPage() {
               >
                 <option value="Active">نشط (Active - يعود كـ معين أو متاح حسب وجود تعيين مفتوح)</option>
                 <option value="Suspended">موقوف يدوي (Suspended - يحتفظ بالتعيين ويمنع تعيينات جديدة)</option>
-                <option value="Retired">متقاعد (Retired - يحتفظ بالتعيين والسجل)</option>
+                <option value="Retired">مستبعد (Retired - يحتفظ بالتعيين والسجل)</option>
                 <option value="Archived">مؤرشف (Archived - أرشفة الحساب مع بقاء السجل)</option>
               </select>
             </div>
@@ -2528,7 +2731,9 @@ export default function NinjaAccountsPage() {
                         <div key={idx} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--subtle-bg)]/40 space-y-1">
                           <div className="flex items-center justify-between font-mono">
                             <span className="font-bold text-sm text-[var(--foreground)]" dir="ltr">{item.captainId}</span>
-                            <span className="text-xs">{item.status}</span>
+                            <span className="text-xs font-semibold">
+                              {item.status === "Available" ? "متاح" : item.status === "Assigned" ? "معين" : item.status === "Suspended" ? "موقوف" : item.status === "Retired" ? "مستبعد" : item.status === "Archived" ? "مؤرشف" : item.status}
+                            </span>
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
                             <span>كود: {item.accountCode}</span>
@@ -2612,21 +2817,42 @@ export default function NinjaAccountsPage() {
 
             {/* Rider Select */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[var(--foreground)]">
-                المندوب الفعلي (Actual Rider) <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[var(--foreground)]">
+                  المندوب الفعلي (Actual Rider) <span className="text-red-500">*</span>
+                </label>
+                <label className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] select-none text-[var(--muted)] hover:text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={showAllRidersInAssign}
+                    onChange={(e) => setShowAllRidersInAssign(e.target.checked)}
+                    className="rounded border-[var(--border)] text-purple-600 focus:ring-purple-500"
+                  />
+                  <span>عرض جميع المناديب</span>
+                </label>
+              </div>
+
               <SearchableSelect
-                options={riders.map((r) => ({
-                  value: r.id,
-                  label: `${r.fullNameAr || r.fullNameEn} (${r.iqamaNo || r.employeeId})`,
-                }))}
+                options={assignRiderOptions}
                 value={assignRiderId}
                 onChange={setAssignRiderId}
-                placeholder="ابحث واختر المندوب الفعلي..."
+                placeholder="ابحث واختر المندوب الفعلي غير المعين..."
               />
-              <p className="text-[11px] text-[var(--muted)]">
-                تطبق حدود التعيين القياسية: بحد أقصى حسابين لكل مندوب وحساب راتب واحد فقط.
-              </p>
+
+              <div className="flex items-center justify-between text-[11px] text-[var(--muted)]">
+                <span>
+                  المتاحون للتعيين (بدون تعيين نشط):{" "}
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
+                    {assignableRiders.length}
+                  </strong>{" "}
+                  من أصل {riders.length} مندوب
+                </span>
+                {!showAllRidersInAssign && riders.length > assignableRiders.length && (
+                  <span className="text-purple-600 dark:text-purple-400 font-medium">
+                    (تم استبعاد {riders.length - assignableRiders.length} مندوب لديهم تعيينات نشطة)
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Effective Date */}
