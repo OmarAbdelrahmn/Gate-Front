@@ -9,6 +9,7 @@ import {
   getNinjaPlatform,
   ensureNinjaPlatform,
   getNinjaAccounts,
+  getAllNinjaAccounts,
   setNinjaAccountStatus,
   compareNinjaAccounts,
   assignNinjaAccount,
@@ -47,6 +48,11 @@ import { DateInput } from "@/components/ui/DateInput";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
 import {
+  TableHeaderColumnFilter,
+  TableHeaderDualFilter,
+  type FilterOption,
+} from "@/components/ui/TableHeaderFilter";
+import {
   Zap,
   Search,
   RefreshCw,
@@ -70,6 +76,10 @@ import {
   XCircle,
   HelpCircle,
   ArrowUpRight,
+  Filter,
+  X,
+  MapPin,
+  Building2,
 } from "lucide-react";
 
 export default function NinjaAccountsPage() {
@@ -104,16 +114,27 @@ export default function NinjaAccountsPage() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
 
-  // Pagination (no total count from server)
-  const [page, setPage] = useState(1);
-  const pageSize = 50;
-  const [hasMore, setHasMore] = useState(false);
+  // Pagination (load all by default on the first page, allow user to paginate client-side)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | "all">("all");
 
-  // Filters
+  // Toolbar Filters
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterCooldown, setFilterCooldown] = useState<"all" | "active" | "ready">("all");
   const [filterDebtBlocked, setFilterDebtBlocked] = useState(false);
+  const [filterCityId, setFilterCityId] = useState("");
+  const [filterSponsorId, setFilterSponsorId] = useState("");
+
+  // Column Header Filters
+  const [colFilterCaptain, setColFilterCaptain] = useState<string[]>([]);
+  const [colFilterStatus, setColFilterStatus] = useState<string[]>([]);
+  const [colFilterOwners, setColFilterOwners] = useState<string[]>([]);
+  const [colFilterCitySponsor, setColFilterCitySponsor] = useState<string[]>([]);
+  const [colFilterRiders, setColFilterRiders] = useState<string[]>([]);
+  const [colFilterPhone, setColFilterPhone] = useState<string[]>([]);
+  const [colFilterPasswordCooldown, setColFilterPasswordCooldown] = useState<string[]>([]);
+  const [colFilterSheet, setColFilterSheet] = useState<string[]>([]);
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
 
@@ -191,15 +212,13 @@ export default function NinjaAccountsPage() {
     }
   };
 
-  const loadAccounts = async (targetPage = page) => {
+  const loadAccounts = async () => {
     if (!canRead) return;
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await getNinjaAccounts({ page: targetPage, pageSize });
-      const items = res?.items || [];
+      const items = await getAllNinjaAccounts();
       setAccounts(items);
-      setHasMore(items.length >= pageSize);
     } catch (err: any) {
       console.error("Failed to load Ninja accounts", err);
       const msg =
@@ -217,27 +236,424 @@ export default function NinjaAccountsPage() {
   }, []);
 
   useEffect(() => {
-    loadAccounts(page);
-  }, [page, canRead]);
+    if (canRead) {
+      loadAccounts();
+    }
+  }, [canRead]);
 
-  // Filtered accounts
+  // Lookup maps
+  const cityMap = useMemo(() => {
+    return new Map<string, string>(cities.map((c) => [c.id, c.globalCityAr]));
+  }, [cities]);
+
+  const sponsorMap = useMemo(() => {
+    return new Map<string, string>(sponsors.map((s) => [s.id, s.registryNameAr]));
+  }, [sponsors]);
+
+  // -------------------------------------------------------------
+  // Filter Options for Column Headers
+  // -------------------------------------------------------------
+
+  // 1. Captain ID & Code Filter Options
+  const captainFilterOptions: FilterOption[] = useMemo(() => {
+    let customCodeCount = 0;
+    let matchCodeCount = 0;
+    for (const a of accounts) {
+      if (a.code && a.code !== a.captainId) {
+        customCodeCount++;
+      } else {
+        matchCodeCount++;
+      }
+    }
+    return [
+      {
+        value: "CODE_CUSTOM",
+        label: "كود مخصص (يختلف عن الكابتن ID)",
+        sublabel: "الحسابات التي تم تعيين بادئة أو كود مخصص لها",
+        count: customCodeCount,
+      },
+      {
+        value: "CODE_MATCH",
+        label: "كود مطابق لرقم الكابتن",
+        sublabel: "الحسابات التي يطابق كودها رقم الكابتن مباشرة",
+        count: matchCodeCount,
+      },
+    ];
+  }, [accounts]);
+
+  // 2. Status Filter Options
+  const statusFilterOptions: FilterOption[] = useMemo(() => {
+    const statusCounts = new Map<string, number>();
+    let hasReasonCount = 0;
+    for (const a of accounts) {
+      const s = a.status || "Available";
+      statusCounts.set(s, (statusCounts.get(s) || 0) + 1);
+      if (a.statusReason?.trim()) {
+        hasReasonCount++;
+      }
+    }
+    const standard: FilterOption[] = [
+      {
+        value: "Available",
+        label: "متاح (Available)",
+        sublabel: "جاهز للتعيين لمندوب",
+        count: statusCounts.get("Available") || 0,
+      },
+      {
+        value: "Assigned",
+        label: "معين لمندوب (Assigned)",
+        sublabel: "مرتبط بمندوب فعلي حالياً",
+        count: statusCounts.get("Assigned") || 0,
+      },
+      {
+        value: "Suspended",
+        label: "موقوف (Suspended)",
+        sublabel: "إيقاف إداري يدوي",
+        count: statusCounts.get("Suspended") || 0,
+      },
+      {
+        value: "Retired",
+        label: "متقاعد (Retired)",
+        sublabel: "مستبعد من التشغيل",
+        count: statusCounts.get("Retired") || 0,
+      },
+      {
+        value: "Archived",
+        label: "مؤرشف (Archived)",
+        sublabel: "أرشفة السجل مع إمكانية الاستعادة",
+        count: statusCounts.get("Archived") || 0,
+      },
+    ];
+    if (hasReasonCount > 0) {
+      standard.push({
+        value: "HAS_REASON",
+        label: "مسجل له سبب إيقاف/تعديل",
+        sublabel: "حسابات تحوي ملاحظات إدارية",
+        count: hasReasonCount,
+      });
+    }
+    return standard;
+  }, [accounts]);
+
+  // 3. Registered Owner Filter Options
+  const ownerFilterOptions: FilterOption[] = useMemo(() => {
+    let hasIqamaCount = 0;
+    let noIqamaCount = 0;
+    const ownerCounts = new Map<string, { count: number; iqama?: string }>();
+
+    for (const a of accounts) {
+      const name =
+        a.owner?.nameAr || a.owner?.nameEn || a.ownerRiderNameAr || a.ownerRiderNameEn || "غير محدد";
+      const iqama = a.owner?.iqamaNo || undefined;
+      if (iqama) hasIqamaCount++;
+      else noIqamaCount++;
+
+      const prev = ownerCounts.get(name);
+      if (prev) {
+        prev.count++;
+      } else {
+        ownerCounts.set(name, { count: 1, iqama });
+      }
+    }
+
+    const options: FilterOption[] = [
+      {
+        value: "HAS_IQAMA",
+        label: "مسجل له رقم هوية/إقامة",
+        count: hasIqamaCount,
+      },
+      {
+        value: "NO_IQAMA",
+        label: "غير مسجل له رقم هوية",
+        count: noIqamaCount,
+      },
+    ];
+
+    const sortedOwners = Array.from(ownerCounts.entries()).sort((a, b) => b[1].count - a[1].count);
+    for (const [name, info] of sortedOwners) {
+      options.push({
+        value: `OWNER_${name}`,
+        label: name,
+        sublabel: info.iqama ? `هوية: ${info.iqama}` : undefined,
+        count: info.count,
+      });
+    }
+
+    return options;
+  }, [accounts]);
+
+  // 4. City & Sponsor Dual Filter Options
+  const citySponsorFilterOptions: FilterOption[] = useMemo(() => {
+    const cityCounts = new Map<string, number>();
+    const sponsorCounts = new Map<string, number>();
+    for (const a of accounts) {
+      if (a.operatingCityId) {
+        cityCounts.set(a.operatingCityId, (cityCounts.get(a.operatingCityId) || 0) + 1);
+      }
+      if (a.sponsorId) {
+        sponsorCounts.set(a.sponsorId, (sponsorCounts.get(a.sponsorId) || 0) + 1);
+      }
+    }
+
+    const list: FilterOption[] = [];
+    for (const c of cities) {
+      const count = cityCounts.get(c.id) || 0;
+      if (count > 0) {
+        list.push({
+          value: `CITY_${c.id}`,
+          label: `مدينة: ${c.globalCityAr}`,
+          count,
+        });
+      }
+    }
+    for (const s of sponsors) {
+      const count = sponsorCounts.get(s.id) || 0;
+      if (count > 0) {
+        list.push({
+          value: `SPONSOR_${s.id}`,
+          label: `كفيل: ${s.registryNameAr}`,
+          count,
+        });
+      }
+    }
+
+    return list.sort((a, b) => (b.count || 0) - (a.count || 0));
+  }, [accounts, cities, sponsors]);
+
+  // 5. Actual Assigned Rider Filter Options
+  const riderFilterOptions: FilterOption[] = useMemo(() => {
+    let assignedCount = 0;
+    let unassignedCount = 0;
+    let debtBlockedCount = 0;
+    let debtClearCount = 0;
+    const riderCounts = new Map<string, { count: number; name: string; iqama?: string }>();
+
+    for (const a of accounts) {
+      const isAssigned = Boolean(a.actualRiderProfileId || a.actualRider);
+      if (isAssigned) {
+        assignedCount++;
+        const name =
+          a.actualRider?.nameAr ||
+          a.actualRider?.nameEn ||
+          a.actualRiderNameAr ||
+          a.actualRiderNameEn ||
+          "مندوب معين";
+        const key = a.actualRider?.employeeId || a.actualRider?.iqamaNo || name;
+        const iqama = a.actualRider?.iqamaNo || undefined;
+        const prev = riderCounts.get(key);
+        if (prev) {
+          prev.count++;
+        } else {
+          riderCounts.set(key, { count: 1, name, iqama });
+        }
+      } else {
+        unassignedCount++;
+      }
+
+      if (a.isOperationallyBlocked) {
+        debtBlockedCount++;
+      } else {
+        debtClearCount++;
+      }
+    }
+
+    const options: FilterOption[] = [
+      {
+        value: "STATUS_ASSIGNED",
+        label: "معين لمندوب (نشط)",
+        sublabel: "حسابات مرتبطة بمندوب فعلي حالياً",
+        count: assignedCount,
+      },
+      {
+        value: "STATUS_UNASSIGNED",
+        label: "غير معين (شاغر)",
+        sublabel: "حسابات جاهزة للتخصيص والتعيين",
+        count: unassignedCount,
+      },
+      {
+        value: "DEBT_BLOCKED",
+        label: "حظر مديونية تشغيلية",
+        sublabel: "مندوب عليه حظر تشغيلي من منصة سابقة",
+        count: debtBlockedCount,
+      },
+      {
+        value: "DEBT_CLEAR",
+        label: "سليم من حظر المديونية",
+        sublabel: "لا توجد موانع مديونية مسجلة",
+        count: debtClearCount,
+      },
+    ];
+
+    const sortedRiders = Array.from(riderCounts.entries()).sort((a, b) => b[1].count - a[1].count);
+    for (const [key, info] of sortedRiders) {
+      options.push({
+        value: `RIDER_${key}`,
+        label: info.name,
+        sublabel: info.iqama ? `هوية: ${info.iqama}` : undefined,
+        count: info.count,
+      });
+    }
+
+    return options;
+  }, [accounts]);
+
+  // 6. Login Phone Filter Options
+  const phoneFilterOptions: FilterOption[] = useMemo(() => {
+    let withPhoneCount = 0;
+    let withoutPhoneCount = 0;
+    let saudiCount = 0;
+    let nonSaudiCount = 0;
+
+    for (const a of accounts) {
+      const p = (a.phoneNumber || "").trim();
+      if (p) {
+        withPhoneCount++;
+        if (p.startsWith("05") || p.startsWith("+9665") || p.startsWith("9665")) {
+          saudiCount++;
+        } else {
+          nonSaudiCount++;
+        }
+      } else {
+        withoutPhoneCount++;
+      }
+    }
+
+    return [
+      {
+        value: "WITH_PHONE",
+        label: "مسجل له رقم هاتف دخول",
+        sublabel: "أرقام الدخول النشطة للحسابات",
+        count: withPhoneCount,
+      },
+      {
+        value: "WITHOUT_PHONE",
+        label: "لم يسجل رقم هاتف بعد",
+        sublabel: "حسابات بحاجة لإدخال رقم هاتف",
+        count: withoutPhoneCount,
+      },
+      {
+        value: "SAUDI_PHONE",
+        label: "رقم جوال سعودي (05xxxxxxxx)",
+        count: saudiCount,
+      },
+      {
+        value: "NON_SAUDI_PHONE",
+        label: "رقم دولي أو غير قياسي",
+        count: nonSaudiCount,
+      },
+    ];
+  }, [accounts]);
+
+  // 7. Password & Cooldown Filter Options
+  const passwordCooldownFilterOptions: FilterOption[] = useMemo(() => {
+    let passwordSetCount = 0;
+    let passwordUnsetCount = 0;
+    let cooldownActiveCount = 0;
+    let cooldownReadyCount = 0;
+
+    for (const a of accounts) {
+      if (a.hasPassword) passwordSetCount++;
+      else passwordUnsetCount++;
+
+      if (isCooldownActive(a.passwordChangeAllowedAtUtc)) {
+        cooldownActiveCount++;
+      } else {
+        cooldownReadyCount++;
+      }
+    }
+
+    return [
+      {
+        value: "PASSWORD_SET",
+        label: "كلمة المرور مسجلة",
+        sublabel: "تم حفظ كلمة مرور مشفرة في النظام",
+        count: passwordSetCount,
+      },
+      {
+        value: "PASSWORD_UNSET",
+        label: "كلمة المرور غير مسجلة",
+        sublabel: "يلزم تدوير أو تسجيل كلمة المرور",
+        count: passwordUnsetCount,
+      },
+      {
+        value: "COOLDOWN_ACTIVE",
+        label: "فترة انتظار نشطة (72h)",
+        sublabel: "لا يمكن تعديل كلمة المرور حتى انتهاء المدة",
+        count: cooldownActiveCount,
+      },
+      {
+        value: "COOLDOWN_READY",
+        label: "متاحة للتغيير",
+        sublabel: "فترة الانتظار منتهية أو لم تسجل مسبقاً",
+        count: cooldownReadyCount,
+      },
+    ];
+  }, [accounts]);
+
+  // 8. Latest Sheet Checkup Filter Options
+  const sheetFilterOptions: FilterOption[] = useMemo(() => {
+    let hasCheckupCount = 0;
+    let noCheckupCount = 0;
+    let sheetSuspendedCount = 0;
+    let sheetActiveCount = 0;
+    const statusCounts = new Map<string, number>();
+
+    for (const a of accounts) {
+      const has = Boolean(a.latestSheetStatus || a.sheetUpdatedAtUtc);
+      if (has) hasCheckupCount++;
+      else noCheckupCount++;
+
+      if (a.latestSheetSuspended === true) sheetSuspendedCount++;
+      else if (a.latestSheetSuspended === false) sheetActiveCount++;
+
+      if (a.latestSheetStatus) {
+        statusCounts.set(a.latestSheetStatus, (statusCounts.get(a.latestSheetStatus) || 0) + 1);
+      }
+    }
+
+    const options: FilterOption[] = [
+      {
+        value: "CHECKUP_EXISTS",
+        label: "تم فحصه بالشيت",
+        sublabel: "حسابات خضعت للمطابقة مع شيتات نينجا",
+        count: hasCheckupCount,
+      },
+      {
+        value: "CHECKUP_NONE",
+        label: "لا يوجد فحص بالشيت",
+        sublabel: "حسابات جديدة أو لم ترد في شيت بعد",
+        count: noCheckupCount,
+      },
+      {
+        value: "SHEET_ACTIVE",
+        label: "نشط بالشيت (غير موقوف)",
+        count: sheetActiveCount,
+      },
+      {
+        value: "SHEET_SUSPENDED",
+        label: "موقوف بالشيت (Suspended)",
+        count: sheetSuspendedCount,
+      },
+    ];
+
+    for (const [st, count] of statusCounts.entries()) {
+      options.push({
+        value: `STATUS_${st}`,
+        label: `حالة الشيت: ${st}`,
+        count,
+      });
+    }
+
+    return options;
+  }, [accounts]);
+
+  // -------------------------------------------------------------
+  // Filtered Accounts
+  // -------------------------------------------------------------
   const filteredAccounts = useMemo(() => {
     let result = accounts;
 
-    if (filterStatus !== "all") {
-      result = result.filter((a) => (a.status || "").toLowerCase() === filterStatus.toLowerCase());
-    }
-
-    if (filterCooldown === "active") {
-      result = result.filter((a) => isCooldownActive(a.passwordChangeAllowedAtUtc));
-    } else if (filterCooldown === "ready") {
-      result = result.filter((a) => !isCooldownActive(a.passwordChangeAllowedAtUtc));
-    }
-
-    if (filterDebtBlocked) {
-      result = result.filter((a) => a.isOperationallyBlocked);
-    }
-
+    // Search query
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       result = result.filter((a) => {
@@ -250,6 +666,8 @@ export default function NinjaAccountsPage() {
         const riderAr = (a.actualRider?.nameAr || a.actualRiderNameAr || "").toLowerCase();
         const riderEn = (a.actualRider?.nameEn || a.actualRiderNameEn || "").toLowerCase();
         const riderIqama = (a.actualRider?.iqamaNo || "").toLowerCase();
+        const cityName = (cityMap.get(a.operatingCityId) || a.operatingCityNameAr || "").toLowerCase();
+        const sponsorName = (sponsorMap.get(a.sponsorId || "") || a.sponsorNameAr || "").toLowerCase();
         return (
           captain.includes(q) ||
           code.includes(q) ||
@@ -259,13 +677,252 @@ export default function NinjaAccountsPage() {
           ownerIqama.includes(q) ||
           riderAr.includes(q) ||
           riderEn.includes(q) ||
-          riderIqama.includes(q)
+          riderIqama.includes(q) ||
+          cityName.includes(q) ||
+          sponsorName.includes(q)
         );
       });
     }
 
+    // Toolbar Status
+    if (filterStatus !== "all") {
+      result = result.filter((a) => (a.status || "").toLowerCase() === filterStatus.toLowerCase());
+    }
+
+    // Toolbar Cooldown
+    if (filterCooldown === "active") {
+      result = result.filter((a) => isCooldownActive(a.passwordChangeAllowedAtUtc));
+    } else if (filterCooldown === "ready") {
+      result = result.filter((a) => !isCooldownActive(a.passwordChangeAllowedAtUtc));
+    }
+
+    // Toolbar Debt Blocked
+    if (filterDebtBlocked) {
+      result = result.filter((a) => a.isOperationallyBlocked);
+    }
+
+    // Toolbar City
+    if (filterCityId) {
+      result = result.filter((a) => a.operatingCityId === filterCityId);
+    }
+
+    // Toolbar Sponsor
+    if (filterSponsorId) {
+      result = result.filter((a) => a.sponsorId === filterSponsorId);
+    }
+
+    // Column Filter: Captain ID & Code
+    if (colFilterCaptain.length > 0) {
+      result = result.filter((a) => {
+        const isCustom = a.code && a.code !== a.captainId;
+        return colFilterCaptain.some((val) => {
+          if (val === "CODE_CUSTOM") return isCustom;
+          if (val === "CODE_MATCH") return !isCustom;
+          return a.captainId === val || a.code === val;
+        });
+      });
+    }
+
+    // Column Filter: Status
+    if (colFilterStatus.length > 0) {
+      result = result.filter((a) => {
+        const s = (a.status || "").toLowerCase();
+        return colFilterStatus.some((val) => {
+          if (val === "HAS_REASON") return Boolean(a.statusReason?.trim());
+          return s === val.toLowerCase();
+        });
+      });
+    }
+
+    // Column Filter: Registered Owner
+    if (colFilterOwners.length > 0) {
+      result = result.filter((a) => {
+        const ownerName =
+          a.owner?.nameAr || a.owner?.nameEn || a.ownerRiderNameAr || a.ownerRiderNameEn || "";
+        const hasIqama = Boolean(a.owner?.iqamaNo);
+        return colFilterOwners.some((val) => {
+          if (val === "HAS_IQAMA") return hasIqama;
+          if (val === "NO_IQAMA") return !hasIqama;
+          if (val.startsWith("OWNER_")) return val.slice(6) === ownerName;
+          return false;
+        });
+      });
+    }
+
+    // Column Filter: City / Sponsor
+    if (colFilterCitySponsor.length > 0) {
+      const selectedCities = colFilterCitySponsor
+        .filter((v) => v.startsWith("CITY_"))
+        .map((v) => v.slice(5));
+      const selectedSponsors = colFilterCitySponsor
+        .filter((v) => v.startsWith("SPONSOR_"))
+        .map((v) => v.slice(8));
+
+      if (selectedCities.length > 0) {
+        result = result.filter(
+          (a) => a.operatingCityId && selectedCities.includes(a.operatingCityId)
+        );
+      }
+      if (selectedSponsors.length > 0) {
+        result = result.filter((a) => a.sponsorId && selectedSponsors.includes(a.sponsorId));
+      }
+    }
+
+    // Column Filter: Actual Assigned Rider
+    if (colFilterRiders.length > 0) {
+      result = result.filter((a) => {
+        const isAssigned = Boolean(a.actualRiderProfileId || a.actualRider);
+        const riderName =
+          a.actualRider?.nameAr ||
+          a.actualRider?.nameEn ||
+          a.actualRiderNameAr ||
+          a.actualRiderNameEn ||
+          "";
+        const riderKey = a.actualRider?.employeeId || a.actualRider?.iqamaNo || riderName;
+        return colFilterRiders.some((val) => {
+          if (val === "STATUS_ASSIGNED") return isAssigned;
+          if (val === "STATUS_UNASSIGNED") return !isAssigned;
+          if (val === "DEBT_BLOCKED") return a.isOperationallyBlocked;
+          if (val === "DEBT_CLEAR") return !a.isOperationallyBlocked;
+          if (val.startsWith("RIDER_"))
+            return val.slice(6) === riderKey || val.slice(6) === riderName;
+          return false;
+        });
+      });
+    }
+
+    // Column Filter: Phone
+    if (colFilterPhone.length > 0) {
+      result = result.filter((a) => {
+        const p = (a.phoneNumber || "").trim();
+        const hasPhone = Boolean(p);
+        const isSaudi = p.startsWith("05") || p.startsWith("+9665") || p.startsWith("9665");
+        return colFilterPhone.some((val) => {
+          if (val === "WITH_PHONE") return hasPhone;
+          if (val === "WITHOUT_PHONE") return !hasPhone;
+          if (val === "SAUDI_PHONE") return hasPhone && isSaudi;
+          if (val === "NON_SAUDI_PHONE") return hasPhone && !isSaudi;
+          return false;
+        });
+      });
+    }
+
+    // Column Filter: Password & Cooldown
+    if (colFilterPasswordCooldown.length > 0) {
+      result = result.filter((a) => {
+        const isCooldown = isCooldownActive(a.passwordChangeAllowedAtUtc);
+        return colFilterPasswordCooldown.some((val) => {
+          if (val === "PASSWORD_SET") return a.hasPassword;
+          if (val === "PASSWORD_UNSET") return !a.hasPassword;
+          if (val === "COOLDOWN_ACTIVE") return isCooldown;
+          if (val === "COOLDOWN_READY") return !isCooldown;
+          return false;
+        });
+      });
+    }
+
+    // Column Filter: Latest Sheet Checkup
+    if (colFilterSheet.length > 0) {
+      result = result.filter((a) => {
+        const hasCheckup = Boolean(a.latestSheetStatus || a.sheetUpdatedAtUtc);
+        return colFilterSheet.some((val) => {
+          if (val === "CHECKUP_EXISTS") return hasCheckup;
+          if (val === "CHECKUP_NONE") return !hasCheckup;
+          if (val === "SHEET_SUSPENDED") return a.latestSheetSuspended === true;
+          if (val === "SHEET_ACTIVE") return a.latestSheetSuspended === false;
+          if (val.startsWith("STATUS_")) return (a.latestSheetStatus || "") === val.slice(7);
+          return false;
+        });
+      });
+    }
+
     return result;
-  }, [accounts, filterStatus, filterCooldown, filterDebtBlocked, search]);
+  }, [
+    accounts,
+    search,
+    filterStatus,
+    filterCooldown,
+    filterDebtBlocked,
+    filterCityId,
+    filterSponsorId,
+    colFilterCaptain,
+    colFilterStatus,
+    colFilterOwners,
+    colFilterCitySponsor,
+    colFilterRiders,
+    colFilterPhone,
+    colFilterPasswordCooldown,
+    colFilterSheet,
+    cityMap,
+    sponsorMap,
+  ]);
+
+  // Check if any filter is active
+  const hasActiveFilters = Boolean(
+    search.trim() ||
+      filterStatus !== "all" ||
+      filterCooldown !== "all" ||
+      filterDebtBlocked ||
+      filterCityId ||
+      filterSponsorId ||
+      colFilterCaptain.length > 0 ||
+      colFilterStatus.length > 0 ||
+      colFilterOwners.length > 0 ||
+      colFilterCitySponsor.length > 0 ||
+      colFilterRiders.length > 0 ||
+      colFilterPhone.length > 0 ||
+      colFilterPasswordCooldown.length > 0 ||
+      colFilterSheet.length > 0
+  );
+
+  const handleClearAllFilters = () => {
+    setSearch("");
+    setFilterStatus("all");
+    setFilterCooldown("all");
+    setFilterDebtBlocked(false);
+    setFilterCityId("");
+    setFilterSponsorId("");
+    setColFilterCaptain([]);
+    setColFilterStatus([]);
+    setColFilterOwners([]);
+    setColFilterCitySponsor([]);
+    setColFilterRiders([]);
+    setColFilterPhone([]);
+    setColFilterPasswordCooldown([]);
+    setColFilterSheet([]);
+    setCurrentPage(1);
+  };
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    search,
+    filterStatus,
+    filterCooldown,
+    filterDebtBlocked,
+    filterCityId,
+    filterSponsorId,
+    colFilterCaptain,
+    colFilterStatus,
+    colFilterOwners,
+    colFilterCitySponsor,
+    colFilterRiders,
+    colFilterPhone,
+    colFilterPasswordCooldown,
+    colFilterSheet,
+    pageSize,
+  ]);
+
+  const totalFilteredCount = filteredAccounts.length;
+  const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(totalFilteredCount / pageSize));
+
+  // Displayed accounts: all by default on the first page
+  const displayedAccounts = useMemo(() => {
+    if (pageSize === "all") return filteredAccounts;
+    const start = (currentPage - 1) * pageSize;
+    return filteredAccounts.slice(start, start + pageSize);
+  }, [filteredAccounts, currentPage, pageSize]);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -307,12 +964,12 @@ export default function NinjaAccountsPage() {
       const updated = await setNinjaAccountStatus(targetId, payload);
       toast.success("تم بنجاح", `تم تحديث حالة الحساب إلى ${updated.status}.`);
       setStatusAccount(null);
-      loadAccounts(page);
+      loadAccounts();
     } catch (err: any) {
       console.error("Status update error", err);
       if (err?.status === 409) {
         toast.error("تعارض في السجل (409)", "تم تعديل الحساب بالتزامن من مستخدم آخر. يرجى مراجعة البيانات الحالية.");
-        loadAccounts(page);
+        loadAccounts();
       } else if (err?.code === "rider.jahez_debt_block" || err?.message?.includes("debt")) {
         toast.error("حظر مديونية تشغيلية", "لا يمكن تنشيط الحساب لوجود مديونية تشغيلية سابقة على المندوب.");
       } else {
@@ -392,12 +1049,12 @@ export default function NinjaAccountsPage() {
       }
 
       setAssigningAccount(null);
-      loadAccounts(page);
+      loadAccounts();
     } catch (err: any) {
       console.error("Assign error", err);
       if (err?.status === 409) {
         toast.error("تعارض في السجل (409)", "تم تعديل الحساب بالتزامن. يرجى مراجعة البيانات الحالية وإعادة المحاولة.");
-        loadAccounts(page);
+        loadAccounts();
       } else {
         toast.error("خطأ في التعيين", err?.message || "تعذر تعيين الحساب.");
       }
@@ -478,12 +1135,12 @@ export default function NinjaAccountsPage() {
       }
 
       setReleasingAccount(null);
-      loadAccounts(page);
+      loadAccounts();
     } catch (err: any) {
       console.error("Return error", err);
       if (err?.status === 409) {
         toast.error("تعارض في سجل التعيين (409)", "تم تعديل التعيين بالتزامن. يرجى تحديث البيانات والمحاولة مجدداً.");
-        loadAccounts(page);
+        loadAccounts();
       } else {
         toast.error("خطأ في الإرجاع", err?.message || "تعذر إرجاع الحساب.");
       }
@@ -552,12 +1209,12 @@ export default function NinjaAccountsPage() {
       }
 
       setCredAccount(null);
-      loadAccounts(page);
+      loadAccounts();
     } catch (err: any) {
       console.error("Update credentials error", err);
       if (err?.status === 409) {
         toast.error("تعارض في السجل (409)", "تم تعديل بيانات الحساب بالتزامن. يرجى التحديث والمحاولة ثانية.");
-        loadAccounts(page);
+        loadAccounts();
       } else {
         toast.error("خطأ في التحديث", err?.message || "تعذر تحديث بيانات الدخول.");
       }
@@ -642,7 +1299,7 @@ export default function NinjaAccountsPage() {
       setIsCreateOpen(false);
       setCreateCaptainId("");
       setCreateCode("");
-      loadAccounts(1);
+      loadAccounts();
     } catch (err: any) {
       console.error("Create account error", err);
       toast.error("خطأ", err?.message || "تعذر إنشاء حساب المنصة.");
@@ -784,7 +1441,7 @@ export default function NinjaAccountsPage() {
 
           <Button
             variant="secondary"
-            onClick={() => loadAccounts(page)}
+            onClick={() => loadAccounts()}
             disabled={loading}
             className="gap-2 text-xs"
           >
@@ -821,7 +1478,7 @@ export default function NinjaAccountsPage() {
           <div className="relative flex-1">
             <Search className="absolute right-3.5 top-3 h-4 w-4 text-[var(--muted)] rtl:right-3.5 ltr:left-3.5" />
             <Input
-              placeholder="بحث برقم الكابتن، كود الحساب، اسم المالك، المندوب، الهوية أو الهاتف..."
+              placeholder="بحث برقم الكابتن، كود الحساب، اسم المالك، المندوب، الهوية، الهاتف، المدينة أو الكفيل..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pr-10 rtl:pr-10 ltr:pl-10 text-xs"
@@ -856,6 +1513,36 @@ export default function NinjaAccountsPage() {
               <option value="ready">متاحة للتغيير</option>
             </select>
 
+            {/* City Filter */}
+            <select
+              value={filterCityId}
+              onChange={(e) => setFilterCityId(e.target.value)}
+              aria-label="تصفية حسب المدينة"
+              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
+            >
+              <option value="">جميع المدن</option>
+              {cities.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.globalCityAr}
+                </option>
+              ))}
+            </select>
+
+            {/* Sponsor Filter */}
+            <select
+              value={filterSponsorId}
+              onChange={(e) => setFilterSponsorId(e.target.value)}
+              aria-label="تصفية حسب الكفيل"
+              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
+            >
+              <option value="">جميع الكفلاء</option>
+              {sponsors.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.registryNameAr}
+                </option>
+              ))}
+            </select>
+
             {/* Debt Blocked Toggle */}
             <button
               type="button"
@@ -870,6 +1557,191 @@ export default function NinjaAccountsPage() {
             </button>
           </div>
         </div>
+
+        {/* Active Column & Toolbar Filter Badges */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-[var(--border)] text-xs">
+            <span className="font-bold text-[var(--muted)]">فلاتر مطبقة:</span>
+
+            {search.trim() && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                <Search className="h-3 w-3" />
+                <span>بحث: {search}</span>
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {colFilterStatus.map((val) => {
+              const opt = statusFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                >
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterStatus((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {colFilterOwners.map((val) => {
+              const opt = ownerFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                >
+                  <UserCheck className="h-3 w-3" />
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterOwners((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {colFilterCitySponsor.map((val) => {
+              const opt = citySponsorFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                >
+                  <MapPin className="h-3 w-3" />
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterCitySponsor((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {colFilterRiders.map((val) => {
+              const opt = riderFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                >
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterRiders((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {colFilterPhone.map((val) => {
+              const opt = phoneFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                >
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterPhone((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {colFilterPasswordCooldown.map((val) => {
+              const opt = passwordCooldownFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800"
+                >
+                  <Lock className="h-3 w-3" />
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterPasswordCooldown((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {colFilterSheet.map((val) => {
+              const opt = sheetFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                >
+                  <FileSpreadsheet className="h-3 w-3" />
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterSheet((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {colFilterCaptain.map((val) => {
+              const opt = captainFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
+                >
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterCaptain((prev) => prev.filter((x) => x !== val))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 mr-2 transition-colors cursor-pointer"
+            >
+              إعادة تعيين جميع الفلاتر
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Accounts Table */}
@@ -877,7 +1749,7 @@ export default function NinjaAccountsPage() {
         <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-[var(--foreground)]">قائمة حسابات نينجا</span>
-            <Badge tone="gray" className="text-xs">
+            <Badge tone="gray" className="text-xs font-mono">
               {filteredAccounts.length} حساب
             </Badge>
           </div>
@@ -887,14 +1759,127 @@ export default function NinjaAccountsPage() {
           <table className="w-full text-xs text-right border-collapse">
             <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
               <tr>
-                <th className="px-4 py-3 font-bold">كابتن ID</th>
-                <th className="px-4 py-3 font-bold">حالة الحساب</th>
-                <th className="px-4 py-3 font-bold">المالك المسجل</th>
-                <th className="px-4 py-3 font-bold">المندوب الفعلي</th>
-                <th className="px-4 py-3 font-bold">هاتف الدخول</th>
-                <th className="px-4 py-3 font-bold">كلمة المرور وفترة الانتظار</th>
-                <th className="px-4 py-3 font-bold">آخر فحص بالشيت</th>
-                <th className="px-4 py-3 font-bold text-center">إجراءات</th>
+                {/* 1. Captain ID */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>كابتن ID</span>
+                    <TableHeaderColumnFilter
+                      label="كابتن ID والكود"
+                      value={colFilterCaptain}
+                      onChange={setColFilterCaptain}
+                      options={captainFilterOptions}
+                      placeholder="تصفية بالكود..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
+                {/* 2. Status */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>حالة الحساب</span>
+                    <TableHeaderColumnFilter
+                      label="حالة الحساب"
+                      value={colFilterStatus}
+                      onChange={setColFilterStatus}
+                      options={statusFilterOptions}
+                      placeholder="تصفية بالحالة..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
+                {/* 3. Owner & City/Sponsor */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>المالك والمدينة/الكفيل</span>
+                    <TableHeaderDualFilter
+                      label="المالك والمدينة/الكفيل"
+                      align="right"
+                      tab1={{
+                        id: "owner",
+                        label: "المالك المسجل",
+                        icon: <UserCheck className="h-3 w-3" />,
+                        values: colFilterOwners,
+                        onChange: setColFilterOwners,
+                        options: ownerFilterOptions,
+                        placeholder: "تصفية بالمالك المسجل...",
+                      }}
+                      tab2={{
+                        id: "city_sponsor",
+                        label: "المدينة والكفيل",
+                        icon: <MapPin className="h-3 w-3" />,
+                        values: colFilterCitySponsor,
+                        onChange: setColFilterCitySponsor,
+                        options: citySponsorFilterOptions,
+                        placeholder: "تصفية بالمدينة أو الكفيل...",
+                      }}
+                    />
+                  </div>
+                </th>
+
+                {/* 4. Actual Rider */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>المندوب الفعلي</span>
+                    <TableHeaderColumnFilter
+                      label="المندوب الفعلي"
+                      value={colFilterRiders}
+                      onChange={setColFilterRiders}
+                      options={riderFilterOptions}
+                      placeholder="تصفية بالمندوب أو التعيين..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
+                {/* 5. Phone */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>هاتف الدخول</span>
+                    <TableHeaderColumnFilter
+                      label="هاتف الدخول"
+                      value={colFilterPhone}
+                      onChange={setColFilterPhone}
+                      options={phoneFilterOptions}
+                      placeholder="تصفية برقم الهاتف..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
+                {/* 6. Password & Cooldown */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>كلمة المرور وفترة الانتظار</span>
+                    <TableHeaderColumnFilter
+                      label="كلمة المرور والانتظار"
+                      value={colFilterPasswordCooldown}
+                      onChange={setColFilterPasswordCooldown}
+                      options={passwordCooldownFilterOptions}
+                      placeholder="تصفية بكلمة المرور والانتظار..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
+                {/* 7. Sheet Checkup */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>آخر فحص بالشيت</span>
+                    <TableHeaderColumnFilter
+                      label="فحص الشيت"
+                      value={colFilterSheet}
+                      onChange={setColFilterSheet}
+                      options={sheetFilterOptions}
+                      placeholder="تصفية بفحص الشيت..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
+                {/* 8. Actions */}
+                <th className="px-4 py-3 font-bold text-center whitespace-nowrap">إجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -902,7 +1887,7 @@ export default function NinjaAccountsPage() {
                 <tr>
                   <td colSpan={8} className="py-12 text-center">
                     <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
-                    <p className="text-xs text-[var(--muted)]">جارٍ تحميل حسابات نينجا...</p>
+                    <p className="text-xs text-[var(--muted)]">جارٍ تحميل جميع حسابات نينجا...</p>
                   </td>
                 </tr>
               ) : fetchError ? (
@@ -912,7 +1897,7 @@ export default function NinjaAccountsPage() {
                     <p className="font-bold">{fetchError}</p>
                   </td>
                 </tr>
-              ) : filteredAccounts.length === 0 ? (
+              ) : displayedAccounts.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
                     <Zap className="h-10 w-10 mx-auto mb-2 text-[var(--muted)]/40" />
@@ -920,7 +1905,7 @@ export default function NinjaAccountsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredAccounts.map((acc) => {
+                displayedAccounts.map((acc) => {
                   const accId = acc.accountId || acc.id || "";
                   const isAssigned = (acc.status || "").toLowerCase() === "assigned";
                   const isAvailable = (acc.status || "").toLowerCase() === "available";
@@ -992,7 +1977,7 @@ export default function NinjaAccountsPage() {
                         </div>
                       </td>
 
-                      {/* Registered Owner */}
+                      {/* Registered Owner & City/Sponsor */}
                       <td className="px-4 py-3 space-y-0.5">
                         <div className="font-bold text-[var(--foreground)]">
                           {ownerName}
@@ -1001,6 +1986,22 @@ export default function NinjaAccountsPage() {
                           {acc.owner?.iqamaNo && <span>ID: {acc.owner.iqamaNo}</span>}
                           {acc.ownerEmployeeId && !acc.owner?.iqamaNo && <span>Emp: {acc.ownerEmployeeId.substring(0, 8)}...</span>}
                         </div>
+                        {(acc.operatingCityNameAr || cityMap.get(acc.operatingCityId) || acc.sponsorNameAr || (acc.sponsorId && sponsorMap.get(acc.sponsorId))) && (
+                          <div className="flex flex-wrap items-center gap-1 pt-0.5 text-[10px] text-[var(--muted)]">
+                            {(acc.operatingCityNameAr || cityMap.get(acc.operatingCityId)) && (
+                              <span className="inline-flex items-center gap-0.5 rounded bg-[var(--subtle-bg)] px-1.5 py-0.5">
+                                <MapPin className="h-2.5 w-2.5" />
+                                {acc.operatingCityNameAr || cityMap.get(acc.operatingCityId)}
+                              </span>
+                            )}
+                            {(acc.sponsorNameAr || (acc.sponsorId && sponsorMap.get(acc.sponsorId))) && (
+                              <span className="inline-flex items-center gap-0.5 rounded bg-[var(--subtle-bg)] px-1.5 py-0.5">
+                                <Building2 className="h-2.5 w-2.5" />
+                                {acc.sponsorNameAr || sponsorMap.get(acc.sponsorId!)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Actual Assigned Rider */}
@@ -1182,31 +2183,59 @@ export default function NinjaAccountsPage() {
           </table>
         </div>
 
-        {/* Pagination Bar */}
-        <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
+        {/* Pagination & Summary Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
           <div className="text-[var(--muted)]">
-            صفحة <span className="font-bold text-[var(--foreground)]">{page}</span>
+            عرض <span className="font-bold font-mono text-[var(--foreground)]">{displayedAccounts.length}</span> من أصل{" "}
+            <span className="font-bold font-mono text-[var(--foreground)]">{filteredAccounts.length}</span> حساب
+            {filteredAccounts.length !== accounts.length && (
+              <span className="text-[11px] text-[var(--muted)] font-normal"> (تمت تصفيته من إجمالي {accounts.length} حساب)</span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="text-xs"
-            >
-              الصفحة السابقة
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!hasMore || loading}
-              onClick={() => setPage((p) => p + 1)}
-              className="text-xs"
-            >
-              الصفحة التالية
-            </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Page Size Selector */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-[var(--muted)]">سجلات الصفحة:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(e.target.value === "all" ? "all" : Number(e.target.value))}
+                aria-label="تحديد عدد سجلات الصفحة"
+                className="rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1 text-xs text-[var(--foreground)]"
+              >
+                <option value="all">الكل (عرض جميع السجلات)</option>
+                <option value={50}>50 سجل</option>
+                <option value={100}>100 سجل</option>
+                <option value={200}>200 سجل</option>
+              </select>
+            </div>
+
+            {/* Pagination Controls when not displaying all */}
+            {pageSize !== "all" && totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={currentPage <= 1 || loading}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="text-xs"
+                >
+                  الصفحة السابقة
+                </Button>
+                <span className="font-mono text-xs text-[var(--foreground)]">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={currentPage >= totalPages || loading}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="text-xs"
+                >
+                  الصفحة التالية
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>

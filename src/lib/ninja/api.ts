@@ -202,19 +202,34 @@ export async function getNinjaAccount(accountId: string): Promise<NinjaAccountRe
   return normalizeAccount(res);
 }
 
-export async function getAllNinjaAccounts(pageSize = 100): Promise<NinjaAccountResponse[]> {
+export async function getAllNinjaAccounts(pageSize = 200): Promise<NinjaAccountResponse[]> {
   const all: NinjaAccountResponse[] = [];
+  const seenIds = new Set<string>();
   let page = 1;
-  const maxPages = 50; // Safety guard
+  const maxPages = 100;
+  let serverPageSize: number | null = null;
 
   while (page <= maxPages) {
     const res = await getNinjaAccounts({ page, pageSize });
     const items = res?.items || [];
     if (items.length === 0) break;
 
-    all.push(...items);
+    if (serverPageSize === null) {
+      serverPageSize = res?.pageSize && res.pageSize > 0 ? res.pageSize : items.length;
+    }
 
-    if (items.length < (res?.pageSize || pageSize)) {
+    let newCount = 0;
+    for (const item of items) {
+      const key = item.accountId || item.id || `${item.captainId}-${item.code}`;
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        all.push(item);
+        newCount++;
+      }
+    }
+
+    if (newCount === 0) break;
+    if (items.length < serverPageSize) {
       break;
     }
     page++;
