@@ -6,10 +6,10 @@ import Link from "next/link";
 import {
   getJahezAdministrativeDebts,
   getAllJahezAdministrativeDebts,
-  getJahezTransferredDebts,
+  getJahezRiderTransferredDebts,
 } from "@/lib/jahez/api";
 import type { AdministrativeDebt, TransferredDebt } from "@/lib/jahez/types";
-import { Coins, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Coins, ExternalLink, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface JahezRiderDebtSummaryCardProps {
   riderId: string;
@@ -37,7 +37,7 @@ export function JahezRiderDebtSummaryCard({
     try {
       const [debtsRes, transfersRes] = await Promise.allSettled([
         getAllJahezAdministrativeDebts(100),
-        getJahezTransferredDebts(1, 100),
+        getJahezRiderTransferredDebts(riderId, 1, 50),
       ]);
 
       if (debtsRes.status === "fulfilled") {
@@ -48,10 +48,7 @@ export function JahezRiderDebtSummaryCard({
       }
 
       if (transfersRes.status === "fulfilled") {
-        const myTransfers = (transfersRes.value.items || []).filter(
-          (t) => t.riderProfileId === riderId,
-        );
-        setTransferredDebts(myTransfers);
+        setTransferredDebts(transfersRes.value?.items || []);
       }
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "خطأ أثناء تحميل بيانات جاهز");
@@ -97,15 +94,15 @@ export function JahezRiderDebtSummaryCard({
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <span>
               {isEn
-                ? "No outstanding Jahez transferred debts or active administrative blocks."
-                : "لا توجد التزامات مرحلة أو حظر مالي معلق على المندوب في جاهز."}
+                ? "No outstanding Jahez transferred debts."
+                : "لا توجد التزامات مرحلة غير مسددة على المندوب في جاهز."}
             </span>
           </div>
           <Link
-            href="/admin/jahez/accounts"
+            href="/admin/jahez/cashbox"
             className="flex items-center gap-1 font-semibold text-emerald-700 hover:underline dark:text-emerald-300"
           >
-            <span>{isEn ? "Accounts" : "حسابات جاهز"}</span>
+            <span>{isEn ? "Transferred Debts" : "مديونيات جاهز المرحلة"}</span>
             <ExternalLink className="h-3 w-3" />
           </Link>
         </div>
@@ -117,28 +114,25 @@ export function JahezRiderDebtSummaryCard({
     <div
       className={`rounded-xl border ${
         unpaidTransfers.length > 0
-          ? "border-rose-300 bg-rose-50/60 dark:border-rose-900/50 dark:bg-rose-950/20"
-          : "border-amber-300 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20"
+          ? "border-amber-300 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20"
+          : "border-blue-300 bg-blue-50/60 dark:border-blue-900/50 dark:bg-blue-950/20"
       } p-3 text-xs shadow-sm ${className}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
-          {unpaidTransfers.length > 0 ? (
-            <ShieldAlert className="mt-0.5 h-4 w-4 text-rose-600 dark:text-rose-400" />
-          ) : (
-            <Coins className="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400" />
-          )}
+          <Coins className="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400" />
           <div>
             <div className="font-semibold text-gray-900 dark:text-gray-100">
               {unpaidTransfers.length > 0
                 ? isEn
-                  ? "Operationally Blocked — Unpaid Jahez Transferred Debt"
-                  : "موقوف تشغيلياً — وجود التزام مرحل غير مسدد في جاهز"
+                  ? "Jahez Transferred Debt (Collection in Progress)"
+                  : "التزام مالي مرحل غير مسدد في جاهز (قيد التحصيل)"
                 : isEn
                 ? "Jahez Administrative Monitoring"
                 : "متابعة مديونية جاهز الإدارية"}
             </div>
             <div className="mt-1 flex flex-wrap gap-4 text-gray-600 dark:text-gray-300">
+
               {unpaidTransfers.length > 0 && (
                 <div>
                   <span className="font-medium text-rose-700 dark:text-rose-300">

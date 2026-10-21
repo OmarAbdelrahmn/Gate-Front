@@ -36,6 +36,9 @@ import type {
   RequestCreate,
   Statistics,
   TransferredDebt,
+  RiderTransferredDebtSummary,
+  RiderDebtRepaymentRequest,
+  RiderDebtRepaymentResponse,
   CashboxHandover,
   CashboxHandoverCreate,
   CashboxHandoverConfirm,
@@ -560,6 +563,7 @@ export async function recordJahezFeeReceipt(
   });
 }
 
+
 // ----------------------------------------------------------------------
 // 8. Cashbox Accountant Handovers
 // ----------------------------------------------------------------------
@@ -679,6 +683,71 @@ export async function repayJahezTransferredDebt(
       headers,
       body: JSON.stringify(data),
       notifySuccess: init?.notifySuccess ?? "تم سداد كامل المستحق بنجاح",
+    },
+  );
+}
+
+/**
+ * GET /riders/transferred-debts?page=1&pageSize=50
+ * Actionable list: one row per rider with unpaid transferred debt
+ */
+export async function getJahezRidersWithTransferredDebts(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<RiderTransferredDebtSummary>> {
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+  return authFetch<Page<RiderTransferredDebtSummary>>(
+    `${ROOT}/riders/transferred-debts?${pageQuery(page, safePageSize)}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+}
+
+/**
+ * GET /riders/{riderId}/transferred-debts?page=1&pageSize=50
+ * That rider's unpaid debts (TransferredDebtRow)
+ */
+export async function getJahezRiderTransferredDebts(
+  riderId: string,
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<Page<TransferredDebt>> {
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+  return authFetch<Page<TransferredDebt>>(
+    `${ROOT}/riders/${encodeURIComponent(riderId)}/transferred-debts?${pageQuery(page, safePageSize)}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+}
+
+/**
+ * POST /riders/{riderId}/transferred-debts/repayment
+ * Repay all unpaid transferred debts of that rider in full
+ */
+export async function repayJahezRiderTransferredDebts(
+  riderId: string,
+  data: RiderDebtRepaymentRequest,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<RiderDebtRepaymentResponse> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("bulk-debt-repay");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<RiderDebtRepaymentResponse>(
+    `${ROOT}/riders/${encodeURIComponent(riderId)}/transferred-debts/repayment`,
+    {
+      ...init,
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+      notifySuccess: init?.notifySuccess ?? "تم سداد جميع المديونيات المرحلة بقيمة المستحق بنجاح",
     },
   );
 }

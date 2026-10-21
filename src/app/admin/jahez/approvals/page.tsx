@@ -237,12 +237,16 @@ export default function JahezApprovalsPage() {
     try {
       const app = await getJahezRequestDetails(requestId);
       setSelectedApproval(app);
-      setDecisionReason("");
+      setDecisionReason(
+        app.request.kind === ApprovalKind.SettlementTransfer
+          ? "تمت مراجعة مديونية الداشبورد والعمولة واعتماد الترحيل"
+          : "",
+      );
       setUseOriginalValues(false);
       setApprovedNet(app.request.proposedNet ?? "");
       setApprovedCommission(app.request.proposedCommission ?? "");
       setIsDecisionOpen(true);
-    } catch (err: unknown) {
+    } catch {
       toast.error("خطأ", "تعذر جلب تفاصيل الطلب");
     }
   };
@@ -259,18 +263,28 @@ export default function JahezApprovalsPage() {
       return;
     }
 
+    const isTransfer = selectedApproval.request.kind === ApprovalKind.SettlementTransfer;
+
     setDecisionSubmitting(true);
     try {
       await decideJahezRequest(selectedApproval.request.id, {
         approve,
-        reason: decisionReason.trim() || (approve ? "اعتماد الطلب" : "رفض الطلب"),
-        useOriginalValues: approve ? useOriginalValues : undefined,
+        reason:
+          decisionReason.trim() ||
+          (isTransfer
+            ? approve
+              ? "تمت مراجعة مديونية الداشبورد والعمولة واعتماد الترحيل"
+              : "يلزم مراجعة مبلغ الداشبورد"
+            : approve
+            ? "اعتماد الطلب"
+            : "رفض الطلب"),
+        useOriginalValues: isTransfer ? undefined : approve ? useOriginalValues : undefined,
         approvedNet:
-          approve && !useOriginalValues && approvedNet !== ""
+          !isTransfer && approve && !useOriginalValues && approvedNet !== ""
             ? Number(approvedNet)
             : undefined,
         approvedCommission:
-          approve && !useOriginalValues && approvedCommission !== ""
+          !isTransfer && approve && !useOriginalValues && approvedCommission !== ""
             ? Number(approvedCommission)
             : undefined,
       });
@@ -283,6 +297,7 @@ export default function JahezApprovalsPage() {
       setDecisionSubmitting(false);
     }
   };
+
 
   const getKindLabel = (kind: ApprovalKind) => {
     switch (kind) {
@@ -500,15 +515,28 @@ export default function JahezApprovalsPage() {
                         {req.kind === ApprovalKind.SettlementTransfer && (
                           <div className="flex flex-col gap-0.5">
                             <span className="font-bold text-purple-700 dark:text-purple-400">
-                              ترحيل كامل المستحق وحظر مالي
+                              تصفية وسحب وترحيل مديونية
                             </span>
-                            {req.operation?.remaining != null && (
+                            {req.amounts ? (
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-gray-600 dark:text-gray-300">
+                                <span>داشبورد: {Number(req.amounts.dashboardDebt).toFixed(2)}</span>
+                                <span>•</span>
+                                <span>عمولة: {Number(req.amounts.commission).toFixed(2)}</span>
+                                <span>•</span>
+                                <strong className="text-rose-600 dark:text-rose-400">
+                                  إجمالي: {Number(req.amounts.total).toFixed(2)} ر.س
+                                </strong>
+                              </div>
+                            ) : req.operation?.remaining != null ? (
                               <span className="text-[10px] font-mono text-gray-500">
-                                المبلغ المرحل: {req.operation.remaining} ر.س
+                                المبلغ المرحل: {Number(req.operation.remaining).toFixed(2)} ر.س
                               </span>
+                            ) : (
+                              <span className="text-[10px] text-gray-400">تفاصيل العملية غير متاحة</span>
                             )}
                           </div>
                         )}
+
                       </div>
                     </td>
                     <td className="py-3 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={req.reason}>
@@ -951,79 +979,134 @@ export default function JahezApprovalsPage() {
                 </div>
               )}
 
-              {/* Financial comparison card */}
-              {(selectedApproval.request.operation || selectedApproval.request.proposedNet !== null || selectedApproval.request.proposedCommission !== null) && (
-                <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1 dark:border-gray-700">
-                    <ArrowRightLeft className="h-4 w-4 text-purple-600" />
-                    <span>المقارنة المالية بين العملية الحالية والمقترح</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Operation current values */}
-                    <div className="rounded-lg bg-gray-50 p-2.5 dark:bg-gray-900 space-y-1">
-                      <div className="font-bold text-[11px] text-gray-700 dark:text-gray-300 border-b pb-1">
-                        القيم الحالية المسجلة
-                      </div>
-                      <div className="text-[11px] flex justify-between">
-                        <span className="text-gray-500">الصافي:</span>
-                        <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
-                          {selectedApproval.request.operation?.net != null ? `${selectedApproval.request.operation.net} ر.س` : "-"}
-                        </span>
-                      </div>
-                      <div className="text-[11px] flex justify-between">
-                        <span className="text-gray-500">عمولة الشركة:</span>
-                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                          {selectedApproval.request.operation?.commission != null ? `${selectedApproval.request.operation.commission} ر.س` : "-"}
-                        </span>
-                      </div>
-                      <div className="text-[11px] flex justify-between">
-                        <span className="text-gray-500">المبلغ المتبقي:</span>
-                        <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
-                          {selectedApproval.request.operation?.remaining != null ? `${selectedApproval.request.operation.remaining} ر.س` : "-"}
-                        </span>
-                      </div>
-                      {selectedApproval.request.operation?.throughDate && (
-                        <div className="text-[10px] text-gray-400 font-mono pt-1">
-                          حتى تاريخ: {selectedApproval.request.operation.throughDate}
-                        </div>
-                      )}
+              {/* Financial comparison card for Adjustments */}
+              {selectedApproval.request.kind !== ApprovalKind.SettlementTransfer &&
+                (selectedApproval.request.operation ||
+                  selectedApproval.request.proposedNet !== null ||
+                  selectedApproval.request.proposedCommission !== null) && (
+                  <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-800/60 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white text-xs border-b pb-1 dark:border-gray-700">
+                      <ArrowRightLeft className="h-4 w-4 text-purple-600" />
+                      <span>المقارنة المالية بين العملية الحالية والمقترح</span>
                     </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Operation current values */}
+                      <div className="rounded-lg bg-gray-50 p-2.5 dark:bg-gray-900 space-y-1">
+                        <div className="font-bold text-[11px] text-gray-700 dark:text-gray-300 border-b pb-1">
+                          القيم الحالية المسجلة
+                        </div>
+                        <div className="text-[11px] flex justify-between">
+                          <span className="text-gray-500">الصافي:</span>
+                          <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                            {selectedApproval.request.operation?.net != null ? `${selectedApproval.request.operation.net} ر.س` : "-"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] flex justify-between">
+                          <span className="text-gray-500">عمولة الشركة:</span>
+                          <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                            {selectedApproval.request.operation?.commission != null ? `${selectedApproval.request.operation.commission} ر.س` : "-"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] flex justify-between">
+                          <span className="text-gray-500">المبلغ المتبقي:</span>
+                          <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
+                            {selectedApproval.request.operation?.remaining != null ? `${selectedApproval.request.operation.remaining} ر.س` : "-"}
+                          </span>
+                        </div>
+                        {selectedApproval.request.operation?.throughDate && (
+                          <div className="text-[10px] text-gray-400 font-mono pt-1">
+                            حتى تاريخ: {selectedApproval.request.operation.throughDate}
+                          </div>
+                        )}
+                      </div>
 
-                    {/* Proposed values */}
-                    <div className="rounded-lg bg-indigo-50/60 p-2.5 dark:bg-indigo-950/40 space-y-1">
-                      <div className="font-bold text-[11px] text-indigo-800 dark:text-indigo-300 border-b pb-1 border-indigo-200 dark:border-indigo-800">
-                        القيم المقترحة بالطلب
-                      </div>
-                      <div className="text-[11px] flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">الصافي المقترح:</span>
-                        <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
-                          {selectedApproval.request.proposedNet != null ? `${selectedApproval.request.proposedNet} ر.س` : "-"}
-                        </span>
-                      </div>
-                      <div className="text-[11px] flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">العمولة المقترحة:</span>
-                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
-                          {selectedApproval.request.proposedCommission != null ? `${selectedApproval.request.proposedCommission} ر.س` : "-"}
-                        </span>
-                      </div>
-                      {selectedApproval.request.debtAdjustment !== null && (
+                      {/* Proposed values */}
+                      <div className="rounded-lg bg-indigo-50/60 p-2.5 dark:bg-indigo-950/40 space-y-1">
+                        <div className="font-bold text-[11px] text-indigo-800 dark:text-indigo-300 border-b pb-1 border-indigo-200 dark:border-indigo-800">
+                          القيم المقترحة بالطلب
+                        </div>
                         <div className="text-[11px] flex justify-between">
-                          <span className="text-gray-600 dark:text-gray-400">تعديل المديونية:</span>
-                          <span className="font-mono font-bold text-rose-700 dark:text-rose-300">
-                            {selectedApproval.request.debtAdjustment} ر.س
+                          <span className="text-gray-600 dark:text-gray-400">الصافي المقترح:</span>
+                          <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
+                            {selectedApproval.request.proposedNet != null ? `${selectedApproval.request.proposedNet} ر.س` : "-"}
                           </span>
                         </div>
-                      )}
-                      {selectedApproval.request.waiverAmount > 0 && (
                         <div className="text-[11px] flex justify-between">
-                          <span className="text-gray-600 dark:text-gray-400">مبلغ الإعفاء:</span>
-                          <span className="font-mono font-bold text-purple-700 dark:text-purple-300">
-                            {selectedApproval.request.waiverAmount} ر.س
+                          <span className="text-gray-600 dark:text-gray-400">العمولة المقترحة:</span>
+                          <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                            {selectedApproval.request.proposedCommission != null ? `${selectedApproval.request.proposedCommission} ر.س` : "-"}
                           </span>
                         </div>
-                      )}
+                        {selectedApproval.request.debtAdjustment !== null && (
+                          <div className="text-[11px] flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">تعديل المديونية:</span>
+                            <span className="font-mono font-bold text-rose-700 dark:text-rose-300">
+                              {selectedApproval.request.debtAdjustment} ر.س
+                            </span>
+                          </div>
+                        )}
+                        {selectedApproval.request.waiverAmount > 0 && (
+                          <div className="text-[11px] flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">مبلغ الإعفاء:</span>
+                            <span className="font-mono font-bold text-purple-700 dark:text-purple-300">
+                              {selectedApproval.request.waiverAmount} ر.س
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
+                )}
+
+              {/* Dedicated Financial Split for Settlement Transfer */}
+              {selectedApproval.request.kind === ApprovalKind.SettlementTransfer && (
+                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3.5 dark:border-purple-900/50 dark:bg-purple-950/40 space-y-2.5">
+                  <div className="flex items-center justify-between font-bold text-xs text-purple-950 dark:text-purple-200">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4 text-purple-600" />
+                      تفاصيل المبالغ المعتمدة للترحيل (amounts)
+                    </span>
+                    <Badge tone="purple">تصفية وسحب وترحيل</Badge>
+                  </div>
+
+                  {(() => {
+                    const amounts = selectedApproval.request.amounts || selectedApproval.amounts;
+                    if (amounts) {
+                      return (
+                        <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                          <div className="rounded-xl bg-white p-2.5 border border-purple-100 shadow-xs dark:bg-gray-900 dark:border-gray-800">
+                            <span className="text-[10px] text-gray-500 font-medium block">
+                              مديونية داشبورد جاهز المدخلة
+                            </span>
+                            <span className="font-mono font-bold text-sm text-gray-900 dark:text-white mt-0.5 block">
+                              {Number(amounts.dashboardDebt).toFixed(2)} ر.س
+                            </span>
+                          </div>
+                          <div className="rounded-xl bg-white p-2.5 border border-purple-100 shadow-xs dark:bg-gray-900 dark:border-gray-800">
+                            <span className="text-[10px] text-gray-500 font-medium block">
+                              العمولة المستحقة للشركة
+                            </span>
+                            <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-0.5 block">
+                              {Number(amounts.commission).toFixed(2)} ر.س
+                            </span>
+                          </div>
+                          <div className="rounded-xl bg-white p-2.5 border border-purple-100 shadow-xs dark:bg-gray-900 dark:border-gray-800">
+                            <span className="text-[10px] text-gray-500 font-medium block">
+                              إجمالي الترحيل المعتمد
+                            </span>
+                            <span className="font-mono font-black text-sm text-rose-600 dark:text-rose-400 mt-0.5 block">
+                              {Number(amounts.total).toFixed(2)} ر.س
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="text-center py-2 text-amber-700 dark:text-amber-300 font-semibold text-xs bg-amber-50 dark:bg-amber-950/40 rounded-lg p-2">
+                        تفاصيل العملية غير متاحة؛ يرجى تحديث البيانات ومراجعة التصفية قبل الاعتماد.
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1119,7 +1202,11 @@ export default function JahezApprovalsPage() {
                     <Input
                       value={decisionReason}
                       onChange={(e) => setDecisionReason(e.target.value)}
-                      placeholder="سبب الاعتماد أو الرفض..."
+                      placeholder={
+                        selectedApproval.request.kind === ApprovalKind.SettlementTransfer
+                          ? "تمت مراجعة مديونية الداشبورد والعمولة واعتماد الترحيل"
+                          : "سبب الاعتماد أو الرفض..."
+                      }
                     />
                   </div>
 
@@ -1132,28 +1219,43 @@ export default function JahezApprovalsPage() {
                       إغلاق
                     </Button>
 
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={() => submitDecision(false)}
-                        disabled={decisionSubmitting}
-                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1"
-                      >
-                        <X className="h-4 w-4" />
-                        رفض الطلب
-                      </Button>
+                    {Boolean(user?.id && selectedApproval.request.requestedByUserId === user.id) ? (
+                      <span className="text-xs text-amber-600 font-bold">
+                        غير مصرح باعتماد طلبك الشخصي
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={() => submitDecision(false)}
+                          disabled={decisionSubmitting}
+                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1"
+                        >
+                          <X className="h-4 w-4" />
+                          {selectedApproval.request.kind === ApprovalKind.SettlementTransfer
+                            ? "رفض الترحيل"
+                            : "رفض الطلب"}
+                        </Button>
 
-                      <Button
-                        onClick={() => submitDecision(true)}
-                        disabled={decisionSubmitting}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1"
-                      >
-                        <Check className="h-4 w-4" />
-                        اعتماد الطلب
-                      </Button>
-                    </div>
+                        <Button
+                          onClick={() => submitDecision(true)}
+                          disabled={decisionSubmitting}
+                          className={`${
+                            selectedApproval.request.kind === ApprovalKind.SettlementTransfer
+                              ? "bg-purple-600 hover:bg-purple-700"
+                              : "bg-emerald-600 hover:bg-emerald-700"
+                          } text-white font-bold gap-1 shadow-xs`}
+                        >
+                          <Check className="h-4 w-4" />
+                          {selectedApproval.request.kind === ApprovalKind.SettlementTransfer
+                            ? "اعتماد السحب وترحيل المستحق"
+                            : "اعتماد الطلب"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
+
             </div>
           )}
         </div>

@@ -105,6 +105,16 @@ export interface Statistics {
   sponsors: SponsorStatistics[];
 }
 
+export interface DayUsage {
+  ordersCount?: number | null;
+  workingHours?: number | null;
+  collectedAmount?: number | null;
+  deductionsAmount?: number | null;
+  totalValidOffers?: number | null;
+  declinedOffers?: number | null;
+  missedOffers?: number | null;
+}
+
 export interface OperationCreate {
   handoverId: Id;
   mode: OperationMode;
@@ -116,6 +126,7 @@ export interface OperationCreate {
   purpose?: Purpose;
   transferToRider?: boolean;
   paymentReference?: string | null;
+  dayUsage?: DayUsage | null;
 }
 
 export interface Preview {
@@ -257,6 +268,12 @@ export interface ApprovalRequestAccount {
   sponsorNameAr?: string | null;
 }
 
+export interface TransferAmounts {
+  dashboardDebt: number;
+  commission: number;
+  total: number;
+}
+
 export interface ApprovalRequest extends Audit {
   handoverId: Id;
   kind: ApprovalKind;
@@ -279,6 +296,7 @@ export interface ApprovalRequest extends Audit {
   account?: ApprovalRequestAccount | null;
   targetAccount?: ApprovalRequestAccount | null;
   operation?: (Partial<Operation> & { net?: number; commission?: number; remaining?: number }) | null;
+  amounts?: TransferAmounts | null;
 }
 
 export interface DecisionRequest {
@@ -305,6 +323,7 @@ export interface Decision {
 export interface Approval {
   request: ApprovalRequest;
   decisions: Decision[];
+  amounts?: TransferAmounts | null;
 }
 
 export interface MoneyRecord {
@@ -360,6 +379,28 @@ export interface TransferredDebt extends Audit {
   userRider?: RiderPerson | null;
   assignment?: TransferredDebtAssignment | null;
   sourceOperation?: TransferredDebtSourceOperation | null;
+}
+
+export interface RiderTransferredDebtSummary {
+  riderProfileId: Id;
+  userRider: RiderPerson | null;
+  unpaidDebtCount: number;
+  outstandingAmount: number;
+  amounts: TransferAmounts | null;
+}
+
+export interface RiderDebtRepaymentRequest {
+  expectedAmount: number;
+  fund: Fund;
+  reference: string;
+  reason: string;
+}
+
+export interface RiderDebtRepaymentResponse {
+  riderProfileId: Id;
+  paidAmount: number;
+  paidDebtIds: Id[];
+  remainingAmount: number;
 }
 
 export interface RiderPerson {

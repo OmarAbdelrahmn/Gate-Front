@@ -58,8 +58,6 @@ import {
   UserPlus,
   PlayCircle,
   FileText,
-  KeyRound,
-  Lock,
   AlertTriangle,
   CheckCircle2,
   XCircle,
@@ -110,7 +108,6 @@ export default function JahezAccountsPage() {
   const [assignedFilter, setAssignedFilter] = useState<string>("ALL");
   const [cityFilter, setCityFilter] = useState<string>("ALL");
   const [sponsorFilter, setSponsorFilter] = useState<string>("ALL");
-  const [passwordFilter, setPasswordFilter] = useState<string>("ALL");
 
   // -----------------------------------------------------------------
   // Modals States
@@ -350,11 +347,13 @@ export default function JahezAccountsPage() {
     return accounts.filter((acc) => {
       if (statusFilter !== "ALL" && acc.status !== statusFilter) return false;
       if (assignedFilter === "ASSIGNED" && !acc.isAssigned) return false;
-      if (assignedFilter === "UNASSIGNED" && acc.isAssigned) return false;
+      if (assignedFilter === "UNASSIGNED") {
+        if (acc.isAssigned) return false;
+        // Ready ones only: exclude suspended or non-available accounts unless specific status is requested
+        if (statusFilter === "ALL" && acc.status !== "Available") return false;
+      }
       if (cityFilter !== "ALL" && acc.cityNameAr !== cityFilter) return false;
       if (sponsorFilter !== "ALL" && acc.sponsorNameAr !== sponsorFilter) return false;
-      if (passwordFilter === "HAS_PASSWORD" && !acc.hasPassword) return false;
-      if (passwordFilter === "MISSING_PASSWORD" && acc.hasPassword) return false;
 
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
@@ -382,12 +381,12 @@ export default function JahezAccountsPage() {
         riderMatch
       );
     });
-  }, [accounts, search, statusFilter, assignedFilter, cityFilter, sponsorFilter, passwordFilter]);
+  }, [accounts, search, statusFilter, assignedFilter, cityFilter, sponsorFilter]);
 
   // Reset to first page whenever search, filter or pageSize changes
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, assignedFilter, cityFilter, sponsorFilter, passwordFilter, pageSize]);
+  }, [search, statusFilter, assignedFilter, cityFilter, sponsorFilter, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
 
@@ -402,8 +401,7 @@ export default function JahezAccountsPage() {
     statusFilter !== "ALL" ||
     assignedFilter !== "ALL" ||
     cityFilter !== "ALL" ||
-    sponsorFilter !== "ALL" ||
-    passwordFilter !== "ALL";
+    sponsorFilter !== "ALL";
 
   const clearFilters = () => {
     setSearch("");
@@ -411,7 +409,6 @@ export default function JahezAccountsPage() {
     setAssignedFilter("ALL");
     setCityFilter("ALL");
     setSponsorFilter("ALL");
-    setPasswordFilter("ALL");
   };
 
   // -----------------------------------------------------------------
@@ -957,7 +954,6 @@ export default function JahezAccountsPage() {
       "هوية المندوب": a.actualRider?.iqamaNo || "-",
       "حالة الحساب": a.status,
       "حالة الإسناد": a.isAssigned ? "مسند" : "متاح",
-      "كلمة المرور": a.hasPassword ? "متوفرة" : "غير متوفرة",
       "طلبات الأمس": a.yesterdayOrders ?? "لا توجد بيانات",
       "آخر طلبات": a.lastOrderCount ?? 0,
     }));
@@ -1014,7 +1010,7 @@ export default function JahezAccountsPage() {
 
       {/* ----------------- Statistics Banner ----------------- */}
       {statistics && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div
             onClick={clearFilters}
             className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
@@ -1061,29 +1057,32 @@ export default function JahezAccountsPage() {
           <div
             onClick={() => {
               setAssignedFilter("UNASSIGNED");
-              setStatusFilter("ALL");
+              setStatusFilter("Available");
             }}
             className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
-              assignedFilter === "UNASSIGNED"
+              assignedFilter === "UNASSIGNED" && (statusFilter === "Available" || statusFilter === "ALL")
                 ? "border-blue-500 bg-blue-100/50 dark:border-blue-600 dark:bg-blue-950/40"
                 : "border-blue-200/80 bg-blue-50/40 hover:border-blue-400 dark:border-blue-950 dark:bg-blue-950/20"
             }`}
-            title="فلترة الحسابات غير المسندة المتاحة"
+            title="فلترة الحسابات غير المسندة والجاهزة للتسليم (استبعاد الموقوفة)"
           >
             <div className="text-xs font-medium text-blue-700 dark:text-blue-400">
               غير مسندة حالياً
             </div>
             <div className="mt-1 text-2xl font-black text-blue-800 dark:text-blue-200">
-              {statistics.unassignedAccounts}
+              {accounts.length > 0
+                ? accounts.filter((a) => !a.isAssigned && a.status === "Available").length
+                : statistics.unassignedAccounts}
             </div>
             <div className="mt-0.5 text-[10px] text-blue-600/80 dark:text-blue-400/80">
-              متاحة للتسليم
+              جاهزة للتسليم
             </div>
           </div>
 
           <div
             onClick={() => {
               setStatusFilter("Suspended");
+              setAssignedFilter("ALL");
             }}
             className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
               statusFilter === "Suspended"
@@ -1096,32 +1095,12 @@ export default function JahezAccountsPage() {
               موقوفة إدارياً
             </div>
             <div className="mt-1 text-2xl font-black text-rose-800 dark:text-rose-200">
-              {statistics.blockedAccounts}
+              {accounts.length > 0
+                ? accounts.filter((a) => a.status === "Suspended").length
+                : statistics.blockedAccounts}
             </div>
             <div className="mt-0.5 text-[10px] text-rose-600/80 dark:text-rose-400/80">
               Suspended
-            </div>
-          </div>
-
-          <div
-            onClick={() => {
-              setPasswordFilter("MISSING_PASSWORD");
-            }}
-            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
-              passwordFilter === "MISSING_PASSWORD"
-                ? "border-amber-500 bg-amber-100/50 dark:border-amber-600 dark:bg-amber-950/40"
-                : "border-amber-200/80 bg-amber-50/40 hover:border-amber-400 dark:border-amber-950 dark:bg-amber-950/20"
-            }`}
-            title="فلترة الحسابات التي تنقصها كلمة المرور"
-          >
-            <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
-              ناقصة كلمة المرور
-            </div>
-            <div className="mt-1 text-2xl font-black text-amber-800 dark:text-amber-200">
-              {statistics.missingPasswordAccounts}
-            </div>
-            <div className="mt-0.5 text-[10px] text-amber-600/80 dark:text-amber-400/80">
-              تحتاج تدوير
             </div>
           </div>
 
@@ -1198,17 +1177,7 @@ export default function JahezAccountsPage() {
           >
             <option value="ALL">جميع حالات الإسناد</option>
             <option value="ASSIGNED">مسند فقط</option>
-            <option value="UNASSIGNED">غير مسند فقط</option>
-          </select>
-
-          <select
-            value={passwordFilter}
-            onChange={(e) => setPasswordFilter(e.target.value)}
-            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-          >
-            <option value="ALL">جميع حالات كلمة المرور</option>
-            <option value="HAS_PASSWORD">كلمة المرور متوفرة</option>
-            <option value="MISSING_PASSWORD">ناقصة كلمة المرور</option>
+            <option value="UNASSIGNED">غير مسند فقط (جاهزة للتسليم)</option>
           </select>
 
           {availableCities.length > 0 && (
@@ -1255,7 +1224,6 @@ export default function JahezAccountsPage() {
                 <th className="py-3 px-3">صاحب الحساب الرسمي</th>
                 <th className="py-3 px-3">المندوب الفعلي (المستخدم)</th>
                 <th className="py-3 px-3 text-center">الحالة والإسناد</th>
-                <th className="py-3 px-3 text-center">الباسوورد</th>
                 <th className="py-3 px-3 text-center">طلبات الأمس</th>
                 <th className="py-3 px-3 text-center">التصفية / التسليم</th>
                 <th className="py-3 px-3 text-center">إجراءات إضافية</th>
@@ -1264,14 +1232,14 @@ export default function JahezAccountsPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading && accounts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-500">
+                  <td colSpan={9} className="py-12 text-center text-gray-500">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-amber-500 mb-2" />
                     جارٍ تحميل حسابات جاهز V2...
                   </td>
                 </tr>
               ) : filteredAccounts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-500">
+                  <td colSpan={9} className="py-12 text-center text-gray-500">
                     لا توجد حسابات مطابقة لمعايير البحث الحالية
                   </td>
                 </tr>
@@ -1390,20 +1358,6 @@ export default function JahezAccountsPage() {
                             </span>
                           )}
                         </div>
-                      </td>
-
-                      {/* الباسوورد */}
-                      <td className="py-3 px-3 text-center">
-                        {acc.hasPassword ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100/70 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-                            <Lock className="h-2.5 w-2.5" />
-                            متوفرة
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100/70 px-2 py-0.5 text-[10px] font-semibold text-rose-800 dark:bg-rose-950/50 dark:text-rose-300">
-                            ناقصة
-                          </span>
-                        )}
                       </td>
 
                       {/* طلبات الأمس */}
@@ -1941,18 +1895,18 @@ export default function JahezAccountsPage() {
             </div>
           </div>
 
-          {/* 3. الصافي من داشبورد جاهز في المسارات المالية */}
+          {/* 3. مديونية داشبورد جاهز في المسارات المالية */}
           {opMode !== OperationMode.Withdraw && (
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block font-bold text-gray-800 dark:text-gray-200">
-                  2. الصافي من داشبورد جاهز بإشارته (+ / -):
+                  2. مديونية داشبورد جاهز المدخلة (+ / -):
                 </label>
                 <span className="text-[10px] text-gray-500">
-                  {Number(opNet) < 0 ? (
-                    <span className="text-rose-600 font-bold">عليه مديونية بالداشبورد</span>
-                  ) : Number(opNet) > 0 ? (
-                    <span className="text-emerald-600 font-bold">له أرباح بالداشبورد</span>
+                  {Number(opNet) > 0 ? (
+                    <span className="text-rose-600 font-bold">مديونية على المندوب بالداشبورد</span>
+                  ) : Number(opNet) < 0 ? (
+                    <span className="text-emerald-600 font-bold">أرباح ومستحقات للمندوب بالداشبورد</span>
                   ) : (
                     "صفر"
                   )}
@@ -1963,7 +1917,7 @@ export default function JahezAccountsPage() {
                 step="0.01"
                 value={opNet}
                 onChange={(e) => handleNetChange(e.target.value)}
-                placeholder="أدخل الصافي بإشارته كما يظهر بداشبورد جاهز..."
+                placeholder="أدخل مديونية الداشبورد بإشارتها (موجب للمدين، سالب للدائن)..."
                 className="font-mono text-base font-bold"
               />
             </div>
@@ -1974,7 +1928,9 @@ export default function JahezAccountsPage() {
             <div className="flex items-center justify-between mb-2">
               <span className="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
                 <Coins className="h-4 w-4 text-amber-500" />
-                معاينة الحساب المالي (المتبقي = الصافي + العمولة):
+                {opTransferToRider
+                  ? "معاينة إجمالي الترحيل (الإجمالي = مديونية الداشبورد + العمولة):"
+                  : "معاينة الحساب المالي (المتبقي = الصافي + العمولة):"}
               </span>
               {previewLoading && (
                 <span className="text-[10px] text-amber-600 flex items-center gap-1">
@@ -1998,21 +1954,27 @@ export default function JahezAccountsPage() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-xl bg-white p-2.5 shadow-xs dark:bg-gray-900">
-                    <div className="text-[10px] text-gray-400">الصافي المدخل</div>
+                  <div className="rounded-xl bg-white p-2.5 shadow-xs dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
+                    <div className="text-[10px] text-gray-500 font-medium">
+                      {opTransferToRider ? "مديونية داشبورد جاهز المدخلة" : "الصافي المدخل"}
+                    </div>
                     <div className="mt-0.5 font-mono text-base font-black text-gray-900 dark:text-white">
                       {opPreview.net.toFixed(2)} ر.س
                     </div>
                   </div>
-                  <div className="rounded-xl bg-white p-2.5 shadow-xs dark:bg-gray-900">
-                    <div className="text-[10px] text-gray-400">العمولة المحسوبة</div>
+                  <div className="rounded-xl bg-white p-2.5 shadow-xs dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
+                    <div className="text-[10px] text-gray-500 font-medium">العمولة المستحقة</div>
                     <div className="mt-0.5 font-mono text-base font-black text-amber-600">
                       {opPreview.commission.toFixed(2)} ر.س
                     </div>
                   </div>
-                  <div className="rounded-xl bg-white p-2.5 shadow-xs dark:bg-gray-900">
-                    <div className="text-[10px] text-gray-400">المتبقي الصافي</div>
-                    <div className="mt-0.5 font-mono text-base font-black text-gray-900 dark:text-white">
+                  <div className="rounded-xl bg-white p-2.5 shadow-xs dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
+                    <div className="text-[10px] text-gray-500 font-medium">
+                      {opTransferToRider ? "إجمالي الترحيل" : "المتبقي الصافي"}
+                    </div>
+                    <div className={`mt-0.5 font-mono text-base font-black ${
+                      opTransferToRider ? "text-rose-600 dark:text-rose-400" : "text-gray-900 dark:text-white"
+                    }`}>
                       {opPreview.remaining.toFixed(2)} ر.س
                     </div>
                   </div>
@@ -2021,14 +1983,21 @@ export default function JahezAccountsPage() {
                 {/* اتجاه المال والنص الظاهر الصريح */}
                 <div
                   className={`rounded-xl p-3 text-center font-black text-sm flex items-center justify-center gap-2 ${
-                    opPreview.remaining > 0
+                    opTransferToRider
+                      ? "bg-purple-600 text-white"
+                      : opPreview.remaining > 0
                       ? "bg-emerald-500 text-white"
                       : opPreview.remaining < 0
                       ? "bg-blue-600 text-white"
                       : "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
                   }`}
                 >
-                  {opPreview.remaining > 0 ? (
+                  {opTransferToRider ? (
+                    <>
+                      <ArrowRightLeft className="h-4 w-4" />
+                      ترحيل مستحق قدره {Math.abs(opPreview.remaining).toFixed(2)} ر.س كالتزام مالي على المندوب
+                    </>
+                  ) : opPreview.remaining > 0 ? (
                     <>
                       <ArrowRightLeft className="h-4 w-4" />
                       قبض {Math.abs(opPreview.remaining).toFixed(2)} ريال من المندوب (عليه)
@@ -2050,14 +2019,14 @@ export default function JahezAccountsPage() {
                       type="checkbox"
                       checked={opTransferToRider}
                       onChange={(e) => setOpTransferToRider(e.target.checked)}
-                      className="rounded h-4 w-4 text-amber-600"
+                      className="rounded h-4 w-4 text-purple-600 focus:ring-purple-500"
                     />
                     <span>
-                      ترحيل المبلغ كالتزام مالي على المندوب وحظره تشغيلياً (يتطلب طلب واعتماد
-                      المدير)
+                      ترحيل كامل المستحق على المندوب (يتطلب طلب واعتماد المدير)
                     </span>
                   </label>
                 )}
+
 
                 {/* الجهة المالية عند وجود حركة حقيقية وبدون ترحيل */}
                 {opPreview.remaining !== 0 &&
@@ -2165,19 +2134,6 @@ export default function JahezAccountsPage() {
                     <AlertTriangle className="h-3.5 w-3.5" />
                     طلب تعديل تصفية
                   </Button>
-
-                  {opMode === OperationMode.SettleAndWithdraw && opTransferToRider && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={handleOpenTransferRequest}
-                      disabled={isTransferSubmitting}
-                      className="text-purple-700 border-purple-300 hover:bg-purple-50 gap-1 text-[11px]"
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      طلب ترحيل واعتماد
-                    </Button>
-                  )}
                 </>
               )}
             </div>
@@ -2226,42 +2182,65 @@ export default function JahezAccountsPage() {
                     </Button>
                   )}
 
-                  {savedOperation.status !== OperationStatus.Executed && (
-                    <Button
-                      size="sm"
-                      onClick={handleExecuteOperation}
-                      disabled={
-                        opSubmitting ||
-                        previewLoading ||
-                        !opPreview ||
-                        savedPaymentReferenceInvalid ||
-                        opPaymentDetailsChanged ||
-                        opTransferToRider ||
-                        savedOperation.status === OperationStatus.UnderReview
-                      }
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5"
-                      title={
-                        savedOperation.status === OperationStatus.UnderReview
-                          ? "العملية قيد المراجعة وتتطلب اعتماد الإدارة أولاً"
-                          : savedPaymentReferenceInvalid || opPaymentDetailsChanged
-                          ? "أدخل مرجع الحركة الفعلية واحفظ تحديث المسودة أولاً"
-                          : opTransferToRider
-                          ? "عملية الترحيل تتطلب اعتماد المدير أولاً"
-                          : "تنفيذ الحركة المالية وإنهاء التصفية"
-                      }
-                    >
-                      {opSubmitting ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <PlayCircle className="h-4 w-4" />
-                      )}
-                      تنفيذ الحركة المالية (إنهاء التصفية)
-                    </Button>
+                  {/* إذا كانت العملية ترحيل إلى المندوب */}
+                  {opTransferToRider ? (
+                    savedOperation.status === OperationStatus.UnderReview ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800 font-bold text-xs">
+                        <Clock className="h-3.5 w-3.5" />
+                        بانتظار اعتماد المدير
+                      </span>
+                    ) : savedOperation.status === OperationStatus.Ready ? (
+                      <Button
+                        size="sm"
+                        onClick={handleOpenTransferRequest}
+                        disabled={isTransferSubmitting}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold gap-1.5 text-xs shadow-xs"
+                      >
+                        {isTransferSubmitting ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5" />
+                        )}
+                        إرسال طلب اعتماد الترحيل للمدير
+                      </Button>
+                    ) : null
+                  ) : (
+                    /* للعمليات العادية غير المرحلة */
+                    savedOperation.status !== OperationStatus.Executed && (
+                      <Button
+                        size="sm"
+                        onClick={handleExecuteOperation}
+                        disabled={
+                          opSubmitting ||
+                          previewLoading ||
+                          !opPreview ||
+                          savedPaymentReferenceInvalid ||
+                          opPaymentDetailsChanged ||
+                          savedOperation.status === OperationStatus.UnderReview
+                        }
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5"
+                        title={
+                          savedOperation.status === OperationStatus.UnderReview
+                            ? "العملية قيد المراجعة وتتطلب اعتماد الإدارة أولاً"
+                            : savedPaymentReferenceInvalid || opPaymentDetailsChanged
+                            ? "أدخل مرجع الحركة الفعلية واحفظ تحديث المسودة أولاً"
+                            : "تنفيذ الحركة المالية وإنهاء التصفية"
+                        }
+                      >
+                        {opSubmitting ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <PlayCircle className="h-4 w-4" />
+                        )}
+                        تنفيذ الحركة المالية (إنهاء التصفية)
+                      </Button>
+                    )
                   )}
                 </div>
               )}
             </div>
           </div>
+
         </div>
       </Modal>
 
