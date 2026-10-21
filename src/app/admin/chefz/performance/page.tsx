@@ -849,7 +849,7 @@ export default function ChefzPerformancePage() {
                           : "text-[var(--foreground)] hover:bg-[var(--card-bg)]"
                       }`}
                     >
-                      إجمالي العروض
+                      إجمالي الطلبات (Orders)
                     </button>
                     <button
                       type="button"
@@ -1049,7 +1049,7 @@ export default function ChefzPerformancePage() {
                                 }`}
                                 title={
                                   cell
-                                    ? `التاريخ: ${d.dateStr} (${d.dayNameAr})\nالمندوب: ${r.riderName}\nالطلبات المقبولة: ${cell.acceptedOffers}\nإجمالي العروض: ${cell.totalValidOffers}\nالمرفوضة: ${cell.declinedOffers}\nالفائتة: ${cell.missedOffers}\nنسبة القبول: ${cell.acceptanceRate}%\nالحسابات: ${cell.accountCodes.join(" / ") || "—"}`
+                                    ? `التاريخ: ${d.dateStr} (${d.dayNameAr})\nالمندوب: ${r.riderName}\nالطلبات المقبولة: ${cell.acceptedOffers}\nإجمالي الطلبات: ${cell.totalValidOffers}\nالمرفوضة: ${cell.declinedOffers}\nالفائتة: ${cell.missedOffers}\nنسبة القبول: ${cell.acceptanceRate}%\nالحسابات: ${cell.accountCodes.join(" / ") || "—"}`
                                     : `التاريخ: ${d.dateStr} (${d.dayNameAr})\nلا توجد بيانات مسجلة لهذا المندوب (0)`
                                 }
                               >

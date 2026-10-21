@@ -53,8 +53,12 @@ import {
   UserCheck,
   FileSpreadsheet,
   Zap,
+  Activity,
 } from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
+import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
+import type { PlatformAccountDayUsageInput } from "@/lib/platforms/day-usage-types";
 
 export default function PlatformAccountsPage() {
   const { can, locale, refreshSession } = useAuth();
@@ -153,6 +157,14 @@ export default function PlatformAccountsPage() {
     status: "Ended",
     reason: "",
   });
+  const [releaseDayUsage, setReleaseDayUsage] = useState<PlatformAccountDayUsageInput | null>(null);
+
+  // Supplementary Day Usage Modal State
+  const [dayUsageModalAccount, setDayUsageModalAccount] = useState<{
+    id: string;
+    code?: string;
+    platformName?: string;
+  } | null>(null);
 
   const [rotateFormData, setRotateFormData] = useState({
     secret: "",
@@ -532,6 +544,7 @@ export default function PlatformAccountsPage() {
       status: "Ended",
       reason: "",
     });
+    setReleaseDayUsage(null);
     setIsReleaseOpen(true);
   };
 
@@ -565,6 +578,7 @@ export default function PlatformAccountsPage() {
           status: releaseFormData.status || "Ended",
           reason: releaseFormData.reason.trim(),
           rowVersion: releasingAccount.currentAssignment!.rowVersion, // Send assignment rowVersion!
+          dayUsage: releaseDayUsage,
         };
 
         console.log("=== Sending Release Platform Account Payload ===");
@@ -1297,6 +1311,21 @@ export default function PlatformAccountsPage() {
                           </button>
                         )}
 
+                        {/* Shared Day Usage Button */}
+                        <button
+                          onClick={() =>
+                            setDayUsageModalAccount({
+                              id: acc.id,
+                              code: acc.code,
+                              platformName: acc.platformNameAr || acc.platformNameEn || undefined,
+                            })
+                          }
+                          title="إدارة إنتاجية اليوم المشترك (Day Usage)"
+                          className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                        >
+                          <Activity className="h-4 w-4" />
+                        </button>
+
                         {/* Edit Button */}
                         {can("platform_accounts.update") && (
                           <button
@@ -1753,6 +1782,14 @@ export default function PlatformAccountsPage() {
             />
           </div>
 
+          <DayUsageFields
+            value={releaseDayUsage}
+            onChange={setReleaseDayUsage}
+            platform="generic"
+            riderName={releasingAccount?.currentAssignment?.actualRiderNameAr}
+            effectiveDate={releaseFormData.effectiveTo}
+          />
+
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <Button type="button" variant="secondary" onClick={() => setIsReleaseOpen(false)}>
               {t("common.cancel")}
@@ -1913,6 +1950,23 @@ export default function PlatformAccountsPage() {
           )}
         </div>
       </Modal>
+
+      {/* Shared Account Day Usage Modal */}
+      {dayUsageModalAccount && (
+        <SharedAccountDayUsageModal
+          isOpen={Boolean(dayUsageModalAccount)}
+          onClose={() => setDayUsageModalAccount(null)}
+          accountId={dayUsageModalAccount.id}
+          accountCode={dayUsageModalAccount.code}
+          platformName={dayUsageModalAccount.platformName}
+          riderNamesMap={Object.fromEntries(
+            employees
+              .filter((e) => e.riderProfileId)
+              .map((e) => [e.riderProfileId!, e.fullNameAr || e.fullNameEn])
+          )}
+          onUpdated={loadData}
+        />
+      )}
     </div>
   );
 }

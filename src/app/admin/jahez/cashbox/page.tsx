@@ -11,6 +11,7 @@ import {
   getJahezTransferredDebts,
   repayJahezTransferredDebt,
   getJahezRidersWithTransferredDebts,
+  getJahezRiderTransferredDebtsSummary,
   getJahezRiderTransferredDebts,
   repayJahezRiderTransferredDebts,
   generateIdempotencyKey,
@@ -118,9 +119,7 @@ export default function JahezCashboxPage() {
   const canSubmitHandover = can("jahez.cashbox.submit") || isAdmin;
   const canConfirmHandover = can("jahez.cashbox.confirm") || isAdmin;
   const canRepayDebt =
-    can("jahez.transferred-debt.repay") ||
-    can("jahez.money.receive") ||
-    canSettle ||
+    (can("jahez.transferred-debt.repay") && can("jahez.money.receive")) ||
     isAdmin;
 
   const [activeTab, setActiveTab] = useState<"movements" | "handovers" | "transferredDebts">("movements");
@@ -150,6 +149,7 @@ export default function JahezCashboxPage() {
   const [isRiderDrawerOpen, setIsRiderDrawerOpen] = useState(false);
   const [selectedRiderSummary, setSelectedRiderSummary] = useState<RiderTransferredDebtSummary | null>(null);
   const [riderDetailDebts, setRiderDetailDebts] = useState<TransferredDebt[]>([]);
+  const [riderDetailPage, setRiderDetailPage] = useState(1);
   const [riderDetailLoading, setRiderDetailLoading] = useState(false);
 
   // Bulk Rider Repay Modal State
@@ -159,6 +159,7 @@ export default function JahezCashboxPage() {
   const [bulkRepayRef, setBulkRepayRef] = useState("");
   const [bulkRepayReason, setBulkRepayReason] = useState("تحصيل كامل المديونيات المرحلة على المندوب");
   const [bulkRepayKey, setBulkRepayKey] = useState<string>("");
+  const [bulkRepayConflictNotice, setBulkRepayConflictNotice] = useState<string | null>(null);
   const [bulkRepaySubmitting, setBulkRepaySubmitting] = useState(false);
 
   // Single Debt Repay Modal State (from drawer or history)
@@ -578,12 +579,30 @@ export default function JahezCashboxPage() {
     }
   };
 
+  const loadRiderDetailPage = async (riderProfileId: string, targetPage = 1) => {
+    setRiderDetailLoading(true);
+    try {
+      const res = await getJahezRiderTransferredDebts(riderProfileId, targetPage, 50);
+      setRiderDetailDebts(res?.items || []);
+      setRiderDetailPage(targetPage);
+    } catch {
+      toast.error("خطأ", "فشل تحميل تفاصيل مديونيات المندوب");
+    } finally {
+      setRiderDetailLoading(false);
+    }
+  };
+
   const openRiderDrawer = async (summary: RiderTransferredDebtSummary) => {
     setSelectedRiderSummary(summary);
     setIsRiderDrawerOpen(true);
+    setRiderDetailPage(1);
     setRiderDetailLoading(true);
     try {
-      const res = await getJahezRiderTransferredDebts(summary.riderProfileId, 1, 50);
+      const [freshSummary, res] = await Promise.all([
+        getJahezRiderTransferredDebtsSummary(summary.riderProfileId).catch(() => summary),
+        getJahezRiderTransferredDebts(summary.riderProfileId, 1, 50),
+      ]);
+      if (freshSummary) setSelectedRiderSummary(freshSummary);
       setRiderDetailDebts(res?.items || []);
     } catch {
       toast.error("خطأ", "فشل تحميل تفاصيل مديونيات المندوب");
@@ -592,13 +611,23 @@ export default function JahezCashboxPage() {
     }
   };
 
-  const openBulkRepayModal = (summary: RiderTransferredDebtSummary) => {
+  const openBulkRepayModal = async (summary: RiderTransferredDebtSummary) => {
     setBulkRepayRider(summary);
     setBulkRepayExpectedAmount(summary.outstandingAmount);
     setBulkRepayRef(`RCPT-${getRiyadhTodayDate().replace(/-/g, "")}-${Date.now().toString().slice(-4)}`);
     setBulkRepayReason("تحصيل كامل المديونيات المرحلة على المندوب");
     setBulkRepayKey(generateIdempotencyKey("bulk-debt-repay"));
+    setBulkRepayConflictNotice(null);
     setIsBulkRepayOpen(true);
+    try {
+      const freshSummary = await getJahezRiderTransferredDebtsSummary(summary.riderProfileId);
+      if (freshSummary) {
+        setBulkRepayRider(freshSummary);
+        setBulkRepayExpectedAmount(freshSummary.outstandingAmount);
+      }
+    } catch {
+      // Fallback to existing summary if fresh reload fails
+    }
   };
 
   const submitBulkRepayment = async () => {
@@ -612,6 +641,7 @@ export default function JahezCashboxPage() {
       return;
     }
     setBulkRepaySubmitting(true);
+    setBulkRepayConflictNotice(null);
     try {
       const res = await repayJahezRiderTransferredDebts(
         bulkRepayRider.riderProfileId,
@@ -639,6 +669,35 @@ export default function JahezCashboxPage() {
           "تعارض في البيانات (409)",
           "تغير إجمالي المديونية أو سددت مسبقاً؛ يرجى مراجعة الأرقام المحدثة قبل التأكيد بمفتاح جديد.",
         );
+        try {
+          const [freshSummary, freshDebts] = await Promise.all([
+            getJahezRiderTransferredDebtsSummary(bulkRepayRider.riderProfileId),
+            getJahezRiderTransferredDebts(bulkRepayRider.riderProfileId, 1, 50),
+          ]);
+          if (freshSummary) {
+            setBulkRepayRider(freshSummary);
+            setBulkRepayExpectedAmount(freshSummary.outstandingAmount);
+            if (selectedRiderSummary?.riderProfileId === bulkRepayRider.riderProfileId) {
+              setSelectedRiderSummary(freshSummary);
+            }
+          } else {
+            // Rider no longer has unpaid transferred debt (already repaid)
+            setBulkRepayExpectedAmount(0);
+          }
+          if (freshDebts && selectedRiderSummary?.riderProfileId === bulkRepayRider.riderProfileId) {
+            setRiderDetailDebts(freshDebts.items || []);
+            setRiderDetailPage(1);
+          }
+          setBulkRepayConflictNotice(
+            freshSummary
+              ? `تغير إجمالي المديونية المفتوحة على الخادم إلى ${Number(freshSummary.outstandingAmount).toFixed(2)} ر.س (${freshSummary.unpaidDebtCount} ديون). يرجى مراجعة الإجمالي المحدث قبل التأكيد مجدداً.`
+              : "لا توجد مديونيات مرحلة غير مسددة لهذا المندوب حالياً؛ ربما تم السداد مسبقاً."
+          );
+        } catch {
+          setBulkRepayConflictNotice(
+            "تغير إجمالي المديونية أو تم سداد بعضها. تم تحديث البيانات؛ يرجى مراجعة الإجمالي قبل التأكيد."
+          );
+        }
         loadRiderDebts(riderDebtsPage);
         setBulkRepayKey(generateIdempotencyKey("bulk-repay-retry"));
       } else {
@@ -1721,7 +1780,7 @@ export default function JahezCashboxPage() {
                                 </span>
                                 {!s.userRider && (
                                   <span className="text-[10px] font-mono text-gray-400">
-                                    معرف: {s.riderProfileId.slice(0, 8)}
+                                    معرف المندوب: {s.riderProfileId}
                                   </span>
                                 )}
                               </div>
@@ -2223,27 +2282,38 @@ export default function JahezCashboxPage() {
       <Modal
         isOpen={isBulkRepayOpen}
         onClose={() => setIsBulkRepayOpen(false)}
-        title="سداد كامل المستحق المرحّل على المندوب"
+        title="سداد كامل المستحق المرحّل"
         maxWidth="max-w-md"
       >
         <div className="space-y-4 text-xs" dir="rtl">
           {bulkRepayRider && (
             <div className="space-y-3">
+              {bulkRepayConflictNotice && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200 font-semibold">
+                  {bulkRepayConflictNotice}
+                </div>
+              )}
+
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
                 <div className="flex items-center justify-between font-bold text-sm mb-1.5">
-                  <span>{bulkRepayRider.userRider?.nameAr || bulkRepayRider.userRider?.nameEn || "بيانات المندوب"}</span>
+                  <span>{bulkRepayRider.userRider?.nameAr || bulkRepayRider.userRider?.nameEn || "بيانات الهوية غير متاحة"}</span>
                   <span className="font-mono text-base text-emerald-700 dark:text-emerald-400">
                     {Number(bulkRepayExpectedAmount).toFixed(2)} ر.س
                   </span>
                 </div>
                 <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                  <div>معرف المندوب: <span className="font-mono">{bulkRepayRider.riderProfileId}</span></div>
                   <div>هوية / إقامة: <span className="font-mono font-bold">{bulkRepayRider.userRider?.iqamaNo || "-"}</span></div>
                   <div>عدد الالتزامات المرحلة: <span className="font-bold">{bulkRepayRider.unpaidDebtCount}</span></div>
                 </div>
-                {bulkRepayRider.amounts && (
+                {bulkRepayRider.amounts ? (
                   <div className="mt-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 text-[10px] grid grid-cols-2 gap-1 font-mono">
-                    <div>داشبورد جاهز: {Number(bulkRepayRider.amounts.dashboardDebt).toFixed(2)} ر.س</div>
-                    <div>العمولة: {Number(bulkRepayRider.amounts.commission).toFixed(2)} ر.س</div>
+                    <div>مديونية داشبورد جاهز: {Number(bulkRepayRider.amounts.dashboardDebt).toFixed(2)} ر.س</div>
+                    <div>عمولة الفرسان: {Number(bulkRepayRider.amounts.commission).toFixed(2)} ر.س</div>
+                  </div>
+                ) : (
+                  <div className="mt-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 text-[10px] text-gray-500">
+                    تفاصيل التقسيم غير متاحة
                   </div>
                 )}
                 <div className="mt-2 text-[10px] text-emerald-800 dark:text-emerald-300">
@@ -2279,7 +2349,10 @@ export default function JahezCashboxPage() {
                 </label>
                 <Input
                   value={bulkRepayRef}
-                  onChange={(e) => setBulkRepayRef(e.target.value)}
+                  onChange={(e) => {
+                    setBulkRepayRef(e.target.value);
+                    setBulkRepayKey(generateIdempotencyKey("bulk-debt-repay"));
+                  }}
                   placeholder="مثال: RCPT-20261021-001"
                 />
               </div>
@@ -2290,7 +2363,10 @@ export default function JahezCashboxPage() {
                 </label>
                 <Input
                   value={bulkRepayReason}
-                  onChange={(e) => setBulkRepayReason(e.target.value)}
+                  onChange={(e) => {
+                    setBulkRepayReason(e.target.value);
+                    setBulkRepayKey(generateIdempotencyKey("bulk-debt-repay"));
+                  }}
                   placeholder="تحصيل كامل المديونيات المرحلة على المندوب"
                 />
               </div>
@@ -2305,7 +2381,12 @@ export default function JahezCashboxPage() {
                 </Button>
                 <Button
                   onClick={submitBulkRepayment}
-                  disabled={bulkRepaySubmitting || !bulkRepayRef.trim() || !bulkRepayReason.trim()}
+                  disabled={
+                    bulkRepaySubmitting ||
+                    !bulkRepayRef.trim() ||
+                    !bulkRepayReason.trim() ||
+                    bulkRepayExpectedAmount <= 0
+                  }
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                 >
                   {bulkRepaySubmitting ? (
@@ -2488,9 +2569,9 @@ export default function JahezCashboxPage() {
                   <thead className="bg-gray-50/80 dark:bg-gray-800/60 font-bold text-gray-600 dark:text-gray-300 border-b">
                     <tr>
                       <th className="py-2.5 px-3">حساب المنصة والتكليف</th>
-                      <th className="py-2.5 px-3">تاريخ الاحتساب والبيان</th>
-                      <th className="py-2.5 px-3 text-center">الصافي / العمولة</th>
-                      <th className="py-2.5 px-3 text-center">مبلغ الدين</th>
+                      <th className="py-2.5 px-3">تاريخ الاحتساب والاعتماد</th>
+                      <th className="py-2.5 px-3 text-center">مديونية جاهز / العمولة / المتبقي</th>
+                      <th className="py-2.5 px-3 text-center">إجمالي الدين المرحّل</th>
                       <th className="py-2.5 px-3 text-center">الإجراء</th>
                     </tr>
                   </thead>
@@ -2518,32 +2599,47 @@ export default function JahezCashboxPage() {
                             <div className="text-[10px] text-gray-500 font-mono">
                               من {d.assignment?.startedAtUtc?.slice(0, 10) || d.assignment?.effectiveFrom || "-"} إلى {d.assignment?.endedAtUtc?.slice(0, 10) || d.assignment?.effectiveTo || "-"}
                             </div>
+                            {d.userRider && (
+                              <div className="text-[10px] text-gray-400">
+                                {d.userRider.nameAr || d.userRider.nameEn} {d.userRider.iqamaNo ? `(${d.userRider.iqamaNo})` : ""}
+                              </div>
+                            )}
                           </td>
                           <td className="py-2.5 px-3">
                             <div className="font-mono text-gray-800 dark:text-gray-200">
-                              حتى: {d.sourceOperation?.throughDate || d.createdAtUtc?.slice(0, 10) || "-"}
+                              حتى: {d.sourceOperation?.throughDate || "-"}
                             </div>
+                            <div className="text-[10px] text-gray-500 font-mono">
+                              الإنشاء: {d.createdAtUtc?.slice(0, 10) || "-"}
+                            </div>
+                            {d.approvedRequestId && (
+                              <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono" title={d.approvedRequestId}>
+                                طلب الاعتماد: {d.approvedRequestId.slice(0, 8)}...
+                              </div>
+                            )}
                             {d.sourceOperation?.reason && (
                               <div className="text-[10px] text-gray-500 truncate max-w-[200px]" title={d.sourceOperation.reason}>
-                                {d.sourceOperation.reason}
+                                البيان: {d.sourceOperation.reason}
                               </div>
                             )}
                           </td>
                           <td className="py-2.5 px-3 text-center font-mono text-[11px]">
-                            <div>صافي: {d.sourceOperation?.net != null ? `${Number(d.sourceOperation.net).toFixed(2)}` : "-"}</div>
-                            <div className="text-emerald-600">عمولة: {d.sourceOperation?.commission != null ? `${Number(d.sourceOperation.commission).toFixed(2)}` : "-"}</div>
+                            <div>داشبورد جاهز: {d.sourceOperation?.net != null ? `${Math.abs(Number(d.sourceOperation.net)).toFixed(2)}` : "-"}</div>
+                            <div className="text-emerald-600">عمولة الفرسان: {d.sourceOperation?.commission != null ? `${Number(d.sourceOperation.commission).toFixed(2)}` : "-"}</div>
+                            <div className="text-gray-500">المتبقي: {d.sourceOperation?.remaining != null ? `${Number(d.sourceOperation.remaining).toFixed(2)}` : "-"}</div>
                           </td>
                           <td className="py-2.5 px-3 text-center font-mono font-bold text-rose-700 dark:text-rose-400">
                             {Number(d.amount).toFixed(2)} ر.س
                           </td>
                           <td className="py-2.5 px-3 text-center">
-                            {canRepayDebt && (
+                            {canRepayDebt && selectedRiderSummary.unpaidDebtCount > 1 && (
                               <Button
+                                variant="secondary"
                                 size="sm"
                                 onClick={() => openSingleDebtRepayModal(d)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-6 text-[11px] px-2"
+                                className="h-6 text-[11px] px-2 font-semibold"
                               >
-                                سداد هذا الدين
+                                سداد منفرد
                               </Button>
                             )}
                           </td>
@@ -2552,6 +2648,29 @@ export default function JahezCashboxPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Drawer Pagination */}
+              <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+                <span>صفحة {riderDetailPage} (بحد أقصى 50 سجل لكل صفحة)</span>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={riderDetailPage <= 1 || riderDetailLoading}
+                    onClick={() => loadRiderDetailPage(selectedRiderSummary.riderProfileId, riderDetailPage - 1)}
+                  >
+                    السابق
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={riderDetailDebts.length < 50 || riderDetailLoading}
+                    onClick={() => loadRiderDetailPage(selectedRiderSummary.riderProfileId, riderDetailPage + 1)}
+                  >
+                    التالي
+                  </Button>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t">

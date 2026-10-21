@@ -82,7 +82,11 @@ import {
   X,
   MapPin,
   Building2,
+  Activity,
 } from "lucide-react";
+import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
+import type { PlatformAccountDayUsageInput } from "@/lib/platforms/day-usage-types";
 
 export default function NinjaAccountsPage() {
   const { can, canAny, locale } = useAuth();
@@ -125,7 +129,6 @@ export default function NinjaAccountsPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterCooldown, setFilterCooldown] = useState<"all" | "active" | "ready">("all");
-  const [filterDebtBlocked, setFilterDebtBlocked] = useState(false);
   const [filterCityId, setFilterCityId] = useState("");
   const [filterSponsorId, setFilterSponsorId] = useState("");
 
@@ -169,7 +172,11 @@ export default function NinjaAccountsPage() {
   const [returnPhone, setReturnPhone] = useState("");
   const [returnPassword, setReturnPassword] = useState("");
   const [returnReason, setReturnReason] = useState("إرجاع حساب نينجا من قِبل المندوب");
+  const [returnDayUsage, setReturnDayUsage] = useState<PlatformAccountDayUsageInput | null>(null);
   const [returnSubmitting, setReturnSubmitting] = useState(false);
+
+  // Supplementary Shared-Day Usage Modal
+  const [dayUsageModalAccount, setDayUsageModalAccount] = useState<{ id: string; code?: string } | null>(null);
 
   // 4. Update Credentials Modal
   const [credAccount, setCredAccount] = useState<NinjaAccountResponse | null>(null);
@@ -585,8 +592,6 @@ export default function NinjaAccountsPage() {
   const riderFilterOptions: FilterOption[] = useMemo(() => {
     let assignedCount = 0;
     let unassignedCount = 0;
-    let debtBlockedCount = 0;
-    let debtClearCount = 0;
     const riderCounts = new Map<string, { count: number; name: string; iqama?: string }>();
 
     for (const a of accounts) {
@@ -610,12 +615,6 @@ export default function NinjaAccountsPage() {
       } else {
         unassignedCount++;
       }
-
-      if (a.isOperationallyBlocked) {
-        debtBlockedCount++;
-      } else {
-        debtClearCount++;
-      }
     }
 
     const options: FilterOption[] = [
@@ -630,18 +629,6 @@ export default function NinjaAccountsPage() {
         label: "غير معين (شاغر)",
         sublabel: "حسابات جاهزة للتخصيص والتعيين",
         count: unassignedCount,
-      },
-      {
-        value: "DEBT_BLOCKED",
-        label: "حظر مديونية تشغيلية",
-        sublabel: "مندوب عليه حظر تشغيلي من منصة سابقة",
-        count: debtBlockedCount,
-      },
-      {
-        value: "DEBT_CLEAR",
-        label: "سليم من حظر المديونية",
-        sublabel: "لا توجد موانع مديونية مسجلة",
-        count: debtClearCount,
       },
     ];
 
@@ -857,11 +844,6 @@ export default function NinjaAccountsPage() {
       result = result.filter((a) => !isCooldownActive(a.passwordChangeAllowedAtUtc));
     }
 
-    // Toolbar Debt Blocked
-    if (filterDebtBlocked) {
-      result = result.filter((a) => a.isOperationallyBlocked);
-    }
-
     // Toolbar City
     if (filterCityId) {
       result = result.filter((a) => a.operatingCityId === filterCityId);
@@ -943,8 +925,6 @@ export default function NinjaAccountsPage() {
         return colFilterRiders.some((val) => {
           if (val === "STATUS_ASSIGNED") return isAssigned;
           if (val === "STATUS_UNASSIGNED") return !isAssigned;
-          if (val === "DEBT_BLOCKED") return a.isOperationallyBlocked;
-          if (val === "DEBT_CLEAR") return !a.isOperationallyBlocked;
           if (val.startsWith("RIDER_"))
             return val.slice(6) === riderKey || val.slice(6) === riderName;
           return false;
@@ -1003,7 +983,6 @@ export default function NinjaAccountsPage() {
     search,
     filterStatus,
     filterCooldown,
-    filterDebtBlocked,
     filterCityId,
     filterSponsorId,
     colFilterCaptain,
@@ -1023,7 +1002,6 @@ export default function NinjaAccountsPage() {
     search.trim() ||
       filterStatus !== "all" ||
       filterCooldown !== "all" ||
-      filterDebtBlocked ||
       filterCityId ||
       filterSponsorId ||
       colFilterCaptain.length > 0 ||
@@ -1040,7 +1018,6 @@ export default function NinjaAccountsPage() {
     setSearch("");
     setFilterStatus("all");
     setFilterCooldown("all");
-    setFilterDebtBlocked(false);
     setFilterCityId("");
     setFilterSponsorId("");
     setColFilterCaptain([]);
@@ -1061,7 +1038,6 @@ export default function NinjaAccountsPage() {
     search,
     filterStatus,
     filterCooldown,
-    filterDebtBlocked,
     filterCityId,
     filterSponsorId,
     colFilterCaptain,
@@ -1145,8 +1121,6 @@ export default function NinjaAccountsPage() {
       if (err?.status === 409) {
         toast.error("تعارض في السجل (409)", "تم تعديل الحساب بالتزامن من مستخدم آخر. يرجى مراجعة البيانات الحالية.");
         loadAccounts();
-      } else if (err?.code === "rider.jahez_debt_block" || err?.message?.includes("debt")) {
-        toast.error("حظر مديونية تشغيلية", "لا يمكن تنشيط الحساب لوجود مديونية تشغيلية سابقة على المندوب.");
       } else {
         toast.error("خطأ", err?.message || "تعذر تحديث حالة الحساب.");
       }
@@ -1253,6 +1227,7 @@ export default function NinjaAccountsPage() {
     setReturnPhone(account.phoneNumber || "");
     setReturnPassword("");
     setReturnReason("إرجاع حساب نينجا من قِبل المندوب");
+    setReturnDayUsage(null);
   };
 
   const handleReturnSubmit = async (e: React.FormEvent) => {
@@ -1302,6 +1277,7 @@ export default function NinjaAccountsPage() {
         reason: returnReason.trim(),
         rowVersion: releasingAccount.assignmentRowVersion,
         status: "Ended",
+        dayUsage: returnDayUsage,
       };
 
       const res = await returnNinjaAccount(targetId, payload);
@@ -1546,10 +1522,6 @@ export default function NinjaAccountsPage() {
           header: "آخر حالة بالشيت",
           accessor: (a) => a.latestSheetStatus || "—",
         },
-        {
-          header: "حظر مديونية تشغيلية",
-          accessor: (a) => (a.isOperationallyBlocked ? "محظور" : "لا"),
-        },
       ],
     });
   };
@@ -1723,19 +1695,6 @@ export default function NinjaAccountsPage() {
                 </option>
               ))}
             </select>
-
-            {/* Debt Blocked Toggle */}
-            <button
-              type="button"
-              onClick={() => setFilterDebtBlocked(!filterDebtBlocked)}
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors ${filterDebtBlocked
-                  ? "bg-rose-600 text-white shadow"
-                  : "bg-[var(--subtle-bg)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                }`}
-            >
-              <ShieldAlert className="h-3.5 w-3.5" />
-              حظر مديونية فقط
-            </button>
           </div>
         </div>
 
@@ -2146,16 +2105,6 @@ export default function NinjaAccountsPage() {
                                   <span>{statusInfo.detailText}</span>
                                 </span>
                               )}
-
-                              {acc.isOperationallyBlocked && (
-                                <span
-                                  className="inline-flex items-center gap-1 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/40 px-1.5 py-0.5 text-[10px] font-bold w-fit mt-0.5"
-                                  title={acc.operationalBlockReason || "محظور تشغيلياً بسبب مديونية"}
-                                >
-                                  <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
-                                  حظر مديونية
-                                </span>
-                              )}
                             </div>
                           );
                         })()}
@@ -2206,16 +2155,6 @@ export default function NinjaAccountsPage() {
                           <span className="inline-block rounded-md bg-gray-100 dark:bg-gray-800/60 px-2 py-0.5 text-[11px] text-[var(--muted)]">
                             غير معين
                           </span>
-                        )}
-
-                        {acc.isOperationallyBlocked && (
-                          <div
-                            className="inline-flex items-center gap-1 rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-200 px-1.5 py-0.5 text-[10px] font-bold mt-1"
-                            title={acc.operationalBlockReason || "محظور بسبب مديونية تشغيلية سابقة"}
-                          >
-                            <ShieldAlert className="h-3 w-3 shrink-0" />
-                            حظر مديونية
-                          </div>
                         )}
                       </td>
 
@@ -2357,6 +2296,23 @@ export default function NinjaAccountsPage() {
                             <KeyRound className="h-3.5 w-3.5 text-amber-600" />
                             بيانات الدخول
                           </Button>
+
+                          {/* Shared Day Usage Management */}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              setDayUsageModalAccount({
+                                id: acc.accountId || acc.id || "",
+                                code: acc.code || acc.captainId,
+                              })
+                            }
+                            className="gap-1 text-[11px]"
+                            title="إدارة إنتاجية اليوم المشترك (Day Usage)"
+                          >
+                            <Activity className="h-3.5 w-3.5 text-blue-600" />
+                            اليوم المشترك
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -2464,18 +2420,6 @@ export default function NinjaAccountsPage() {
                 })()}
               </div>
             </div>
-
-            {statusAccount.isOperationallyBlocked && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-2.5 text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <ShieldAlert className="h-4 w-4" />
-                  حظر مديونية تشغيلية سابقة
-                </div>
-                <p className="text-[11px]">
-                  {statusAccount.operationalBlockReason || "المندوب محظور تشغيلياً؛ لن يتم قبول التنشيط حتى تسوية المديونية."}
-                </p>
-              </div>
-            )}
 
             <div>
               <label className="block font-bold text-[var(--foreground)] mb-1.5">الحالة الجديدة *</label>
@@ -3113,6 +3057,15 @@ export default function NinjaAccountsPage() {
               />
             </div>
 
+            {/* Day Usage Input Section */}
+            <DayUsageFields
+              value={returnDayUsage}
+              onChange={setReturnDayUsage}
+              platform="ninja"
+              riderName={releasingAccount.actualRider?.nameAr || releasingAccount.actualRiderNameAr}
+              effectiveDate={returnEffectiveTo}
+            />
+
             <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
               <Button
                 type="button"
@@ -3395,6 +3348,22 @@ export default function NinjaAccountsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* 6. Modal: Shared Account Day Usage Management */}
+      {dayUsageModalAccount && (
+        <SharedAccountDayUsageModal
+          isOpen={Boolean(dayUsageModalAccount)}
+          onClose={() => setDayUsageModalAccount(null)}
+          accountId={dayUsageModalAccount.id}
+          accountCode={dayUsageModalAccount.code}
+          platformName="نينجا (Ninja)"
+          platform="ninja"
+          riderNamesMap={Object.fromEntries(
+            riders.map((r) => [r.id, r.fullNameAr || r.fullNameEn || ""])
+          )}
+          onUpdated={loadAccounts}
+        />
+      )}
     </div>
   );
 }

@@ -158,6 +158,16 @@ export interface NinjaAssignRequest {
   backdatedReason?: string | null;
 }
 
+export interface PlatformAccountDayUsageInput {
+  ordersCount?: number | null;
+  workingHours?: number | null;
+  collectedAmount?: number | null;
+  deductionsAmount?: number | null;
+  totalValidOffers?: number | null;
+  declinedOffers?: number | null;
+  missedOffers?: number | null;
+}
+
 export interface NinjaReturnRequest {
   effectiveTo: DateOnly;
   phoneNumber: string;
@@ -166,6 +176,7 @@ export interface NinjaReturnRequest {
   /** Assignment token: account.assignmentRowVersion or lifecycle.assignment.rowVersion */
   rowVersion: string;
   status?: "Ended" | "Cancelled" | string;
+  dayUsage?: PlatformAccountDayUsageInput | null;
 }
 
 export interface NinjaCredentialRequest {

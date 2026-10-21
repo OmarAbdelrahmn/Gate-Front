@@ -4,12 +4,12 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  getJahezAdministrativeDebts,
   getAllJahezAdministrativeDebts,
   getJahezRiderTransferredDebts,
+  getJahezRiderTransferredDebtsSummary,
 } from "@/lib/jahez/api";
-import type { AdministrativeDebt, TransferredDebt } from "@/lib/jahez/types";
-import { Coins, ExternalLink, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import type { AdministrativeDebt, TransferredDebt, RiderTransferredDebtSummary } from "@/lib/jahez/types";
+import { Coins, ExternalLink, RefreshCw, CheckCircle2 } from "lucide-react";
 
 interface JahezRiderDebtSummaryCardProps {
   riderId: string;
@@ -26,6 +26,7 @@ export function JahezRiderDebtSummaryCard({
 
   const [adminDebts, setAdminDebts] = useState<AdministrativeDebt[]>([]);
   const [transferredDebts, setTransferredDebts] = useState<TransferredDebt[]>([]);
+  const [debtSummary, setDebtSummary] = useState<RiderTransferredDebtSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -35,8 +36,9 @@ export function JahezRiderDebtSummaryCard({
     setErrorMessage(null);
 
     try {
-      const [debtsRes, transfersRes] = await Promise.allSettled([
+      const [debtsRes, summaryRes, transfersRes] = await Promise.allSettled([
         getAllJahezAdministrativeDebts(100),
+        getJahezRiderTransferredDebtsSummary(riderId),
         getJahezRiderTransferredDebts(riderId, 1, 50),
       ]);
 
@@ -45,6 +47,10 @@ export function JahezRiderDebtSummaryCard({
           (d) => d.riderProfileId === riderId,
         );
         setAdminDebts(myDebts);
+      }
+
+      if (summaryRes.status === "fulfilled") {
+        setDebtSummary(summaryRes.value);
       }
 
       if (transfersRes.status === "fulfilled") {
@@ -82,9 +88,14 @@ export function JahezRiderDebtSummaryCard({
 
   const unpaidTransfers = transferredDebts.filter((t) => !t.paidAtUtc);
   const totalAdminDebt = adminDebts.reduce((sum, d) => sum + (d.platformDebt || 0), 0);
-  const totalUnpaidTransfer = unpaidTransfers.reduce((sum, t) => sum + (t.amount || 0), 0);
+  const hasOutstandingTransferred =
+    (debtSummary ? debtSummary.unpaidDebtCount > 0 || debtSummary.outstandingAmount > 0 : false) ||
+    unpaidTransfers.length > 0;
+  const totalUnpaidTransfer =
+    debtSummary?.outstandingAmount ??
+    unpaidTransfers.reduce((sum, t) => sum + (t.amount || 0), 0);
 
-  if (adminDebts.length === 0 && unpaidTransfers.length === 0) {
+  if (adminDebts.length === 0 && !hasOutstandingTransferred) {
     return (
       <div
         className={`rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 ${className}`}
@@ -113,7 +124,7 @@ export function JahezRiderDebtSummaryCard({
   return (
     <div
       className={`rounded-xl border ${
-        unpaidTransfers.length > 0
+        hasOutstandingTransferred
           ? "border-amber-300 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20"
           : "border-blue-300 bg-blue-50/60 dark:border-blue-900/50 dark:bg-blue-950/20"
       } p-3 text-xs shadow-sm ${className}`}
@@ -123,7 +134,7 @@ export function JahezRiderDebtSummaryCard({
           <Coins className="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400" />
           <div>
             <div className="font-semibold text-gray-900 dark:text-gray-100">
-              {unpaidTransfers.length > 0
+              {hasOutstandingTransferred
                 ? isEn
                   ? "Jahez Transferred Debt (Collection in Progress)"
                   : "التزام مالي مرحل غير مسدد في جاهز (قيد التحصيل)"
@@ -133,7 +144,7 @@ export function JahezRiderDebtSummaryCard({
             </div>
             <div className="mt-1 flex flex-wrap gap-4 text-gray-600 dark:text-gray-300">
 
-              {unpaidTransfers.length > 0 && (
+              {hasOutstandingTransferred && (
                 <div>
                   <span className="font-medium text-rose-700 dark:text-rose-300">
                     {isEn ? "Transferred Debt: " : "المبلغ المرحل غير المسدد: "}
@@ -158,10 +169,10 @@ export function JahezRiderDebtSummaryCard({
         </div>
 
         <Link
-          href={unpaidTransfers.length > 0 ? "/admin/jahez/cashbox" : "/admin/jahez/statistics"}
+          href={hasOutstandingTransferred ? "/admin/jahez/cashbox" : "/admin/jahez/statistics"}
           className="flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200"
         >
-          <span>{unpaidTransfers.length > 0 ? (isEn ? "Settle Debt" : "سداد المرحل") : (isEn ? "View" : "عرض")}</span>
+          <span>{hasOutstandingTransferred ? (isEn ? "Settle Debt" : "سداد المرحل") : (isEn ? "View" : "عرض")}</span>
           <ExternalLink className="h-3 w-3" />
         </Link>
       </div>

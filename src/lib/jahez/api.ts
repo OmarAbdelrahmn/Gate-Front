@@ -707,6 +707,27 @@ export async function getJahezRidersWithTransferredDebts(
 }
 
 /**
+ * Resolve one rider's authoritative summary row from
+ * GET /riders/transferred-debts (no dedicated per-rider summary endpoint exists).
+ * Walks pages until the rider is found or a short page ends navigation.
+ * Returns null when the rider has no unpaid transferred debt.
+ */
+export async function getJahezRiderTransferredDebtsSummary(
+  riderId: string,
+  init?: CustomRequestInit,
+): Promise<RiderTransferredDebtSummary | null> {
+  const pageSize = 100;
+  for (let page = 1; page <= 100000; page++) {
+    const res = await getJahezRidersWithTransferredDebts(page, pageSize, init);
+    const items = res?.items || [];
+    const hit = items.find((s) => s.riderProfileId === riderId);
+    if (hit) return hit;
+    if (items.length < pageSize) break;
+  }
+  return null;
+}
+
+/**
  * GET /riders/{riderId}/transferred-debts?page=1&pageSize=50
  * That rider's unpaid debts (TransferredDebtRow)
  */

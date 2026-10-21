@@ -96,7 +96,11 @@ import {
   MapPin,
   Save,
   X,
+  Activity,
 } from "lucide-react";
+import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
+import type { PlatformAccountDayUsageInput } from "@/lib/platforms/day-usage-types";
 
 interface JoinedAccount {
   base: AccountResponse;
@@ -215,7 +219,11 @@ export default function ChefzAccountsPage() {
   const [releasingAccount, setReleasingAccount] = useState<AccountResponse | null>(null);
   const [releaseEffectiveTo, setReleaseEffectiveTo] = useState(new Date().toISOString().split("T")[0]);
   const [releaseReason, setReleaseReason] = useState("إرجاع الحساب");
+  const [releaseDayUsage, setReleaseDayUsage] = useState<PlatformAccountDayUsageInput | null>(null);
   const [releaseSubmitting, setReleaseSubmitting] = useState(false);
+
+  // Supplementary Day Usage Modal State
+  const [dayUsageModalAccount, setDayUsageModalAccount] = useState<{ id: string; code?: string } | null>(null);
 
   const [historyAccount, setHistoryAccount] = useState<AccountResponse | null>(null);
   const [assignmentHistoryList, setAssignmentHistoryList] = useState<AssignmentResponse[]>([]);
@@ -1451,11 +1459,6 @@ export default function ChefzAccountsPage() {
           problem?.detail ||
           "لا يمكن تعيين هذا الحساب لأن المندوب يمتلك بالفعل حساب راتب (Salary). يسمح بحساب راتب واحد فقط كحد أقصى."
         );
-      } else if (errorCode === "rider.jahez_debt_block") {
-        setAssignError(
-          problem?.detail ||
-          "المندوب محظور تشغيلياً بسبب مديونية سابقة ولا يمكن تعيينه حتى تسوية المديونية."
-        );
       } else {
         setAssignError(problem?.detail || e.message || "تعذر تعيين الحساب للمندوب.");
       }
@@ -1475,6 +1478,7 @@ export default function ChefzAccountsPage() {
         reason: releaseReason.trim() || "إرجاع الحساب",
         status: "Ended",
         rowVersion: releasingAccount.currentAssignment.rowVersion,
+        dayUsage: releaseDayUsage,
       });
 
       await loadData();
@@ -2466,16 +2470,6 @@ export default function ChefzAccountsPage() {
                               {translateStatusReason(chefz.statusReason)}
                             </span>
                           )}
-
-                          {chefz?.isOperationallyBlocked && (
-                            <span
-                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-300 dark:border-red-800"
-                              title={chefz.operationalBlockReason || "محظور تشغيلياً"}
-                            >
-                              <ShieldAlert className="h-3 w-3 shrink-0" />
-                              محظور تشغيلياً
-                            </span>
-                          )}
                         </div>
                       </td>
 
@@ -2531,11 +2525,28 @@ export default function ChefzAccountsPage() {
                               onClick={() => {
                                 setReleasingAccount(base);
                                 setReleaseEffectiveTo(new Date().toISOString().split("T")[0]);
+                                setReleaseDayUsage(null);
                               }}
                               className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
                               title="إنهاء تعيين المندوب"
                             >
                               <UserMinus className="h-4 w-4" />
+                            </button>
+                          )}
+
+                          {/* Shared Day Usage Button (Only for non-FullTime accounts, since FullTime is exclusive per calendar day) */}
+                          {chefz?.accountType !== "FullTime" && (
+                            <button
+                              onClick={() =>
+                                setDayUsageModalAccount({
+                                  id: base.id,
+                                  code: base.code,
+                                })
+                              }
+                              className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800"
+                              title="إدارة إنتاجية اليوم المشترك (Day Usage)"
+                            >
+                              <Activity className="h-4 w-4" />
                             </button>
                           )}
 
@@ -3255,6 +3266,20 @@ export default function ChefzAccountsPage() {
               />
             </div>
 
+            {(() => {
+              const joined = accounts.find((a) => a.base.id === releasingAccount.id);
+              if (joined?.chefz?.accountType === "FullTime") return null;
+              return (
+                <DayUsageFields
+                  value={releaseDayUsage}
+                  onChange={setReleaseDayUsage}
+                  platform="chefz"
+                  riderName={releasingAccount.currentAssignment.actualRiderNameAr}
+                  effectiveDate={releaseEffectiveTo}
+                />
+              );
+            })()}
+
             <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
               <Button
                 type="button"
@@ -3640,6 +3665,24 @@ export default function ChefzAccountsPage() {
           </form>
         )}
       </Modal>
+
+      {/* Shared Account Day Usage Modal */}
+      {dayUsageModalAccount && (
+        <SharedAccountDayUsageModal
+          isOpen={Boolean(dayUsageModalAccount)}
+          onClose={() => setDayUsageModalAccount(null)}
+          accountId={dayUsageModalAccount.id}
+          accountCode={dayUsageModalAccount.code}
+          platformName="شيفز (The Chefz)"
+          platform="chefz"
+          riderNamesMap={Object.fromEntries(
+            employees
+              .filter((e) => e.riderProfileId)
+              .map((e) => [e.riderProfileId!, e.fullNameAr || e.fullNameEn])
+          )}
+          onUpdated={loadData}
+        />
+      )}
     </div>
   );
 }

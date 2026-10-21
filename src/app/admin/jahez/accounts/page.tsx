@@ -24,6 +24,7 @@ import {
 import {
   OperationMode,
   OperationStatus,
+  PaymentStatus,
   Fund,
   Purpose,
   ApprovalKind,
@@ -82,7 +83,11 @@ import {
   Calendar,
   X,
   Edit3,
+  Activity,
 } from "lucide-react";
+import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
+import type { DayUsage } from "@/lib/jahez/types";
 
 function riyadhDateTimeInput(value: string): string {
   return new Date(new Date(value).getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
@@ -193,14 +198,26 @@ export default function JahezAccountsPage() {
   const [opTransferToRider, setOpTransferToRider] = useState(false);
   const [opFund, setOpFund] = useState<Fund | "">("");
   const [opPaymentRef, setOpPaymentRef] = useState("");
+  const [opDayUsage, setOpDayUsage] = useState<DayUsage | null>(null);
+
+  // Supplementary Shared-Day Usage Modal State
+  const [dayUsageModalAccount, setDayUsageModalAccount] = useState<{ id: string; code?: string } | null>(null);
 
   // Preview & Operation lifecycle state
   const [opPreview, setOpPreview] = useState<Preview | null>(null);
   const [savedOperation, setSavedOperation] = useState<Operation | null>(null);
+  const [opTargetHandoverId, setOpTargetHandoverId] = useState<string>("");
+  const [opHistoricalHandoverEnd, setOpHistoricalHandoverEnd] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [opPreviewError, setOpPreviewError] = useState<string | null>(null);
   const [opSubmitting, setOpSubmitting] = useState(false);
   const previewRequestId = useRef(0);
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isAdmin = user?.roles?.includes("Admin");
+  const canSettle = can("jahez.settle") || isAdmin;
+  const canWithdraw = can("jahez.withdraw") || isAdmin;
+  const canCreateTransferRequest = can("jahez.requests.transfer.create") || isAdmin;
 
   const opNeedsPayment =
     opMode !== OperationMode.Withdraw &&
@@ -230,9 +247,30 @@ export default function JahezAccountsPage() {
     savedOperationNeedsPayment &&
     (trimmedOpPaymentRef !== (savedOperation?.paymentReference ?? "") ||
       opFund !== savedOperation?.fund);
+  const opNetOutOfBounds =
+    opMode !== OperationMode.Withdraw &&
+    opNet !== "" &&
+    Math.abs(Number(opNet)) > 1000000000;
+  const opReasonInvalid = !opReason.trim() || opReason.trim().length > 2000;
+  const opCommissionIncomplete = Boolean(
+    opPreview && opPreview.commissionComplete === false,
+  );
+  const opModePermitted =
+    (opMode === OperationMode.Settle && canSettle) ||
+    (opMode === OperationMode.SettleAndWithdraw && canSettle && canWithdraw) ||
+    (opMode === OperationMode.Withdraw && canWithdraw);
+
   const opSaveDisabled =
-    opSubmitting || previewLoading || !opPreview ||
-    Boolean(opPaymentReferenceError) || opPaymentFundInvalid;
+    opSubmitting ||
+    previewLoading ||
+    !opPreview ||
+    !opModePermitted ||
+    (opTransferToRider && !canCreateTransferRequest) ||
+    opCommissionIncomplete ||
+    opNetOutOfBounds ||
+    opReasonInvalid ||
+    Boolean(opPaymentReferenceError) ||
+    opPaymentFundInvalid;
 
   // Last Settlement information for the selected account/handover
   interface LastSettlementInfo {
@@ -463,12 +501,29 @@ export default function JahezAccountsPage() {
   // -----------------------------------------------------------------
   // Operation Action ("شاشة العملية")
   // -----------------------------------------------------------------
-  const openOperationModal = (acc: Account, existingOpToResume?: Operation) => {
+  const openOperationModal = (
+    acc: Account,
+    existingOpToResume?: Operation,
+    historicalHandover?: { id: string; endedAtUtc?: string | null },
+  ) => {
     setOpAccount(acc);
+    const resolvedHandoverId =
+      historicalHandover?.id ||
+      existingOpToResume?.handoverId ||
+      acc.currentHandoverId ||
+      "";
+    setOpTargetHandoverId(resolvedHandoverId);
+    setOpHistoricalHandoverEnd(
+      historicalHandover?.endedAtUtc ? historicalHandover.endedAtUtc.slice(0, 10) : null,
+    );
     setOpTransferToRider(existingOpToResume?.transferToRider ?? false);
     setOpPaymentRef(existingOpToResume?.paymentReference || "");
     setOpFund(existingOpToResume?.fund ?? Fund.Cashbox);
     setOpPreview(null);
+
+    const defaultThroughDate = historicalHandover?.endedAtUtc
+      ? historicalHandover.endedAtUtc.slice(0, 10)
+      : getRiyadhTodayDate();
 
     if (existingOpToResume) {
       setSavedOperation(existingOpToResume);
@@ -481,13 +536,27 @@ export default function JahezAccountsPage() {
       );
       setOpNet(existingOpToResume.net);
       setOpReason(existingOpToResume.reason || "تصفية من داشبورد جاهز");
+      if (existingOpToResume.dayUsageJson) {
+        try {
+          setOpDayUsage(JSON.parse(existingOpToResume.dayUsageJson));
+        } catch {
+          setOpDayUsage(null);
+        }
+      } else {
+        setOpDayUsage(null);
+      }
     } else {
       setSavedOperation(null);
       setOpMode(OperationMode.Settle);
-      setOpThroughDate(getRiyadhTodayDate());
+      setOpThroughDate(defaultThroughDate);
       setOpEffectiveAt(getRiyadhNowIso().slice(0, 16));
       setOpNet(0);
-      setOpReason("تصفية من داشبورد جاهز");
+      setOpReason(
+        historicalHandover
+          ? "تصفية فترة تسليم سابقة (مسحوبة دون تصفية)"
+          : "تصفية من داشبورد جاهز",
+      );
+      setOpDayUsage(null);
     }
 
     setIsOpModalOpen(true);
@@ -508,13 +577,14 @@ export default function JahezAccountsPage() {
     getJahezAccountDetails(acc.accountId, 1, 50)
       .then((details) => {
         const currentHandover =
-          details.handovers?.items?.find((h) => h.id === acc.currentHandoverId) ||
+          details.handovers?.items?.find((h) => h.id === resolvedHandoverId) ||
           details.handovers?.items?.[0];
 
         // Filter executed / recorded settlements
         const settlements = (details.operations?.items || [])
           .filter(
             (op) =>
+              (!resolvedHandoverId || op.handoverId === resolvedHandoverId) &&
               (op.mode === OperationMode.Settle ||
                 op.mode === OperationMode.SettleAndWithdraw ||
                 op.purpose === Purpose.Settlement) &&
@@ -544,11 +614,12 @@ export default function JahezAccountsPage() {
           totalSettlementsCount: settlements.length,
         });
 
-        // Check if there is already an unexecuted draft/pending operation
+        // Check if there is already an unexecuted draft/pending operation for this handover
         if (!existingOpToResume) {
           const pendingOp = (details.operations?.items || []).find(
             (op) =>
-              op.status === OperationStatus.Ready || op.status === OperationStatus.UnderReview,
+              (!resolvedHandoverId || op.handoverId === resolvedHandoverId) &&
+              (op.status === OperationStatus.Ready || op.status === OperationStatus.UnderReview),
           );
 
           if (pendingOp) {
@@ -565,7 +636,7 @@ export default function JahezAccountsPage() {
             setOpTransferToRider(pendingOp.transferToRider ?? false);
 
             runPreview(
-              pendingOp.handoverId || acc.currentHandoverId || "",
+              pendingOp.handoverId || resolvedHandoverId,
               pendingOp.mode,
               pendingOp.throughDate,
               pendingOp.net,
@@ -591,17 +662,24 @@ export default function JahezAccountsPage() {
       });
 
     // Initial preview if not resuming
-    if (!existingOpToResume && acc.currentHandoverId) {
-      runPreview(acc.currentHandoverId, OperationMode.Settle, getRiyadhTodayDate(), 0, getRiyadhNowIso());
-    } else if (existingOpToResume && (existingOpToResume.handoverId || acc.currentHandoverId)) {
+    if (!existingOpToResume && resolvedHandoverId) {
+      runPreview(resolvedHandoverId, OperationMode.Settle, defaultThroughDate, 0, getRiyadhNowIso());
+    } else if (existingOpToResume && resolvedHandoverId) {
       runPreview(
-        existingOpToResume.handoverId || acc.currentHandoverId || "",
+        resolvedHandoverId,
         existingOpToResume.mode,
         existingOpToResume.throughDate,
         existingOpToResume.net,
         existingOpToResume.effectiveAtUtc,
       );
     }
+  };
+
+  const toRiyadhExplicitIso = (localInput: string): string => {
+    if (!localInput) return getRiyadhNowIso();
+    if (localInput.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(localInput)) return localInput;
+    const withSeconds = localInput.length === 16 ? `${localInput}:00` : localInput;
+    return `${withSeconds}+03:00`;
   };
 
   const runPreview = async (
@@ -611,13 +689,13 @@ export default function JahezAccountsPage() {
     netValue: number,
     effectiveAtValue?: string,
   ) => {
+    if (!handoverId) return;
     const requestId = ++previewRequestId.current;
     setPreviewLoading(true);
     setOpPreview(null);
     setOpPreviewError(null);
     try {
-      const effectiveAtUtc = effectiveAtValue
-        ?? (opEffectiveAt ? new Date(`${opEffectiveAt}+03:00`).toISOString() : getRiyadhNowIso());
+      const effectiveAtUtc = effectiveAtValue ?? toRiyadhExplicitIso(opEffectiveAt);
       const res = await previewJahezOperation({
         handoverId,
         mode,
@@ -640,67 +718,111 @@ export default function JahezAccountsPage() {
   const handleNetChange = (val: string) => {
     const num = val === "" ? "" : Number(val);
     setOpNet(num);
-    if (opAccount?.currentHandoverId && num !== "") {
-      runPreview(opAccount.currentHandoverId, opMode, opThroughDate, Number(num));
+    const activeHandoverId =
+      opTargetHandoverId || savedOperation?.handoverId || opAccount?.currentHandoverId;
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+    }
+    if (activeHandoverId && num !== "" && Math.abs(Number(num)) <= 1000000000) {
+      previewDebounceRef.current = setTimeout(() => {
+        runPreview(activeHandoverId, opMode, opThroughDate, Number(num));
+      }, 300);
     }
   };
 
   const handleModeChange = (newMode: OperationMode) => {
     setOpMode(newMode);
     if (newMode !== OperationMode.SettleAndWithdraw) setOpTransferToRider(false);
-    if (newMode === OperationMode.Withdraw) {
-      setOpThroughDate(getRiyadhTodayDate());
+    const nextThroughDate =
+      newMode === OperationMode.Withdraw || newMode === OperationMode.SettleAndWithdraw
+        ? opEffectiveAt?.slice(0, 10) || getRiyadhTodayDate()
+        : opThroughDate;
+    if (newMode === OperationMode.Withdraw || newMode === OperationMode.SettleAndWithdraw) {
+      setOpThroughDate(nextThroughDate);
     }
-    if (opAccount?.currentHandoverId) {
+    if (newMode === OperationMode.Settle) {
+      setOpDayUsage(null);
+    }
+    const activeHandoverId =
+      opTargetHandoverId || savedOperation?.handoverId || opAccount?.currentHandoverId;
+    if (activeHandoverId) {
       runPreview(
-        opAccount.currentHandoverId,
+        activeHandoverId,
         newMode,
-        newMode === OperationMode.Withdraw ? getRiyadhTodayDate() : opThroughDate,
+        nextThroughDate,
         opNet === "" ? 0 : Number(opNet),
       );
     }
   };
 
-  const handleSaveOperationDraft = async () => {
-    if (opSubmitting) return;
-    if (!opAccount?.currentHandoverId && !savedOperation?.handoverId) {
-      toast.error("خطأ", "لا توجد فترة تسليم نشطة لهذا الحساب");
-      return;
+  const handleSaveOperationDraft = async (): Promise<Operation | null> => {
+    if (opSubmitting) return null;
+    const targetHandoverId =
+      opTargetHandoverId || savedOperation?.handoverId || opAccount?.currentHandoverId || "";
+    if (!targetHandoverId) {
+      toast.error("خطأ", "لا توجد فترة تسليم محددة لهذا الحساب");
+      return null;
     }
     if (previewLoading || !opPreview) {
       toast.warning("المعاينة مطلوبة", "انتظر اكتمال معاينة الحساب المالي قبل الحفظ.");
-      return;
+      return null;
+    }
+    if (opPreview.commissionComplete === false) {
+      toast.error(
+        "العمولة غير مكتملة",
+        (opPreview.problems && opPreview.problems.join(" • ")) ||
+          "لا يمكن المتابعة حتى اكتمال احتساب العمولة من السيرفر.",
+      );
+      return null;
+    }
+    if (opReasonInvalid) {
+      toast.warning("السبب مطلوب", "يرجى إدخال سبب العملية (من 1 إلى 2000 حرف).");
+      return null;
+    }
+    if (opNetOutOfBounds) {
+      toast.warning("قيمة غير صالحة", "مبلغ داشبورد جاهز يتجاوز الحد المسموح به (1,000,000,000 ر.س).");
+      return null;
     }
     if (opPaymentReferenceError) {
       toast.warning("مرجع الحركة مطلوب", opPaymentReferenceError);
-      return;
+      return null;
     }
     setOpSubmitting(true);
     try {
-      const effectiveAtUtc = new Date(`${opEffectiveAt}+03:00`).toISOString();
-      const targetHandoverId = opAccount?.currentHandoverId || savedOperation?.handoverId || "";
+      const effectiveAtUtc = toRiyadhExplicitIso(opEffectiveAt);
+      const isWithdrawMode =
+        opMode === OperationMode.Withdraw || opMode === OperationMode.SettleAndWithdraw;
       const calculationPayload = {
         handoverId: targetHandoverId,
         mode: opMode,
         throughDate: opThroughDate,
         effectiveAtUtc,
         net: opMode === OperationMode.Withdraw || opNet === "" ? 0 : Number(opNet),
-        reason: opReason.trim() || "تصفية من داشبورد جاهز",
+        reason: opReason.trim(),
         purpose: Purpose.Settlement,
         transferToRider: opTransferToRider,
+        dayUsage: isWithdrawMode ? opDayUsage : null,
       };
       // Recheck the submitted values instead of relying on a possibly older preview.
       const freshPreview = await previewJahezOperation(calculationPayload);
       setOpPreview(freshPreview);
+      if (freshPreview.commissionComplete === false) {
+        toast.error(
+          "العمولة غير مكتملة",
+          (freshPreview.problems && freshPreview.problems.join(" • ")) ||
+            "لا يمكن حفظ المسودة حتى اكتمال بيانات العمولة.",
+        );
+        return null;
+      }
       const needsFund =
         opMode !== OperationMode.Withdraw && !opTransferToRider && freshPreview.remaining !== 0;
       if (needsFund && (!trimmedOpPaymentRef || trimmedOpPaymentRef.length > 500)) {
         toast.warning("مرجع الحركة مطلوب", "أدخل مرجع الحركة الفعلية، بحد أقصى 500 حرف، ثم احفظ المسودة.");
-        return;
+        return null;
       }
       if (needsFund && (opFund === "" || !freshPreview.allowedFunds.includes(opFund))) {
         toast.warning("الجهة المالية مطلوبة", "اختر جهة مالية تسمح بالقبض أو الصرف وفق المعاينة الحالية.");
-        return;
+        return null;
       }
       const opPayload = {
         ...calculationPayload,
@@ -720,6 +842,7 @@ export default function JahezAccountsPage() {
         toast.success("تم الحفظ", `تم حفظ مسودة العملية #${op.id.slice(0, 8)} بحالة جاهزة (Ready)`);
       }
       setSavedOperation(op);
+      return op;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "تعذر حفظ العملية";
       if (msg.includes("غير مكتملة") && opAccount) {
@@ -728,7 +851,9 @@ export default function JahezAccountsPage() {
             suppressErrorToast: true,
           });
           const recovered = (freshDetails.operations?.items || []).find(
-            (o) => o.status === OperationStatus.Ready || o.status === OperationStatus.UnderReview,
+            (o) =>
+              (!targetHandoverId || o.handoverId === targetHandoverId) &&
+              (o.status === OperationStatus.Ready || o.status === OperationStatus.UnderReview),
           );
           if (recovered) {
             setSavedOperation(recovered);
@@ -736,13 +861,14 @@ export default function JahezAccountsPage() {
               "تم استرجاع المسودة الحالية",
               `توجد مسودة مسجلة مسبقاً لهذه الفترة (#${recovered.id.slice(0, 8)}). يمكنك الآن مراجعتها وتنفيذ الحركة المالية لإنهاء التصفية.`,
             );
-            return;
+            return recovered;
           }
         } catch {
           // ignore
         }
       }
       toast.error("فشل الحفظ", msg);
+      return null;
     } finally {
       setOpSubmitting(false);
     }
@@ -807,14 +933,16 @@ export default function JahezAccountsPage() {
   };
 
   const handleOpenAdjustmentRequest = async () => {
-    if (!opAccount?.currentHandoverId || !savedOperation) {
+    const activeHandoverId =
+      opTargetHandoverId || savedOperation?.handoverId || opAccount?.currentHandoverId;
+    if (!activeHandoverId || !savedOperation) {
       toast.warning("تنبيه", "يرجى حفظ مسودة العملية أولاً قبل فتح طلب التعديل");
       return;
     }
     setIsAdjustmentSubmitting(true);
     try {
       await createJahezRequest({
-        handoverId: opAccount.currentHandoverId,
+        handoverId: activeHandoverId,
         kind: ApprovalKind.Adjustment,
         reason: `طلب مراجعة وتعديل التصفية للعملية #${savedOperation.id.slice(0, 8)}`,
         operationId: savedOperation.id,
@@ -836,23 +964,48 @@ export default function JahezAccountsPage() {
   };
 
   const handleOpenTransferRequest = async () => {
-    if (!opAccount?.currentHandoverId || !savedOperation) {
+    if (!canCreateTransferRequest) {
+      toast.warning("غير مصرح", "ليس لديك صلاحية إرسال طلب اعتماد الترحيل للمدير.");
+      return;
+    }
+    const activeHandoverId =
+      opTargetHandoverId || savedOperation?.handoverId || opAccount?.currentHandoverId;
+    if (!activeHandoverId || !savedOperation) {
       toast.warning("تنبيه", "يرجى حفظ مسودة العملية أولاً");
       return;
     }
     setIsTransferSubmitting(true);
     try {
+      let currentOp = savedOperation;
+      if (currentOp.status === OperationStatus.Ready && !currentOp.transferToRider) {
+        const updatedDraft = await handleSaveOperationDraft();
+        if (!updatedDraft) {
+          setIsTransferSubmitting(false);
+          return;
+        }
+        currentOp = updatedDraft;
+      }
+
       await createJahezRequest({
-        handoverId: opAccount.currentHandoverId,
+        handoverId: activeHandoverId,
         kind: ApprovalKind.SettlementTransfer,
-        reason: "ترحيل كامل المستحق بعد السحب إلى مديونية المندوب",
-        operationId: savedOperation.id,
+        reason: opReason.trim() || "اعتماد ترحيل المستحق على المندوب",
+        operationId: currentOp.id,
       });
-      toast.success("تم إرسال الطلب", "تم إرسال طلب الترحيل إلى الإدارة لاعتماده وتنفيذه");
-      setIsOpModalOpen(false);
+      toast.success("تم إرسال الطلب", "تم تحويل العملية إلى قيد المراجعة بانتظار اعتماد المدير.");
+      setSavedOperation({
+        ...currentOp,
+        status: OperationStatus.UnderReview,
+        transferToRider: true,
+      });
       loadData();
     } catch (err: unknown) {
-      toast.error("فشل الطلب", err instanceof Error ? err.message : "تعذر إنشاء طلب الترحيل");
+      toast.error(
+        "فشل إرسال الطلب",
+        err instanceof Error
+          ? `${err.message} (تم الاحتفاظ بالمسودة؛ يمكنك إعادة محاولة إرسال الطلب دون إنشاء مسودة جديدة)`
+          : "تعذر إنشاء طلب الترحيل",
+      );
     } finally {
       setIsTransferSubmitting(false);
     }
@@ -1428,6 +1581,19 @@ export default function JahezAccountsPage() {
                           )}
 
                           <button
+                            onClick={() =>
+                              setDayUsageModalAccount({
+                                id: acc.accountId,
+                                code: acc.code,
+                              })
+                            }
+                            className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 hover:text-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                            title="إدارة إنتاجية اليوم المشترك (Day Usage)"
+                          >
+                            <Activity className="h-4 w-4" />
+                          </button>
+
+                          <button
                             onClick={() => openStatusModal(acc)}
                             className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
                             title="تحديث حالة الحساب"
@@ -1730,6 +1896,13 @@ export default function JahezAccountsPage() {
           )}
 
           {/* 1. مسار العملية */}
+          {opHistoricalHandoverEnd && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              <strong>تصفية فترة تسليم سابقة (مسحوبة دون تصفية / مؤجلة):</strong> يتم احتساب وتنفيذ هذه التصفية على فترة التسليم القديمة رقم{" "}
+              <span className="font-mono font-bold">#{opTargetHandoverId.slice(0, 8)}</span>{" "}
+              (نهاية الفترة: <span className="font-mono font-bold">{opHistoricalHandoverEnd}</span>) دون المساس بفترة المندوب الحالي.
+            </div>
+          )}
           <div>
             <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1.5">
               1. اختيار مسار العملية:
@@ -1737,8 +1910,9 @@ export default function JahezAccountsPage() {
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
+                disabled={!canSettle}
                 onClick={() => handleModeChange(OperationMode.Settle)}
-                className={`rounded-xl border p-2.5 text-center font-bold transition-all ${
+                className={`rounded-xl border p-2.5 text-center font-bold transition-all disabled:opacity-50 ${
                   opMode === OperationMode.Settle
                     ? "border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 ring-2 ring-indigo-500/20"
                     : "border-gray-200 hover:bg-gray-50 text-gray-700 dark:border-gray-800 dark:text-gray-300"
@@ -1748,8 +1922,9 @@ export default function JahezAccountsPage() {
               </button>
               <button
                 type="button"
+                disabled={Boolean(opHistoricalHandoverEnd) || !(canSettle && canWithdraw)}
                 onClick={() => handleModeChange(OperationMode.SettleAndWithdraw)}
-                className={`rounded-xl border p-2.5 text-center font-bold transition-all ${
+                className={`rounded-xl border p-2.5 text-center font-bold transition-all disabled:opacity-50 ${
                   opMode === OperationMode.SettleAndWithdraw
                     ? "border-amber-600 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 ring-2 ring-amber-500/20"
                     : "border-gray-200 hover:bg-gray-50 text-gray-700 dark:border-gray-800 dark:text-gray-300"
@@ -1759,8 +1934,9 @@ export default function JahezAccountsPage() {
               </button>
               <button
                 type="button"
+                disabled={Boolean(opHistoricalHandoverEnd) || !canWithdraw}
                 onClick={() => handleModeChange(OperationMode.Withdraw)}
-                className={`rounded-xl border p-2.5 text-center font-bold transition-all ${
+                className={`rounded-xl border p-2.5 text-center font-bold transition-all disabled:opacity-50 ${
                   opMode === OperationMode.Withdraw
                     ? "border-rose-600 bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 ring-2 ring-rose-500/20"
                     : "border-gray-200 hover:bg-gray-50 text-gray-700 dark:border-gray-800 dark:text-gray-300"
@@ -1861,12 +2037,15 @@ export default function JahezAccountsPage() {
                 <Input
                   type="date"
                   value={opThroughDate}
-                  disabled={opMode === OperationMode.Withdraw}
+                  max={opHistoricalHandoverEnd || undefined}
+                  disabled={opMode === OperationMode.Withdraw || opMode === OperationMode.SettleAndWithdraw}
                   onChange={(e) => {
                     setOpThroughDate(e.target.value);
-                    if (opAccount?.currentHandoverId) {
+                    const handoverId =
+                      opTargetHandoverId || savedOperation?.handoverId || opAccount?.currentHandoverId;
+                    if (handoverId) {
                       runPreview(
-                        opAccount.currentHandoverId,
+                        handoverId,
                         opMode,
                         e.target.value,
                         opNet === "" ? 0 : Number(opNet),
@@ -1883,11 +2062,26 @@ export default function JahezAccountsPage() {
                   type="datetime-local"
                   value={opEffectiveAt}
                   onChange={(e) => {
-                    setOpEffectiveAt(e.target.value);
-                    const handoverId = savedOperation?.handoverId || opAccount?.currentHandoverId;
-                    if (handoverId && e.target.value) {
-                      runPreview(handoverId, opMode, opThroughDate, Number(opNet) || 0,
-                        new Date(`${e.target.value}+03:00`).toISOString());
+                    const nextVal = e.target.value;
+                    setOpEffectiveAt(nextVal);
+                    const syncedThroughDate =
+                      (opMode === OperationMode.Withdraw || opMode === OperationMode.SettleAndWithdraw) &&
+                      nextVal.length >= 10
+                        ? nextVal.slice(0, 10)
+                        : opThroughDate;
+                    if (syncedThroughDate !== opThroughDate) {
+                      setOpThroughDate(syncedThroughDate);
+                    }
+                    const handoverId =
+                      opTargetHandoverId || savedOperation?.handoverId || opAccount?.currentHandoverId;
+                    if (handoverId && nextVal) {
+                      runPreview(
+                        handoverId,
+                        opMode,
+                        syncedThroughDate,
+                        Number(opNet) || 0,
+                        toRiyadhExplicitIso(nextVal),
+                      );
                     }
                   }}
                 />
@@ -1915,11 +2109,18 @@ export default function JahezAccountsPage() {
               <Input
                 type="number"
                 step="0.01"
+                min={-1000000000}
+                max={1000000000}
                 value={opNet}
                 onChange={(e) => handleNetChange(e.target.value)}
                 placeholder="أدخل مديونية الداشبورد بإشارتها (موجب للمدين، سالب للدائن)..."
                 className="font-mono text-base font-bold"
               />
+              {opNetOutOfBounds && (
+                <p className="mt-1 text-xs text-rose-600 font-semibold">
+                  القيمة المدخلة تتجاوز الحد الأقصى المسموح به (1,000,000,000 ر.س).
+                </p>
+              )}
             </div>
           )}
 
@@ -1942,6 +2143,31 @@ export default function JahezAccountsPage() {
 
             {opPreview ? (
               <div className="space-y-3">
+                {/* تنبيه عدم اكتمال العمولة أو مشاكل المعاينة */}
+                {(opPreview.commissionComplete === false ||
+                  (opPreview.problems && opPreview.problems.length > 0)) && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-200 space-y-1"
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                      <span>
+                        {opPreview.commissionComplete === false
+                          ? "احتساب العمولة غير مكتمل — لا يمكن المتابعة حتى معالجة الملاحظات التالية:"
+                          : "ملاحظات المعاينة:"}
+                      </span>
+                    </div>
+                    {opPreview.problems && opPreview.problems.length > 0 && (
+                      <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                        {opPreview.problems.map((prob, idx) => (
+                          <li key={idx}>{prob}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
                 {/* كفيل ملكية الحساب المعتمد مالياً */}
                 <div className="flex items-center justify-between rounded-xl bg-amber-500/10 px-3 py-2 border border-amber-500/20 text-xs">
                   <span className="text-gray-600 dark:text-gray-300 flex items-center gap-1.5 font-medium">
@@ -2109,15 +2335,45 @@ export default function JahezAccountsPage() {
 
           {/* 5. سبب العملية */}
           <div>
-            <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              ملاحظات / سبب العملية
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block font-semibold text-gray-700 dark:text-gray-300">
+                ملاحظات / سبب العملية <span className="text-red-500">*</span>
+              </label>
+              <span className="text-[10px] text-gray-500 font-mono" dir="ltr">
+                {opReason.length}/2000
+              </span>
+            </div>
             <Input
+              required
+              maxLength={2000}
               value={opReason}
               onChange={(e) => setOpReason(e.target.value)}
               placeholder="تصفية دورية..."
             />
+            {opReasonInvalid && (
+              <p className="mt-1 text-xs text-rose-600 font-semibold">
+                سبب العملية مطلوب (بحد أقصى 2000 حرف).
+              </p>
+            )}
           </div>
+
+          {/* 6. بيانات إنتاجية اليوم عند السحب */}
+          {(opMode === OperationMode.Withdraw || opMode === OperationMode.SettleAndWithdraw) && (
+            <DayUsageFields
+              value={opDayUsage}
+              onChange={setOpDayUsage}
+              platform="jahez"
+              riderName={opAccount?.actualRider?.nameAr || opAccount?.owner?.nameAr}
+              effectiveDate={opThroughDate}
+            />
+          )}
+
+          {savedOperation?.dayUsageJson && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-2.5 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200">
+              <span className="font-bold">بيانات إنتاجية اليوم المسجلة بالمسودة: </span>
+              <span className="font-mono text-[11px]">{savedOperation.dayUsageJson}</span>
+            </div>
+          )}
 
           {/* أزرار العمليات والتدفق الإجرائي */}
           <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -2193,7 +2449,7 @@ export default function JahezAccountsPage() {
                       <Button
                         size="sm"
                         onClick={handleOpenTransferRequest}
-                        disabled={isTransferSubmitting}
+                        disabled={isTransferSubmitting || !canCreateTransferRequest}
                         className="bg-purple-600 hover:bg-purple-700 text-white font-bold gap-1.5 text-xs shadow-xs"
                       >
                         {isTransferSubmitting ? (
@@ -2412,21 +2668,35 @@ export default function JahezAccountsPage() {
                                   {op.remaining.toFixed(2)}
                                 </td>
                                 <td className="py-2 px-3">
-                                  <Badge
-                                    tone={
-                                      op.status === 3
-                                        ? "green"
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <Badge
+                                      tone={
+                                        op.status === 3
+                                          ? "green"
+                                          : op.status === 2
+                                          ? "orange"
+                                          : "blue"
+                                      }
+                                    >
+                                      {op.status === 3
+                                        ? "منفذة"
                                         : op.status === 2
-                                        ? "orange"
-                                        : "blue"
-                                    }
-                                  >
-                                    {op.status === 3
-                                      ? "منفذة"
-                                      : op.status === 2
-                                      ? "قيد المراجعة"
-                                      : "جاهزة"}
-                                  </Badge>
+                                        ? "قيد المراجعة"
+                                        : "جاهزة"}
+                                    </Badge>
+                                    {(op.mode === OperationMode.Withdraw ||
+                                      op.paymentStatus === PaymentStatus.Deferred) && (
+                                      <span className="inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                        مسحوب دون تصفية / تصفية مؤجلة
+                                      </span>
+                                    )}
+                                    {op.mode !== OperationMode.Withdraw &&
+                                      op.paymentStatus === PaymentStatus.Transferred && (
+                                        <span className="inline-flex items-center rounded-md bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                                          مُرحّل على المندوب
+                                        </span>
+                                      )}
+                                  </div>
                                 </td>
                                 <td className="py-2 px-3 text-gray-400">
                                   {op.effectiveAtUtc?.slice(0, 10)}
@@ -2491,23 +2761,58 @@ export default function JahezAccountsPage() {
                 {/* بقية التبويبات تعرض السجلات بوضوح */}
                 {detailsTab === "handovers" && (
                   <div className="space-y-2">
-                    {accountDetails.handovers.items?.map((h) => (
-                      <div
-                        key={h.id}
-                        className="rounded-xl border p-3 flex items-center justify-between"
-                      >
-                        <div>
-                          <div className="font-bold">فترة تسليم #{h.id.slice(0, 8)}</div>
-                          <div className="text-gray-400 text-[10px]">
-                            بدأت في: {h.startedAtUtc?.slice(0, 10)} • انتهاء:{" "}
-                            {h.endedAtUtc ? h.endedAtUtc.slice(0, 10) : "مستمرة"}
+                    {accountDetails.handovers.items?.map((h) => {
+                      const hasDeferredWithdraw = (accountDetails.operations.items || []).some(
+                        (op) =>
+                          op.handoverId === h.id &&
+                          (op.mode === OperationMode.Withdraw ||
+                            op.paymentStatus === PaymentStatus.Deferred),
+                      );
+                      const isHistorical = Boolean(h.endedAtUtc);
+
+                      return (
+                        <div
+                          key={h.id}
+                          className="rounded-xl border p-3 flex flex-wrap items-center justify-between gap-2"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">فترة تسليم #{h.id.slice(0, 8)}</span>
+                              {hasDeferredWithdraw && (
+                                <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                  مسحوب دون تصفية (تصفية مؤجلة)
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-gray-400 text-[10px]">
+                              بدأت في: {h.startedAtUtc?.slice(0, 10)} • انتهاء:{" "}
+                              {h.endedAtUtc ? h.endedAtUtc.slice(0, 10) : "مستمرة"}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-left font-mono text-[11px]">
+                              عمولة حتى: {h.commissionPostedThrough || "لم تبدأ"}
+                            </div>
+                            {isHistorical && canSettle && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setIsDetailsOpen(false);
+                                  openOperationModal(accountDetails.account, undefined, {
+                                    id: h.id,
+                                    endedAtUtc: h.endedAtUtc,
+                                  });
+                                }}
+                                className="h-7 px-2.5 text-[10px] font-bold bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
+                              >
+                                تصفية هذه الفترة (تصفية مؤجلة)
+                              </Button>
+                            )}
                           </div>
                         </div>
-                        <div className="text-left font-mono text-[11px]">
-                          عمولة حتى: {h.commissionPostedThrough || "لم تبدأ"}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2670,6 +2975,22 @@ export default function JahezAccountsPage() {
           loadData();
         }}
       />
+
+      {/* Shared Account Day Usage Modal */}
+      {dayUsageModalAccount && (
+        <SharedAccountDayUsageModal
+          isOpen={Boolean(dayUsageModalAccount)}
+          onClose={() => setDayUsageModalAccount(null)}
+          accountId={dayUsageModalAccount.id}
+          accountCode={dayUsageModalAccount.code}
+          platformName="جاهز (Jahez)"
+          platform="jahez"
+          riderNamesMap={Object.fromEntries(
+            riders.map((r) => [r.id, r.fullNameAr || r.fullNameEn])
+          )}
+          onUpdated={loadData}
+        />
+      )}
     </div>
   );
 }

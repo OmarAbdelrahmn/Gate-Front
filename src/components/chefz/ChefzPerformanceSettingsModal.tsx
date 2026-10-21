@@ -464,7 +464,7 @@ export function ChefzPerformanceSettingsForm({
                   تفعيل وسم &quot;متابعه شديدة&quot;
                 </span>
                 <span className="text-[var(--muted)] block mt-0.5 leading-relaxed">
-                  عند تسجيل صفر طلبات يومياً مع وجود عروض فائتة (Missed Offers &gt; 0)، يمنح المندوب تقييم &quot;متابعه شديدة&quot;.
+                  عند تسجيل صفر طلبات يومياً مع وجود طلبات فائتة (Missed Orders &gt; 0)، يمنح المندوب تقييم &quot;متابعه شديدة&quot;.
                 </span>
               </div>
             </label>

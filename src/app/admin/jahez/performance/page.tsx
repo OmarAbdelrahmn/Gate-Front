@@ -47,6 +47,7 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
+  Activity,
 } from "lucide-react";
 
 export default function JahezOrderPerformancePage() {
@@ -289,7 +290,9 @@ export default function JahezOrderPerformancePage() {
   const handleCommit = async (batchId: string) => {
     setCommitSubmitting(true);
     try {
-      await commitJahezImport(batchId, { allocations: [] });
+      await commitJahezImport(batchId, {
+        allocations: selectedPreview?.resolvedAllocations ?? [],
+      });
       toast.success("تم الاعتماد", "تم اعتماد وتحديث بيانات أداء الطلبات بنجاح");
       setIsPreviewOpen(false);
       loadAll();
@@ -1009,6 +1012,29 @@ export default function JahezOrderPerformancePage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* التوزيع التلقائي للحسابات المشتركة */}
+              {selectedPreview.resolvedAllocations && selectedPreview.resolvedAllocations.length > 0 && (
+                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 dark:border-purple-900/50 dark:bg-purple-950/30">
+                  <div className="font-bold text-purple-900 dark:text-purple-200 mb-1 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Activity className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <span>التوزيع التلقائي للحسابات المشتركة ({selectedPreview.resolvedAllocations.length} توزيع):</span>
+                    </div>
+                    <span className="text-[10px] text-purple-700 dark:text-purple-300">
+                      سيتم تثبيتها تلقائياً عند الاعتماد
+                    </span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1 text-purple-800 dark:text-purple-300 text-[11px]">
+                    {selectedPreview.resolvedAllocations.map((alloc, idx) => (
+                      <div key={idx} className="flex items-center justify-between border-b border-purple-100 dark:border-purple-900/40 py-1">
+                        <span>السبب: {alloc.reason || "توزيع تلقائي لليوم المشترك"}</span>
+                        <span className="font-bold font-mono">العدد: {alloc.count} طلب</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

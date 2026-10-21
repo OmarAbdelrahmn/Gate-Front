@@ -1,4 +1,4 @@
-// src/app/admin/jahez/approvals/page.tsx
+﻿// src/app/admin/jahez/approvals/page.tsx
 "use client";
 
 import { useEffect, useState, useTransition, useMemo } from "react";
@@ -83,9 +83,159 @@ export default function JahezApprovalsPage() {
   const [approvedNet, setApprovedNet] = useState<number | "">("");
   const [approvedCommission, setApprovedCommission] = useState<number | "">("");
   const [decisionSubmitting, setDecisionSubmitting] = useState(false);
+  const [confirmTransferApproveOpen, setConfirmTransferApproveOpen] = useState(false);
+  const [commissionConflictNotice, setCommissionConflictNotice] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [manualHandoverMode, setManualHandoverMode] = useState(false);
   const [manualTargetAccountMode, setManualTargetAccountMode] = useState(false);
+
+  const isAdmin = user?.roles?.includes("Admin");
+  const canCreateTransferRequest = can("jahez.requests.transfer.create") || isAdmin;
+  const canApproveTransfer =
+    (can("jahez.requests.transfer.approve") &&
+      can("jahez.settle") &&
+      can("jahez.withdraw")) ||
+    isAdmin;
+  const canRejectTransfer = can("jahez.requests.transfer.approve") || isAdmin;
+
+  // Helper to extract financial money information from request responses
+  const getRequestMoneyDisplay = (req: ApprovalRequest) => {
+    const r = req as any;
+    const amounts =
+      req.amounts ||
+      r.Amounts ||
+      (req.operation as any)?.amounts ||
+      r.operation?.Amounts ||
+      r.Operation?.amounts ||
+      r.Operation?.Amounts;
+
+    const dashboardDebt =
+      amounts?.dashboardDebt ?? amounts?.DashboardDebt;
+    const commission =
+      amounts?.commission ?? amounts?.Commission;
+    const total =
+      amounts?.total ?? amounts?.Total;
+
+    const op = req.operation || r.Operation;
+    const opRemaining = op?.remaining ?? op?.Remaining ?? r.remaining ?? r.Remaining;
+    const opNet = op?.net ?? op?.Net ?? r.net ?? r.Net;
+
+    switch (req.kind) {
+      case ApprovalKind.SettlementTransfer: {
+        // Per spec: Use the returned `amounts`; do not calculate manager totals from proposedNet/proposedCommission.
+        // For a transfer request without linked financial details, display «تفاصيل العملية غير متاحة».
+        if (amounts && total != null && !isNaN(Number(total))) {
+          const totalNum = Number(total);
+          const bd: { label: string; amount: number; color?: string }[] = [];
+          if (dashboardDebt != null && !isNaN(Number(dashboardDebt))) {
+            bd.push({ label: "مديونية داشبورد جاهز", amount: Number(dashboardDebt) });
+          }
+          if (commission != null && !isNaN(Number(commission))) {
+            bd.push({
+              label: "عمولة الفرسان",
+              amount: Number(commission),
+              color: "text-emerald-600 dark:text-emerald-400 font-semibold",
+            });
+          }
+          return {
+            amount: totalNum,
+            currency: "ر.س",
+            badgeLabel: "الإجمالي المرحّل على المندوب",
+            badgeTone: "purple" as const,
+            breakdown: bd,
+          };
+        }
+        return {
+          amount: null,
+          currency: "ر.س",
+          isUnavailable: true,
+          unavailableText: "تفاصيل العملية غير متاحة",
+        };
+      }
+
+      case ApprovalKind.FeeException: {
+        const waiver = req.waiverAmount ?? r.WaiverAmount ?? 0;
+        return {
+          amount: Number(waiver),
+          currency: "ر.س",
+          badgeLabel: "إعفاء رسوم",
+          badgeTone: "red" as const,
+        };
+      }
+
+      case ApprovalKind.AccountSwitch: {
+        const waiver = req.waiverAmount ?? r.WaiverAmount ?? 0;
+        if (Number(waiver) > 0) {
+          return {
+            amount: Number(waiver),
+            currency: "ر.س",
+            badgeLabel: "إعفاء تبديل",
+            badgeTone: "orange" as const,
+          };
+        }
+        return {
+          amount: 0,
+          currency: "ر.س",
+          badgeLabel: "بدون إعفاء",
+          badgeTone: "blue" as const,
+        };
+      }
+
+      case ApprovalKind.Adjustment: {
+        const debtAdj = req.debtAdjustment ?? r.DebtAdjustment;
+        if (debtAdj != null && !isNaN(Number(debtAdj))) {
+          return {
+            amount: Number(debtAdj),
+            currency: "ر.س",
+            badgeLabel: "تعديل دين",
+            badgeTone: Number(debtAdj) >= 0 ? ("orange" as const) : ("green" as const),
+            subText: req.proposedNet != null ? `صافي مقترح: ${req.proposedNet} ر.س` : undefined,
+          };
+        }
+        if (req.proposedNet != null && !isNaN(Number(req.proposedNet))) {
+          return {
+            amount: Number(req.proposedNet),
+            currency: "ر.س",
+            badgeLabel: "صافي مقترح",
+            badgeTone: "blue" as const,
+            subText: req.proposedCommission != null ? `عمولة: ${req.proposedCommission} ر.س` : undefined,
+          };
+        }
+        if (opRemaining != null && !isNaN(Number(opRemaining))) {
+          return {
+            amount: Number(opRemaining),
+            currency: "ر.س",
+            badgeLabel: "المتبقي الحالي",
+            badgeTone: "blue" as const,
+          };
+        }
+        return {
+          amount: null,
+          currency: "ر.س",
+          isUnavailable: true,
+          unavailableText: "بدون مبالغ محددة",
+        };
+      }
+
+      case ApprovalKind.PercentageCommission: {
+        return {
+          amount: null,
+          currency: "",
+          badgeLabel: "عمولة 15%",
+          badgeTone: "blue" as const,
+          subText: req.fromDate && req.toDate ? `${req.fromDate} ← ${req.toDate}` : "سياسة نسبة",
+        };
+      }
+
+      default:
+        return {
+          amount: null,
+          currency: "",
+          isUnavailable: true,
+          unavailableText: "-",
+        };
+    }
+  };
 
   const loadRequests = async (targetPage = page) => {
     setLoading(true);
@@ -94,7 +244,66 @@ export default function JahezApprovalsPage() {
         getJahezRequests(targetPage, pageSize),
         getJahezAccounts(1, 100),
       ]);
-      if (reqRes.status === "fulfilled") setRequests(reqRes.value.items || []);
+      if (reqRes.status === "fulfilled") {
+        const rawItems = reqRes.value.items || [];
+        const normalized = rawItems.map((r: any) => {
+          const am = r.amounts || r.Amounts || r.operation?.amounts || r.operation?.Amounts;
+          const op = r.operation || r.Operation;
+          return {
+            ...r,
+            amounts: am || r.amounts,
+            operation: op || r.operation,
+          };
+        });
+        setRequests(normalized);
+
+        // Background loader for settlement transfer requests where amounts wasn't populated in list endpoint
+        const missingTransfers = normalized.filter(
+          (r: any) =>
+            r.kind === ApprovalKind.SettlementTransfer &&
+            !r.amounts?.total &&
+            !r.amounts?.dashboardDebt &&
+            r.operation?.remaining == null
+        );
+
+        if (missingTransfers.length > 0) {
+          Promise.allSettled(
+            missingTransfers.map((r: any) => getJahezRequestDetails(r.id))
+          ).then((detailsResults) => {
+            const updates: Record<string, { amounts?: any; operation?: any }> = {};
+            detailsResults.forEach((res) => {
+              if (res.status === "fulfilled" && res.value) {
+                const app = res.value as any;
+                const am =
+                  app.amounts ||
+                  app.Amounts ||
+                  app.request?.amounts ||
+                  app.request?.Amounts ||
+                  app.request?.operation?.amounts ||
+                  app.request?.operation?.Amounts;
+                const op = app.request?.operation || app.request?.Operation;
+                if (am || op) {
+                  updates[app.request.id] = { amounts: am, operation: op };
+                }
+              }
+            });
+
+            if (Object.keys(updates).length > 0) {
+              setRequests((prev) =>
+                prev.map((r) => {
+                  const u = updates[r.id];
+                  if (!u) return r;
+                  return {
+                    ...r,
+                    amounts: u.amounts || r.amounts,
+                    operation: u.operation || r.operation,
+                  };
+                })
+              );
+            }
+          });
+        }
+      }
       if (accRes.status === "fulfilled") setAccounts(accRes.value.items || []);
     } catch (err: unknown) {
       toast.error("خطأ", "فشل تحميل طلبات الاعتماد");
@@ -251,7 +460,7 @@ export default function JahezApprovalsPage() {
     }
   };
 
-  const submitDecision = async (approve: boolean) => {
+  const submitDecision = async (approve: boolean, confirmedTransfer = false) => {
     if (!selectedApproval) return;
 
     // Self-approval check
@@ -264,20 +473,37 @@ export default function JahezApprovalsPage() {
     }
 
     const isTransfer = selectedApproval.request.kind === ApprovalKind.SettlementTransfer;
+    if (isTransfer) {
+      if (approve && !canApproveTransfer) {
+        toast.error(
+          "غير مصرح",
+          "اعتماد السحب وترحيل المستحق يتطلب صلاحيات الاعتماد والتصفية والسحب معاً.",
+        );
+        return;
+      }
+      if (!approve && !canRejectTransfer) {
+        toast.error("غير مصرح", "ليس لديك صلاحية رفض طلبات الترحيل.");
+        return;
+      }
+    }
+
+    const trimmedReason = decisionReason.trim();
+    if (!trimmedReason || trimmedReason.length > 2000) {
+      toast.warning("السبب مطلوب", "يرجى إدخال مبرر أو سبب القرار (من 1 إلى 2000 حرف) قبل المتابعة.");
+      return;
+    }
+
+    if (isTransfer && approve && !confirmedTransfer) {
+      setConfirmTransferApproveOpen(true);
+      return;
+    }
 
     setDecisionSubmitting(true);
+    setCommissionConflictNotice(null);
     try {
       await decideJahezRequest(selectedApproval.request.id, {
         approve,
-        reason:
-          decisionReason.trim() ||
-          (isTransfer
-            ? approve
-              ? "تمت مراجعة مديونية الداشبورد والعمولة واعتماد الترحيل"
-              : "يلزم مراجعة مبلغ الداشبورد"
-            : approve
-            ? "اعتماد الطلب"
-            : "رفض الطلب"),
+        reason: trimmedReason,
         useOriginalValues: isTransfer ? undefined : approve ? useOriginalValues : undefined,
         approvedNet:
           !isTransfer && approve && !useOriginalValues && approvedNet !== ""
@@ -289,10 +515,26 @@ export default function JahezApprovalsPage() {
             : undefined,
       });
 
+      setConfirmTransferApproveOpen(false);
       setIsDecisionOpen(false);
       loadRequests(page);
     } catch (err: unknown) {
-      toast.error("فشل تسجيل القرار", err instanceof Error ? err.message : "تعذر تنفيذ القرار");
+      const msg = err instanceof Error ? err.message : "تعذر تنفيذ القرار";
+      const status = (err as { status?: number })?.status;
+      setConfirmTransferApproveOpen(false);
+      if (status === 409 || msg.includes("409") || msg.includes("عمولة") || msg.includes("تعارض")) {
+        setCommissionConflictNotice(
+          "تغيرت بيانات العمولة أو حالة العملية في الخادم (409). تم تحديث تفاصيل الطلب؛ لا تعِد الاعتماد عشوائياً ووجّه العملية لمسار التعديل (Adjustment) إذا لزم الأمر.",
+        );
+        try {
+          const fresh = await getJahezRequestDetails(selectedApproval.request.id);
+          setSelectedApproval(fresh);
+        } catch {
+          // ignore
+        }
+        loadRequests(page);
+      }
+      toast.error("فشل تسجيل القرار", msg);
     } finally {
       setDecisionSubmitting(false);
     }
@@ -406,6 +648,7 @@ export default function JahezApprovalsPage() {
                 <th className="py-3 px-3">نوع الطلب</th>
                 <th className="py-3 px-3">المندوب الفعلي</th>
                 <th className="py-3 px-3">الحساب والتكليف</th>
+                <th className="py-3 px-3 font-bold text-gray-900 dark:text-gray-100">المبلغ (ر.س)</th>
                 <th className="py-3 px-3">البيانات المالية والمقترحة</th>
                 <th className="py-3 px-3">السبب والمبرر</th>
                 <th className="py-3 px-3 text-center">الحالة</th>
@@ -416,14 +659,14 @@ export default function JahezApprovalsPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-gray-500">
+                  <td colSpan={10} className="py-12 text-center text-gray-500">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-indigo-500 mb-2" />
                     جارٍ تحميل طلبات الاعتماد...
                   </td>
                 </tr>
               ) : filteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-gray-500">
+                  <td colSpan={10} className="py-12 text-center text-gray-500">
                     لا توجد طلبات مطابقة للمعايير الحالية
                   </td>
                 </tr>
@@ -475,6 +718,73 @@ export default function JahezApprovalsPage() {
                         )}
                       </div>
                     </td>
+
+                    {/* Money Column (المبلغ) */}
+                    <td className="py-3 px-3">
+                      {(() => {
+                        const money = getRequestMoneyDisplay(req);
+                        if (money.isUnavailable) {
+                          return (
+                            <span className="text-[11px] font-mono text-gray-400">
+                              {money.unavailableText}
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            {money.amount !== null ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono font-black text-sm text-gray-900 dark:text-gray-100">
+                                  {new Intl.NumberFormat("en-US", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  }).format(money.amount)}{" "}
+                                  <span className="text-[10px] font-normal text-gray-500">
+                                    {money.currency}
+                                  </span>
+                                </span>
+                                {money.badgeLabel && (
+                                  <Badge tone={money.badgeTone || "blue"} className="text-[9px] px-1.5 py-0">
+                                    {money.badgeLabel}
+                                  </Badge>
+                                )}
+                              </div>
+                            ) : (
+                              money.badgeLabel && (
+                                <div className="flex items-center gap-1">
+                                  <Badge tone={money.badgeTone || "blue"}>
+                                    {money.badgeLabel}
+                                  </Badge>
+                                </div>
+                              )
+                            )}
+
+                            {money.breakdown && money.breakdown.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-gray-500 dark:text-gray-400">
+                                {money.breakdown.map((b, i) => (
+                                  <span key={b.label} className={b.color || ""}>
+                                    {i > 0 && <span className="text-gray-300 dark:text-gray-600 mr-1">• </span>}
+                                    {b.label}: {new Intl.NumberFormat("en-US", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    }).format(b.amount)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {money.subText && (
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                {money.subText}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+
+                    {/* Financial details & Proposals */}
                     <td className="py-3 px-3">
                       <div className="space-y-1">
                         {req.kind === ApprovalKind.Adjustment && (
@@ -498,45 +808,39 @@ export default function JahezApprovalsPage() {
                           </div>
                         )}
                         {req.kind === ApprovalKind.FeeException && (
-                          <span className="font-bold text-rose-700 dark:text-rose-400">
-                            إعفاء رسوم: {req.waiverAmount} ر.س
+                          <span className="text-gray-600 dark:text-gray-300 text-[11px]">
+                            طلب إعفاء المندوب من رسوم التكليف
                           </span>
                         )}
                         {req.kind === ApprovalKind.AccountSwitch && (
-                          <span className="font-bold text-amber-700 dark:text-amber-400">
-                            تبديل حساب • إعفاء: {req.waiverAmount} ر.س
-                          </span>
+                          <div className="flex flex-col gap-0.5 text-[11px]">
+                            <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                              تبديل الحساب إلى بديل متاح
+                            </span>
+                            {req.targetAccount && (
+                              <span className="text-gray-500 font-mono text-[10px]">
+                                البديل: {req.targetAccount.code || req.targetAccount.externalAccountId}
+                              </span>
+                            )}
+                          </div>
                         )}
                         {req.kind === ApprovalKind.PercentageCommission && (
                           <span className="text-gray-700 dark:text-gray-300 font-mono text-[11px]">
-                            من: {req.fromDate || "-"} إلى: {req.toDate || "-"}
+                            فترة التطبيق: من {req.fromDate || "-"} إلى {req.toDate || "-"}
                           </span>
                         )}
                         {req.kind === ApprovalKind.SettlementTransfer && (
                           <div className="flex flex-col gap-0.5">
-                            <span className="font-bold text-purple-700 dark:text-purple-400">
-                              تصفية وسحب وترحيل مديونية
+                            <span className="font-semibold text-purple-700 dark:text-purple-400 text-[11px]">
+                              ترحيل المستحق إلى مديونية المندوب
                             </span>
-                            {req.amounts ? (
-                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-gray-600 dark:text-gray-300">
-                                <span>داشبورد: {Number(req.amounts.dashboardDebt).toFixed(2)}</span>
-                                <span>•</span>
-                                <span>عمولة: {Number(req.amounts.commission).toFixed(2)}</span>
-                                <span>•</span>
-                                <strong className="text-rose-600 dark:text-rose-400">
-                                  إجمالي: {Number(req.amounts.total).toFixed(2)} ر.س
-                                </strong>
-                              </div>
-                            ) : req.operation?.remaining != null ? (
-                              <span className="text-[10px] font-mono text-gray-500">
-                                المبلغ المرحل: {Number(req.operation.remaining).toFixed(2)} ر.س
+                            {req.operation?.throughDate && (
+                              <span className="text-[10px] font-mono text-gray-400">
+                                حتى تاريخ: {req.operation.throughDate}
                               </span>
-                            ) : (
-                              <span className="text-[10px] text-gray-400">تفاصيل العملية غير متاحة</span>
                             )}
                           </div>
                         )}
-
                       </div>
                     </td>
                     <td className="py-3 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={req.reason}>
@@ -901,7 +1205,26 @@ export default function JahezApprovalsPage() {
                   <strong className="text-gray-900 dark:text-white">المبرر الإداري للطلب: </strong>
                   {selectedApproval.request.reason}
                 </div>
+                {selectedApproval.request.requestedByUserId && (
+                  <div className="text-[11px] text-gray-600 dark:text-gray-400">
+                    <strong>معرّف مقدم الطلب (Requester): </strong>
+                    <span className="font-mono">{selectedApproval.request.requestedByUserId}</span>
+                  </div>
+                )}
               </div>
+
+              {commissionConflictNotice && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-200 space-y-1.5"
+                >
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                    <span>تعارض في العمولة أو حالة العملية (409)</span>
+                  </div>
+                  <p>{commissionConflictNotice}</p>
+                </div>
+              )}
 
               {/* Rider Details Card */}
               {selectedApproval.request.userRider && (
@@ -966,8 +1289,23 @@ export default function JahezApprovalsPage() {
                       </span>
                     </div>
                     {selectedApproval.request.assignment && (
-                      <div className="col-span-2 text-[11px] text-gray-600 dark:text-gray-400 pt-0.5">
-                        فترة التكليف: من {selectedApproval.request.assignment.effectiveFrom || "-"} إلى {selectedApproval.request.assignment.effectiveTo || "مستمر"}
+                      <div className="col-span-2 text-[11px] text-gray-600 dark:text-gray-400 pt-0.5 space-y-0.5">
+                        <div>
+                          فترة التكليف: من {selectedApproval.request.assignment.effectiveFrom || "-"} إلى{" "}
+                          {selectedApproval.request.assignment.effectiveTo || "مستمر"}
+                        </div>
+                        {(selectedApproval.request.assignment.startedAtUtc ||
+                          selectedApproval.request.assignment.endedAtUtc ||
+                          selectedApproval.request.assignment.commissionStartsOn) && (
+                          <div className="font-mono text-[10.5px] text-gray-500">
+                            بدء الجلسة: {selectedApproval.request.assignment.startedAtUtc?.slice(0, 16).replace("T", " ") || "-"}
+                            {" • "}
+                            انتهاء الجلسة: {selectedApproval.request.assignment.endedAtUtc?.slice(0, 16).replace("T", " ") || "مستمرة"}
+                            {selectedApproval.request.assignment.commissionStartsOn
+                              ? ` • بدء العمولة: ${selectedApproval.request.assignment.commissionStartsOn}`
+                              : ""}
+                          </div>
+                        )}
                       </div>
                     )}
                     {selectedApproval.request.targetAccount && (
@@ -1069,41 +1407,99 @@ export default function JahezApprovalsPage() {
                     <Badge tone="purple">تصفية وسحب وترحيل</Badge>
                   </div>
 
+                  {selectedApproval.request.operation && (
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-purple-900 dark:text-purple-200 bg-white/70 dark:bg-gray-900/50 rounded-lg p-2 border border-purple-100 dark:border-purple-900/40">
+                      <div>
+                        <span className="text-gray-500">تاريخ التصفية (throughDate): </span>
+                        <span className="font-mono font-bold">
+                          {selectedApproval.request.operation.throughDate || "-"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">وقت التنفيذ (effectiveAtUtc): </span>
+                        <span className="font-mono font-bold">
+                          {selectedApproval.request.operation.effectiveAtUtc
+                            ?.slice(0, 16)
+                            .replace("T", " ") || "-"}
+                        </span>
+                      </div>
+                      {selectedApproval.request.operation.reason && (
+                        <div className="col-span-2">
+                          <span className="text-gray-500">سبب العملية: </span>
+                          <span>{selectedApproval.request.operation.reason}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {(() => {
-                    const amounts = selectedApproval.request.amounts || selectedApproval.amounts;
-                    if (amounts) {
+                    const selApp = selectedApproval as any;
+                    const amounts =
+                      selectedApproval.request.amounts ||
+                      selApp.request?.Amounts ||
+                      selectedApproval.amounts ||
+                      selApp.Amounts ||
+                      (selectedApproval.request.operation as any)?.amounts ||
+                      selApp.request?.operation?.Amounts ||
+                      selApp.operation?.amounts ||
+                      selApp.operation?.Amounts;
+
+                    const dashboardDebt =
+                      amounts?.dashboardDebt ?? amounts?.DashboardDebt;
+                    const commission =
+                      amounts?.commission ?? amounts?.Commission;
+                    const total =
+                      amounts?.total ?? amounts?.Total;
+
+                    if (amounts && total != null) {
                       return (
                         <div className="grid grid-cols-3 gap-2 text-center pt-1">
                           <div className="rounded-xl bg-white p-2.5 border border-purple-100 shadow-xs dark:bg-gray-900 dark:border-gray-800">
                             <span className="text-[10px] text-gray-500 font-medium block">
-                              مديونية داشبورد جاهز المدخلة
+                              مديونية داشبورد جاهز
                             </span>
                             <span className="font-mono font-bold text-sm text-gray-900 dark:text-white mt-0.5 block">
-                              {Number(amounts.dashboardDebt).toFixed(2)} ر.س
+                              {Number(dashboardDebt ?? 0).toFixed(2)} ر.س
                             </span>
                           </div>
                           <div className="rounded-xl bg-white p-2.5 border border-purple-100 shadow-xs dark:bg-gray-900 dark:border-gray-800">
                             <span className="text-[10px] text-gray-500 font-medium block">
-                              العمولة المستحقة للشركة
+                              عمولة الفرسان
                             </span>
                             <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-0.5 block">
-                              {Number(amounts.commission).toFixed(2)} ر.س
+                              {Number(commission ?? 0).toFixed(2)} ر.س
                             </span>
                           </div>
                           <div className="rounded-xl bg-white p-2.5 border border-purple-100 shadow-xs dark:bg-gray-900 dark:border-gray-800">
                             <span className="text-[10px] text-gray-500 font-medium block">
-                              إجمالي الترحيل المعتمد
+                              الإجمالي المرحّل على المندوب
                             </span>
                             <span className="font-mono font-black text-sm text-rose-600 dark:text-rose-400 mt-0.5 block">
-                              {Number(amounts.total).toFixed(2)} ر.س
+                              {Number(total ?? 0).toFixed(2)} ر.س
                             </span>
                           </div>
                         </div>
                       );
                     }
                     return (
-                      <div className="text-center py-2 text-amber-700 dark:text-amber-300 font-semibold text-xs bg-amber-50 dark:bg-amber-950/40 rounded-lg p-2">
-                        تفاصيل العملية غير متاحة؛ يرجى تحديث البيانات ومراجعة التصفية قبل الاعتماد.
+                      <div className="text-center py-2 text-amber-700 dark:text-amber-300 font-semibold text-xs bg-amber-50 dark:bg-amber-950/40 rounded-lg p-2 space-y-2">
+                        <div>تفاصيل العملية غير متاحة</div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={async () => {
+                            try {
+                              const fresh = await getJahezRequestDetails(selectedApproval.request.id);
+                              setSelectedApproval(fresh);
+                            } catch {
+                              toast.error("خطأ", "تعذر تحديث تفاصيل الطلب");
+                            }
+                          }}
+                          className="h-7 px-3 text-[11px] font-bold"
+                        >
+                          <RefreshCw className="h-3 w-3 ml-1" />
+                          تحديث ومراجعة تفاصيل العملية
+                        </Button>
                       </div>
                     );
                   })()}
@@ -1128,16 +1524,23 @@ export default function JahezApprovalsPage() {
                     سجل القرارات السابقة:
                   </div>
                   {selectedApproval.decisions.map((d) => (
-                    <div key={d.id} className="text-[11px] text-gray-600 dark:text-gray-400 flex items-center justify-between border-t pt-1 first:border-0 first:pt-0">
-                      <div className="flex items-center gap-1.5">
-                        <Badge tone={d.status === ApprovalStatus.Approved ? "green" : "red"}>
-                          {d.status === ApprovalStatus.Approved ? "معتمد" : "مرفوض"}
-                        </Badge>
-                        <span>{d.reason}</span>
+                    <div key={d.id} className="text-[11px] text-gray-600 dark:text-gray-400 border-t pt-1.5 first:border-0 first:pt-0 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Badge tone={d.status === ApprovalStatus.Approved ? "green" : "red"}>
+                            {d.status === ApprovalStatus.Approved ? "معتمد" : "مرفوض"}
+                          </Badge>
+                          <span>{d.reason}</span>
+                        </div>
+                        <span className="font-mono text-gray-400 text-[10px]">
+                          {d.decidedAtUtc?.slice(0, 10)}
+                        </span>
                       </div>
-                      <span className="font-mono text-gray-400 text-[10px]">
-                        {d.decidedAtUtc?.slice(0, 10)}
-                      </span>
+                      {d.decisionJson && (
+                        <div className="font-mono text-[10px] text-gray-500 bg-white/80 dark:bg-gray-900/60 rounded px-2 py-1 border border-gray-100 dark:border-gray-800 break-all" dir="ltr">
+                          {d.decisionJson}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1200,6 +1603,8 @@ export default function JahezApprovalsPage() {
                       مبرر / سبب القرار *
                     </label>
                     <Input
+                      required
+                      maxLength={2000}
                       value={decisionReason}
                       onChange={(e) => setDecisionReason(e.target.value)}
                       placeholder={
@@ -1210,55 +1615,174 @@ export default function JahezApprovalsPage() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setIsDecisionOpen(false)}
-                      disabled={decisionSubmitting}
-                    >
-                      إغلاق
-                    </Button>
+                  {(() => {
+                    const selApp = selectedApproval as any;
+                    const transferAmounts =
+                      selectedApproval.request.amounts ||
+                      selApp.request?.Amounts ||
+                      selectedApproval.amounts ||
+                      selApp.Amounts ||
+                      (selectedApproval.request.operation as any)?.amounts ||
+                      selApp.request?.operation?.Amounts;
+                    const isTransfer =
+                      selectedApproval.request.kind === ApprovalKind.SettlementTransfer;
+                    const missingTransferDetails =
+                      isTransfer &&
+                      (!transferAmounts ||
+                        (transferAmounts.total == null && transferAmounts.Total == null) ||
+                        !selectedApproval.request.operation);
 
-                    {Boolean(user?.id && selectedApproval.request.requestedByUserId === user.id) ? (
-                      <span className="text-xs text-amber-600 font-bold">
-                        غير مصرح باعتماد طلبك الشخصي
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-2">
+                    return (
+                      <div className="flex items-center justify-between gap-2 pt-2">
                         <Button
-                          onClick={() => submitDecision(false)}
+                          variant="secondary"
+                          onClick={() => setIsDecisionOpen(false)}
                           disabled={decisionSubmitting}
-                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1"
                         >
-                          <X className="h-4 w-4" />
-                          {selectedApproval.request.kind === ApprovalKind.SettlementTransfer
-                            ? "رفض الترحيل"
-                            : "رفض الطلب"}
+                          إغلاق
                         </Button>
 
-                        <Button
-                          onClick={() => submitDecision(true)}
-                          disabled={decisionSubmitting}
-                          className={`${
-                            selectedApproval.request.kind === ApprovalKind.SettlementTransfer
-                              ? "bg-purple-600 hover:bg-purple-700"
-                              : "bg-emerald-600 hover:bg-emerald-700"
-                          } text-white font-bold gap-1 shadow-xs`}
-                        >
-                          <Check className="h-4 w-4" />
-                          {selectedApproval.request.kind === ApprovalKind.SettlementTransfer
-                            ? "اعتماد السحب وترحيل المستحق"
-                            : "اعتماد الطلب"}
-                        </Button>
+                        {Boolean(user?.id && selectedApproval.request.requestedByUserId === user.id) ? (
+                          <span className="text-xs text-amber-600 font-bold">
+                            غير مصرح باعتماد طلبك الشخصي
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => submitDecision(false)}
+                              disabled={
+                                decisionSubmitting ||
+                                !decisionReason.trim() ||
+                                (isTransfer && !canRejectTransfer)
+                              }
+                              className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1"
+                            >
+                              <X className="h-4 w-4" />
+                              {isTransfer ? "رفض الترحيل" : "رفض الطلب"}
+                            </Button>
+
+                            <Button
+                              onClick={() => submitDecision(true)}
+                              disabled={
+                                decisionSubmitting ||
+                                !decisionReason.trim() ||
+                                missingTransferDetails ||
+                                (isTransfer && !canApproveTransfer)
+                              }
+                              className={`${
+                                isTransfer
+                                  ? "bg-purple-600 hover:bg-purple-700"
+                                  : "bg-emerald-600 hover:bg-emerald-700"
+                              } text-white font-bold gap-1 shadow-xs`}
+                            >
+                              <Check className="h-4 w-4" />
+                              {isTransfer ? "اعتماد السحب وترحيل المستحق" : "اعتماد الطلب"}
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
 
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* ================================================================= */}
+      {/* Financial Confirmation Dialog for Transfer Approval               */}
+      {/* ================================================================= */}
+      <Modal
+        isOpen={confirmTransferApproveOpen}
+        onClose={() => setConfirmTransferApproveOpen(false)}
+        title="تأكيد قرار مالي: اعتماد السحب وترحيل المستحق"
+        maxWidth="max-w-md"
+      >
+        {selectedApproval && (
+          <div className="space-y-4 text-xs" dir="rtl">
+            <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-3 dark:border-purple-900/50 dark:bg-purple-950/30 space-y-2">
+              <div className="font-bold text-purple-950 dark:text-purple-200">
+                المندوب الفعلي المسجل عليه الالتزام:
+              </div>
+              <div className="text-sm font-black text-gray-900 dark:text-white">
+                {selectedApproval.request.userRider?.nameAr ||
+                  selectedApproval.request.userRider?.nameEn ||
+                  "مندوب غير محدد"}
+              </div>
+              {selectedApproval.request.userRider?.iqamaNo && (
+                <div className="font-mono text-[11px] text-gray-600 dark:text-gray-400">
+                  رقم الهوية / الإقامة: {selectedApproval.request.userRider.iqamaNo}
+                </div>
+              )}
+            </div>
+
+            {(() => {
+              const selApp = selectedApproval as any;
+              const amounts =
+                selectedApproval.request.amounts ||
+                selApp.request?.Amounts ||
+                selectedApproval.amounts ||
+                selApp.Amounts ||
+                (selectedApproval.request.operation as any)?.amounts;
+              const dashboardDebt = Number(amounts?.dashboardDebt ?? amounts?.DashboardDebt ?? 0);
+              const commission = Number(amounts?.commission ?? amounts?.Commission ?? 0);
+              const total = Number(amounts?.total ?? amounts?.Total ?? 0);
+
+              return (
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-800 dark:bg-gray-900">
+                    <span className="text-[10px] text-gray-500 block">مديونية داشبورد جاهز</span>
+                    <span className="font-mono font-bold text-sm mt-0.5 block">
+                      {dashboardDebt.toFixed(2)} ر.س
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-800 dark:bg-gray-900">
+                    <span className="text-[10px] text-gray-500 block">عمولة الفرسان</span>
+                    <span className="font-mono font-bold text-sm text-emerald-600 mt-0.5 block">
+                      {commission.toFixed(2)} ر.س
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-purple-200 bg-purple-50 p-2.5 dark:border-purple-900 dark:bg-purple-950/40">
+                    <span className="text-[10px] text-purple-700 dark:text-purple-300 font-bold block">
+                      الإجمالي المرحّل على المندوب
+                    </span>
+                    <span className="font-mono font-black text-sm text-rose-600 dark:text-rose-400 mt-0.5 block">
+                      {total.toFixed(2)} ر.س
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed">
+              سيقوم هذا الإجراء باعتماد الطلب وتنفيذ سحب الحساب وتسجيل الإجمالي المرحّل كمديونية مرحلة على المندوب دون إنشاء حركة خزنة فورية.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 border-t pt-3 dark:border-gray-800">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmTransferApproveOpen(false)}
+                disabled={decisionSubmitting}
+              >
+                تراجع
+              </Button>
+              <Button
+                onClick={() => submitDecision(true, true)}
+                disabled={decisionSubmitting}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold gap-1.5"
+              >
+                {decisionSubmitting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                اعتماد السحب وترحيل المستحق
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

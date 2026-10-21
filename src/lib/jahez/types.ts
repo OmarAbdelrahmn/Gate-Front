@@ -162,6 +162,7 @@ export interface Operation extends Audit {
   executedAtUtc: Instant | null;
   executedByUserId: Id | null;
   commissionStartDate?: DateOnly | null;
+  dayUsageJson?: string | null;
 }
 
 export interface OperationUpdate {
@@ -272,6 +273,9 @@ export interface TransferAmounts {
   dashboardDebt: number;
   commission: number;
   total: number;
+  DashboardDebt?: number;
+  Commission?: number;
+  Total?: number;
 }
 
 export interface ApprovalRequest extends Audit {
@@ -296,7 +300,9 @@ export interface ApprovalRequest extends Audit {
   account?: ApprovalRequestAccount | null;
   targetAccount?: ApprovalRequestAccount | null;
   operation?: (Partial<Operation> & { net?: number; commission?: number; remaining?: number }) | null;
+  Operation?: (Partial<Operation> & { net?: number; commission?: number; remaining?: number }) | null;
   amounts?: TransferAmounts | null;
+  Amounts?: TransferAmounts | null;
 }
 
 export interface DecisionRequest {
@@ -324,6 +330,7 @@ export interface Approval {
   request: ApprovalRequest;
   decisions: Decision[];
   amounts?: TransferAmounts | null;
+  Amounts?: TransferAmounts | null;
 }
 
 export interface MoneyRecord {
@@ -375,6 +382,7 @@ export interface TransferredDebt extends Audit {
   amount: number;
   paidAtUtc: Instant | null;
   paidByUserId: Id | null;
+  approvedRequestId?: Id | null;
   // Enriched fields from backend:
   userRider?: RiderPerson | null;
   assignment?: TransferredDebtAssignment | null;
@@ -619,6 +627,13 @@ export interface ImportBatch extends Audit {
   correctionReason: string | null;
 }
 
+export interface JahezResolvedDispatchAllocation {
+  rowId: string;
+  handoverId: string;
+  count: number;
+  reason: string;
+}
+
 export interface ImportPreview {
   batchId: Id;
   kind: ImportKind;
@@ -627,6 +642,7 @@ export interface ImportPreview {
   issues: ImportIssue[];
   files: { id: Id; fileName: string }[] | null;
   accounts: ImportAccountSummary[] | null;
+  resolvedAllocations?: JahezResolvedDispatchAllocation[];
 }
 
 export interface ImportCommit {

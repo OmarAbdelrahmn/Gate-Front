@@ -107,11 +107,15 @@ export interface AssignRequest {
   backdatedReason?: string | null;
 }
 
+export * from "./day-usage-types";
+import type { PlatformAccountDayUsageInput, PlatformAccountDayResponse, PlatformAccountDayUpdateRequest } from "./day-usage-types";
+
 export interface ReleaseRequest {
   effectiveTo: string;
   status: "Ended" | "Cancelled" | string;
   reason: string;
   rowVersion: string; // Assignment rowVersion!
+  dayUsage?: PlatformAccountDayUsageInput | null;
 }
 
 export interface CredentialHistoryResponse {
@@ -410,5 +414,26 @@ export const getRiderPlatformHistory = async (riderProfileId: string) => {
     }
     return null;
   }
+};
+
+// 14. GET /api/platform-accounts/{id}/day-usage?date=YYYY-MM-DD
+export const getPlatformAccountDayUsage = (id: string, date: string) => {
+  return authFetch<PlatformAccountDayResponse>(
+    `/api/platform-accounts/${encodeURIComponent(id)}/day-usage?date=${encodeURIComponent(date)}`
+  );
+};
+
+// 15. PUT /api/platform-accounts/{id}/day-usage?date=YYYY-MM-DD
+export const updatePlatformAccountDayUsage = (
+  id: string,
+  payload: PlatformAccountDayUpdateRequest,
+  date: string
+) => {
+  const url = `/api/platform-accounts/${encodeURIComponent(id)}/day-usage?date=${encodeURIComponent(date)}`;
+  return authFetch<void>(url, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    notifySuccess: "تم تحديث بيانات استخدام الحساب المشترك بنجاح",
+  });
 };
 

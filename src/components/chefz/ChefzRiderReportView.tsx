@@ -401,8 +401,8 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
           { header: "اسم المندوب", accessor: () => riderName, isText: true },
           { header: "رقم الإقامة", accessor: (d) => d.riderIqamaNo ?? riderIqama, isText: true },
           { header: "الطلبات المقبولة", accessor: (d) => d.orders },
-          { header: "إجمالي العروض الصالحة", accessor: (d) => d.validOffers },
-          { header: "العروض الفائتة", accessor: (d) => d.missedOffers },
+          { header: "إجمالي الطلبات الصالحة (Valid Orders)", accessor: (d) => d.validOffers },
+          { header: "الطلبات الفائتة (Missed Orders)", accessor: (d) => d.missedOffers },
           {
             header: "نسبة القبول (%)",
             accessor: (d) => (d.acceptanceRate !== null ? `${d.acceptanceRate}%` : "لا توجد بيانات"),
@@ -1390,8 +1390,8 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
                             <tr>
                               <th className="px-3 py-2.5">التاريخ</th>
                               <th className="px-3 py-2.5 text-center">الطلبات المقبولة</th>
-                              <th className="px-3 py-2.5 text-center">العروض الصالحة</th>
-                              <th className="px-3 py-2.5 text-center">العروض الفائتة</th>
+                              <th className="px-3 py-2.5 text-center">الطلبات الصالحة</th>
+                              <th className="px-3 py-2.5 text-center">الطلبات الفائتة</th>
                               <th className="px-3 py-2.5 text-center">نسبة القبول</th>
                               <th className="px-3 py-2.5 text-center">التقييم اليومي</th>
                             </tr>
