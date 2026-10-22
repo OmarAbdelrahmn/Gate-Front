@@ -93,6 +93,23 @@ function riyadhDateTimeInput(value: string): string {
   return new Date(new Date(value).getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
 }
 
+function getAccountStatusDisplay(status: Account["status"], isEn = false) {
+  switch (status) {
+    case "Available":
+      return { label: isEn ? "Available" : "متاح", tone: "green" as const };
+    case "Assigned":
+      return { label: isEn ? "Assigned" : "مسند", tone: "blue" as const };
+    case "Suspended":
+      return { label: isEn ? "Block" : "بلوك", tone: "red" as const };
+    case "Retired":
+      return { label: isEn ? "Retired" : "متقاعد", tone: "gray" as const };
+    case "Archived":
+      return { label: isEn ? "Out of Sponsorship" : "خارج الكفالة", tone: "orange" as const };
+    default:
+      return { label: status, tone: "gray" as const };
+  }
+}
+
 export default function JahezAccountsPage() {
   const { user, can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
@@ -409,6 +426,18 @@ export default function JahezAccountsPage() {
         acc.actualRider?.iqamaNo?.includes(q) ||
         acc.actualRider?.mobile?.includes(q);
 
+      const statusLabels =
+        acc.status === "Suspended"
+          ? "بلوك block suspended موقوف"
+          : acc.status === "Archived"
+          ? "خارج الكفالة خارج الكفاله archived مؤرشف"
+          : acc.status === "Available"
+          ? "متاح available"
+          : acc.status === "Assigned"
+          ? "مسند assigned"
+          : "متقاعد retired";
+      const statusMatch = statusLabels.toLowerCase().includes(q);
+
       return (
         codeMatch ||
         extMatch ||
@@ -416,7 +445,8 @@ export default function JahezAccountsPage() {
         cityMatch ||
         sponsorMatch ||
         ownerMatch ||
-        riderMatch
+        riderMatch ||
+        statusMatch
       );
     });
   }, [accounts, search, statusFilter, assignedFilter, cityFilter, sponsorFilter]);
@@ -1105,7 +1135,16 @@ export default function JahezAccountsPage() {
       "هوية المالك": a.owner?.iqamaNo || "-",
       "المندوب الفعلي": a.actualRider?.nameAr || "غير مسند",
       "هوية المندوب": a.actualRider?.iqamaNo || "-",
-      "حالة الحساب": a.status,
+      "حالة الحساب":
+        a.status === "Available"
+          ? "متاح"
+          : a.status === "Assigned"
+          ? "مسند"
+          : a.status === "Suspended"
+          ? "بلوك"
+          : a.status === "Retired"
+          ? "متقاعد"
+          : "خارج الكفالة",
       "حالة الإسناد": a.isAssigned ? "مسند" : "متاح",
       "طلبات الأمس": a.yesterdayOrders ?? "لا توجد بيانات",
       "آخر طلبات": a.lastOrderCount ?? 0,
@@ -1242,10 +1281,10 @@ export default function JahezAccountsPage() {
                 ? "border-rose-500 bg-rose-100/50 dark:border-rose-600 dark:bg-rose-950/40"
                 : "border-rose-200/80 bg-rose-50/40 hover:border-rose-400 dark:border-rose-950 dark:bg-rose-950/20"
             }`}
-            title="فلترة الحسابات الموقوفة"
+            title="فلترة حسابات البلوك (الموقوفة)"
           >
             <div className="text-xs font-medium text-rose-700 dark:text-rose-400">
-              موقوفة إدارياً
+              حسابات بلوك
             </div>
             <div className="mt-1 text-2xl font-black text-rose-800 dark:text-rose-200">
               {accounts.length > 0
@@ -1253,7 +1292,30 @@ export default function JahezAccountsPage() {
                 : statistics.blockedAccounts}
             </div>
             <div className="mt-0.5 text-[10px] text-rose-600/80 dark:text-rose-400/80">
-              Suspended
+              Block (موقوف)
+            </div>
+          </div>
+
+          <div
+            onClick={() => {
+              setStatusFilter("Archived");
+              setAssignedFilter("ALL");
+            }}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              statusFilter === "Archived"
+                ? "border-orange-500 bg-orange-100/50 dark:border-orange-600 dark:bg-orange-950/40"
+                : "border-orange-200/80 bg-orange-50/40 hover:border-orange-400 dark:border-orange-950 dark:bg-orange-950/20"
+            }`}
+            title="فلترة حسابات خارج الكفالة (المؤرشفة)"
+          >
+            <div className="text-xs font-medium text-orange-700 dark:text-orange-400">
+              خارج الكفالة
+            </div>
+            <div className="mt-1 text-2xl font-black text-orange-800 dark:text-orange-200">
+              {accounts.filter((a) => a.status === "Archived").length}
+            </div>
+            <div className="mt-0.5 text-[10px] text-orange-600/80 dark:text-orange-400/80">
+              خارج الكفالة (Archived)
             </div>
           </div>
 
@@ -1318,9 +1380,9 @@ export default function JahezAccountsPage() {
             <option value="ALL">جميع الحالات التشغيلية</option>
             <option value="Available">متاح (Available)</option>
             <option value="Assigned">مسند (Assigned)</option>
-            <option value="Suspended">موقوف (Suspended)</option>
+            <option value="Suspended">بلوك (Block)</option>
             <option value="Retired">متقاعد (Retired)</option>
-            <option value="Archived">مؤرشف (Archived)</option>
+            <option value="Archived">خارج الكفالة (Archived)</option>
           </select>
 
           <select
@@ -1474,28 +1536,14 @@ export default function JahezAccountsPage() {
                       {/* الحالة والإسناد */}
                       <td className="py-3 px-3 text-center">
                         <div className="flex flex-col items-center gap-1">
-                          <Badge
-                            tone={
-                              acc.status === "Available"
-                                ? "green"
-                                : acc.status === "Assigned"
-                                ? "blue"
-                                : acc.status === "Suspended"
-                                ? "red"
-                                : "gray"
-                            }
-                            className="text-[10px]"
-                          >
-                            {acc.status === "Available"
-                              ? "متاح"
-                              : acc.status === "Assigned"
-                              ? "مسند"
-                              : acc.status === "Suspended"
-                              ? "موقوف"
-                              : acc.status === "Retired"
-                              ? "متقاعد"
-                              : "مؤرشف"}
-                          </Badge>
+                          {(() => {
+                            const { label, tone } = getAccountStatusDisplay(acc.status, isEn);
+                            return (
+                              <Badge tone={tone} className="text-[10px]">
+                                {label}
+                              </Badge>
+                            );
+                          })()}
 
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
                             {acc.isAssigned ? "مسند حالياً" : "غير مسند"}
@@ -2605,8 +2653,11 @@ export default function JahezAccountsPage() {
                       <div>المدينة: {accountDetails.account.cityNameAr}</div>
                       <div>الكفيل: {accountDetails.account.sponsorNameAr || "بدون"}</div>
                       <div>
-                        الحالة التشغيلية: {accountDetails.account.status} (
-                        {accountDetails.account.isAssigned ? "مسند" : "متاح"})
+                        الحالة التشغيلية:{" "}
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">
+                          {getAccountStatusDisplay(accountDetails.account.status, isEn).label}
+                        </span>{" "}
+                        ({accountDetails.account.isAssigned ? "مسند" : "متاح"})
                       </div>
                     </div>
 
@@ -2834,7 +2885,12 @@ export default function JahezAccountsPage() {
           {statusAccount && (
             <div className="rounded-xl bg-gray-100 p-3 dark:bg-gray-800">
               <span className="font-bold">الحساب: {statusAccount.code}</span>
-              <div className="text-gray-500">الحالة الحالية: {statusAccount.status}</div>
+              <div className="text-gray-500">
+                الحالة الحالية:{" "}
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  {getAccountStatusDisplay(statusAccount.status, isEn).label}
+                </span>
+              </div>
             </div>
           )}
 
@@ -2849,9 +2905,9 @@ export default function JahezAccountsPage() {
             >
               <option value="Available">متاح للتشغيل (Available)</option>
               <option value="Assigned">مسند (Assigned)</option>
-              <option value="Suspended">موقوف إدارياً (Suspended)</option>
+              <option value="Suspended">بلوك (Block / Suspended)</option>
               <option value="Retired">متقاعد (Retired)</option>
-              <option value="Archived">مؤرشف (Archived)</option>
+              <option value="Archived">خارج الكفالة (Archived)</option>
             </select>
           </div>
 

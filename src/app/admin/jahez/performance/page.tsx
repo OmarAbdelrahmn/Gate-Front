@@ -234,7 +234,18 @@ export default function JahezOrderPerformancePage() {
       "إقامة المالك": a.owner?.iqamaNo || "-",
       "الكفيل": a.sponsorNameAr || "-",
       "المدينة": a.cityNameAr || "-",
-      "حالة الحساب": a.status,
+      "حالة الحساب":
+        a.status === "Available"
+          ? "متاح"
+          : a.status === "Assigned"
+          ? "مسند"
+          : a.status === "Suspended"
+          ? "بلوك"
+          : a.status === "Retired"
+          ? "متقاعد"
+          : a.status === "Archived"
+          ? "خارج الكفالة"
+          : a.status,
       "مسند": a.isAssigned ? "نعم" : "لا",
       "طلبات الأمس": a.yesterdayOrders ?? 0,
       "تاريخ الأمس": statistics?.yesterday || "-",
@@ -683,13 +694,17 @@ export default function JahezOrderPerformancePage() {
                                     ? "green"
                                     : a.status === "Suspended"
                                     ? "red"
+                                    : a.status === "Archived"
+                                    ? "orange"
                                     : "gray"
                                 }
                               >
                                 {a.status === "Available"
                                   ? "متاح/نشط"
                                   : a.status === "Suspended"
-                                  ? "موقوف"
+                                  ? "بلوك"
+                                  : a.status === "Archived"
+                                  ? "خارج الكفالة"
                                   : a.status}
                               </Badge>
                               {a.isAssigned && (

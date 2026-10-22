@@ -52,6 +52,55 @@ export function DayUsageFields({
 
   const hasEnteredData = Object.values(current).some((v) => v !== null && v !== undefined);
 
+  const getVisibleFields = (): (keyof PlatformAccountDayUsageInput)[] => {
+    const fields: (keyof PlatformAccountDayUsageInput)[] = ["ordersCount"];
+    if (!isJahez || (current.workingHours !== undefined && current.workingHours !== null)) {
+      fields.push("workingHours");
+    }
+    if (
+      (!isChefz && !isJahez) ||
+      isNinja ||
+      (current.collectedAmount !== undefined && current.collectedAmount !== null)
+    ) {
+      fields.push("collectedAmount");
+    }
+    if (
+      (!isChefz && !isJahez) ||
+      isNinja ||
+      (current.deductionsAmount !== undefined && current.deductionsAmount !== null)
+    ) {
+      fields.push("deductionsAmount");
+    }
+    if (
+      isChefz ||
+      platform === "generic" ||
+      current.totalValidOffers !== undefined ||
+      current.declinedOffers !== undefined ||
+      current.missedOffers !== undefined
+    ) {
+      fields.push("totalValidOffers", "declinedOffers", "missedOffers");
+    }
+    return fields;
+  };
+
+  const visibleFields = getVisibleFields();
+  const isAllZero =
+    visibleFields.length > 0 &&
+    hasEnteredData &&
+    visibleFields.every((f) => current[f] === 0);
+
+  const handleToggleAllZero = (checked: boolean) => {
+    if (checked) {
+      const updated: PlatformAccountDayUsageInput = { ...current };
+      for (const f of visibleFields) {
+        updated[f] = 0;
+      }
+      onChange(updated);
+    } else {
+      onChange(null);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)]/50 p-3 transition-all">
       <button
@@ -91,6 +140,38 @@ export function DayUsageFields({
                 <strong>تنبيه:</strong> اترك الحقل فارغاً إذا كانت القيمة غير معلومة، واكتب <strong>0</strong> إذا كانت القيمة المؤكدة صفراً.
               </p>
             </div>
+          </div>
+
+          {/* Zero-All Checkbox Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--background)] px-3 py-2 border border-[var(--border)]">
+            <label
+              htmlFor="day-usage-rider-all-zero"
+              className="inline-flex items-center gap-2 cursor-pointer select-none"
+            >
+              <input
+                type="checkbox"
+                id="day-usage-rider-all-zero"
+                checked={isAllZero}
+                onChange={(e) => handleToggleAllZero(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border)] text-purple-600 focus:ring-purple-500 focus:ring-offset-0 cursor-pointer accent-purple-600"
+              />
+              <span className="text-xs font-bold text-[var(--foreground)]">
+                تصفير جميع قيم هذا المندوب (All at zero)
+              </span>
+              <span className="text-[11px] text-[var(--muted)] hidden sm:inline">
+                (تعيين كافة الحقول كأصفار مؤكدة 0)
+              </span>
+            </label>
+
+            {hasEnteredData && (
+              <button
+                type="button"
+                onClick={() => onChange(null)}
+                className="text-[10.5px] font-semibold text-[var(--muted)] hover:text-rose-600 underline"
+              >
+                مسح وتفريغ الحقول (تركها فارغة / مجهولة)
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

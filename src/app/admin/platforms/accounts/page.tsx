@@ -851,7 +851,16 @@ export default function PlatformAccountsPage() {
     });
   };
 
-  const renderStatusBadge = (status: string) => {
+  const renderStatusBadge = (status: string, platformCode?: string | null) => {
+    const isJahez =
+      Boolean(platformCode?.toUpperCase().includes("JAHEZ")) ||
+      (filterPlatformId &&
+        platforms.some(
+          (p) =>
+            p.id === filterPlatformId &&
+            (p.code?.toUpperCase().includes("JAHEZ") || p.nameAr?.includes("جاهز"))
+        ));
+
     switch (status) {
       case "Available":
         return (
@@ -867,8 +876,8 @@ export default function PlatformAccountsPage() {
         );
       case "Suspended":
         return (
-          <Badge className="bg-amber-50 text-amber-700 border-amber-200">
-            موقوف
+          <Badge className="bg-rose-50 text-rose-700 border-rose-200">
+            {isJahez ? "بلوك" : "موقوف"}
           </Badge>
         );
       case "Retired":
@@ -879,8 +888,8 @@ export default function PlatformAccountsPage() {
         );
       case "Archived":
         return (
-          <Badge className="bg-slate-100 text-slate-600 border-slate-300">
-            مؤرشف
+          <Badge className="bg-orange-50 text-orange-700 border-orange-200">
+            {isJahez ? "خارج الكفالة" : "مؤرشف"}
           </Badge>
         );
       default:
@@ -1234,7 +1243,7 @@ export default function PlatformAccountsPage() {
                     </td>
 
                     <td className="px-6 py-4">
-                      {renderStatusBadge(acc.status)}
+                      {renderStatusBadge(acc.status, acc.platformCode)}
                       {(acc.platformCode === "JAHEZ" || acc.platformNameAr?.includes("جاهز") || acc.platformNameEn?.toLowerCase().includes("jahez")) &&
                         acc.status === "Suspended" && (
                           <span className="block text-[10px] text-rose-600 dark:text-rose-400 font-medium mt-1 leading-tight max-w-[180px]">

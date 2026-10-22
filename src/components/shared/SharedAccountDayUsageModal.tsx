@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Modal } from "@/components/ui/Modal";
@@ -209,7 +209,21 @@ export function SharedAccountDayUsageModal({
 
   const handleLeaveUnchangedOrRemainder = (assignmentId: string) => {
     setDirtyAssignments((prev) => ({ ...prev, [assignmentId]: false }));
-    setEditedFigures((prev) => ({ ...prev, [assignmentId]: null }));
+    const orig = participants.find((p) => p.assignmentId === assignmentId)?.figures;
+    setEditedFigures((prev) => ({
+      ...prev,
+      [assignmentId]: orig
+        ? {
+            ordersCount: orig.ordersCount ?? null,
+            workingHours: orig.workingHours ?? null,
+            collectedAmount: orig.collectedAmount ?? null,
+            deductionsAmount: orig.deductionsAmount ?? null,
+            totalValidOffers: orig.totalValidOffers ?? null,
+            declinedOffers: orig.declinedOffers ?? null,
+            missedOffers: orig.missedOffers ?? null,
+          }
+        : null,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -301,6 +315,48 @@ export function SharedAccountDayUsageModal({
             p.figures.missedOffers !== null))
     );
 
+  const getVisibleFields = useCallback((): (keyof PlatformAccountDayUsageInput)[] => {
+    const keys: (keyof PlatformAccountDayUsageInput)[] = ["ordersCount"];
+    if (resolvedPlatform !== "jahez") {
+      keys.push("workingHours");
+    }
+    if (resolvedPlatform !== "jahez" && resolvedPlatform !== "chefz") {
+      keys.push("collectedAmount", "deductionsAmount");
+    }
+    if (showChefzFields) {
+      keys.push("totalValidOffers", "declinedOffers", "missedOffers");
+    }
+    return keys;
+  }, [resolvedPlatform, showChefzFields]);
+
+  const handleToggleAllZero = (assignmentId: string, checked: boolean) => {
+    if (checked) {
+      const visibleFields = getVisibleFields();
+      setDirtyAssignments((prev) => ({ ...prev, [assignmentId]: true }));
+      setEditedFigures((prev) => {
+        const currentObj = prev[assignmentId] || {};
+        const nextObj: PlatformAccountDayUsageInput = { ...currentObj };
+        for (const field of visibleFields) {
+          nextObj[field] = 0;
+        }
+        return {
+          ...prev,
+          [assignmentId]: nextObj,
+        };
+      });
+    } else {
+      handleLeaveUnchangedOrRemainder(assignmentId);
+    }
+  };
+
+  const checkIsAllZero = (assignmentId: string): boolean => {
+    const fig = editedFigures[assignmentId];
+    if (!fig) return false;
+    const visibleFields = getVisibleFields();
+    if (visibleFields.length === 0) return false;
+    return visibleFields.every((f) => fig[f] === 0);
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -377,6 +433,7 @@ export function SharedAccountDayUsageModal({
                 const hasMissing = p.missingFields && p.missingFields.length > 0;
                 const riderName = riderNamesMap?.[p.riderProfileId];
                 const isUnresolvedSequence = p.sequence === null;
+                const isAllZero = checkIsAllZero(p.assignmentId);
 
                 return (
                   <div
@@ -422,16 +479,6 @@ export function SharedAccountDayUsageModal({
                           </div>
                         )}
 
-                        {dirtyAssignments[p.assignmentId] && canUpdateDayUsage && (
-                          <button
-                            type="button"
-                            onClick={() => handleLeaveUnchangedOrRemainder(p.assignmentId)}
-                            className="text-[10.5px] font-semibold text-[var(--muted)] hover:text-rose-600 underline"
-                          >
-                            إلغاء تعديل الأرقام (تركها دون تغيير / متبقي)
-                          </button>
-                        )}
-
                         {/* Reorder Buttons */}
                         {participants.length > 1 && canUpdateDayUsage && (
                           <div className="flex items-center gap-1">
@@ -456,6 +503,39 @@ export function SharedAccountDayUsageModal({
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* Zero-All Checkbox Toolbar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--subtle-bg)]/80 px-3 py-2 border border-[var(--border)]">
+                      <label
+                        htmlFor={`rider-all-zero-${p.assignmentId}`}
+                        className="inline-flex items-center gap-2 cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          id={`rider-all-zero-${p.assignmentId}`}
+                          checked={isAllZero}
+                          disabled={!canUpdateDayUsage}
+                          onChange={(e) => handleToggleAllZero(p.assignmentId, e.target.checked)}
+                          className="h-4 w-4 rounded border-[var(--border)] text-purple-600 focus:ring-purple-500 focus:ring-offset-0 cursor-pointer disabled:cursor-not-allowed accent-purple-600"
+                        />
+                        <span className="text-xs font-bold text-[var(--foreground)]">
+                          تصفير جميع قيم هذا المندوب (All at zero)
+                        </span>
+                        <span className="text-[11px] text-[var(--muted)] hidden sm:inline">
+                          (تعيين كافة الحقول كأصفار مؤكدة 0)
+                        </span>
+                      </label>
+
+                      {dirtyAssignments[p.assignmentId] && canUpdateDayUsage && (
+                        <button
+                          type="button"
+                          onClick={() => handleLeaveUnchangedOrRemainder(p.assignmentId)}
+                          className="text-[10.5px] font-semibold text-[var(--muted)] hover:text-rose-600 underline"
+                        >
+                          إلغاء التعديل (تركها دون تغيير / متبقي)
+                        </button>
+                      )}
                     </div>
 
                     {isLast && participants.length > 1 && !dirtyAssignments[p.assignmentId] && p.figures === null && (
