@@ -2309,7 +2309,7 @@ export default function JahezCashboxPage() {
                 {bulkRepayRider.amounts ? (
                   <div className="mt-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 text-[10px] grid grid-cols-2 gap-1 font-mono">
                     <div>مديونية داشبورد جاهز: {Number(bulkRepayRider.amounts.dashboardDebt).toFixed(2)} ر.س</div>
-                    <div>عمولة الفرسان: {Number(bulkRepayRider.amounts.commission).toFixed(2)} ر.س</div>
+                    <div>عمولة الشركة: {Number(bulkRepayRider.amounts.commission).toFixed(2)} ر.س</div>
                   </div>
                 ) : (
                   <div className="mt-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 text-[10px] text-gray-500">
@@ -2625,7 +2625,7 @@ export default function JahezCashboxPage() {
                           </td>
                           <td className="py-2.5 px-3 text-center font-mono text-[11px]">
                             <div>داشبورد جاهز: {d.sourceOperation?.net != null ? `${Math.abs(Number(d.sourceOperation.net)).toFixed(2)}` : "-"}</div>
-                            <div className="text-emerald-600">عمولة الفرسان: {d.sourceOperation?.commission != null ? `${Number(d.sourceOperation.commission).toFixed(2)}` : "-"}</div>
+                            <div className="text-emerald-600">عمولة الشركة: {d.sourceOperation?.commission != null ? `${Number(d.sourceOperation.commission).toFixed(2)}` : "-"}</div>
                             <div className="text-gray-500">المتبقي: {d.sourceOperation?.remaining != null ? `${Number(d.sourceOperation.remaining).toFixed(2)}` : "-"}</div>
                           </td>
                           <td className="py-2.5 px-3 text-center font-mono font-bold text-rose-700 dark:text-rose-400">

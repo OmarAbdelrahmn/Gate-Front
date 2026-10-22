@@ -91,7 +91,18 @@ export default function JahezStatisticsAndReportsPage() {
       ]);
 
       if (statRes.status === "fulfilled") setStatistics(statRes.value);
-      if (debtRes.status === "fulfilled") setAdminDebts(debtRes.value.items || []);
+      if (debtRes.status === "fulfilled") {
+        const rawItems = debtRes.value.items || [];
+        const adjustedItems = rawItems.map((d) => {
+          const val = Number(d.platformDebt) || 0;
+          const inverted = val === 0 ? 0 : -val;
+          return {
+            ...d,
+            platformDebt: Object.is(inverted, -0) || inverted === 0 ? 0 : inverted,
+          };
+        });
+        setAdminDebts(adjustedItems);
+      }
       if (impRes.status === "fulfilled") setImportBatches(impRes.value.items || []);
     } catch {
       toast.error("خطأ", "تعذر جلب التقارير والإحصائيات");
@@ -440,7 +451,9 @@ export default function JahezStatisticsAndReportsPage() {
                   إجمالي مبالغ المديونية
                 </p>
                 <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
-                  {totalAdminDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                  <span dir="ltr" className="inline-block">
+                    {totalAdminDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>{" "}
                   <span className="text-xs font-normal text-gray-500">ر.س</span>
                 </p>
               </div>
@@ -542,7 +555,10 @@ export default function JahezStatisticsAndReportsPage() {
                           {d.riderNameAr || "مندوب"}
                         </td>
                         <td className="py-3 px-3 text-center font-mono font-bold text-sm text-rose-600 dark:text-rose-400">
-                          {Number(d.platformDebt || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                          <span dir="ltr" className="inline-block">
+                            {Number(d.platformDebt || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>{" "}
+                          ر.س
                         </td>
                       </tr>
                     ))
@@ -555,7 +571,10 @@ export default function JahezStatisticsAndReportsPage() {
                         إجمالي السجلات المعروضة ({filteredAdminDebts.length} من أصل {adminDebts.length})
                       </td>
                       <td className="py-3 px-3 text-center font-mono text-sm text-rose-700 dark:text-rose-300">
-                        {filteredAdminDebtTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                        <span dir="ltr" className="inline-block">
+                          {filteredAdminDebtTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>{" "}
+                        ر.س
                       </td>
                     </tr>
                   </tfoot>

@@ -1,4 +1,4 @@
-﻿// src/app/admin/jahez/approvals/page.tsx
+// src/app/admin/jahez/approvals/page.tsx
 "use client";
 
 import { useEffect, useState, useTransition, useMemo } from "react";
@@ -132,7 +132,7 @@ export default function JahezApprovalsPage() {
           }
           if (commission != null && !isNaN(Number(commission))) {
             bd.push({
-              label: "عمولة الفرسان",
+              label: "عمولة الشركة",
               amount: Number(commission),
               color: "text-emerald-600 dark:text-emerald-400 font-semibold",
             });
@@ -1464,7 +1464,7 @@ export default function JahezApprovalsPage() {
                           </div>
                           <div className="rounded-xl bg-white p-2.5 border border-purple-100 shadow-xs dark:bg-gray-900 dark:border-gray-800">
                             <span className="text-[10px] text-gray-500 font-medium block">
-                              عمولة الفرسان
+                              عمولة الشركة
                             </span>
                             <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-0.5 block">
                               {Number(commission ?? 0).toFixed(2)} ر.س
@@ -1739,7 +1739,7 @@ export default function JahezApprovalsPage() {
                     </span>
                   </div>
                   <div className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-800 dark:bg-gray-900">
-                    <span className="text-[10px] text-gray-500 block">عمولة الفرسان</span>
+                    <span className="text-[10px] text-gray-500 block">عمولة الشركة</span>
                     <span className="font-mono font-bold text-sm text-emerald-600 mt-0.5 block">
                       {commission.toFixed(2)} ر.س
                     </span>
