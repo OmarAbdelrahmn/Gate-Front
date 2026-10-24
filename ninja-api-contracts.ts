@@ -103,6 +103,8 @@ export interface NinjaAccountResponse {
   actualRiderProfileId: Guid | null;
   phoneNumber: string | null;
   hasPassword: boolean;
+  password?: string | null;
+  currentPassword?: string | null;
   passwordChangeAllowedAtUtc: UtcTimestamp | null;
   rowVersion: string; // Account concurrency token (Base64)
   currentAssignmentId: Guid | null;
@@ -198,6 +200,8 @@ export interface NinjaCredentialResponse {
   accountId: Guid;
   phoneNumber: string | null;
   hasPassword: boolean;
+  password?: string | null;
+  currentPassword?: string | null;
   passwordChanged: boolean;
   phoneChanged?: boolean;
   passwordChangeAllowedAtUtc: UtcTimestamp | null;

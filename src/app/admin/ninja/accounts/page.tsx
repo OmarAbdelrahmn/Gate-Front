@@ -70,6 +70,8 @@ import {
   Clock,
   Plus,
   Lock,
+  Eye,
+  EyeOff,
   SlidersHorizontal,
   ArrowRightLeft,
   ShieldAlert,
@@ -184,6 +186,9 @@ export default function NinjaAccountsPage() {
   const [credPassword, setCredPassword] = useState("");
   const [credReason, setCredReason] = useState("تحديث بيانات الاتصال بالحساب");
   const [credSubmitting, setCredSubmitting] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [copiedCurrentPassword, setCopiedCurrentPassword] = useState(false);
 
   // 5. Compare Accounts Modal
   const [isCompareOpen, setIsCompareOpen] = useState(false);
@@ -1314,6 +1319,9 @@ export default function NinjaAccountsPage() {
     setCredPhone(account.phoneNumber || "");
     setCredPassword("");
     setCredReason("تحديث بيانات الاتصال بالحساب");
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setCopiedCurrentPassword(false);
   };
 
   const handleCredSubmit = async (e: React.FormEvent) => {
@@ -2171,7 +2179,7 @@ export default function NinjaAccountsPage() {
 
                       {/* Password & Cooldown */}
                       <td className="px-4 py-3 space-y-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {acc.hasPassword ? (
                             <span className="inline-flex items-center gap-1 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 text-[10px] font-bold">
                               <Lock className="h-3 w-3" />
@@ -2180,6 +2188,16 @@ export default function NinjaAccountsPage() {
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 text-[10px] font-bold">
                               غير مسجلة
+                            </span>
+                          )}
+
+                          {(acc.password || acc.currentPassword) && (
+                            <span
+                              className="font-mono text-[10px] bg-gray-100 dark:bg-gray-800 text-[var(--foreground)] px-1.5 py-0.5 rounded font-bold"
+                              dir="ltr"
+                              title="كلمة المرور الحالية"
+                            >
+                              {acc.password || acc.currentPassword}
                             </span>
                           )}
                         </div>
@@ -3131,6 +3149,71 @@ export default function NinjaAccountsPage() {
               </p>
             </div>
 
+            {/* Current Password */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[var(--foreground)]">
+                  كلمة المرور الحالية (Current Password)
+                </label>
+                {credAccount.hasPassword ? (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    مسجلة في النظام
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                    غير مسجلة
+                  </span>
+                )}
+              </div>
+
+              {(() => {
+                const currentPass = credAccount.password || credAccount.currentPassword;
+                if (currentPass) {
+                  return (
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3">
+                      <span className="font-mono text-xs font-bold text-[var(--foreground)] tracking-wider" dir="ltr">
+                        {showCurrentPassword ? currentPass : "••••••••••••"}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)] transition-colors"
+                          title={showCurrentPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        >
+                          {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(currentPass);
+                            setCopiedCurrentPassword(true);
+                            toast.success("تم النسخ", "تم نسخ كلمة المرور الحالية.");
+                            setTimeout(() => setCopiedCurrentPassword(false), 2000);
+                          }}
+                          className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)] transition-colors"
+                          title="نسخ كلمة المرور"
+                        >
+                          {copiedCurrentPassword ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--subtle-bg)]/60 p-2.5 text-xs text-[var(--muted)] flex items-center justify-between">
+                    <span>
+                      {credAccount.hasPassword
+                        ? "كلمة المرور مسجلة في النظام، بانتظار إرجاع حقل password من الـ API."
+                        : "لا توجد كلمة مرور مسجلة لهذا الحساب حالياً."}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* Password */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -3158,14 +3241,24 @@ export default function NinjaAccountsPage() {
                 </div>
               ) : (
                 <>
-                  <input
-                    type="password"
-                    value={credPassword}
-                    onChange={(e) => setCredPassword(e.target.value)}
-                    placeholder="أدخل كلمة مرور جديدة أو اتركها فارغة لتغيير الهاتف فقط..."
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-xs text-[var(--foreground)] font-mono outline-none focus:border-amber-600"
-                    disabled={!canRotatePassword}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      value={credPassword}
+                      onChange={(e) => setCredPassword(e.target.value)}
+                      placeholder="أدخل كلمة مرور جديدة أو اتركها فارغة لتغيير الهاتف فقط..."
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pl-9 pr-3 text-xs text-[var(--foreground)] font-mono outline-none focus:border-amber-600"
+                      disabled={!canRotatePassword}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
+                      title={showNewPassword ? "إخفاء" : "إظهار"}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                   <p className="text-[11px] text-[var(--muted)]">
                     عند إدخال كلمة مرور جديدة، يتم بدء فترة انتظار جديدة مدتها 72 ساعة.
                   </p>
