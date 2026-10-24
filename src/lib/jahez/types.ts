@@ -702,3 +702,20 @@ export type JahezOperation = Operation;
 export type JahezImportBatch = ImportBatch;
 export type JahezImportPreview = ImportPreview;
 export type JahezLedgerEntry = LedgerEntry;
+
+// ----------------------------------------------------------------------
+// Profit Report Contracts (GET /api/jahez/v2/reports/profit)
+// ----------------------------------------------------------------------
+export interface JahezProfitReport {
+  fromDate: string;
+  toDate: string;
+  accountOpeningFeesTotal: number;
+  settlementCommissionTotal: number;
+  totalProfit: number;
+}
+
+export interface JahezProfitReportParams {
+  fromDate?: string;
+  toDate?: string;
+}
+

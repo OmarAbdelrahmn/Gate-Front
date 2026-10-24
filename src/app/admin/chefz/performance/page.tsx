@@ -1,7 +1,7 @@
 // src/app/admin/chefz/performance/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -100,6 +100,9 @@ export default function ChefzPerformancePage() {
   const [filterAccountId, setFilterAccountId] = useState("");
   const [filterRiderId, setFilterRiderId] = useState("");
 
+  // Stale request guard ref to prevent out-of-order API responses from overwriting newer filters
+  const activeDailyReqIdRef = useRef(0);
+
   // Upload Modal State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [uploadDate, setUploadDate] = useState(todayStr);
@@ -136,8 +139,9 @@ export default function ChefzPerformancePage() {
   }, []);
 
   // Load ALL Daily Performance records (fetches all pages, not just 50)
-  const loadDailyPerformance = async () => {
-    if (!filterFrom || !filterTo) return;
+  const loadDailyPerformance = useCallback(async () => {
+    if (!filterFrom || !filterTo || filterFrom > filterTo) return;
+    const reqId = ++activeDailyReqIdRef.current;
     setDailyLoading(true);
     try {
       const allRecords = await getAllChefzPerformance({
@@ -146,19 +150,36 @@ export default function ChefzPerformancePage() {
         accountId: filterAccountId || undefined,
         riderId: filterRiderId || undefined,
       });
+      // Stale response guard: discard if a newer filter change triggered another request
+      if (reqId !== activeDailyReqIdRef.current) return;
       setPerformanceRecords(allRecords || []);
-    } catch (err: unknown) {
+    } catch {
+      if (reqId !== activeDailyReqIdRef.current) return;
       toast.error("خطأ", "تعذر تحميل بيانات الأداء اليومي.");
     } finally {
-      setDailyLoading(false);
+      if (reqId === activeDailyReqIdRef.current) {
+        setDailyLoading(false);
+      }
     }
-  };
+  }, [filterFrom, filterTo, filterAccountId, filterRiderId]);
 
   useEffect(() => {
     if (activeTab === "dailyRecords") {
       loadDailyPerformance();
     }
-  }, [activeTab, filterFrom, filterTo, filterAccountId, filterRiderId]);
+  }, [activeTab, loadDailyPerformance]);
+
+  // Strictly filter records by from/to dates and account/rider filters
+  const filteredPerformanceRecords = useMemo(() => {
+    if (!performanceRecords || performanceRecords.length === 0) return [];
+    return performanceRecords.filter((p) => {
+      if (filterFrom && p.reportDate < filterFrom) return false;
+      if (filterTo && p.reportDate > filterTo) return false;
+      if (filterAccountId && p.accountId !== filterAccountId) return false;
+      if (filterRiderId && p.riderProfileId !== filterRiderId) return false;
+      return true;
+    });
+  }, [performanceRecords, filterFrom, filterTo, filterAccountId, filterRiderId]);
 
   // Lookup maps
   const baseAccountMap = useMemo(() => {
@@ -214,7 +235,7 @@ export default function ChefzPerformancePage() {
 
   // Group records by Rider into Matrix Rows
   const matrixRiderRows = useMemo(() => {
-    if (performanceRecords.length === 0) return [];
+    if (filteredPerformanceRecords.length === 0) return [];
 
     const groupMap = new Map<
       string,
@@ -239,7 +260,7 @@ export default function ChefzPerformancePage() {
       }
     >();
 
-    for (const p of performanceRecords) {
+    for (const p of filteredPerformanceRecords) {
       const effectiveRiderId =
         p.riderProfileId && p.riderProfileId !== "00000000-0000-0000-0000-000000000000"
           ? p.riderProfileId
@@ -304,13 +325,17 @@ export default function ChefzPerformancePage() {
       let totalMissed = 0;
       let activeDaysCount = 0;
 
-      for (const d of g.daysMap.values()) {
-        totalAccepted += d.acceptedOffers;
-        totalValid += d.totalValidOffers;
-        totalDeclined += d.declinedOffers;
-        totalMissed += d.missedOffers;
-        if (d.acceptedOffers > 0 || d.totalValidOffers > 0) {
-          activeDaysCount++;
+      // Sum strictly across the selected date range daysList
+      for (const d of daysList) {
+        const cell = g.daysMap.get(d.dateStr);
+        if (cell) {
+          totalAccepted += cell.acceptedOffers;
+          totalValid += cell.totalValidOffers;
+          totalDeclined += cell.declinedOffers;
+          totalMissed += cell.missedOffers;
+          if (cell.acceptedOffers > 0 || cell.totalValidOffers > 0) {
+            activeDaysCount++;
+          }
         }
       }
 
@@ -337,7 +362,7 @@ export default function ChefzPerformancePage() {
     // Sort by total accepted offers descending
     rows.sort((a, b) => b.totalAccepted - a.totalAccepted || a.riderName.localeCompare(b.riderName));
     return rows;
-  }, [performanceRecords, riderMap, baseAccountMap]);
+  }, [filteredPerformanceRecords, riderMap, baseAccountMap, daysList]);
 
   // Quick filter on rider matrix rows
   const filteredMatrixRows = useMemo(() => {
@@ -456,7 +481,7 @@ export default function ChefzPerformancePage() {
       exportToExcel({
         filename: `سجلات-الأداء-اليومي-شيفز-${filterFrom}-إلى-${filterTo}`,
         sheetName: "Daily Performance Records",
-        data: performanceRecords,
+        data: filteredPerformanceRecords,
         columns: [
           { header: "التاريخ", accessor: (p) => p.reportDate, isText: true },
           {
@@ -674,7 +699,7 @@ export default function ChefzPerformancePage() {
               <Button
                 variant="secondary"
                 onClick={handleExportDailyExcel}
-                disabled={dailyLoading || performanceRecords.length === 0}
+                disabled={dailyLoading || filteredPerformanceRecords.length === 0}
                 className="gap-2 text-xs font-semibold"
               >
                 <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
@@ -747,6 +772,7 @@ export default function ChefzPerformancePage() {
                   type="date"
                   value={filterFrom}
                   onChange={(e) => setFilterFrom(e.target.value)}
+                  max={filterTo || todayStr}
                   required
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] font-mono"
                 />
@@ -761,6 +787,8 @@ export default function ChefzPerformancePage() {
                   type="date"
                   value={filterTo}
                   onChange={(e) => setFilterTo(e.target.value)}
+                  min={filterFrom}
+                  max={todayStr}
                   required
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] font-mono"
                 />
@@ -822,7 +850,7 @@ export default function ChefzPerformancePage() {
               <div className="flex flex-wrap items-center gap-3">
                 <span>
                   سجلات الأداء المحملة:{" "}
-                  <strong className="text-[var(--foreground)]">{performanceRecords.length}</strong> سجل
+                  <strong className="text-[var(--foreground)]">{filteredPerformanceRecords.length}</strong> سجل
                   (تم جلب كافة الصفحات من {filterFrom} إلى {filterTo})
                 </span>
 
@@ -1147,14 +1175,14 @@ export default function ChefzPerformancePage() {
                           جارٍ تحميل سجلات الأداء اليومي...
                         </td>
                       </tr>
-                    ) : performanceRecords.length === 0 ? (
+                    ) : filteredPerformanceRecords.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="py-12 text-center text-sm text-[var(--muted)]">
                           لا توجد بيانات أداء مستوردة في نطاق التواريخ المحدد.
                         </td>
                       </tr>
                     ) : (
-                      performanceRecords.map((p) => {
+                      filteredPerformanceRecords.map((p) => {
                         const acc = baseAccountMap.get(p.accountId);
                         const rider = riderMap.get(p.riderProfileId);
 

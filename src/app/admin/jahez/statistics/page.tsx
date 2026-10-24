@@ -48,13 +48,14 @@ import {
   X,
   Activity,
 } from "lucide-react";
+import { JahezProfitReportTab } from "@/components/jahez/JahezProfitReportTab";
 
 export default function JahezStatisticsAndReportsPage() {
   const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const [activeTab, setActiveTab] = useState<"sponsors" | "adminDebts" | "imports" | "earnings">(
+  const [activeTab, setActiveTab] = useState<"sponsors" | "adminDebts" | "imports" | "profit">(
     "sponsors",
   );
 
@@ -325,6 +326,20 @@ export default function JahezStatisticsAndReportsPage() {
           }`}
         >
           سجل استيراد الملفات ({importBatches.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("profit");
+            setSearch("");
+          }}
+          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            activeTab === "profit"
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400"
+          }`}
+        >
+          <TrendingUp className="h-3.5 w-3.5" />
+          تقرير أرباح جاهز
         </button>
       </div>
 
@@ -659,6 +674,9 @@ export default function JahezStatisticsAndReportsPage() {
           </div>
         </div>
       )}
+
+      {/* Tab 4: Jahez Profit Report */}
+      {activeTab === "profit" && <JahezProfitReportTab />}
 
       {/* ================================================================= */}
       {/* Upload Modal                                                       */}

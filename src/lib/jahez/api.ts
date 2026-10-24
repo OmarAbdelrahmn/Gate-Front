@@ -985,3 +985,37 @@ export async function downloadJahezImportFile(
 ): Promise<{ blob: Blob; fileName: string }> {
   return authDownload(`${ROOT}/import-files/${encodeURIComponent(fileId)}`);
 }
+
+// ----------------------------------------------------------------------
+// 8. Profit Report
+// ----------------------------------------------------------------------
+
+/**
+ * Fetch Jahez profit report covering opening fees collected and settlement commission.
+ * Route: GET /api/jahez/v2/reports/profit?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD
+ * Requires: bearer token and jahez.financial-reports.read permission.
+ */
+export async function getJahezProfitReport(
+  params?: JahezProfitReportParams,
+  init?: CustomRequestInit,
+): Promise<JahezProfitReport> {
+  const query = new URLSearchParams();
+  if (params?.fromDate) query.set("fromDate", params.fromDate);
+  if (params?.toDate) query.set("toDate", params.toDate);
+  const qs = query.toString();
+  return authFetch<JahezProfitReport>(`${ROOT}/reports/profit${qs ? `?${qs}` : ""}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+/**
+ * Jahez V2 client helper matching backend integration handoff contract.
+ * Usage: jahezClient(...).profitReport({ fromDate, toDate })
+ */
+export function jahezClient(init?: CustomRequestInit) {
+  return {
+    profitReport: (params?: JahezProfitReportParams) => getJahezProfitReport(params, init),
+  };
+}
+

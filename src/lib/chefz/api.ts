@@ -448,6 +448,12 @@ export async function getChefzPerformance(params: {
   const query = new URLSearchParams();
   query.set("from", params.from);
   query.set("to", params.to);
+  query.set("fromDate", params.from);
+  query.set("toDate", params.to);
+  query.set("startDate", params.from);
+  query.set("endDate", params.to);
+  query.set("dateFrom", params.from);
+  query.set("dateTo", params.to);
   if (params.accountId) query.set("accountId", params.accountId);
   if (params.riderId) query.set("riderId", params.riderId);
   if (params.page) query.set("page", String(params.page));
@@ -468,6 +474,14 @@ export async function getAllChefzPerformance(params: {
   riderId?: string;
   pageSize?: number;
 }): Promise<ChefzPerformance[]> {
+  const filterByDateBounds = (list: ChefzPerformance[]) => {
+    return list.filter((item) => {
+      if (params.from && item.reportDate && item.reportDate < params.from) return false;
+      if (params.to && item.reportDate && item.reportDate > params.to) return false;
+      return true;
+    });
+  };
+
   const pageSize = params?.pageSize || 100;
   const firstPage = await getChefzPerformance({
     ...params,
@@ -478,11 +492,11 @@ export async function getAllChefzPerformance(params: {
   const totalCount = firstPage?.totalCount;
 
   if (items.length === 0 || items.length < pageSize) {
-    return items;
+    return filterByDateBounds(items);
   }
 
   if (typeof totalCount === "number" && items.length >= totalCount) {
-    return items;
+    return filterByDateBounds(items);
   }
 
   const all = [...items];
@@ -511,7 +525,7 @@ export async function getAllChefzPerformance(params: {
         }
       }
     }
-    return all;
+    return filterByDateBounds(all);
   }
 
   // Fallback sequential
@@ -539,7 +553,7 @@ export async function getAllChefzPerformance(params: {
     }
   }
 
-  return all;
+  return filterByDateBounds(all);
 }
 
 // -------------------------------------------------------------
