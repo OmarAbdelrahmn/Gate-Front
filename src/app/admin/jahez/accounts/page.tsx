@@ -35,8 +35,11 @@ import {
   type Preview,
   type Operation,
   canEditPaymentMethod,
+  formatJahezVehicleType,
 } from "@/lib/jahez/types";
+import { JahezVehicleTypeBadge } from "@/components/jahez/JahezVehicleTypeBadge";
 import { EditPaymentMethodModal } from "@/components/jahez/EditPaymentMethodModal";
+import { RefundAccountFeeModal } from "@/components/jahez/RefundAccountFeeModal";
 import { listRiders } from "@/lib/workforce/api";
 import type { Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
@@ -78,12 +81,11 @@ import {
   CreditCard,
   Check,
   ExternalLink,
-  ChevronLeft,
-  ChevronRight,
   Calendar,
   X,
   Edit3,
   Activity,
+  RotateCcw,
 } from "lucide-react";
 import { DayUsageFields } from "@/components/shared/DayUsageFields";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
@@ -102,7 +104,7 @@ function getAccountStatusDisplay(status: Account["status"], isEn = false) {
     case "Suspended":
       return { label: isEn ? "Block" : "بلوك", tone: "red" as const };
     case "Retired":
-      return { label: isEn ? "Retired" : "متقاعد", tone: "gray" as const };
+      return { label: isEn ? "Administrative Stop" : "إيقاف إداري", tone: "gray" as const };
     case "Archived":
       return { label: isEn ? "Out of Sponsorship" : "خارج الكفالة", tone: "orange" as const };
     default:
@@ -122,14 +124,13 @@ export default function JahezAccountsPage() {
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
-  // Pagination & Filtering
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  // Filtering (All accounts handled on one page)
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [assignedFilter, setAssignedFilter] = useState<string>("ALL");
   const [cityFilter, setCityFilter] = useState<string>("ALL");
   const [sponsorFilter, setSponsorFilter] = useState<string>("ALL");
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>("ALL");
 
   // -----------------------------------------------------------------
   // Modals States
@@ -231,9 +232,18 @@ export default function JahezAccountsPage() {
   const previewRequestId = useRef(0);
   const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isAdmin = user?.roles?.includes("Admin");
+  const isAdmin =
+    Boolean(user?.roles?.some((r) => r.toLowerCase() === "admin")) ||
+    can("admin") ||
+    can("*");
   const canSettle = can("jahez.settle") || isAdmin;
   const canWithdraw = can("jahez.withdraw") || isAdmin;
+  const canDisburse = can("jahez.money.disburse") || isAdmin;
+  const canApproveFee =
+    can("jahez.requests.fee.approve") ||
+    can("jahez.requests.approve") ||
+    isAdmin;
+  const canRefundFee = canApproveFee && canWithdraw && canDisburse;
   const canCreateTransferRequest = can("jahez.requests.transfer.create") || isAdmin;
 
   const opNeedsPayment =
@@ -342,6 +352,28 @@ export default function JahezAccountsPage() {
     settlementDate?: string | null;
   } | undefined>(undefined);
 
+  // 7. Refund Account Fee Modal State
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [refundHandoverId, setRefundHandoverId] = useState("");
+  const [refundAccount, setRefundAccount] = useState<Account | null>(null);
+
+  const openRefundModal = (handoverId?: string | null, acc?: Account | null) => {
+    setRefundHandoverId(handoverId || acc?.currentHandoverId || "");
+    setRefundAccount(acc || null);
+    setIsRefundModalOpen(true);
+  };
+
+  const handoverOptions = useMemo(() => {
+    return accounts
+      .filter((a) => Boolean(a.currentHandoverId))
+      .map((a) => ({
+        value: a.currentHandoverId!,
+        label: `${a.code} - ${a.actualRider?.nameAr || a.userName || "حساب جاهز"}`,
+        sublabel: `المندوب: ${a.actualRider?.nameAr || "غير مسند"} (إقامة: ${a.actualRider?.iqamaNo || "-"}) • المعرف: #${a.currentHandoverId!.slice(0, 8)}`,
+        keywords: `${a.code} ${a.userName || ""} ${a.actualRider?.nameAr || ""} ${a.actualRider?.iqamaNo || ""} ${a.currentHandoverId}`,
+      }));
+  }, [accounts]);
+
   // -----------------------------------------------------------------
   // Load data - fetch ALL accounts across all pages
   // -----------------------------------------------------------------
@@ -397,6 +429,16 @@ export default function JahezAccountsPage() {
     return Array.from(set).sort();
   }, [accounts]);
 
+  const availableVehicleTypes = useMemo(() => {
+    const set = new Set<string>();
+    accounts.forEach((a) => {
+      if (a.vehicleType?.trim()) {
+        set.add(a.vehicleType.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [accounts]);
+
   // Client search & filter over ALL loaded accounts
   const filteredAccounts = useMemo(() => {
     return accounts.filter((acc) => {
@@ -409,6 +451,13 @@ export default function JahezAccountsPage() {
       }
       if (cityFilter !== "ALL" && acc.cityNameAr !== cityFilter) return false;
       if (sponsorFilter !== "ALL" && acc.sponsorNameAr !== sponsorFilter) return false;
+      if (vehicleTypeFilter !== "ALL") {
+        if (vehicleTypeFilter === "WITHOUT_VEHICLE") {
+          if (acc.vehicleType) return false;
+        } else if (acc.vehicleType?.toLowerCase() !== vehicleTypeFilter.toLowerCase()) {
+          return false;
+        }
+      }
 
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
@@ -426,6 +475,16 @@ export default function JahezAccountsPage() {
         acc.actualRider?.iqamaNo?.includes(q) ||
         acc.actualRider?.mobile?.includes(q);
 
+      const vType = acc.vehicleType?.toLowerCase() || "";
+      const vTypeLabelAr = acc.vehicleType
+        ? formatJahezVehicleType(acc.vehicleType, false).toLowerCase()
+        : "";
+      const vehicleTypeMatch =
+        vType.includes(q) ||
+        vTypeLabelAr.includes(q) ||
+        (vType === "motorcycle" && (q.includes("دباب") || q.includes("دراجة") || q.includes("دراجة نارية"))) ||
+        (vType === "car" && (q.includes("سيارة") || q.includes("سياره")));
+
       const statusLabels =
         acc.status === "Suspended"
           ? "بلوك block suspended موقوف"
@@ -435,7 +494,7 @@ export default function JahezAccountsPage() {
           ? "متاح available"
           : acc.status === "Assigned"
           ? "مسند assigned"
-          : "متقاعد retired";
+          : "إيقاف إداري ايقاف اداري متقاعد retired";
       const statusMatch = statusLabels.toLowerCase().includes(q);
 
       return (
@@ -446,30 +505,19 @@ export default function JahezAccountsPage() {
         sponsorMatch ||
         ownerMatch ||
         riderMatch ||
+        vehicleTypeMatch ||
         statusMatch
       );
     });
-  }, [accounts, search, statusFilter, assignedFilter, cityFilter, sponsorFilter]);
-
-  // Reset to first page whenever search, filter or pageSize changes
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter, assignedFilter, cityFilter, sponsorFilter, pageSize]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
-
-  // Current page items to display in table
-  const paginatedAccounts = useMemo(() => {
-    const startIndex = (page - 1) * pageSize;
-    return filteredAccounts.slice(startIndex, startIndex + pageSize);
-  }, [filteredAccounts, page, pageSize]);
+  }, [accounts, search, statusFilter, assignedFilter, cityFilter, sponsorFilter, vehicleTypeFilter]);
 
   const hasActiveFilters =
     Boolean(search.trim()) ||
     statusFilter !== "ALL" ||
     assignedFilter !== "ALL" ||
     cityFilter !== "ALL" ||
-    sponsorFilter !== "ALL";
+    sponsorFilter !== "ALL" ||
+    vehicleTypeFilter !== "ALL";
 
   const clearFilters = () => {
     setSearch("");
@@ -477,6 +525,7 @@ export default function JahezAccountsPage() {
     setAssignedFilter("ALL");
     setCityFilter("ALL");
     setSponsorFilter("ALL");
+    setVehicleTypeFilter("ALL");
   };
 
   // -----------------------------------------------------------------
@@ -1135,6 +1184,7 @@ export default function JahezAccountsPage() {
       "هوية المالك": a.owner?.iqamaNo || "-",
       "المندوب الفعلي": a.actualRider?.nameAr || "غير مسند",
       "هوية المندوب": a.actualRider?.iqamaNo || "-",
+      "نوع المركبة": a.vehicleType ? formatJahezVehicleType(a.vehicleType, isEn) : (isEn ? "None" : "بدون مركبة"),
       "حالة الحساب":
         a.status === "Available"
           ? "متاح"
@@ -1143,7 +1193,7 @@ export default function JahezAccountsPage() {
           : a.status === "Suspended"
           ? "بلوك"
           : a.status === "Retired"
-          ? "متقاعد"
+          ? "إيقاف إداري"
           : "خارج الكفالة",
       "حالة الإسناد": a.isAssigned ? "مسند" : "متاح",
       "طلبات الأمس": a.yesterdayOrders ?? "لا توجد بيانات",
@@ -1381,7 +1431,7 @@ export default function JahezAccountsPage() {
             <option value="Available">متاح (Available)</option>
             <option value="Assigned">مسند (Assigned)</option>
             <option value="Suspended">بلوك (Block)</option>
-            <option value="Retired">متقاعد (Retired)</option>
+            <option value="Retired">إيقاف إداري (Retired)</option>
             <option value="Archived">خارج الكفالة (Archived)</option>
           </select>
 
@@ -1424,6 +1474,27 @@ export default function JahezAccountsPage() {
               ))}
             </select>
           )}
+
+          <select
+            value={vehicleTypeFilter}
+            onChange={(e) => setVehicleTypeFilter(e.target.value)}
+            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+          >
+            <option value="ALL">جميع أنواع المركبات</option>
+            <option value="Motorcycle">دراجة نارية (Motorcycle)</option>
+            <option value="Car">سيارة (Car)</option>
+            {availableVehicleTypes
+              .filter(
+                (vt) =>
+                  vt.toLowerCase() !== "motorcycle" && vt.toLowerCase() !== "car"
+              )
+              .map((vt) => (
+                <option key={vt} value={vt}>
+                  {formatJahezVehicleType(vt, isEn)} ({vt})
+                </option>
+              ))}
+            <option value="WITHOUT_VEHICLE">بدون مركبة مربوطة</option>
+          </select>
         </div>
       </div>
 
@@ -1438,6 +1509,7 @@ export default function JahezAccountsPage() {
                 <th className="py-3 px-3">الكفيل</th>
                 <th className="py-3 px-3">صاحب الحساب الرسمي</th>
                 <th className="py-3 px-3">المندوب الفعلي (المستخدم)</th>
+                <th className="py-3 px-3 text-center">نوع المركبة</th>
                 <th className="py-3 px-3 text-center">الحالة والإسناد</th>
                 <th className="py-3 px-3 text-center">طلبات الأمس</th>
                 <th className="py-3 px-3 text-center">التصفية / التسليم</th>
@@ -1447,19 +1519,19 @@ export default function JahezAccountsPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading && accounts.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-gray-500">
+                  <td colSpan={10} className="py-12 text-center text-gray-500">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-amber-500 mb-2" />
                     جارٍ تحميل حسابات جاهز V2...
                   </td>
                 </tr>
               ) : filteredAccounts.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-gray-500">
+                  <td colSpan={10} className="py-12 text-center text-gray-500">
                     لا توجد حسابات مطابقة لمعايير البحث الحالية
                   </td>
                 </tr>
               ) : (
-                paginatedAccounts.map((acc) => {
+                filteredAccounts.map((acc) => {
                   const hasConsistencyIssue = acc.isAssigned && !acc.currentHandoverId;
 
                   return (
@@ -1531,6 +1603,11 @@ export default function JahezAccountsPage() {
                             غير مسند
                           </span>
                         )}
+                      </td>
+
+                      {/* نوع المركبة */}
+                      <td className="py-3 px-3 text-center">
+                        <JahezVehicleTypeBadge vehicleType={acc.vehicleType} isEn={isEn} />
                       </td>
 
                       {/* الحالة والإسناد */}
@@ -1628,6 +1705,16 @@ export default function JahezAccountsPage() {
                             </button>
                           )}
 
+                          {acc.isAssigned && acc.currentHandoverId && canRefundFee && (
+                            <button
+                              onClick={() => openRefundModal(acc.currentHandoverId, acc)}
+                              className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                              title="استرداد رسوم فتح حساب وسحب الحساب"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </button>
+                          )}
+
                           <button
                             onClick={() =>
                               setDayUsageModalAccount({
@@ -1658,77 +1745,23 @@ export default function JahezAccountsPage() {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-gray-200 bg-gray-50/60 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/40 text-xs text-gray-500">
-          <div>
-            عرض {paginatedAccounts.length} من أصل {filteredAccounts.length} حساب مطابق
+        {/* Footer Summary - All accounts in one page */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-gray-200 bg-gray-50/70 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/40 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-700 dark:text-gray-300">
+              إجمالي الحسابات المعروضة:
+            </span>
+            <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs">
+              {filteredAccounts.length} حساب
+            </span>
             {filteredAccounts.length !== accounts.length && (
-              <span className="text-gray-400 mr-1 font-mono">
-                (من إجمالي {accounts.length} حساب)
+              <span className="text-gray-400 mr-1 font-mono text-[11px]">
+                (تمت التصفية من إجمالي {accounts.length} حساب)
               </span>
             )}
-            {" "}— (الصفحة {page} من {totalPages})
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
-              <span>عرض:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 focus:outline-hidden"
-              >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={200}>200</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage(1)}
-                className="h-8 px-2 text-[11px]"
-                title="الصفحة الأولى"
-              >
-                الأولى
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="h-8 w-8 p-0"
-                title="الصفحة السابقة"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <span className="font-semibold text-gray-700 dark:text-gray-300 px-1">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="h-8 w-8 p-0"
-                title="الصفحة التالية"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage(totalPages)}
-                className="h-8 px-2 text-[11px]"
-                title="الصفحة الأخيرة"
-              >
-                الأخيرة
-              </Button>
-            </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            يتم عرض جميع الحسابات في صفحة واحدة
           </div>
         </div>
       </div>
@@ -1745,8 +1778,13 @@ export default function JahezAccountsPage() {
         <div className="space-y-4 text-xs" dir="rtl">
           {handoverAccount && (
             <div className="rounded-xl bg-amber-500/10 p-3 text-amber-900 dark:text-amber-200">
-              <div className="font-bold">
-                الحساب: {handoverAccount.code} ({handoverAccount.userName})
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-bold">
+                  الحساب: {handoverAccount.code} ({handoverAccount.userName})
+                </div>
+                {handoverAccount.vehicleType && (
+                  <JahezVehicleTypeBadge vehicleType={handoverAccount.vehicleType} isEn={isEn} />
+                )}
               </div>
               <div className="text-[11px] text-amber-700 dark:text-amber-300">
                 المدينة: {handoverAccount.cityNameAr} • الكفيل:{" "}
@@ -1896,9 +1934,14 @@ export default function JahezAccountsPage() {
           {opAccount && (
             <div className="flex items-center justify-between rounded-xl bg-indigo-50/80 p-3 text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-200">
               <div>
-                <span className="font-bold text-sm">
-                  الحساب: {opAccount.code} ({opAccount.userName || "-"})
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm">
+                    الحساب: {opAccount.code} ({opAccount.userName || "-"})
+                  </span>
+                  {opAccount.vehicleType && (
+                    <JahezVehicleTypeBadge vehicleType={opAccount.vehicleType} isEn={isEn} />
+                  )}
+                </div>
                 <div className="text-[11px] text-indigo-700 dark:text-indigo-300">
                   المندوب الفعلي: {opAccount.actualRider?.nameAr || "غير مسند"} (إقامة:{" "}
                   {opAccount.actualRider?.iqamaNo || "-"})
@@ -2652,6 +2695,14 @@ export default function JahezAccountsPage() {
                       <div>اسم المستخدم: {accountDetails.account.userName || "-"}</div>
                       <div>المدينة: {accountDetails.account.cityNameAr}</div>
                       <div>الكفيل: {accountDetails.account.sponsorNameAr || "بدون"}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span>نوع المركبة:</span>
+                        <JahezVehicleTypeBadge
+                          vehicleType={accountDetails.account.vehicleType ?? accountDetails.vehicleType}
+                          isEn={isEn}
+                          showNone
+                        />
+                      </div>
                       <div>
                         الحالة التشغيلية:{" "}
                         <span className="font-semibold text-gray-900 dark:text-gray-100">
@@ -2670,6 +2721,33 @@ export default function JahezAccountsPage() {
                       <div>ملاحظات الملكية: {accountDetails.account.ownershipNotes || "-"}</div>
                       <div>ملاحظات التشغيل: {accountDetails.account.operationalNotes || "-"}</div>
                     </div>
+
+                    {accountDetails.account.isAssigned && accountDetails.account.currentHandoverId && (
+                      <div className="col-span-2 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-gradient-to-l from-rose-50 to-amber-50 dark:from-rose-950/40 dark:to-amber-950/30 p-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 text-xs">
+                            <RotateCcw className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                            <span>استرداد رسوم فتح الحساب وسحب التكليف</span>
+                          </div>
+                          <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                            جلسة الإسناد الحالية: <span className="font-mono font-bold">#{accountDetails.account.currentHandoverId}</span> • مهلة الاسترداد 7 أيام
+                          </div>
+                        </div>
+                        {canRefundFee && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setIsDetailsOpen(false);
+                              openRefundModal(accountDetails.account.currentHandoverId!, accountDetails.account);
+                            }}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1.5 shadow-xs text-xs"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span>استرداد الرسوم وسحب الحساب</span>
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2860,10 +2938,108 @@ export default function JahezAccountsPage() {
                                 تصفية هذه الفترة (تصفية مؤجلة)
                               </Button>
                             )}
+                            {!isHistorical && canRefundFee && (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setIsDetailsOpen(false);
+                                  openRefundModal(h.id, accountDetails.account);
+                                }}
+                                className="h-7 px-2.5 text-[10px] font-bold bg-rose-600 hover:bg-rose-700 text-white gap-1 shadow-2xs"
+                                title="استرداد رسوم فتح الحساب وسحب الحساب"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                استرداد وسحب
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {detailsTab === "fees" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-1">
+                      <div className="font-bold text-gray-800 dark:text-gray-200 text-xs">
+                        سجلات رسوم فتح الحساب ({accountDetails.fees.items?.length || 0})
+                      </div>
+                      {accountDetails.account.isAssigned && accountDetails.account.currentHandoverId && canRefundFee && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setIsDetailsOpen(false);
+                            openRefundModal(accountDetails.account.currentHandoverId!, accountDetails.account);
+                          }}
+                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1.5 h-7 text-xs shadow-xs"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>استرداد رسوم فتح حساب وسحب الحساب</span>
+                        </Button>
+                      )}
+                    </div>
+
+                    {accountDetails.fees.items?.length === 0 ? (
+                      <div className="py-8 text-center text-gray-400">
+                        لا توجد رسوم مسجلة لهذا الحساب
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                        <table className="w-full text-right text-xs">
+                          <thead className="border-b bg-gray-50 dark:bg-gray-800 font-bold">
+                            <tr>
+                              <th className="py-2 px-3">فترة الإسناد</th>
+                              <th className="py-2 px-3">المبلغ المقبوض</th>
+                              <th className="py-2 px-3">المبلغ المستثنى</th>
+                              <th className="py-2 px-3">تاريخ القيد</th>
+                              <th className="py-2 px-3 text-center">الإجراء</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {accountDetails.fees.items?.map((fee) => {
+                              const isActiveSession =
+                                fee.handoverId === accountDetails.account.currentHandoverId &&
+                                accountDetails.account.isAssigned;
+                              return (
+                                <tr key={fee.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
+                                  <td className="py-2.5 px-3 font-mono font-bold">
+                                    #{fee.handoverId.slice(0, 8)}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                                    {Number(fee.amount).toFixed(2)} ر.س
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono">
+                                    {fee.waivedAmount > 0 ? `${Number(fee.waivedAmount).toFixed(2)} ر.س` : "-"}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-gray-400 font-mono">
+                                    {fee.createdAtUtc?.slice(0, 10)}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    {isActiveSession && canRefundFee ? (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          setIsDetailsOpen(false);
+                                          openRefundModal(fee.handoverId, accountDetails.account);
+                                        }}
+                                        className="h-6 px-2 text-[10px] font-bold bg-rose-600 hover:bg-rose-700 text-white gap-1 shadow-2xs"
+                                        title="استرداد الرسوم وسحب الحساب"
+                                      >
+                                        <RotateCcw className="h-3 w-3" />
+                                        استرداد وسحب
+                                      </Button>
+                                    ) : (
+                                      <span className="text-gray-400 text-[11px]">-</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2906,7 +3082,7 @@ export default function JahezAccountsPage() {
               <option value="Available">متاح للتشغيل (Available)</option>
               <option value="Assigned">مسند (Assigned)</option>
               <option value="Suspended">بلوك (Block / Suspended)</option>
-              <option value="Retired">متقاعد (Retired)</option>
+              <option value="Retired">إيقاف إداري (Retired)</option>
               <option value="Archived">خارج الكفالة (Archived)</option>
             </select>
           </div>
@@ -3047,6 +3223,25 @@ export default function JahezAccountsPage() {
           onUpdated={loadData}
         />
       )}
+
+      {/* Modal: Refund Account Fee */}
+      <RefundAccountFeeModal
+        isOpen={isRefundModalOpen}
+        onClose={() => {
+          setIsRefundModalOpen(false);
+          setRefundAccount(null);
+          setRefundHandoverId("");
+        }}
+        handoverId={refundHandoverId}
+        account={refundAccount}
+        availableHandovers={handoverOptions}
+        onSuccess={() => {
+          if (selectedAccountId) {
+            openDetailsModal(selectedAccountId);
+          }
+          loadData();
+        }}
+      />
     </div>
   );
 }

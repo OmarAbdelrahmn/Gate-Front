@@ -76,6 +76,7 @@ export interface Account {
   yesterdayOrders: number | null;
   lastOrderDate: DateOnly | null;
   lastOrderCount: number | null;
+  vehicleType?: string | null;
   rowVersion: string;
 }
 
@@ -185,6 +186,32 @@ export interface OperationCommissionStartUpdate {
   paymentReference?: string | null;
 }
 
+export interface OperationNetUpdate {
+  net: number;
+  reason: string;
+  rowVersion: string;
+}
+
+export function canEditSettlementNet(
+  operation: Operation | null | undefined,
+  canSettle: boolean,
+  canApproveAdjustment: boolean,
+  canReceive: boolean,
+  canDisburse: boolean,
+): boolean {
+  if (!canSettle || !canApproveAdjustment || !canReceive || !canDisburse) {
+    return false;
+  }
+  if (!operation) return true;
+  return (
+    operation.status === OperationStatus.Executed &&
+    operation.purpose === Purpose.Settlement &&
+    (operation.mode === OperationMode.Settle ||
+      operation.mode === OperationMode.SettleAndWithdraw) &&
+    operation.transferToRider === false
+  );
+}
+
 export function canCorrectCommissionStart(
   operation: Operation | null | undefined,
   canSettle: boolean,
@@ -267,6 +294,7 @@ export interface ApprovalRequestAccount {
   cityNameAr?: string | null;
   sponsorId?: Id | null;
   sponsorNameAr?: string | null;
+  vehicleType?: string | null;
 }
 
 export interface TransferAmounts {
@@ -348,6 +376,63 @@ export interface FeeReceipt {
   reason: string;
 }
 
+export interface FeeRefundDayUsage {
+  ordersCount?: number;
+}
+
+export interface FeeRefundPreviewRequest {
+  handoverId: Id;
+  waiveCommission: boolean;
+}
+
+export interface FeeRefundPreviewResponse {
+  handoverId: Id;
+  waiveCommission: boolean;
+  collectedFee: number;
+  commissionDue: number;
+  commissionDeducted: number;
+  refundAmount: number;
+  deadlineUtc?: Instant | null;
+  deadline?: Instant | null;
+  cancelledUncollectedFee?: number;
+  uncollectedFeeCancelled?: number;
+  isEligible?: boolean;
+  ineligibleReason?: string | null;
+  startedAtUtc?: Instant | null;
+  accountCode?: string | null;
+  riderNameAr?: string | null;
+  [key: string]: unknown;
+}
+
+export interface FeeRefundExecutionRequest {
+  handoverId: Id;
+  waiveCommission: boolean;
+  reference: string;
+  reason: string;
+  dayUsage?: FeeRefundDayUsage;
+}
+
+export interface AccountFeeRefund {
+  id: Id;
+  handoverId: Id;
+  waiveCommission: boolean;
+  collectedFee: number;
+  commissionDue: number;
+  commissionDeducted: number;
+  refundAmount: number;
+  cancelledUncollectedFee?: number;
+  reference: string;
+  reason: string;
+  actorUserId?: Id | null;
+  createdAtUtc: Instant;
+  movementId?: Id | null;
+  fund?: Fund;
+  direction?: Direction;
+  purpose?: Purpose;
+  dayUsageOrdersCount?: number;
+  [key: string]: unknown;
+}
+
 export interface TransferredDebtAssignment {
   assignmentId?: Id | null;
   handoverId?: Id | null;
@@ -411,6 +496,29 @@ export interface RiderDebtRepaymentResponse {
   remainingAmount: number;
 }
 
+export interface RiderPartialDebtRepaymentRequest {
+  amount: number;
+  expectedAmount?: number;
+  paidAmount?: number;
+  fund?: Fund;
+  reference: string;
+  reason: string;
+}
+
+export interface RiderPartialDebtRepaymentResponse {
+  riderProfileId: Id;
+  paidAmount: number;
+  remainingAmount?: number;
+  paidDebtIds?: Id[];
+}
+
+export interface RiderDebtCommissionUpdate {
+  commission: number;
+  newCommission?: number;
+  amount?: number;
+  reason: string;
+}
+
 export interface RiderPerson {
   employeeId: string;
   riderProfileId: string | null;
@@ -435,6 +543,7 @@ export interface MoneyMovement {
   actorUserId: string;
   occurredAtUtc: string;
   reference: string;
+  paymentReference?: string | null;
   reason: string;
   createdAtUtc: string;
   createdByUserId: string | null;
@@ -677,12 +786,23 @@ export interface LedgerEntry {
 
 export interface AccountDetails {
   account: Account;
+  vehicleType?: string | null;
   handovers: Page<Handover>;
   operations: Page<Operation>;
   requests: Page<ApprovalRequest>;
   fees: Page<AccountFee>;
   orders: Page<OrderRow>;
   ledger: Page<LedgerEntry>;
+}
+
+export function formatJahezVehicleType(type?: string | null, isEn = false): string {
+  if (!type || !type.trim()) return isEn ? "None" : "بدون";
+  const lower = type.trim().toLowerCase();
+  if (lower === "motorcycle") return isEn ? "Motorcycle" : "دراجة نارية";
+  if (lower === "car") return isEn ? "Car" : "سيارة";
+  if (lower === "van") return isEn ? "Van" : "فان";
+  if (lower === "truck") return isEn ? "Truck" : "شاحنة";
+  return type;
 }
 
 export interface Problem {
@@ -717,5 +837,60 @@ export interface JahezProfitReport {
 export interface JahezProfitReportParams {
   fromDate?: string;
   toDate?: string;
+}
+
+// ----------------------------------------------------------------------
+// Rider Performance by Date Range (GET /api/jahez/v2/reports/riders)
+// ----------------------------------------------------------------------
+export interface JahezRiderPerformanceDaily {
+  date: string;
+  orders: number | null;
+}
+
+export interface JahezRiderPerformanceSummary {
+  periodDays: number;
+  daysWithData: number;
+  daysWithOrders: number;
+  zeroOrderDays: number;
+  missingDays: number;
+  orders: number;
+  averageOrdersPerDayWithData: number | null;
+  maxOrdersPerDay: number | null;
+}
+
+export interface JahezRiderPerformanceAccountBreakdown {
+  accountId: string;
+  externalAccountId: string;
+  summary: JahezRiderPerformanceSummary;
+  daily: JahezRiderPerformanceDaily[];
+}
+
+export interface JahezRiderPerformanceItem {
+  riderProfileId: string;
+  riderName: string;
+  riderIqamaNo: string | null;
+  selectedSummary: JahezRiderPerformanceSummary;
+  daily: JahezRiderPerformanceDaily[];
+  accounts: JahezRiderPerformanceAccountBreakdown[];
+}
+
+export interface JahezRiderPerformanceResponse {
+  startDate: string;
+  endDate: string;
+  riderId: string | null;
+  accountId: string | null;
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  items: JahezRiderPerformanceItem[];
+}
+
+export interface JahezRiderPerformanceParams {
+  startDate: string;
+  endDate: string;
+  riderId?: string;
+  accountId?: string;
+  page?: number;
+  pageSize?: number;
 }
 

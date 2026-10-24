@@ -41,6 +41,7 @@ export const Purpose = {
   Fuel: 2,
   AccountFee: 3,
   TransferredDebtRepayment: 4,
+  AccountFeeRefund: 5,
 } as const;
 export type Purpose = (typeof Purpose)[keyof typeof Purpose];
 

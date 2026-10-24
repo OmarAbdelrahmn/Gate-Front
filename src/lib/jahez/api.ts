@@ -3,6 +3,7 @@
 
 import { authFetch, authDownload, type CustomRequestInit } from "../auth/api";
 import { readAuth } from "../auth/token-store";
+import { Fund } from "./constants";
 import type {
   Account,
   AccountDetails,
@@ -15,6 +16,11 @@ import type {
   EarningsRequest,
   EarningsStatement,
   FeeReceipt,
+  FeeRefundDayUsage,
+  FeeRefundPreviewRequest,
+  FeeRefundPreviewResponse,
+  FeeRefundExecutionRequest,
+  AccountFeeRefund,
   FundBalance,
   Handover,
   HandoverCreate,
@@ -39,10 +45,18 @@ import type {
   RiderTransferredDebtSummary,
   RiderDebtRepaymentRequest,
   RiderDebtRepaymentResponse,
+  RiderPartialDebtRepaymentRequest,
+  RiderPartialDebtRepaymentResponse,
+  RiderDebtCommissionUpdate,
   CashboxHandover,
   CashboxHandoverCreate,
   CashboxHandoverConfirm,
   CashboxHandoverCancel,
+  OperationNetUpdate,
+  JahezProfitReport,
+  JahezProfitReportParams,
+  JahezRiderPerformanceParams,
+  JahezRiderPerformanceResponse,
 } from "./types";
 
 export * from "./constants";
@@ -444,6 +458,30 @@ export async function updateJahezCommissionStart(
 
 export const updateCommissionStart = updateJahezCommissionStart;
 
+export async function updateJahezOperationNet(
+  operationId: string,
+  data: OperationNetUpdate,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<Operation> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("op-net");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<Operation>(
+    `${ROOT}/operations/${encodeURIComponent(operationId)}/net`,
+    {
+      ...init,
+      method: "PUT",
+      headers,
+      body: JSON.stringify(data),
+      notifySuccess: init?.notifySuccess ?? "تم تعديل صافي المبلغ للتصفية بنجاح",
+    },
+  );
+}
+
+export const updateOperationNet = updateJahezOperationNet;
+
 // ----------------------------------------------------------------------
 // 4. Approval Requests & Decisions
 // ----------------------------------------------------------------------
@@ -561,6 +599,63 @@ export async function recordJahezFeeReceipt(
     body: JSON.stringify(data),
     notifySuccess: init?.notifySuccess ?? "تم تسجيل قبض رسوم فتح الحساب بنجاح",
   });
+}
+
+/**
+ * Preview fee refund calculations, commissions, and 7-day deadline.
+ * Route: POST /api/jahez/v2/fees/refunds/preview
+ * Requires: jahez.requests.fee.approve
+ */
+export async function previewJahezFeeRefund(
+  data: FeeRefundPreviewRequest,
+  init?: CustomRequestInit,
+): Promise<FeeRefundPreviewResponse> {
+  return authFetch<FeeRefundPreviewResponse>(`${ROOT}/fees/refunds/preview`, {
+    ...init,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Execute immutable fee refund and completed withdrawal for the active session.
+ * Route: POST /api/jahez/v2/fees/refunds
+ * Requires: jahez.requests.fee.approve, jahez.withdraw, jahez.money.disburse (and jahez.requests.commission.approve if waiving)
+ */
+export async function executeJahezFeeRefund(
+  data: FeeRefundExecutionRequest,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<AccountFeeRefund> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("fee-refund");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  return authFetch<AccountFeeRefund>(`${ROOT}/fees/refunds`, {
+    ...init,
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+    notifySuccess: init?.notifySuccess ?? "تم استرداد رسوم فتح الحساب وسحب الحساب بنجاح",
+  });
+}
+
+/**
+ * Get fee refund history for a session (handover) - returns 0 or 1 item.
+ * Route: GET /api/jahez/v2/handovers/{handoverId}/fee-refunds
+ * Requires: jahez.read
+ */
+export async function getJahezHandoverFeeRefunds(
+  handoverId: string,
+  init?: CustomRequestInit,
+): Promise<AccountFeeRefund[]> {
+  return authFetch<AccountFeeRefund[]>(
+    `${ROOT}/handovers/${encodeURIComponent(handoverId)}/fee-refunds`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
 }
 
 
@@ -769,6 +864,68 @@ export async function repayJahezRiderTransferredDebts(
       headers,
       body: JSON.stringify(data),
       notifySuccess: init?.notifySuccess ?? "تم سداد جميع المديونيات المرحلة بقيمة المستحق بنجاح",
+    },
+  );
+}
+
+/**
+ * POST /riders/{riderId}/transferred-debts/partial-repayment
+ * Partially repay unpaid transferred debts of that rider
+ */
+export async function repayJahezRiderPartialTransferredDebt(
+  riderId: string,
+  data: RiderPartialDebtRepaymentRequest,
+  idempotencyKey?: string,
+  init?: CustomRequestInit,
+): Promise<RiderPartialDebtRepaymentResponse> {
+  const key = idempotencyKey?.trim() || generateIdempotencyKey("part-debt-repay");
+  const headers = new Headers(init?.headers);
+  headers.set("Idempotency-Key", key);
+
+  const payload = {
+    amount: data.amount,
+    expectedAmount: data.amount,
+    paidAmount: data.amount,
+    fund: data.fund ?? Fund.Cashbox,
+    reference: data.reference,
+    reason: data.reason,
+  };
+
+  return authFetch<RiderPartialDebtRepaymentResponse>(
+    `${ROOT}/riders/${encodeURIComponent(riderId)}/transferred-debts/partial-repayment`,
+    {
+      ...init,
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      notifySuccess: init?.notifySuccess ?? "تم تسجيل السداد الجزئي للمديونية بنجاح",
+    },
+  );
+}
+
+/**
+ * PUT /riders/{riderId}/transferred-debts/commission
+ * Update the commission amount for rider's transferred debts
+ */
+export async function updateJahezRiderTransferredDebtCommission(
+  riderId: string,
+  data: RiderDebtCommissionUpdate,
+  init?: CustomRequestInit,
+): Promise<unknown> {
+  const payload = {
+    commission: data.commission,
+    newCommission: data.commission,
+    amount: data.commission,
+    reason: data.reason,
+  };
+
+  return authFetch(
+    `${ROOT}/riders/${encodeURIComponent(riderId)}/transferred-debts/commission`,
+    {
+      ...init,
+      method: "PUT",
+      body: JSON.stringify(payload),
+      notifySuccess: init?.notifySuccess ?? "تم تحديث العمولة بنجاح",
     },
   );
 }
@@ -1009,13 +1166,107 @@ export async function getJahezProfitReport(
   });
 }
 
+// ----------------------------------------------------------------------
+// 9. Rider Performance by Date Range (GET /api/jahez/v2/reports/riders)
+// ----------------------------------------------------------------------
+
+/**
+ * Fetch Jahez rider performance by date range.
+ * Route: GET /api/jahez/v2/reports/riders?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD[&riderId=...][&accountId=...][&page=...][&pageSize=...]
+ * Requires: jahez.read within Jahez client-platform scope.
+ */
+export async function getJahezRiderPerformance(
+  params: JahezRiderPerformanceParams,
+  init?: CustomRequestInit,
+): Promise<JahezRiderPerformanceResponse> {
+  const query = new URLSearchParams();
+  if (params.startDate) query.set("startDate", params.startDate);
+  if (params.endDate) query.set("endDate", params.endDate);
+  if (params.riderId) query.set("riderId", params.riderId);
+  if (params.accountId) query.set("accountId", params.accountId);
+  if (params.page !== undefined) query.set("page", String(params.page));
+  if (params.pageSize !== undefined) query.set("pageSize", String(params.pageSize));
+  const qs = query.toString();
+  return authFetch<JahezRiderPerformanceResponse>(`${ROOT}/reports/riders${qs ? `?${qs}` : ""}`, {
+    ...init,
+    method: "GET",
+  });
+}
+
+/**
+ * Fetch all Jahez rider performance records across all pages for a date range.
+ * Automatically paginates through all records and merges them into one response.
+ */
+export async function getAllJahezRiderPerformance(
+  params: JahezRiderPerformanceParams,
+  init?: CustomRequestInit,
+): Promise<JahezRiderPerformanceResponse> {
+  const pageSize = 100;
+  const firstPage = await getJahezRiderPerformance({ ...params, page: 1, pageSize }, init);
+  const totalCount = firstPage.totalCount || firstPage.items.length;
+  const items = [...firstPage.items];
+
+  if (totalCount > pageSize) {
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const promises: Promise<JahezRiderPerformanceResponse>[] = [];
+    for (let p = 2; p <= totalPages; p++) {
+      promises.push(getJahezRiderPerformance({ ...params, page: p, pageSize }, init));
+    }
+    const results = await Promise.all(promises);
+    for (const res of results) {
+      if (res?.items) {
+        items.push(...res.items);
+      }
+    }
+  }
+
+  return {
+    ...firstPage,
+    page: 1,
+    pageSize: items.length,
+    totalCount: items.length,
+    items,
+  };
+}
+
 /**
  * Jahez V2 client helper matching backend integration handoff contract.
  * Usage: jahezClient(...).profitReport({ fromDate, toDate })
+ *        jahezClient(...).riderPerformance({ startDate, endDate, riderId, accountId, page, pageSize })
+ *        jahezClient(...).allRiderPerformance({ startDate, endDate, riderId, accountId })
  */
 export function jahezClient(init?: CustomRequestInit) {
   return {
     profitReport: (params?: JahezProfitReportParams) => getJahezProfitReport(params, init),
+    riderPerformance: (params: JahezRiderPerformanceParams) =>
+      getJahezRiderPerformance(params, init),
+    allRiderPerformance: (params: JahezRiderPerformanceParams) =>
+      getAllJahezRiderPerformance(params, init),
+    updateNet: (
+      operationId: string,
+      data: OperationNetUpdate,
+      key?: string,
+    ) => updateJahezOperationNet(operationId, data, key, init),
+    repayTransferredDebt: (
+      riderId: string,
+      data: RiderDebtRepaymentRequest,
+      key?: string,
+    ) => repayJahezRiderTransferredDebts(riderId, data, key, init),
+    partialRepayTransferredDebt: (
+      riderId: string,
+      data: RiderPartialDebtRepaymentRequest,
+      key?: string,
+    ) => repayJahezRiderPartialTransferredDebt(riderId, data, key, init),
+    updateTransferredDebtCommission: (
+      riderId: string,
+      data: RiderDebtCommissionUpdate,
+    ) => updateJahezRiderTransferredDebtCommission(riderId, data, init),
+    previewFeeRefund: (data: FeeRefundPreviewRequest) =>
+      previewJahezFeeRefund(data, init),
+    executeFeeRefund: (data: FeeRefundExecutionRequest, key?: string) =>
+      executeJahezFeeRefund(data, key, init),
+    getHandoverFeeRefunds: (handoverId: string) =>
+      getJahezHandoverFeeRefunds(handoverId, init),
   };
 }
 

@@ -21,6 +21,8 @@ import {
   type ImportPreview,
   type Account,
 } from "@/lib/jahez/types";
+import { JahezVehicleTypeBadge } from "@/components/jahez/JahezVehicleTypeBadge";
+import { JahezRiderPerformanceReportView } from "@/components/jahez/JahezRiderPerformanceReportView";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -48,7 +50,14 @@ import {
   ChevronRight,
   TrendingUp,
   Activity,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Filter,
+  RotateCcw,
+  CalendarDays,
 } from "lucide-react";
+import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 
 export default function JahezOrderPerformancePage() {
   const { can, locale } = useAuth();
@@ -62,10 +71,19 @@ export default function JahezOrderPerformancePage() {
   const [loading, setLoading] = useState(true);
 
   // Performance Filters & View State
-  const [activeTab, setActiveTab] = useState<"orders" | "batches">("orders");
+  const [activeTab, setActiveTab] = useState<"periodReport" | "orders" | "batches">("periodReport");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      if (tab === "orders" || tab === "batches" || tab === "periodReport") {
+        setActiveTab(tab);
+      }
+    }
+  }, []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
-    "ALL" | "WITH_ORDERS" | "ZERO_ORDERS" | "ASSIGNED" | "UNASSIGNED"
+    "ALL" | "ASSIGNED_ZERO_ORDERS" | "ZERO_ORDERS" | "WITH_ORDERS" | "ASSIGNED" | "UNASSIGNED"
   >("ALL");
   const [sponsorFilter, setSponsorFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
@@ -169,12 +187,85 @@ export default function JahezOrderPerformancePage() {
     return Array.from(set).sort();
   }, [accounts]);
 
+  // Real-time status counts for header filters and badges
+  const counts = useMemo(() => {
+    let all = accounts.length;
+    let assigned = 0;
+    let unassigned = 0;
+    let withOrders = 0;
+    let assignedZeroOrders = 0;
+
+    for (const a of accounts) {
+      const isAssigned = !!a.isAssigned;
+      const orders = a.yesterdayOrders ?? 0;
+
+      if (isAssigned) {
+        assigned++;
+        if (orders === 0) {
+          assignedZeroOrders++;
+        }
+      } else {
+        unassigned++;
+      }
+
+      if (orders > 0) {
+        withOrders++;
+      }
+    }
+
+    return {
+      all,
+      assigned,
+      unassigned,
+      withOrders,
+      assignedZeroOrders,
+    };
+  }, [accounts]);
+
+  // Options for table column header dropdown filter
+  const statusFilterOptions: FilterOption[] = useMemo(() => {
+    return [
+      {
+        value: "ALL",
+        label: "جميع الحالات",
+        count: counts.all,
+      },
+      {
+        value: "ASSIGNED_ZERO_ORDERS",
+        label: "مسندة بلا طلبات (0)",
+        sublabel: "حسابات مسندة لم تسجل أي طلب بالأمس",
+        count: counts.assignedZeroOrders,
+      },
+      {
+        value: "WITH_ORDERS",
+        label: "حققت طلبات (> 0)",
+        sublabel: "حسابات سجلت طلبات بالأمس",
+        count: counts.withOrders,
+      },
+      {
+        value: "ASSIGNED",
+        label: "مسندة فقط",
+        sublabel: "حسابات مربوطة بمندوب فعلي",
+        count: counts.assigned,
+      },
+      {
+        value: "UNASSIGNED",
+        label: "غير مسندة",
+        sublabel: "حسابات بدون مندوب فعلي",
+        count: counts.unassigned,
+      },
+    ];
+  }, [counts]);
+
   // Filtered Accounts
   const filteredAccounts = useMemo(() => {
     return accounts
       .filter((a) => {
         if (statusFilter === "WITH_ORDERS" && (a.yesterdayOrders ?? 0) <= 0) return false;
-        if (statusFilter === "ZERO_ORDERS" && ((a.yesterdayOrders ?? 0) > 0 || !a.isAssigned))
+        if (
+          (statusFilter === "ZERO_ORDERS" || statusFilter === "ASSIGNED_ZERO_ORDERS") &&
+          ((a.yesterdayOrders ?? 0) > 0 || !a.isAssigned)
+        )
           return false;
         if (statusFilter === "ASSIGNED" && !a.isAssigned) return false;
         if (statusFilter === "UNASSIGNED" && a.isAssigned) return false;
@@ -242,7 +333,7 @@ export default function JahezOrderPerformancePage() {
           : a.status === "Suspended"
           ? "بلوك"
           : a.status === "Retired"
-          ? "متقاعد"
+          ? "إيقاف إداري"
           : a.status === "Archived"
           ? "خارج الكفالة"
           : a.status,
@@ -382,127 +473,143 @@ export default function JahezOrderPerformancePage() {
         </div>
       </div>
 
-      {/* Performance KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {/* إجمالي طلبات الأمس */}
-        <div className="rounded-2xl border border-purple-200 bg-purple-50/50 p-4 shadow-xs dark:border-purple-950 dark:bg-purple-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
-              <BarChart3 className="h-4 w-4 text-purple-600" />
-              إجمالي طلبات الأمس
-            </span>
-            <Badge tone="blue">{statistics?.yesterday || "أمس"}</Badge>
-          </div>
-          <div className="mt-2 text-2xl font-black text-purple-900 dark:text-purple-100 font-mono">
-            {displayYesterdayOrders.toLocaleString()} <span className="text-sm font-normal text-purple-600">طلب</span>
-          </div>
-          <div className="mt-1 text-[11px] text-gray-500">
-            عبر {accounts.length} حساب مسجل
-          </div>
-        </div>
-
-        {/* الحسابات المحققة للطلبات */}
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs dark:border-emerald-950 dark:bg-emerald-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              حسابات سجلت طلبات
-            </span>
-            <Badge tone="green">
-              {activeAccountsCount > 0
-                ? `${((displayAccountsWithOrders / activeAccountsCount) * 100).toFixed(0)}% نشاط`
-                : "-"}
-            </Badge>
-          </div>
-          <div className="mt-2 text-2xl font-black text-emerald-900 dark:text-emerald-100 font-mono">
-            {displayAccountsWithOrders} <span className="text-sm font-normal text-emerald-600">من {activeAccountsCount}</span>
-          </div>
-          <div className="mt-1 text-[11px] text-gray-500">
-            حسابات نشطة حققت طلبات أمس
-          </div>
-        </div>
-
-        {/* متوسط الإنتاجية لكل حساب نشط */}
-        <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 shadow-xs dark:border-blue-950 dark:bg-blue-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
-              <Zap className="h-4 w-4 text-blue-600" />
-              متوسط الطلبات / حساب
-            </span>
-            <Badge tone="blue">معدل الإنجاز</Badge>
-          </div>
-          <div className="mt-2 text-2xl font-black text-blue-900 dark:text-blue-100 font-mono">
-            {avgOrders} <span className="text-sm font-normal text-blue-600">طلب / حساب</span>
-          </div>
-          <div className="mt-1 text-[11px] text-gray-500">
-            للحسابات المسجلة للطلبات أمس
-          </div>
-        </div>
-
-        {/* حسابات نشطة بلا طلبات */}
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 shadow-xs dark:border-amber-950 dark:bg-amber-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              حسابات بلا طلبات
-            </span>
-            <Badge tone="orange">تحتاج متابعة</Badge>
-          </div>
-          <div className="mt-2 text-2xl font-black text-amber-900 dark:text-amber-100 font-mono">
-            {Math.max(0, activeAccountsCount - displayAccountsWithOrders)} <span className="text-sm font-normal text-amber-600">حساب</span>
-          </div>
-          <div className="mt-1 text-[11px] text-gray-500">
-            حسابات نشطة/مسندة بدون إنتاجية أمس
-          </div>
-        </div>
-
-        {/* أعلى أداء حساب أمس */}
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 shadow-xs dark:border-indigo-950 dark:bg-indigo-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
-              <Award className="h-4 w-4 text-indigo-600" />
-              الأعلى إنجازاً أمس
-            </span>
-            <Badge tone="blue">الأعلى أداءً</Badge>
-          </div>
-          <div className="mt-2 text-2xl font-black text-indigo-900 dark:text-indigo-100 font-mono">
-            {topPerformer?.yesterdayOrders ?? 0} <span className="text-sm font-normal text-indigo-600">طلب</span>
-          </div>
-          <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-300 truncate font-semibold">
-            {topPerformer?.actualRider?.nameAr || topPerformer?.code || "-"}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs Selector: Orders Table vs Daily Orders Batches */}
-      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 text-xs font-bold">
+      {/* Tabs Selector: Period Report vs Orders Table vs Daily Orders Batches */}
+      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 text-xs font-bold overflow-x-auto">
+        <button
+          onClick={() => setActiveTab("periodReport")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
+            activeTab === "periodReport"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+          }`}
+        >
+          <CalendarDays className="h-4 w-4" />
+          تقرير أداء المناديب بالفترة (مصفوفة الأيام)
+        </button>
         <button
           onClick={() => {
             setActiveTab("orders");
             setPage(1);
           }}
-          className={`px-4 py-2 rounded-xl transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
             activeTab === "orders"
               ? "bg-purple-600 text-white shadow-xs"
               : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
           }`}
         >
-          جدول أداء طلبات الحسابات والمناديب ({filteredAccounts.length})
+          <BarChart3 className="h-4 w-4" />
+          أداء طلبات الأمس للحسابات ({filteredAccounts.length})
         </button>
         <button
           onClick={() => setActiveTab("batches")}
-          className={`px-4 py-2 rounded-xl transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
             activeTab === "batches"
               ? "bg-purple-600 text-white shadow-xs"
               : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
           }`}
         >
+          <Upload className="h-4 w-4" />
           شيتات الطلبات اليومية المرفوعة ({dailyOrdersBatches.length})
         </button>
       </div>
 
-      {/* Tab 1: Orders Performance Table */}
+      {/* Tab 1: Period Report (Matrix View: Days as Columns, Riders as Rows) */}
+      {activeTab === "periodReport" && <JahezRiderPerformanceReportView />}
+
+      {/* Tab 2: Orders Performance Table */}
       {activeTab === "orders" && (
+        <div className="space-y-6">
+          {/* Performance KPI Cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {/* إجمالي طلبات الأمس */}
+            <div className="rounded-2xl border border-purple-200 bg-purple-50/50 p-4 shadow-xs dark:border-purple-950 dark:bg-purple-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                  <BarChart3 className="h-4 w-4 text-purple-600" />
+                  إجمالي طلبات الأمس
+                </span>
+                <Badge tone="blue">{statistics?.yesterday || "أمس"}</Badge>
+              </div>
+              <div className="mt-2 text-2xl font-black text-purple-900 dark:text-purple-100 font-mono">
+                {displayYesterdayOrders.toLocaleString()} <span className="text-sm font-normal text-purple-600">طلب</span>
+              </div>
+              <div className="mt-1 text-[11px] text-gray-500">
+                عبر {accounts.length} حساب مسجل
+              </div>
+            </div>
+
+            {/* الحسابات المحققة للطلبات */}
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs dark:border-emerald-950 dark:bg-emerald-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  حسابات سجلت طلبات
+                </span>
+                <Badge tone="green">
+                  {activeAccountsCount > 0
+                    ? `${((displayAccountsWithOrders / activeAccountsCount) * 100).toFixed(0)}% نشاط`
+                    : "-"}
+                </Badge>
+              </div>
+              <div className="mt-2 text-2xl font-black text-emerald-900 dark:text-emerald-100 font-mono">
+                {displayAccountsWithOrders} <span className="text-sm font-normal text-emerald-600">من {activeAccountsCount}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-gray-500">
+                حسابات نشطة حققت طلبات أمس
+              </div>
+            </div>
+
+            {/* متوسط الإنتاجية لكل حساب نشط */}
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 shadow-xs dark:border-blue-950 dark:bg-blue-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                  <Zap className="h-4 w-4 text-blue-600" />
+                  متوسط الطلبات / حساب
+                </span>
+                <Badge tone="blue">معدل الإنجاز</Badge>
+              </div>
+              <div className="mt-2 text-2xl font-black text-blue-900 dark:text-blue-100 font-mono">
+                {avgOrders} <span className="text-sm font-normal text-blue-600">طلب / حساب</span>
+              </div>
+              <div className="mt-1 text-[11px] text-gray-500">
+                للحسابات المسجلة للطلبات أمس
+              </div>
+            </div>
+
+            {/* حسابات نشطة بلا طلبات */}
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 shadow-xs dark:border-amber-950 dark:bg-amber-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  حسابات بلا طلبات
+                </span>
+                <Badge tone="orange">تحتاج متابعة</Badge>
+              </div>
+              <div className="mt-2 text-2xl font-black text-amber-900 dark:text-amber-100 font-mono">
+                {Math.max(0, activeAccountsCount - displayAccountsWithOrders)} <span className="text-sm font-normal text-amber-600">حساب</span>
+              </div>
+              <div className="mt-1 text-[11px] text-gray-500">
+                حسابات نشطة/مسندة بدون إنتاجية أمس
+              </div>
+            </div>
+
+            {/* أعلى أداء حساب أمس */}
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 shadow-xs dark:border-indigo-950 dark:bg-indigo-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                  <Award className="h-4 w-4 text-indigo-600" />
+                  الأعلى إنجازاً أمس
+                </span>
+                <Badge tone="blue">الأعلى أداءً</Badge>
+              </div>
+              <div className="mt-2 text-2xl font-black text-indigo-900 dark:text-indigo-100 font-mono">
+                {topPerformer?.yesterdayOrders ?? 0} <span className="text-sm font-normal text-indigo-600">طلب</span>
+              </div>
+              <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-300 truncate font-semibold">
+                {topPerformer?.actualRider?.nameAr || topPerformer?.code || "-"}
+              </div>
+            </div>
+          </div>
         <div className="space-y-4">
           {/* Filters Bar */}
           <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 md:flex-row md:items-center md:justify-between">
@@ -521,18 +628,26 @@ export default function JahezOrderPerformancePage() {
 
             <div className="flex flex-wrap items-center gap-2">
               <select
-                value={statusFilter}
+                value={statusFilter === "ZERO_ORDERS" ? "ASSIGNED_ZERO_ORDERS" : statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value as any);
                   setPage(1);
                 }}
                 className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium dark:border-gray-700 dark:bg-gray-800"
               >
-                <option value="ALL">جميع الحالات</option>
-                <option value="WITH_ORDERS">حققت طلبات (&gt; 0)</option>
-                <option value="ZERO_ORDERS">بدون طلبات (0)</option>
-                <option value="ASSIGNED">المسندة فقط</option>
-                <option value="UNASSIGNED">غير مسندة</option>
+                <option value="ALL">جميع الحالات ({counts.all})</option>
+                <option value="ASSIGNED_ZERO_ORDERS">
+                  مسندة بلا طلبات (0) ({counts.assignedZeroOrders})
+                </option>
+                <option value="WITH_ORDERS">
+                  حققت طلبات (&gt; 0) ({counts.withOrders})
+                </option>
+                <option value="ASSIGNED">
+                  المسندة فقط ({counts.assigned})
+                </option>
+                <option value="UNASSIGNED">
+                  غير مسندة ({counts.unassigned})
+                </option>
               </select>
 
               {uniqueSponsors.length > 0 && (
@@ -585,6 +700,208 @@ export default function JahezOrderPerformancePage() {
 
           {/* Table */}
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+            {/* Table Header Filter Toolbar */}
+            <div className="border-b border-gray-200 bg-gray-50/80 p-3 dark:border-gray-800 dark:bg-gray-800/40">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                {/* Status Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 ml-1 flex items-center gap-1">
+                    <Filter className="h-3.5 w-3.5" />
+                    <span>تصفية:</span>
+                  </span>
+
+                  {/* الكل */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("ALL");
+                      setPage(1);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      statusFilter === "ALL"
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700/60"
+                    }`}
+                  >
+                    <span>الكل</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        statusFilter === "ALL"
+                          ? "bg-white/20 text-white"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                      }`}
+                    >
+                      {counts.all}
+                    </span>
+                  </button>
+
+                  {/* حسابات مسندة بلا طلبات */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("ASSIGNED_ZERO_ORDERS");
+                      setPage(1);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      statusFilter === "ASSIGNED_ZERO_ORDERS" || statusFilter === "ZERO_ORDERS"
+                        ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-500/30"
+                        : "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                    }`}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>مسندة بلا طلبات (0)</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        statusFilter === "ASSIGNED_ZERO_ORDERS" || statusFilter === "ZERO_ORDERS"
+                          ? "bg-white/20 text-white"
+                          : "bg-amber-200/80 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200"
+                      }`}
+                    >
+                      {counts.assignedZeroOrders}
+                    </span>
+                  </button>
+
+                  {/* حققت طلبات (> 0) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("WITH_ORDERS");
+                      setPage(1);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      statusFilter === "WITH_ORDERS"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>حققت طلبات (&gt; 0)</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        statusFilter === "WITH_ORDERS"
+                          ? "bg-white/20 text-white"
+                          : "bg-emerald-200/80 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200"
+                      }`}
+                    >
+                      {counts.withOrders}
+                    </span>
+                  </button>
+
+                  {/* مسندة */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("ASSIGNED");
+                      setPage(1);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      statusFilter === "ASSIGNED"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700/60"
+                    }`}
+                  >
+                    <UserCheck className="h-3.5 w-3.5 shrink-0" />
+                    <span>مسندة</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        statusFilter === "ASSIGNED"
+                          ? "bg-white/20 text-white"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                      }`}
+                    >
+                      {counts.assigned}
+                    </span>
+                  </button>
+
+                  {/* غير مسندة */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("UNASSIGNED");
+                      setPage(1);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      statusFilter === "UNASSIGNED"
+                        ? "bg-gray-700 text-white shadow-xs"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700/60"
+                    }`}
+                  >
+                    <User className="h-3.5 w-3.5 shrink-0" />
+                    <span>غير مسندة</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        statusFilter === "UNASSIGNED"
+                          ? "bg-white/20 text-white"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                      }`}
+                    >
+                      {counts.unassigned}
+                    </span>
+                  </button>
+
+                  {/* Reset filters if any are active */}
+                  {(statusFilter !== "ALL" || sponsorFilter || cityFilter || search) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter("ALL");
+                        setSponsorFilter("");
+                        setCityFilter("");
+                        setSearch("");
+                        setPage(1);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                      title="إعادة ضبط كافة الفلاتر"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>إعادة ضبط</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Orders Sort Up / Down Controls */}
+                <div className="flex items-center gap-2 self-end lg:self-auto">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    ترتيب الطلبات:
+                  </span>
+                  <div className="inline-flex items-center gap-1 bg-white dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSortOrder("orders_desc");
+                        setPage(1);
+                      }}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        sortOrder === "orders_desc"
+                          ? "bg-purple-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
+                      title="ترتيب تنازلي: الأكثر طلبات أولاً"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                      <span>الأعلى طلبات</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSortOrder("orders_asc");
+                        setPage(1);
+                      }}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        sortOrder === "orders_asc"
+                          ? "bg-purple-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
+                      title="ترتيب تصاعدي: الأقل طلبات أولاً"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                      <span>الأقل طلبات</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs">
                 <thead className="border-b bg-gray-50/80 font-bold text-gray-600 dark:bg-gray-800/50 dark:text-gray-300">
@@ -592,9 +909,72 @@ export default function JahezOrderPerformancePage() {
                     <th className="py-3 px-3">رقم الحساب</th>
                     <th className="py-3 px-3">المندوب الفعلي (المستخدم)</th>
                     <th className="py-3 px-3">صاحب الحساب (المالك)</th>
-                    <th className="py-3 px-3">الكفيل والمدينة</th>
-                    <th className="py-3 px-3 text-center">الحالة والإسناد</th>
-                    <th className="py-3 px-3 text-center">طلبات الأمس</th>
+                    <th className="py-3 px-3">
+                      <div className="flex items-center gap-1.5">
+                        <span>الكفيل والمدينة</span>
+                        {uniqueSponsors.length > 0 && (
+                          <TableHeaderColumnFilter
+                            label="الكفيل"
+                            value={sponsorFilter}
+                            onChange={(vals) => {
+                              setSponsorFilter(vals[0] || "");
+                              setPage(1);
+                            }}
+                            options={[
+                              { value: "ALL", label: "جميع الكفلاء" },
+                              ...uniqueSponsors.map((s) => ({
+                                value: s.id,
+                                label: s.name,
+                              })),
+                            ]}
+                            multi={false}
+                            placeholder="تصفية بالكفيل..."
+                            align="right"
+                          />
+                        )}
+                      </div>
+                    </th>
+                    <th className="py-3 px-3 text-center">
+                      <div className="inline-flex items-center justify-center gap-1.5">
+                        <span>الحالة والإسناد</span>
+                        <TableHeaderColumnFilter
+                          label="الحالة والإسناد"
+                          value={statusFilter === "ALL" ? "" : statusFilter === "ZERO_ORDERS" ? "ASSIGNED_ZERO_ORDERS" : statusFilter}
+                          onChange={(vals) => {
+                            setStatusFilter((vals[0] as any) || "ALL");
+                            setPage(1);
+                          }}
+                          options={statusFilterOptions}
+                          multi={false}
+                          align="right"
+                          placeholder="تصفية بالحالة..."
+                        />
+                      </div>
+                    </th>
+                    <th className="py-3 px-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortOrder((prev) => (prev === "orders_desc" ? "orders_asc" : "orders_desc"));
+                          setPage(1);
+                        }}
+                        className="inline-flex items-center justify-center gap-1.5 font-bold hover:text-purple-600 dark:hover:text-purple-400 transition-colors mx-auto group cursor-pointer"
+                        title="انقر لتبديل الترتيب بين الأعلى طلبات والأقل طلبات"
+                      >
+                        <span>طلبات الأمس</span>
+                        {sortOrder === "orders_desc" ? (
+                          <span className="flex items-center text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 p-0.5 rounded">
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </span>
+                        ) : sortOrder === "orders_asc" ? (
+                          <span className="flex items-center text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 p-0.5 rounded">
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </span>
+                        ) : (
+                          <ArrowUpDown className="h-3.5 w-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300" />
+                        )}
+                      </button>
+                    </th>
                     <th className="py-3 px-3 text-center">آخر نشاط مسجل</th>
                   </tr>
                 </thead>
@@ -629,6 +1009,11 @@ export default function JahezOrderPerformancePage() {
                               {a.externalAccountId}
                               {a.userName && ` • ${a.userName}`}
                             </div>
+                            {a.vehicleType && (
+                              <div className="mt-1">
+                                <JahezVehicleTypeBadge vehicleType={a.vehicleType} isEn={isEn} />
+                              </div>
+                            )}
                           </td>
 
                           {/* المندوب الفعلي */}
@@ -705,6 +1090,8 @@ export default function JahezOrderPerformancePage() {
                                   ? "بلوك"
                                   : a.status === "Archived"
                                   ? "خارج الكفالة"
+                                  : a.status === "Retired"
+                                  ? "إيقاف إداري"
                                   : a.status}
                               </Badge>
                               {a.isAssigned && (
@@ -789,6 +1176,7 @@ export default function JahezOrderPerformancePage() {
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
 

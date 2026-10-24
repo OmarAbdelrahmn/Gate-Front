@@ -14,8 +14,11 @@ import {
   getJahezRiderTransferredDebtsSummary,
   getJahezRiderTransferredDebts,
   repayJahezRiderTransferredDebts,
+  repayJahezRiderPartialTransferredDebt,
+  updateJahezRiderTransferredDebtCommission,
   generateIdempotencyKey,
   recordJahezFeeReceipt,
+  getJahezHandoverFeeRefunds,
   getJahezAccounts,
   getRiyadhTodayDate,
   getJahezCashboxHandovers,
@@ -38,14 +41,19 @@ import {
   type RiderTransferredDebtSummary,
   type TransferAmounts,
   type RiderDebtRepaymentResponse,
+  type RiderPartialDebtRepaymentRequest,
+  type RiderDebtCommissionUpdate,
   type Account,
   type RiderPerson,
   type CashboxHandover,
+  type AccountFeeRefund,
 } from "@/lib/jahez/types";
 import { listRiders, listSponsors, type Sponsor } from "@/lib/workforce/api";
 import type { Rider } from "@/lib/workforce/types";
+import { EditSettlementNetModal } from "@/components/jahez/EditSettlementNetModal";
 import { EditPaymentMethodModal } from "@/components/jahez/EditPaymentMethodModal";
 import { CorrectCommissionStartModal } from "@/components/jahez/CorrectCommissionStartModal";
+import { RefundAccountFeeModal } from "@/components/jahez/RefundAccountFeeModal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -81,6 +89,8 @@ import {
   History,
   FileCheck,
   CalendarCheck,
+  Sparkles,
+  RotateCcw,
 } from "lucide-react";
 
 export default function JahezCashboxPage() {
@@ -103,6 +113,13 @@ export default function JahezCashboxPage() {
     canSettle ||
     isAdmin;
   const canEditPayment = canSettle && canDisburse;
+  const canEditNet =
+    isAdmin ||
+    (can("jahez.settle") &&
+      can("jahez.requests.adjustment.approve") &&
+      can("jahez.money.receive") &&
+      can("jahez.money.disburse")) ||
+    (canSettle && canApproveAdjustment && canReceive && canDisburse);
   const canCorrectCommission =
     isAdmin ||
     canSettle ||
@@ -121,6 +138,15 @@ export default function JahezCashboxPage() {
   const canRepayDebt =
     (can("jahez.transferred-debt.repay") && can("jahez.money.receive")) ||
     isAdmin;
+  const canEditCommission =
+    can("jahez.requests.adjustment.approve") ||
+    can("jahez.settle") ||
+    isAdmin;
+  const canApproveFee =
+    can("jahez.requests.fee.approve") ||
+    can("jahez.requests.approve") ||
+    isAdmin;
+  const canRefundFee = canApproveFee && canDisburse;
 
   const [activeTab, setActiveTab] = useState<"movements" | "handovers" | "transferredDebts">("movements");
 
@@ -170,6 +196,23 @@ export default function JahezCashboxPage() {
   const [singleRepayKey, setSingleRepayKey] = useState<string>("");
   const [singleRepaySubmitting, setSingleRepaySubmitting] = useState(false);
 
+  // Partial Rider Repay Modal State (POST /riders/{riderId}/transferred-debts/partial-repayment)
+  const [isPartialRepayOpen, setIsPartialRepayOpen] = useState(false);
+  const [partialRepayRider, setPartialRepayRider] = useState<RiderTransferredDebtSummary | null>(null);
+  const [partialRepayAmount, setPartialRepayAmount] = useState<number | "">("");
+  const [partialRepayFund, setPartialRepayFund] = useState<Fund>(Fund.Cashbox);
+  const [partialRepayRef, setPartialRepayRef] = useState("");
+  const [partialRepayReason, setPartialRepayReason] = useState("سداد جزئي لمديونية المندوب المرحلة");
+  const [partialRepayKey, setPartialRepayKey] = useState<string>("");
+  const [partialRepaySubmitting, setPartialRepaySubmitting] = useState(false);
+
+  // Edit Rider Commission Modal State (PUT /riders/{riderId}/transferred-debts/commission)
+  const [isEditCommissionOpen, setIsEditCommissionOpen] = useState(false);
+  const [commissionRider, setCommissionRider] = useState<RiderTransferredDebtSummary | null>(null);
+  const [newCommissionValue, setNewCommissionValue] = useState<number | "">("");
+  const [editCommissionReason, setEditCommissionReason] = useState("تعديل عمولة المديونية المرحلة");
+  const [editCommissionSubmitting, setEditCommissionSubmitting] = useState(false);
+
   // Pagination & Filtering
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -216,6 +259,11 @@ export default function JahezCashboxPage() {
   const [cancelReason, setCancelReason] = useState("إلغاء وإعادة المطابقة");
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
+  // Edit Settlement Net Modal State
+  const [isEditNetOpen, setIsEditNetOpen] = useState(false);
+  const [editNetMovement, setEditNetMovement] = useState<Movement | null>(null);
+  const [returnToDetailsAfterEdit, setReturnToDetailsAfterEdit] = useState(false);
+
   // Edit Payment Method Modal State
   const [isEditPaymentOpen, setIsEditPaymentOpen] = useState(false);
   const [editPaymentOpId, setEditPaymentOpId] = useState<string | null>(null);
@@ -231,11 +279,6 @@ export default function JahezCashboxPage() {
   const [isCorrectCommissionOpen, setIsCorrectCommissionOpen] = useState(false);
   const [correctCommissionMovement, setCorrectCommissionMovement] = useState<Movement | null>(null);
 
-  const openCorrectCommissionModal = (m: Movement) => {
-    setCorrectCommissionMovement(m);
-    setIsCorrectCommissionOpen(true);
-  };
-
 
   // Record Fee Modal State
   const [isFeeOpen, setIsFeeOpen] = useState(false);
@@ -246,6 +289,21 @@ export default function JahezCashboxPage() {
   const [feeReason, setFeeReason] = useState("قبض رسوم فتح الحساب نقداً");
   const [feeSubmitting, setFeeSubmitting] = useState(false);
   const [manualHandoverMode, setManualHandoverMode] = useState(false);
+
+  // Refund Account Fee Modal State
+  const [isRefundOpen, setIsRefundOpen] = useState(false);
+  const [refundHandoverId, setRefundHandoverId] = useState("");
+  const [refundMovement, setRefundMovement] = useState<Movement | null>(null);
+  const [refundAccount, setRefundAccount] = useState<Account | null>(null);
+  const [movementRefundHistory, setMovementRefundHistory] = useState<AccountFeeRefund | null>(null);
+  const [loadingMovementRefundHistory, setLoadingMovementRefundHistory] = useState(false);
+
+  const openRefundModal = (handoverId?: string | null, m?: Movement | null, acc?: Account | null) => {
+    setRefundHandoverId(handoverId || m?.handoverId || acc?.currentHandoverId || "");
+    setRefundMovement(m || null);
+    setRefundAccount(acc || null);
+    setIsRefundOpen(true);
+  };
 
   // Lookups
   const riderMap = useMemo(() => new Map(riders.map((r) => [r.id, r])), [riders]);
@@ -264,6 +322,118 @@ export default function JahezCashboxPage() {
       ""
     );
   };
+
+  const openEditNetModal = (m: Movement, returnToDetails = false) => {
+    setEditNetMovement(m);
+    setReturnToDetailsAfterEdit(returnToDetails);
+    setIsEditNetOpen(true);
+  };
+
+  const openEditPaymentModal = (m: Movement, returnToDetails = false) => {
+    const fallbackRider = riderMap.get(m.riderProfileId);
+    const opFallback: Operation = {
+      id: m.operationId || "",
+      handoverId: m.handoverId,
+      mode: OperationMode.Settle,
+      status: OperationStatus.Executed,
+      paymentStatus: PaymentStatus.Paid,
+      throughDate: m.endDate || "",
+      effectiveAtUtc: m.occurredAtUtc,
+      net: m.net ?? 0,
+      commission: m.commission ?? 0,
+      calculatedCommission: m.calculatedCommission ?? m.commission ?? 0,
+      remaining: m.direction === Direction.Receipt ? m.amount : -m.amount,
+      calculationJson: "{}",
+      fund: m.fund,
+      purpose: m.purpose,
+      transferToRider: false,
+      paymentReference: m.paymentReference ?? m.reference ?? null,
+      reason: m.reason,
+      approvedRequestId: null,
+      executedAtUtc: m.occurredAtUtc,
+      executedByUserId: m.actorUserId,
+      createdAtUtc: m.createdAtUtc,
+      createdByUserId: m.createdByUserId,
+      updatedAtUtc: null,
+      updatedByUserId: null,
+      rowVersion: m.operationRowVersion || "",
+      isDeleted: false,
+      deletedAtUtc: null,
+      deletedByUserId: null,
+      deletionReason: null,
+    };
+    setEditPaymentOpId(m.operationId);
+    setEditPaymentInitialOp(opFallback);
+    setEditPaymentMovement(m);
+    setEditPaymentContext({
+      riderName:
+        m.userRider?.nameAr ||
+        m.ownerRider?.nameAr ||
+        fallbackRider?.fullNameAr,
+      settlementDate: m.occurredAtUtc?.slice(0, 10),
+    });
+    setReturnToDetailsAfterEdit(returnToDetails);
+    setIsEditPaymentOpen(true);
+  };
+
+  const openCorrectCommissionModal = (m: Movement, returnToDetails = false) => {
+    setCorrectCommissionMovement(m);
+    setReturnToDetailsAfterEdit(returnToDetails);
+    setIsCorrectCommissionOpen(true);
+  };
+
+  const handleOperationUpdated = (updatedOp: Operation) => {
+    loadAllData(page);
+    if (selectedMovement && selectedMovement.operationId === updatedOp.id) {
+      setSelectedMovement((prev) =>
+        prev
+          ? {
+              ...prev,
+              net: updatedOp.net != null ? updatedOp.net : prev.net,
+              amount: Math.abs(updatedOp.remaining),
+              direction:
+                updatedOp.remaining > 0
+                  ? Direction.Receipt
+                  : updatedOp.remaining < 0
+                  ? Direction.Disbursement
+                  : Direction.None,
+              commission: updatedOp.commission != null ? updatedOp.commission : prev.commission,
+              calculatedCommission:
+                updatedOp.calculatedCommission != null
+                  ? updatedOp.calculatedCommission
+                  : prev.calculatedCommission,
+              startDate: updatedOp.commissionStartDate || prev.startDate,
+              fund: updatedOp.fund ?? prev.fund,
+              paymentReference: updatedOp.paymentReference ?? prev.paymentReference,
+              reference: updatedOp.paymentReference ?? prev.reference,
+              operationRowVersion: updatedOp.rowVersion || prev.operationRowVersion,
+            }
+          : null,
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (
+      selectedMovement?.handoverId &&
+      (selectedMovement.purpose === Purpose.AccountFee ||
+        selectedMovement.purpose === Purpose.AccountFeeRefund)
+    ) {
+      setLoadingMovementRefundHistory(true);
+      getJahezHandoverFeeRefunds(selectedMovement.handoverId)
+        .then((items) => {
+          if (Array.isArray(items) && items.length > 0) {
+            setMovementRefundHistory(items[0]);
+          } else {
+            setMovementRefundHistory(null);
+          }
+        })
+        .catch(() => setMovementRefundHistory(null))
+        .finally(() => setLoadingMovementRefundHistory(false));
+    } else {
+      setMovementRefundHistory(null);
+    }
+  }, [selectedMovement]);
 
   // Pending Handover (Only one company-wide pending handover allowed)
   const pendingHandover = useMemo(() => {
@@ -391,6 +561,8 @@ export default function JahezCashboxPage() {
     return (
       m.id.toLowerCase().includes(q) ||
       (platformAcc ? platformAcc.includes(q) : false) ||
+      (m.paymentReference ? m.paymentReference.toLowerCase().includes(q) : false) ||
+      (m.reference ? m.reference.toLowerCase().includes(q) : false) ||
       m.reason.toLowerCase().includes(q) ||
       m.handoverId.toLowerCase().includes(q) ||
       spName.includes(q) ||
@@ -750,6 +922,137 @@ export default function JahezCashboxPage() {
     }
   };
 
+  // Partial Repayment Handlers (POST /riders/{riderId}/transferred-debts/partial-repayment)
+  const openPartialRepayModal = async (summary: RiderTransferredDebtSummary) => {
+    setPartialRepayRider(summary);
+    setPartialRepayAmount("");
+    setPartialRepayFund(Fund.Cashbox);
+    setPartialRepayRef(`RCPT-PART-${getRiyadhTodayDate().replace(/-/g, "")}-${Date.now().toString().slice(-4)}`);
+    setPartialRepayReason("سداد جزئي لمديونية المندوب المرحلة");
+    setPartialRepayKey(generateIdempotencyKey("partial-debt-repay"));
+    setIsPartialRepayOpen(true);
+    try {
+      const freshSummary = await getJahezRiderTransferredDebtsSummary(summary.riderProfileId);
+      if (freshSummary) {
+        setPartialRepayRider(freshSummary);
+      }
+    } catch {
+      // Fallback to existing summary
+    }
+  };
+
+  const submitPartialRepayment = async () => {
+    if (!partialRepayRider) return;
+    const numAmount = Number(partialRepayAmount);
+    if (!numAmount || numAmount <= 0) {
+      toast.warning("تنبيه", "يرجى إدخال مبلغ سداد جزئي صحيح أكبر من صفر");
+      return;
+    }
+    if (numAmount > partialRepayRider.outstandingAmount) {
+      toast.warning(
+        "تنبيه",
+        `المبلغ المدخل أكبر من إجمالي المديونية (${Number(partialRepayRider.outstandingAmount).toFixed(2)} ر.س)`,
+      );
+      return;
+    }
+    if (!partialRepayRef.trim()) {
+      toast.warning("تنبيه", "يرجى إدخال رقم الإيصال / المرجع الفعلي");
+      return;
+    }
+    if (!partialRepayReason.trim()) {
+      toast.warning("تنبيه", "يرجى كتابة سبب وبيان السداد");
+      return;
+    }
+
+    setPartialRepaySubmitting(true);
+    try {
+      const res = await repayJahezRiderPartialTransferredDebt(
+        partialRepayRider.riderProfileId,
+        {
+          amount: numAmount,
+          expectedAmount: numAmount,
+          paidAmount: numAmount,
+          fund: partialRepayFund,
+          reference: partialRepayRef.trim(),
+          reason: partialRepayReason.trim(),
+        },
+        partialRepayKey,
+      );
+      toast.success(
+        "تم السداد الجزئي بنجاح",
+        `تم سداد مبلغ ${numAmount.toFixed(2)} ر.س بنجاح. المتبقي: ${
+          res?.remainingAmount != null
+            ? `${Number(res.remainingAmount).toFixed(2)} ر.س`
+            : `${(partialRepayRider.outstandingAmount - numAmount).toFixed(2)} ر.س`
+        }`,
+      );
+      setIsPartialRepayOpen(false);
+      if (isRiderDrawerOpen && selectedRiderSummary?.riderProfileId === partialRepayRider.riderProfileId) {
+        const [freshSummary, freshDebts] = await Promise.all([
+          getJahezRiderTransferredDebtsSummary(partialRepayRider.riderProfileId).catch(() => null),
+          getJahezRiderTransferredDebts(partialRepayRider.riderProfileId, 1, 50).catch(() => null),
+        ]);
+        if (freshSummary) setSelectedRiderSummary(freshSummary);
+        if (freshDebts) setRiderDetailDebts(freshDebts.items || []);
+      }
+      loadRiderDebts(riderDebtsPage);
+      loadHistoryDebts(historyDebtsPage);
+      loadAllData(page);
+    } catch (err: unknown) {
+      toast.error("فشل السداد الجزئي", err instanceof Error ? err.message : "تعذر تسجيل السداد الجزئي");
+    } finally {
+      setPartialRepaySubmitting(false);
+    }
+  };
+
+  // Commission Edit Handlers (PUT /riders/{riderId}/transferred-debts/commission)
+  const openEditCommissionModal = (summary: RiderTransferredDebtSummary) => {
+    setCommissionRider(summary);
+    setNewCommissionValue(summary.amounts?.commission ?? 0);
+    setEditCommissionReason("تعديل عمولة المديونية المرحلة للمندوب");
+    setIsEditCommissionOpen(true);
+  };
+
+  const submitEditCommission = async () => {
+    if (!commissionRider) return;
+    if (newCommissionValue === "" || Number(newCommissionValue) < 0) {
+      toast.warning("تنبيه", "يرجى إدخال قيمة صحيحة للعمولة (0 أو أكثر)");
+      return;
+    }
+    if (!editCommissionReason.trim()) {
+      toast.warning("تنبيه", "يرجى كتابة سبب وبيان تعديل العمولة");
+      return;
+    }
+
+    setEditCommissionSubmitting(true);
+    try {
+      await updateJahezRiderTransferredDebtCommission(
+        commissionRider.riderProfileId,
+        {
+          commission: Number(newCommissionValue),
+          reason: editCommissionReason.trim(),
+        },
+      );
+      toast.success("تم التعديل بنجاح", "تم تحديث عمولة المديونية المرحلة للمندوب بنجاح");
+      setIsEditCommissionOpen(false);
+      if (isRiderDrawerOpen && selectedRiderSummary?.riderProfileId === commissionRider.riderProfileId) {
+        const [freshSummary, freshDebts] = await Promise.all([
+          getJahezRiderTransferredDebtsSummary(commissionRider.riderProfileId).catch(() => null),
+          getJahezRiderTransferredDebts(commissionRider.riderProfileId, 1, 50).catch(() => null),
+        ]);
+        if (freshSummary) setSelectedRiderSummary(freshSummary);
+        if (freshDebts) setRiderDetailDebts(freshDebts.items || []);
+      }
+      loadRiderDebts(riderDebtsPage);
+      loadHistoryDebts(historyDebtsPage);
+      loadAllData(page);
+    } catch (err: unknown) {
+      toast.error("فشل تعديل العمولة", err instanceof Error ? err.message : "تعذر تعديل العمولة المرحلة");
+    } finally {
+      setEditCommissionSubmitting(false);
+    }
+  };
+
   // Fee Receipt Handler
   const openFeeModal = () => {
     setFeeHandoverId("");
@@ -791,6 +1094,8 @@ export default function JahezCashboxPage() {
         return "وقود (بترو آب)";
       case Purpose.AccountFee:
         return "رسوم فتح حساب";
+      case Purpose.AccountFeeRefund:
+        return "استرداد رسوم فتح حساب";
       case Purpose.TransferredDebtRepayment:
         return "سداد دين مرحل";
       default:
@@ -837,6 +1142,7 @@ export default function JahezCashboxPage() {
       "عمولة الشركة المعتمدة": m.commission != null ? m.commission : "-",
       "بداية احتساب العمولة": m.startDate || "-",
       "نهاية احتساب العمولة": m.endDate || "-",
+      "رقم الإيصال / المرجع": m.paymentReference || m.reference || "-",
       "التاريخ": m.occurredAtUtc,
       "المندوب الفعلي": m.userRider?.nameAr || m.userRider?.nameEn || "-",
       "إقامة المندوب الفعلي": m.userRider?.iqamaNo || "-",
@@ -910,6 +1216,18 @@ export default function JahezCashboxPage() {
             <Coins className="h-4 w-4" />
             تسجيل إيصال رسوم مستقل
           </Button>
+
+          {canRefundFee && (
+            <Button
+              size="sm"
+              onClick={() => openRefundModal()}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-2"
+              title="استرداد رسوم فتح حساب وسحب الحساب من المندوب"
+            >
+              <RotateCcw className="h-4 w-4" />
+              استرداد رسوم فتح حساب
+            </Button>
+          )}
 
           <Button variant="secondary" size="sm" onClick={handleExportMovements} className="gap-2">
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
@@ -1246,7 +1564,7 @@ export default function JahezCashboxPage() {
                     <th className="py-3 px-3 text-center">تسليم المحاسب</th>
                     <th className="py-3 px-3">التاريخ والوقت</th>
                     <th className="py-3 px-3">البيان</th>
-                    <th className="py-3 px-3 text-center min-w-[210px]">الإجراء</th>
+                    <th className="py-3 px-3 text-center w-14">الإجراء</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -1265,12 +1583,6 @@ export default function JahezCashboxPage() {
                     </tr>
                   ) : (
                     filteredMovements.map((m) => {
-                      const isSettlementDisbursement =
-                        m.purpose === Purpose.Settlement &&
-                        m.direction === Direction.Disbursement &&
-                        Boolean(m.operationId) &&
-                        (m.fund === Fund.Cashbox || m.fund === Fund.Bank);
-
                       const isLockedByHandover = Boolean(m.cashboxHandoverId || m.isHandedToAccountant);
                       const fallbackRider = riderMap.get(m.riderProfileId);
                       const sponsorName = getMovementSponsorName(m);
@@ -1443,11 +1755,25 @@ export default function JahezCashboxPage() {
                           <td className="py-3 px-3 text-gray-400">
                             {m.occurredAtUtc?.slice(0, 16).replace("T", " ")}
                           </td>
-                          <td className="py-3 px-3 text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                            {m.reason}
+                          <td className="py-3 px-3 text-gray-600 dark:text-gray-400 max-w-xs">
+                            <div className="truncate" title={m.reason}>
+                              {m.reason}
+                            </div>
+                            {(m.paymentReference || m.reference) && (
+                              <div
+                                className="text-[10px] text-gray-400 dark:text-gray-500 font-mono flex items-center gap-1 mt-0.5"
+                                title={`رقم الإيصال / مرجع التحويل: ${m.paymentReference || m.reference}`}
+                              >
+                                <span>مرجع:</span>
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                  {m.paymentReference || m.reference}
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <div className="flex items-center justify-center gap-1">
+                              {/* زر تفاصيل الحركة */}
                               <Button
                                 size="sm"
                                 variant="secondary"
@@ -1461,95 +1787,20 @@ export default function JahezCashboxPage() {
                                 <Eye className="h-3.5 w-3.5" />
                               </Button>
 
-                              {isSettlementDisbursement && canEditPayment && (
-                                isLockedByHandover ? (
-                                  <span
-                                    className="inline-flex items-center justify-center h-7 px-2 rounded-xl text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed gap-1 border border-gray-200 dark:border-gray-700"
-                                    title="لا يمكن تعديل طريقة الدفع لأن الحركة مشمولة في تسليم محاسب"
-                                  >
-                                    <Lock className="h-3 w-3" />
-                                    مقفل
-                                  </span>
-                                ) : (
+                              {/* زر استرداد رسوم فتح حساب */}
+                              {m.purpose === Purpose.AccountFee &&
+                                m.direction === Direction.Receipt &&
+                                canRefundFee && (
                                   <Button
                                     size="sm"
                                     variant="secondary"
-                                    onClick={() => {
-                                      const opFallback: Operation = {
-                                        id: m.operationId || "",
-                                        handoverId: m.handoverId,
-                                        mode: OperationMode.Settle,
-                                        status: OperationStatus.Executed,
-                                        paymentStatus: PaymentStatus.Paid,
-                                        throughDate: m.endDate || "",
-                                        effectiveAtUtc: m.occurredAtUtc,
-                                        net: m.net ?? 0,
-                                        commission: m.commission ?? 0,
-                                        calculatedCommission: m.calculatedCommission ?? m.commission ?? 0,
-                                        remaining: m.direction === Direction.Receipt ? m.amount : -m.amount,
-                                        calculationJson: "{}",
-                                        fund: m.fund,
-                                        purpose: m.purpose,
-                                        transferToRider: false,
-                                        paymentReference: m.reference,
-                                        reason: m.reason,
-                                        approvedRequestId: null,
-                                        executedAtUtc: m.occurredAtUtc,
-                                        executedByUserId: m.actorUserId,
-                                        createdAtUtc: m.createdAtUtc,
-                                        createdByUserId: m.createdByUserId,
-                                        updatedAtUtc: null,
-                                        updatedByUserId: null,
-                                        rowVersion: m.operationRowVersion || "",
-                                        isDeleted: false,
-                                        deletedAtUtc: null,
-                                        deletedByUserId: null,
-                                        deletionReason: null,
-                                      };
-                                      setEditPaymentOpId(m.operationId);
-                                      setEditPaymentInitialOp(opFallback);
-                                      setEditPaymentMovement(m);
-                                      setEditPaymentContext({
-                                        riderName:
-                                          m.userRider?.nameAr ||
-                                          m.ownerRider?.nameAr ||
-                                          fallbackRider?.fullNameAr,
-                                        settlementDate: m.occurredAtUtc?.slice(0, 10),
-                                      });
-                                      setIsEditPaymentOpen(true);
-                                    }}
-                                    className="h-7 px-2 text-[11px] font-bold gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900 shadow-2xs"
-                                    title="تعديل طريقة صرف التصفية (الخزنة ↔ الحساب البنكي)"
+                                    onClick={() => openRefundModal(m.handoverId, m)}
+                                    className="h-7 w-7 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/60"
+                                    title="استرداد رسوم فتح حساب وسحب الحساب"
                                   >
-                                    <Edit3 className="h-3 w-3" />
-                                    تعديل الدفع
+                                    <RotateCcw className="h-3.5 w-3.5" />
                                   </Button>
-                                )
-                              )}
-
-                              {/* زر تصحيح تاريخ بداية احتساب العمولة */}
-                              {(Boolean(m.operationId) || m.purpose === Purpose.Settlement || Boolean(m.startDate || m.endDate)) && canCorrectCommission && (
-                                isLockedByHandover ? (
-                                  <span
-                                    className="inline-flex items-center justify-center h-7 px-2 rounded-xl text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed gap-1 border border-gray-200 dark:border-gray-700"
-                                    title="لا يمكن تصحيح احتساب العمولة لأن الحركة مشمولة في تسليم محاسب معلق أو معتمد (يمكن إلغاء التسليم المعلق أولاً ثم إجراء التصحيح)"
-                                  >
-                                    <Lock className="h-3 w-3" />
-                                    تصحيح التاريخ
-                                  </span>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() => openCorrectCommissionModal(m)}
-                                    className="h-7 px-2.5 text-[11px] font-bold gap-1 text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-700 shadow-2xs"
-                                    title="تصحيح تاريخ بداية احتساب عمولة التصفية"
-                                  >
-                                    <CalendarCheck className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
-                                    <span>تصحيح تاريخ العمولة</span>
-                                  </Button>
-                                )
-                              )}
+                                )}
                             </div>
                           </td>
                         </tr>
@@ -1806,19 +2057,31 @@ export default function JahezCashboxPage() {
                               )}
                             </td>
                             <td className="py-3 px-3 text-center font-mono">
-                              {hasAmounts ? (
-                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                                  {Number(s.amounts!.commission).toFixed(2)} ر.س
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
+                              <div className="flex items-center justify-center gap-1">
+                                {hasAmounts ? (
+                                  <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                    {Number(s.amounts!.commission).toFixed(2)} ر.س
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                                {canEditCommission && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditCommissionModal(s)}
+                                    className="p-1 rounded-md text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
+                                    title="تعديل عمولة المديونية المرحلة للمندوب"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3 px-3 text-center font-mono font-black text-rose-700 dark:text-rose-400 text-sm">
                               {Number(s.outstandingAmount).toFixed(2)} ر.س
                             </td>
                             <td className="py-3 px-3 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
                                 <Button
                                   size="sm"
                                   variant="secondary"
@@ -1830,13 +2093,35 @@ export default function JahezCashboxPage() {
                                   <span>التفاصيل</span>
                                 </Button>
                                 {canRepayDebt && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => openPartialRepayModal(s)}
+                                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-7 text-xs shadow-xs"
+                                      title="سداد جزئي لمديونية المندوب المرحلية"
+                                    >
+                                      سداد جزئي
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => openBulkRepayModal(s)}
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 text-xs shadow-xs"
+                                      title="تحصيل وسداد كامل المديونيات المرحلة لهذا المندوب"
+                                    >
+                                      سداد كامل المستحق المرحّل
+                                    </Button>
+                                  </>
+                                )}
+                                {canEditCommission && (
                                   <Button
                                     size="sm"
-                                    onClick={() => openBulkRepayModal(s)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 text-xs shadow-xs"
-                                    title="تحصيل وسداد كامل المديونيات المرحلة لهذا المندوب"
+                                    variant="secondary"
+                                    onClick={() => openEditCommissionModal(s)}
+                                    className="h-7 text-xs font-bold gap-1 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                    title="تعديل عمولة المديونية المرحلة"
                                   >
-                                    سداد كامل المستحق المرحّل
+                                    <Edit3 className="h-3 w-3" />
+                                    <span>تعديل العمولة</span>
                                   </Button>
                                 )}
                               </div>
@@ -2487,6 +2772,236 @@ export default function JahezCashboxPage() {
       </Modal>
 
       {/* ================================================================= */}
+      {/* Partial Transferred Debt Repayment Modal                         */}
+      {/* ================================================================= */}
+      <Modal
+        isOpen={isPartialRepayOpen}
+        onClose={() => setIsPartialRepayOpen(false)}
+        title="سداد جزئي لمديونية المندوب المرحلة"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4 text-xs" dir="rtl">
+          {partialRepayRider && (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+                <div className="font-bold text-sm mb-1">
+                  المندوب: {partialRepayRider.userRider?.nameAr || partialRepayRider.userRider?.nameEn || "بيانات المندوب غير متاحة"}
+                </div>
+                <div className="text-[11px] text-gray-600 dark:text-gray-300 flex items-center gap-2 font-mono">
+                  <span>إقامة: {partialRepayRider.userRider?.iqamaNo || "-"}</span>
+                  <span>•</span>
+                  <span>الديون غير المسددة: {partialRepayRider.unpaidDebtCount}</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-blue-200/80 dark:border-blue-800/80 flex items-center justify-between">
+                  <span className="font-semibold text-[11px]">إجمالي المديونية الحالية:</span>
+                  <span className="font-mono font-black text-rose-700 dark:text-rose-400 text-sm">
+                    {Number(partialRepayRider.outstandingAmount).toFixed(2)} ر.س
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  المبلغ المراد سداده جزئياً (ر.س) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={partialRepayRider.outstandingAmount}
+                  value={partialRepayAmount}
+                  onChange={(e) => setPartialRepayAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder={`الحد الأقصى: ${Number(partialRepayRider.outstandingAmount).toFixed(2)} ر.س`}
+                  className="font-mono text-sm font-bold"
+                />
+                {Number(partialRepayAmount) > 0 && (
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 font-mono">
+                    <span>المتبقي بعد السداد:</span>
+                    <span className="font-bold text-gray-800 dark:text-gray-200">
+                      {Math.max(0, partialRepayRider.outstandingAmount - Number(partialRepayAmount)).toFixed(2)} ر.س
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  الجهة المالية المستلمة
+                </label>
+                <select
+                  value={partialRepayFund}
+                  onChange={(e) => setPartialRepayFund(Number(e.target.value) as Fund)}
+                  className="w-full rounded-xl border border-gray-300 bg-white p-2.5 text-xs text-gray-900 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                >
+                  <option value={Fund.Cashbox}>صندوق الخزنة (نقدياً)</option>
+                  <option value={Fund.Bank}>حساب البنك (تحويل)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  رقم الإيصال / المرجع الفعلي *
+                </label>
+                <Input
+                  value={partialRepayRef}
+                  onChange={(e) => setPartialRepayRef(e.target.value)}
+                  placeholder="مثال: RCPT-20261024-001"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  البيان والسبب *
+                </label>
+                <Input
+                  value={partialRepayReason}
+                  onChange={(e) => setPartialRepayReason(e.target.value)}
+                  placeholder="بيان حركة السداد الجزئي"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsPartialRepayOpen(false)}
+                  disabled={partialRepaySubmitting}
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  onClick={submitPartialRepayment}
+                  disabled={
+                    partialRepaySubmitting ||
+                    !partialRepayRef.trim() ||
+                    !partialRepayReason.trim() ||
+                    Number(partialRepayAmount) <= 0 ||
+                    Number(partialRepayAmount) > partialRepayRider.outstandingAmount
+                  }
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                >
+                  {partialRepaySubmitting ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    `تأكيد سداد ${Number(partialRepayAmount || 0).toFixed(2)} ر.س جزئياً`
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ================================================================= */}
+      {/* Edit Transferred Debt Commission Modal                           */}
+      {/* ================================================================= */}
+      <Modal
+        isOpen={isEditCommissionOpen}
+        onClose={() => setIsEditCommissionOpen(false)}
+        title="تعديل عمولة المديونية المرحلة للمندوب"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4 text-xs" dir="rtl">
+          {commissionRider && (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                <div className="font-bold text-sm mb-1">
+                  المندوب: {commissionRider.userRider?.nameAr || commissionRider.userRider?.nameEn || "بيانات المندوب غير متاحة"}
+                </div>
+                <div className="text-[11px] text-gray-600 dark:text-gray-300 flex items-center gap-2 font-mono">
+                  <span>إقامة: {commissionRider.userRider?.iqamaNo || "-"}</span>
+                  <span>•</span>
+                  <span>الديون: {commissionRider.unpaidDebtCount}</span>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-amber-200/80 dark:border-amber-800/80 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <span className="text-[10px] text-gray-500 block">مديونية الداشبورد</span>
+                    <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                      {Number(commissionRider.amounts?.dashboardDebt ?? 0).toFixed(2)} ر.س
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 block">العمولة الحالية</span>
+                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                      {Number(commissionRider.amounts?.commission ?? 0).toFixed(2)} ر.س
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 block">إجمالي المستحق</span>
+                    <span className="font-mono font-black text-rose-700 dark:text-rose-400">
+                      {Number(commissionRider.outstandingAmount).toFixed(2)} ر.س
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  قيمة العمولة الجديدة (ر.س) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newCommissionValue}
+                  onChange={(e) => setNewCommissionValue(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="أدخل قيمة العمولة الجديدة"
+                  className="font-mono text-sm font-bold"
+                />
+                {newCommissionValue !== "" && (
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 font-mono">
+                    <span>إجمالي المستحق المتوقع بعد التعديل:</span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      {(
+                        Number(commissionRider.amounts?.dashboardDebt ?? 0) +
+                        Number(newCommissionValue)
+                      ).toFixed(2)} ر.س
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  سبب وبيان التعديل *
+                </label>
+                <Input
+                  value={editCommissionReason}
+                  onChange={(e) => setEditCommissionReason(e.target.value)}
+                  placeholder="سبب تعديل العمولة (مثال: خصم إداري أو تسوية خاصة)"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsEditCommissionOpen(false)}
+                  disabled={editCommissionSubmitting}
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  onClick={submitEditCommission}
+                  disabled={
+                    editCommissionSubmitting ||
+                    newCommissionValue === "" ||
+                    Number(newCommissionValue) < 0 ||
+                    !editCommissionReason.trim()
+                  }
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                >
+                  {editCommissionSubmitting ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "تأكيد وحفظ تعديل العمولة"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ================================================================= */}
       {/* Rider Transferred Debt Details Drawer / Modal                    */}
       {/* ================================================================= */}
       <Modal
@@ -2529,12 +3044,20 @@ export default function JahezCashboxPage() {
                     </span>
                   </div>
                   {canRepayDebt && (
-                    <Button
-                      onClick={() => openBulkRepayModal(selectedRiderSummary)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-xs shrink-0"
-                    >
-                      سداد كامل المستحق
-                    </Button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        onClick={() => openPartialRepayModal(selectedRiderSummary)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-8 text-xs"
+                      >
+                        سداد جزئي
+                      </Button>
+                      <Button
+                        onClick={() => openBulkRepayModal(selectedRiderSummary)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-xs shrink-0"
+                      >
+                        سداد كامل المستحق
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2549,7 +3072,19 @@ export default function JahezCashboxPage() {
                     </span>
                   </div>
                   <div className="rounded-xl bg-white p-3 border border-gray-200 dark:border-gray-800 dark:bg-gray-900 text-center shadow-xs">
-                    <span className="text-[10px] text-gray-500 font-medium block">العمولة المستحقة للشركة</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="text-[10px] text-gray-500 font-medium">العمولة المستحقة للشركة</span>
+                      {canEditCommission && (
+                        <button
+                          type="button"
+                          onClick={() => openEditCommissionModal(selectedRiderSummary)}
+                          className="p-0.5 text-gray-400 hover:text-amber-600"
+                          title="تعديل العمولة"
+                        >
+                          <Edit3 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                     <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-0.5 block">
                       {Number(selectedRiderSummary.amounts.commission).toFixed(2)} ر.س
                     </span>
@@ -2987,6 +3522,50 @@ export default function JahezCashboxPage() {
         </div>
       </Modal>
 
+      {/* Modal: Edit Settlement Net */}
+      <EditSettlementNetModal
+        isOpen={isEditNetOpen}
+        onClose={() => {
+          setIsEditNetOpen(false);
+          setEditNetMovement(null);
+          if (returnToDetailsAfterEdit) {
+            setReturnToDetailsAfterEdit(false);
+            setIsDetailsOpen(true);
+          }
+        }}
+        movement={editNetMovement}
+        operationId={editNetMovement?.operationId}
+        contextInfo={{
+          riderName:
+            editNetMovement?.userRider?.nameAr ||
+            editNetMovement?.ownerRider?.nameAr ||
+            riderMap.get(editNetMovement?.riderProfileId || "")?.fullNameAr,
+          accountCode: editNetMovement?.platformAccountId,
+          settlementDate: editNetMovement?.occurredAtUtc?.slice(0, 10),
+        }}
+        canSettle={canSettle}
+        canApproveAdjustment={canApproveAdjustment}
+        canReceive={canReceive}
+        canDisburse={canDisburse}
+        onOpenEditPayment={() => {
+          if (editNetMovement) {
+            openEditPaymentModal(editNetMovement, returnToDetailsAfterEdit);
+          }
+        }}
+        onOpenCorrectCommission={() => {
+          if (editNetMovement) {
+            openCorrectCommissionModal(editNetMovement, returnToDetailsAfterEdit);
+          }
+        }}
+        onSuccess={(updatedOp) => {
+          handleOperationUpdated(updatedOp);
+          if (returnToDetailsAfterEdit) {
+            setReturnToDetailsAfterEdit(false);
+            setIsDetailsOpen(true);
+          }
+        }}
+      />
+
       {/* Modal: Edit Payment Method */}
       <EditPaymentMethodModal
         isOpen={isEditPaymentOpen}
@@ -2995,6 +3574,10 @@ export default function JahezCashboxPage() {
           setEditPaymentOpId(null);
           setEditPaymentInitialOp(null);
           setEditPaymentMovement(null);
+          if (returnToDetailsAfterEdit) {
+            setReturnToDetailsAfterEdit(false);
+            setIsDetailsOpen(true);
+          }
         }}
         operationId={editPaymentOpId}
         initialOperation={editPaymentInitialOp}
@@ -3003,11 +3586,15 @@ export default function JahezCashboxPage() {
         canDisburse={canDisburse}
         onOpenCorrectCommission={() => {
           if (editPaymentMovement) {
-            openCorrectCommissionModal(editPaymentMovement);
+            openCorrectCommissionModal(editPaymentMovement, returnToDetailsAfterEdit);
           }
         }}
-        onSuccess={() => {
-          loadAllData(page);
+        onSuccess={(updatedOp) => {
+          handleOperationUpdated(updatedOp);
+          if (returnToDetailsAfterEdit) {
+            setReturnToDetailsAfterEdit(false);
+            setIsDetailsOpen(true);
+          }
         }}
       />
 
@@ -3017,6 +3604,10 @@ export default function JahezCashboxPage() {
         onClose={() => {
           setIsCorrectCommissionOpen(false);
           setCorrectCommissionMovement(null);
+          if (returnToDetailsAfterEdit) {
+            setReturnToDetailsAfterEdit(false);
+            setIsDetailsOpen(true);
+          }
         }}
         movement={correctCommissionMovement}
         canSettle={canSettle}
@@ -3024,23 +3615,10 @@ export default function JahezCashboxPage() {
         canReceive={canReceive}
         canDisburse={canDisburse}
         onSuccess={(updatedOp) => {
-          loadAllData(page);
-          if (selectedMovement && selectedMovement.operationId === updatedOp.id) {
-            setSelectedMovement((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    commission: updatedOp.commission,
-                    calculatedCommission: updatedOp.calculatedCommission,
-                    startDate: updatedOp.commissionStartDate || prev.startDate,
-                    operationRowVersion: updatedOp.rowVersion,
-                    amount: Math.abs(updatedOp.remaining),
-                    direction: updatedOp.remaining >= 0 ? Direction.Receipt : Direction.Disbursement,
-                    fund: updatedOp.fund ?? prev.fund,
-                    reference: updatedOp.paymentReference ?? prev.reference,
-                  }
-                : null,
-            );
+          handleOperationUpdated(updatedOp);
+          if (returnToDetailsAfterEdit) {
+            setReturnToDetailsAfterEdit(false);
+            setIsDetailsOpen(true);
           }
         }}
       />
@@ -3069,6 +3647,14 @@ export default function JahezCashboxPage() {
                   {selectedMovement.platformAccountId && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 font-mono">
                       حساب: {selectedMovement.platformAccountId}
+                    </span>
+                  )}
+                  {(selectedMovement.paymentReference || selectedMovement.reference) && (
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 font-mono"
+                      title="رقم الإيصال أو مرجع التحويل الفعلي"
+                    >
+                      إيصال / مرجع: {selectedMovement.paymentReference || selectedMovement.reference}
                     </span>
                   )}
                 </div>
@@ -3224,37 +3810,226 @@ export default function JahezCashboxPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-3 border-t">
-              <div>
-                {selectedMovement.purpose === Purpose.Settlement &&
-                  Boolean(selectedMovement.operationId) &&
-                  canCorrectCommission && (
-                    Boolean(selectedMovement.cashboxHandoverId || selectedMovement.isHandedToAccountant) ? (
-                      <span
-                        className="inline-flex items-center justify-center h-8 px-2.5 rounded-xl text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed gap-1.5 border border-gray-200 dark:border-gray-700"
-                        title="لا يمكن تصحيح احتساب العمولة لأن الحركة مشمولة في تسليم محاسب معلق أو معتمد"
-                      >
-                        <Lock className="h-3.5 w-3.5" />
-                        مشمولة في تسليم محاسب (مقفل)
-                      </span>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          const m = selectedMovement;
-                          setIsDetailsOpen(false);
-                          openCorrectCommissionModal(m);
-                        }}
-                        className="h-8 px-3 text-xs font-bold gap-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900 shadow-2xs"
-                        title="تصحيح بداية احتساب عمولة التصفية"
-                      >
-                        <CalendarCheck className="h-3.5 w-3.5" />
-                        تصحيح بداية احتساب العمولة
-                      </Button>
-                    )
+            {/* قسم إجراءات وتصحيح التصفية (الثلاث نقاط نهاية) */}
+            {(selectedMovement.purpose === Purpose.Settlement || Boolean(selectedMovement.operationId)) && (
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 bg-gradient-to-br from-gray-50/90 via-white to-gray-50/50 dark:from-gray-800/60 dark:via-gray-900 dark:to-gray-800/40 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5 text-xs">
+                    <Sparkles className="h-4 w-4 text-emerald-600" />
+                    <span>إجراءات وتصحيح التصفية (3 عمليات متاحة)</span>
+                  </div>
+                  {Boolean(selectedMovement.cashboxHandoverId || selectedMovement.isHandedToAccountant) && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 px-2.5 py-0.5 rounded-lg border border-amber-200 dark:border-amber-800 font-medium">
+                      <Lock className="h-3 w-3" />
+                      مشمولة في تسليم محاسب (مقفل)
+                    </span>
                   )}
-              </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* 1. تعديل صافي المبلغ المُدخل للتصفية */}
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
+                    <div className="space-y-1">
+                      <div className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <Coins className="h-4 w-4 text-emerald-600" />
+                        <span>تعديل صافي المبلغ</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-relaxed">
+                        تعديل صافي التصفية ومتبقي الدفع وحركة الخزنة النقدية
+                      </p>
+                    </div>
+                    <div>
+                      {Boolean(selectedMovement.cashboxHandoverId || selectedMovement.isHandedToAccountant) ? (
+                        <span
+                          className="w-full inline-flex items-center justify-center h-7 rounded-lg text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed gap-1 border border-gray-200 dark:border-gray-700"
+                          title="لا يمكن تعديل الصافي لأن الحركة مشمولة في تسليم محاسب"
+                        >
+                          <Lock className="h-3 w-3" />
+                          مقفل في تسليم
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const m = selectedMovement;
+                            setIsDetailsOpen(false);
+                            openEditNetModal(m, true);
+                          }}
+                          disabled={!canEditNet}
+                          className="w-full h-7 text-[11px] font-bold gap-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 shadow-2xs"
+                          title="تعديل صافي المبلغ المُدخل للتصفية (PUT /operations/{id}/net)"
+                        >
+                          <Coins className="h-3 w-3" />
+                          <span>تعديل الصافي</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 2. تعديل طريقة الدفع */}
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
+                    <div className="space-y-1">
+                      <div className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <CreditCard className="h-4 w-4 text-indigo-600" />
+                        <span>تعديل طريقة الدفع</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-relaxed">
+                        التحويل بين نقدية الخزنة والحساب البنكي لصرف التصفية
+                      </p>
+                    </div>
+                    <div>
+                      {Boolean(selectedMovement.cashboxHandoverId || selectedMovement.isHandedToAccountant) ? (
+                        <span
+                          className="w-full inline-flex items-center justify-center h-7 rounded-lg text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed gap-1 border border-gray-200 dark:border-gray-700"
+                          title="لا يمكن تعديل طريقة الدفع لأن الحركة مشمولة في تسليم محاسب"
+                        >
+                          <Lock className="h-3 w-3" />
+                          مقفل في تسليم
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const m = selectedMovement;
+                            setIsDetailsOpen(false);
+                            openEditPaymentModal(m, true);
+                          }}
+                          disabled={!canEditPayment}
+                          className="w-full h-7 text-[11px] font-bold gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-900 shadow-2xs"
+                          title="تعديل طريقة صرف التصفية (PUT /operations/{id}/payment-method)"
+                        >
+                          <CreditCard className="h-3 w-3" />
+                          <span>تعديل الدفع</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 3. تصحيح تاريخ بداية احتساب العمولة */}
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
+                    <div className="space-y-1">
+                      <div className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <CalendarCheck className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                        <span>تصحيح تاريخ العمولة</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-relaxed">
+                        تحديد وتصحيح تاريخ بداية احتساب عمولة التصفية
+                      </p>
+                    </div>
+                    <div>
+                      {Boolean(selectedMovement.cashboxHandoverId || selectedMovement.isHandedToAccountant) ? (
+                        <span
+                          className="w-full inline-flex items-center justify-center h-7 rounded-lg text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed gap-1 border border-gray-200 dark:border-gray-700"
+                          title="لا يمكن تصحيح احتساب العمولة لأن الحركة مشمولة في تسليم محاسب"
+                        >
+                          <Lock className="h-3 w-3" />
+                          مقفل في تسليم
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const m = selectedMovement;
+                            setIsDetailsOpen(false);
+                            openCorrectCommissionModal(m, true);
+                          }}
+                          disabled={!canCorrectCommission}
+                          className="w-full h-7 text-[11px] font-bold gap-1 text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-300 dark:bg-teal-950/60 dark:text-teal-200 dark:border-teal-800 shadow-2xs"
+                          title="تصحيح تاريخ بداية احتساب العمولة (PUT /operations/{id}/commission-start)"
+                        >
+                          <CalendarCheck className="h-3 w-3" />
+                          <span>تصحيح التاريخ</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* قسم تفاصيل واسترداد رسوم فتح حساب */}
+            {(selectedMovement.purpose === Purpose.AccountFee ||
+              selectedMovement.purpose === Purpose.AccountFeeRefund) && (
+              <div className="rounded-2xl border border-rose-200 dark:border-rose-900/60 p-4 bg-gradient-to-br from-rose-50/50 via-white to-amber-50/40 dark:from-rose-950/30 dark:via-gray-900 dark:to-amber-950/20 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5 text-xs">
+                    <RotateCcw className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    <span>
+                      {selectedMovement.purpose === Purpose.AccountFeeRefund
+                        ? "تفاصيل حركة استرداد رسوم فتح الحساب"
+                        : "بيانات رسوم فتح الحساب وإمكانية الاسترداد"}
+                    </span>
+                  </div>
+                  {movementRefundHistory ? (
+                    <Badge tone="green">تم استرداد الرسوم لهذه الجلسة</Badge>
+                  ) : selectedMovement.purpose === Purpose.AccountFee ? (
+                    <Badge tone="blue">جلسة إسناد نشطة</Badge>
+                  ) : (
+                    <Badge tone="gray">حركة استرداد منفذة</Badge>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-gray-500 block">معرف الجلسة / فترة التسليم:</span>
+                      <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                        {selectedMovement.handoverId || "غير محدد"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">مبلغ الحركة:</span>
+                      <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                        {selectedMovement.amount.toFixed(2)} ر.س
+                      </span>
+                    </div>
+                  </div>
+
+                  {loadingMovementRefundHistory ? (
+                    <div className="py-2 text-center text-gray-400 text-[11px] flex items-center justify-center gap-1">
+                      <RefreshCw className="h-3 w-3 animate-spin text-amber-500" />
+                      <span>جارٍ التحقق من سجل استرداد الرسوم...</span>
+                    </div>
+                  ) : movementRefundHistory ? (
+                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 p-2.5 border border-emerald-200 dark:border-emerald-800 text-[11px] space-y-1">
+                      <div className="font-bold text-emerald-900 dark:text-emerald-200">
+                        سجل الاسترداد المعتمد:
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 font-mono text-emerald-800 dark:text-emerald-300">
+                        <div>مبلغ الاسترداد المصروف: {Number(movementRefundHistory.refundAmount).toFixed(2)} ر.س</div>
+                        <div>المرجع: {movementRefundHistory.reference}</div>
+                        <div>العمولة: {movementRefundHistory.waiveCommission ? "إعفاء كامل" : "مخصومة"}</div>
+                        <div>التاريخ: {movementRefundHistory.createdAtUtc?.slice(0, 16).replace("T", " ")}</div>
+                      </div>
+                    </div>
+                  ) : selectedMovement.purpose === Purpose.AccountFee && selectedMovement.direction === Direction.Receipt ? (
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <p className="text-[10px] text-gray-500 leading-relaxed">
+                        يمكن استرداد رسوم فتح الحساب خلال مهلة 7 أيام من بدء الإسناد وسحب الحساب وإعادته متاحاً فوراً.
+                      </p>
+                      {canRefundFee && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const hid = selectedMovement.handoverId;
+                            const mv = selectedMovement;
+                            setIsDetailsOpen(false);
+                            openRefundModal(hid, mv);
+                          }}
+                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1.5 shrink-0 text-xs shadow-xs"
+                          title="استرداد رسوم فتح حساب وسحب الحساب"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>استرداد الرسوم وسحب الحساب</span>
+                        </Button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end pt-3 border-t">
               <Button variant="secondary" onClick={() => setIsDetailsOpen(false)}>
                 إغلاق
               </Button>
@@ -3262,6 +4037,24 @@ export default function JahezCashboxPage() {
           </div>
         )}
       </Modal>
+
+      {/* Modal: Refund Account Fee */}
+      <RefundAccountFeeModal
+        isOpen={isRefundOpen}
+        onClose={() => {
+          setIsRefundOpen(false);
+          setRefundMovement(null);
+          setRefundAccount(null);
+          setRefundHandoverId("");
+        }}
+        handoverId={refundHandoverId}
+        account={refundAccount}
+        movement={refundMovement}
+        availableHandovers={handoverOptions}
+        onSuccess={() => {
+          loadAllData(page);
+        }}
+      />
     </div>
   );
 }
