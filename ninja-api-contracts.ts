@@ -10,6 +10,72 @@ export type Guid = string;
 export type DateOnly = string; // Formatted YYYY-MM-DD
 export type UtcTimestamp = string; // ISO 8601 UTC timestamp
 
+export type NinjaRiderType =
+  | "InternalCar"
+  | "ExternalCar"
+  | "InternalMotorcycle"
+  | "ExternalMotorcycle";
+
+export type NinjaPaymentModel = "PayPerOrder" | "Salary";
+
+export interface NinjaRiderTypeOption {
+  value: NinjaRiderType;
+  labelEn: string;
+  labelAr: string;
+}
+
+export const NINJA_RIDER_TYPES: readonly NinjaRiderTypeOption[] = [
+  { value: "InternalCar", labelEn: "Internal car", labelAr: "سيارة داخلي" },
+  { value: "ExternalCar", labelEn: "External car", labelAr: "سيارة خارجي" },
+  { value: "InternalMotorcycle", labelEn: "Internal motorcycle", labelAr: "دراجة نارية داخلي" },
+  { value: "ExternalMotorcycle", labelEn: "External motorcycle", labelAr: "دراجة نارية خارجي" },
+] as const;
+
+export interface NinjaPaymentModelOption {
+  value: NinjaPaymentModel;
+  labelEn: string;
+  labelAr: string;
+}
+
+export const NINJA_PAYMENT_MODELS: readonly NinjaPaymentModelOption[] = [
+  { value: "PayPerOrder", labelEn: "Commission", labelAr: "عمولة" },
+  { value: "Salary", labelEn: "Salary", labelAr: "بالراتب" },
+] as const;
+
+export function getNinjaRiderTypeLabel(
+  type?: string | null,
+  isEn = false
+): string {
+  if (!type) return isEn ? "Unknown" : "غير محدد";
+  switch (type) {
+    case "InternalCar":
+      return isEn ? "Internal car" : "سيارة داخلي";
+    case "ExternalCar":
+      return isEn ? "External car" : "سيارة خارجي";
+    case "InternalMotorcycle":
+      return isEn ? "Internal motorcycle" : "دراجة نارية داخلي";
+    case "ExternalMotorcycle":
+      return isEn ? "External motorcycle" : "دراجة نارية خارجي";
+    default:
+      return type;
+  }
+}
+
+export function getNinjaPaymentModelLabel(
+  model?: string | null,
+  isEn = false
+): string {
+  if (!model) return "—";
+  switch (model) {
+    case "PayPerOrder":
+      return isEn ? "Commission" : "عمولة";
+    case "Salary":
+      return isEn ? "Salary" : "بالراتب";
+    default:
+      return model;
+  }
+}
+
 export const ninjaPaths = {
   // Accounts & Lifecycle
   accounts: "/api/ninja/accounts",
@@ -137,6 +203,7 @@ export interface NinjaAccountResponse {
   sponsorNameAr?: string | null;
   sponsorNameEn?: string | null;
   paymentModel?: string | null;
+  riderType?: NinjaRiderType | string | null;
   assignmentEffectiveFrom?: DateOnly | null;
 }
 
@@ -154,6 +221,8 @@ export interface NinjaAssignRequest {
   actualRiderProfileId: Guid;
   effectiveFrom: DateOnly;
   phoneNumber: string;
+  riderType: NinjaRiderType | string;
+  paymentModel: NinjaPaymentModel | string;
   newPassword?: string | null;
   reason?: string | null;
   wasBackdated?: boolean;
@@ -213,6 +282,7 @@ export interface NinjaAssignmentResponse {
   id: Guid;
   accountId: Guid;
   paymentModel: string;
+  riderType?: NinjaRiderType | string | null;
   actualRiderProfileId: Guid;
   actualEmployeeId: Guid;
   actualRiderNameAr: string;

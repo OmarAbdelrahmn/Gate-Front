@@ -19,6 +19,12 @@ import {
   formatRiyadhDateTime,
   isCooldownActive,
   formatRemainingCooldown,
+  getNinjaRiderTypeLabel,
+  getNinjaPaymentModelLabel,
+  NINJA_RIDER_TYPES,
+  NINJA_PAYMENT_MODELS,
+  type NinjaRiderType,
+  type NinjaPaymentModel,
   type NinjaAccountResponse,
   type NinjaAccountStatusRequest,
   type NinjaAccountComparisonResponse,
@@ -85,6 +91,8 @@ import {
   MapPin,
   Building2,
   Activity,
+  Car,
+  Bike,
 } from "lucide-react";
 import { DayUsageFields } from "@/components/shared/DayUsageFields";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
@@ -140,6 +148,8 @@ export default function NinjaAccountsPage() {
   const [colFilterOwners, setColFilterOwners] = useState<string[]>([]);
   const [colFilterCitySponsor, setColFilterCitySponsor] = useState<string[]>([]);
   const [colFilterRiders, setColFilterRiders] = useState<string[]>([]);
+  const [colFilterRiderType, setColFilterRiderType] = useState<string[]>([]);
+  const [colFilterPaymentModel, setColFilterPaymentModel] = useState<string[]>([]);
   const [colFilterPhone, setColFilterPhone] = useState<string[]>([]);
   const [colFilterPasswordCooldown, setColFilterPasswordCooldown] = useState<string[]>([]);
   const [colFilterSheet, setColFilterSheet] = useState<string[]>([]);
@@ -159,6 +169,8 @@ export default function NinjaAccountsPage() {
   // 2. Assign Modal
   const [assigningAccount, setAssigningAccount] = useState<NinjaAccountResponse | null>(null);
   const [assignRiderId, setAssignRiderId] = useState("");
+  const [assignRiderType, setAssignRiderType] = useState<string>("");
+  const [assignPaymentModel, setAssignPaymentModel] = useState<string>("");
   const [showAllRidersInAssign, setShowAllRidersInAssign] = useState(false);
   const [assignEffectiveFrom, setAssignEffectiveFrom] = useState(todayRiyadh);
   const [assignPhone, setAssignPhone] = useState("");
@@ -650,6 +662,89 @@ export default function NinjaAccountsPage() {
     return options;
   }, [accounts]);
 
+  // 6. Rider Type Filter Options
+  const riderTypeFilterOptions: FilterOption[] = useMemo(() => {
+    let internalCarCount = 0;
+    let externalCarCount = 0;
+    let internalMotorcycleCount = 0;
+    let externalMotorcycleCount = 0;
+    let unrecordedCount = 0;
+
+    for (const a of accounts) {
+      if (a.riderType === "InternalCar") internalCarCount++;
+      else if (a.riderType === "ExternalCar") externalCarCount++;
+      else if (a.riderType === "InternalMotorcycle") internalMotorcycleCount++;
+      else if (a.riderType === "ExternalMotorcycle") externalMotorcycleCount++;
+      else unrecordedCount++;
+    }
+
+    return [
+      {
+        value: "InternalCar",
+        label: isEn ? "Internal car" : "سيارة داخلي",
+        sublabel: isEn ? "Company Car" : "سيارة داخلي (InternalCar)",
+        count: internalCarCount,
+      },
+      {
+        value: "ExternalCar",
+        label: isEn ? "External car" : "سيارة خارجي",
+        sublabel: isEn ? "Private Car" : "سيارة خارجي (ExternalCar)",
+        count: externalCarCount,
+      },
+      {
+        value: "InternalMotorcycle",
+        label: isEn ? "Internal motorcycle" : "دراجة نارية داخلي",
+        sublabel: isEn ? "Company Motorcycle" : "دراجة نارية داخلي (InternalMotorcycle)",
+        count: internalMotorcycleCount,
+      },
+      {
+        value: "ExternalMotorcycle",
+        label: isEn ? "External motorcycle" : "دراجة نارية خارجي",
+        sublabel: isEn ? "Private Motorcycle" : "دراجة نارية خارجي (ExternalMotorcycle)",
+        count: externalMotorcycleCount,
+      },
+      {
+        value: "UNRECORDED",
+        label: isEn ? "Unknown / Unassigned" : "غير محدد / شاغر",
+        sublabel: isEn ? "Legacy assignments without rider type or unassigned" : "تعيينات قديمة بدون نوع أو حسابات شاغرة",
+        count: unrecordedCount,
+      },
+    ];
+  }, [accounts, isEn]);
+
+  // 7. Payment Model Filter Options
+  const paymentModelFilterOptions: FilterOption[] = useMemo(() => {
+    let payPerOrderCount = 0;
+    let salaryCount = 0;
+    let unsetCount = 0;
+
+    for (const a of accounts) {
+      if (a.paymentModel === "PayPerOrder") payPerOrderCount++;
+      else if (a.paymentModel === "Salary") salaryCount++;
+      else unsetCount++;
+    }
+
+    return [
+      {
+        value: "PayPerOrder",
+        label: isEn ? "Commission" : "عمولة",
+        sublabel: isEn ? "Pay Per Order" : "عمولة بالطلب (PayPerOrder)",
+        count: payPerOrderCount,
+      },
+      {
+        value: "Salary",
+        label: isEn ? "Salary" : "بالراتب",
+        sublabel: isEn ? "Monthly Salary" : "راتب شهري (Salary)",
+        count: salaryCount,
+      },
+      {
+        value: "UNSET",
+        label: isEn ? "Not specified" : "غير محدد",
+        count: unsetCount,
+      },
+    ];
+  }, [accounts, isEn]);
+
   // 6. Login Phone Filter Options
   const phoneFilterOptions: FilterOption[] = useMemo(() => {
     let withPhoneCount = 0;
@@ -821,6 +916,10 @@ export default function NinjaAccountsPage() {
         const riderIqama = (a.actualRider?.iqamaNo || "").toLowerCase();
         const cityName = (cityMap.get(a.operatingCityId) || a.operatingCityNameAr || "").toLowerCase();
         const sponsorName = (sponsorMap.get(a.sponsorId || "") || a.sponsorNameAr || "").toLowerCase();
+        const riderTypeAr = getNinjaRiderTypeLabel(a.riderType, false).toLowerCase();
+        const riderTypeEn = getNinjaRiderTypeLabel(a.riderType, true).toLowerCase();
+        const paymentModelAr = getNinjaPaymentModelLabel(a.paymentModel, false).toLowerCase();
+        const paymentModelEn = getNinjaPaymentModelLabel(a.paymentModel, true).toLowerCase();
         return (
           captain.includes(q) ||
           code.includes(q) ||
@@ -832,7 +931,11 @@ export default function NinjaAccountsPage() {
           riderEn.includes(q) ||
           riderIqama.includes(q) ||
           cityName.includes(q) ||
-          sponsorName.includes(q)
+          sponsorName.includes(q) ||
+          riderTypeAr.includes(q) ||
+          riderTypeEn.includes(q) ||
+          paymentModelAr.includes(q) ||
+          paymentModelEn.includes(q)
         );
       });
     }
@@ -937,6 +1040,26 @@ export default function NinjaAccountsPage() {
       });
     }
 
+    // Column Filter: Rider Type
+    if (colFilterRiderType.length > 0) {
+      result = result.filter((a) => {
+        return colFilterRiderType.some((val) => {
+          if (val === "UNRECORDED") return !a.riderType;
+          return a.riderType === val;
+        });
+      });
+    }
+
+    // Column Filter: Payment Model
+    if (colFilterPaymentModel.length > 0) {
+      result = result.filter((a) => {
+        return colFilterPaymentModel.some((val) => {
+          if (val === "UNSET") return !a.paymentModel;
+          return a.paymentModel === val;
+        });
+      });
+    }
+
     // Column Filter: Phone
     if (colFilterPhone.length > 0) {
       result = result.filter((a) => {
@@ -995,6 +1118,8 @@ export default function NinjaAccountsPage() {
     colFilterOwners,
     colFilterCitySponsor,
     colFilterRiders,
+    colFilterRiderType,
+    colFilterPaymentModel,
     colFilterPhone,
     colFilterPasswordCooldown,
     colFilterSheet,
@@ -1014,6 +1139,8 @@ export default function NinjaAccountsPage() {
       colFilterOwners.length > 0 ||
       colFilterCitySponsor.length > 0 ||
       colFilterRiders.length > 0 ||
+      colFilterRiderType.length > 0 ||
+      colFilterPaymentModel.length > 0 ||
       colFilterPhone.length > 0 ||
       colFilterPasswordCooldown.length > 0 ||
       colFilterSheet.length > 0
@@ -1030,6 +1157,8 @@ export default function NinjaAccountsPage() {
     setColFilterOwners([]);
     setColFilterCitySponsor([]);
     setColFilterRiders([]);
+    setColFilterRiderType([]);
+    setColFilterPaymentModel([]);
     setColFilterPhone([]);
     setColFilterPasswordCooldown([]);
     setColFilterSheet([]);
@@ -1050,6 +1179,8 @@ export default function NinjaAccountsPage() {
     colFilterOwners,
     colFilterCitySponsor,
     colFilterRiders,
+    colFilterRiderType,
+    colFilterPaymentModel,
     colFilterPhone,
     colFilterPasswordCooldown,
     colFilterSheet,
@@ -1140,6 +1271,8 @@ export default function NinjaAccountsPage() {
   const openAssignModal = (account: NinjaAccountResponse) => {
     setAssigningAccount(account);
     setAssignRiderId("");
+    setAssignRiderType("");
+    setAssignPaymentModel("");
     setShowAllRidersInAssign(false);
     setAssignEffectiveFrom(todayRiyadh);
     setAssignPhone(account.phoneNumber || "");
@@ -1154,7 +1287,28 @@ export default function NinjaAccountsPage() {
     if (!assigningAccount) return;
 
     if (!assignRiderId) {
-      toast.error("تنبيه", "يرجى اختيار المندوب الفعلي المراد تعيين الحساب له.");
+      toast.error(
+        isEn ? "Notice" : "تنبيه",
+        isEn ? "Please select the actual rider to assign this account to." : "يرجى اختيار المندوب الفعلي المراد تعيين الحساب له."
+      );
+      return;
+    }
+    if (!assignRiderType) {
+      toast.error(
+        isEn ? "Notice" : "تنبيه",
+        isEn
+          ? "Please select a rider type (car/motorcycle, internal/external)."
+          : "يرجى اختيار نوع المندوب (سيارة/دراجة نارية، داخلي/خارجي)."
+      );
+      return;
+    }
+    if (!assignPaymentModel) {
+      toast.error(
+        isEn ? "Notice" : "تنبيه",
+        isEn
+          ? "Please select a payment model (Commission / Salary)."
+          : "يرجى اختيار طريقة الدفع (عمولة / بالراتب)."
+      );
       return;
     }
     const chosenRider = riders.find((r) => r.id === assignRiderId);
@@ -1189,6 +1343,8 @@ export default function NinjaAccountsPage() {
         actualRiderProfileId: assignRiderId,
         effectiveFrom: assignEffectiveFrom,
         phoneNumber: assignPhone.trim(),
+        riderType: assignRiderType,
+        paymentModel: assignPaymentModel,
         newPassword: assignPassword.trim() ? assignPassword.trim() : null,
         reason: assignReason.trim() || null,
         wasBackdated: isBackdated,
@@ -1213,8 +1369,39 @@ export default function NinjaAccountsPage() {
     } catch (err: any) {
       console.error("Assign error", err);
       if (err?.status === 409) {
-        toast.error("تعارض في السجل (409)", "تم تعديل الحساب بالتزامن. يرجى مراجعة البيانات الحالية وإعادة المحاولة.");
+        const isUnsupportedModel =
+          err?.code === "platform.payment_model_not_supported" ||
+          err?.problem?.code === "platform.payment_model_not_supported" ||
+          err?.problem?.errorCode === "platform.payment_model_not_supported";
+        if (isUnsupportedModel) {
+          toast.error(
+            isEn ? "Payment Model Not Supported (409)" : "طريقة الدفع غير مدعومة (409)",
+            err?.message ||
+              (isEn
+                ? "The selected payment model is disabled in platform settings."
+                : "طريقة الدفع المختارة غير مفعلة في إعدادات المنصة.")
+          );
+        } else {
+          toast.error(
+            isEn ? "Conflict / Limit Exceeded (409)" : "تعارض في السجل (409)",
+            err?.message ||
+              (isEn
+                ? "Account concurrency conflict or rider salary/account limit exceeded."
+                : "تم تعديل الحساب بالتزامن أو تجاوز سقف حسابات المندوب. يرجى مراجعة البيانات الحالية وإعادة المحاولة.")
+          );
+        }
         loadAccounts();
+      } else if (
+        err?.status === 400 &&
+        (err?.code === "ninja.invalid" || err?.problem?.code === "ninja.invalid")
+      ) {
+        toast.error(
+          isEn ? "Invalid Assignment Data (400)" : "بيانات التعيين غير صالحة (400)",
+          err?.message ||
+            (isEn
+              ? "Invalid rider type or payment model. Please choose valid options."
+              : "نوع المندوب أو طريقة الدفع غير صالحة. يرجى اختيار خيارات صحيحة.")
+        );
       } else {
         toast.error("خطأ في التعيين", err?.message || "تعذر تعيين الحساب.");
       }
@@ -1502,6 +1689,14 @@ export default function NinjaAccountsPage() {
           header: "هوية المندوب الفعلي",
           accessor: (a) => a.actualRider?.iqamaNo || "—",
           isText: true,
+        },
+        {
+          header: isEn ? "Rider Type" : "نوع المندوب",
+          accessor: (a) => getNinjaRiderTypeLabel(a.riderType, isEn),
+        },
+        {
+          header: isEn ? "Payment Model" : "طريقة الدفع",
+          accessor: (a) => getNinjaPaymentModelLabel(a.paymentModel, isEn),
         },
         {
           header: "رقم هاتف الدخول",
@@ -1981,6 +2176,36 @@ export default function NinjaAccountsPage() {
                   </div>
                 </th>
 
+                {/* 5. Rider Type */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>نوع المندوب</span>
+                    <TableHeaderColumnFilter
+                      label="نوع المندوب"
+                      value={colFilterRiderType}
+                      onChange={setColFilterRiderType}
+                      options={riderTypeFilterOptions}
+                      placeholder="تصفية بنوع المندوب..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
+                {/* 6. Payment Model */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>طريقة الدفع</span>
+                    <TableHeaderColumnFilter
+                      label="طريقة الدفع"
+                      value={colFilterPaymentModel}
+                      onChange={setColFilterPaymentModel}
+                      options={paymentModelFilterOptions}
+                      placeholder="تصفية بطريقة الدفع..."
+                      align="right"
+                    />
+                  </div>
+                </th>
+
                 {/* 5. Phone */}
                 <th className="px-4 py-3 font-bold whitespace-nowrap">
                   <div className="flex items-center gap-1.5 justify-start">
@@ -2033,21 +2258,21 @@ export default function NinjaAccountsPage() {
             <tbody className="divide-y divide-[var(--border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center">
+                  <td colSpan={10} className="py-12 text-center">
                     <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
                     <p className="text-xs text-[var(--muted)]">جارٍ تحميل جميع حسابات نينجا...</p>
                   </td>
                 </tr>
               ) : fetchError ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-rose-600">
+                  <td colSpan={10} className="py-12 text-center text-rose-600">
                     <AlertTriangle className="h-8 w-8 mx-auto mb-2" />
                     <p className="font-bold">{fetchError}</p>
                   </td>
                 </tr>
               ) : displayedAccounts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={10} className="py-12 text-center text-[var(--muted)]">
                     <Zap className="h-10 w-10 mx-auto mb-2 text-[var(--muted)]/40" />
                     <p className="font-bold text-sm">لا توجد حسابات مطابقة.</p>
                   </td>
@@ -2163,6 +2388,56 @@ export default function NinjaAccountsPage() {
                           <span className="inline-block rounded-md bg-gray-100 dark:bg-gray-800/60 px-2 py-0.5 text-[11px] text-[var(--muted)]">
                             غير معين
                           </span>
+                        )}
+                      </td>
+
+                      {/* Rider Type */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {acc.riderType ? (
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold border ${
+                              acc.riderType === "InternalCar"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                : acc.riderType === "ExternalCar"
+                                ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                                : acc.riderType === "InternalMotorcycle"
+                                ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
+                                : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                            }`}
+                          >
+                            {acc.riderType.includes("Motorcycle") ? (
+                              <Bike className="h-3.5 w-3.5 shrink-0" />
+                            ) : (
+                              <Car className="h-3.5 w-3.5 shrink-0" />
+                            )}
+                            <span>{getNinjaRiderTypeLabel(acc.riderType, isEn)}</span>
+                          </span>
+                        ) : isAssigned ? (
+                          <span
+                            className="text-[11px] text-[var(--muted)] font-medium"
+                            title={isEn ? "Legacy assignment without recorded rider type" : "تعيين قديم بدون نوع مسجل"}
+                          >
+                            {isEn ? "— (Unknown)" : "— (غير محدد)"}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-[var(--muted)]">—</span>
+                        )}
+                      </td>
+
+                      {/* Payment Model */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {acc.paymentModel ? (
+                          <span
+                            className={`inline-flex items-center rounded-lg px-2.5 py-1 text-[11px] font-bold border ${
+                              acc.paymentModel === "Salary"
+                                ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
+                                : "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800"
+                            }`}
+                          >
+                            {getNinjaPaymentModelLabel(acc.paymentModel, isEn)}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-[var(--muted)]">—</span>
                         )}
                       </td>
 
@@ -2817,6 +3092,73 @@ export default function NinjaAccountsPage() {
               </div>
             </div>
 
+            {/* Rider Type & Payment Model Selection */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* Rider Type */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[var(--foreground)]">
+                  {isEn ? "Rider type / نوع المندوب" : "نوع المندوب (Rider type)"}{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={assignRiderType}
+                  onChange={(e) => setAssignRiderType(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-xs text-[var(--foreground)] outline-none focus:border-purple-600 font-medium"
+                >
+                  <option value="" disabled>
+                    {isEn ? "-- Select Rider Type --" : "-- اختر نوع المندوب --"}
+                  </option>
+                  <option value="InternalCar">
+                    {isEn ? "Internal car (سيارة داخلي)" : "سيارة داخلي (Internal car)"}
+                  </option>
+                  <option value="ExternalCar">
+                    {isEn ? "External car (سيارة خارجي)" : "سيارة خارجي (External car)"}
+                  </option>
+                  <option value="InternalMotorcycle">
+                    {isEn ? "Internal motorcycle (دراجة نارية داخلي)" : "دراجة نارية داخلي (Internal motorcycle)"}
+                  </option>
+                  <option value="ExternalMotorcycle">
+                    {isEn ? "External motorcycle (دراجة نارية خارجي)" : "دراجة نارية خارجي (External motorcycle)"}
+                  </option>
+                </select>
+                <p className="text-[10px] text-[var(--muted)]">
+                  {isEn
+                    ? "Identifies internal/external and car/motorcycle."
+                    : "تصنيف المندوب (داخلي/خارجي) ونوع المركبة (سيارة/دراجة)."}
+                </p>
+              </div>
+
+              {/* Payment Model */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[var(--foreground)]">
+                  {isEn ? "Payment model / طريقة الدفع" : "طريقة الدفع (Payment model)"}{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={assignPaymentModel}
+                  onChange={(e) => setAssignPaymentModel(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-xs text-[var(--foreground)] outline-none focus:border-purple-600 font-medium"
+                >
+                  <option value="" disabled>
+                    {isEn ? "-- Select Payment Model --" : "-- اختر طريقة الدفع --"}
+                  </option>
+                  <option value="PayPerOrder">
+                    {isEn ? "Commission (عمولة)" : "عمولة (PayPerOrder)"}
+                  </option>
+                  <option value="Salary">
+                    {isEn ? "Salary (بالراتب)" : "بالراتب (Salary)"}
+                  </option>
+                </select>
+                <p className="text-[10px] text-[var(--muted)]">
+                  {isEn
+                    ? "Overrides previous account default."
+                    : "يلغي الإعداد الافتراضي السابق للحساب في هذا التعيين."}
+                </p>
+              </div>
+            </div>
+
             {/* Effective Date */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[var(--foreground)]">
@@ -2962,7 +3304,7 @@ export default function NinjaAccountsPage() {
       >
         {releasingAccount && (
           <form onSubmit={handleReturnSubmit} className="space-y-4" dir="rtl">
-            <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-3 text-xs dark:border-rose-900/50 dark:bg-rose-950/30">
+            <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-3 text-xs dark:border-rose-900/50 dark:bg-rose-950/30 space-y-2">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[var(--muted)]">كابتن ID: </span>
@@ -2974,6 +3316,20 @@ export default function NinjaAccountsPage() {
                   <span className="text-[var(--muted)]">المندوب الفعلي الحالي: </span>
                   <span className="font-bold text-[var(--foreground)]">
                     {releasingAccount.actualRider?.nameAr || releasingAccount.actualRiderNameAr || "—"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-rose-200/60 dark:border-rose-900/40 text-[11px]">
+                <div>
+                  <span className="text-[var(--muted)]">نوع المندوب المسجل: </span>
+                  <span className="font-bold text-[var(--foreground)]">
+                    {getNinjaRiderTypeLabel(releasingAccount.riderType, isEn)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[var(--muted)]">طريقة الدفع المسجلة: </span>
+                  <span className="font-bold text-[var(--foreground)]">
+                    {getNinjaPaymentModelLabel(releasingAccount.paymentModel, isEn)}
                   </span>
                 </div>
               </div>

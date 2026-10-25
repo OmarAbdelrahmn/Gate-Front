@@ -146,6 +146,18 @@ export const FORM_TEMPLATES: FormTemplate[] = [
     requiresRider: true,
   },
   {
+    id: "full_custody_form",
+    titleAr: "04 - النموذج الكامل للعهدة (تسليم / استرداد / سياسة الأسطول)",
+    titleEn: "04 - Full Custody & Fleet Policy Form",
+    category: "custody",
+    categoryNameAr: "العهد والتسليم",
+    descriptionAr: "النموذج الشامل والمكتمل للعهدة وحالة فحص المركبة وبنود سياسة قسم الأسطول (تسليم عهدة، استرداد عهدة، سياسة الأسطول) مع خيارات اختيار النماذج واللغات والبنود.",
+    icon: Building2,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "عربي / إنجليزي / ثلاثي",
+  },
+  {
     id: "sim_handover_receipt",
     titleAr: "نموذج استلام شريحة جوال",
     titleEn: "Mobile SIM Receipt Form",

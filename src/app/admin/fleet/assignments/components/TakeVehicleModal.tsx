@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
-import { Upload, X, FileText, AlertCircle, CheckCircle2, UserCheck, Sparkles, RefreshCw, Check } from "lucide-react";
+import { Upload, X, FileText, AlertCircle, CheckCircle2, UserCheck, Sparkles, RefreshCw, Check, Printer } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -1213,13 +1213,31 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
         </div>
 
         {/* Modal Actions */}
-        <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            إلغاء
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              const person = formData.riderProfileId ? personMetaMapRef.current.get(formData.riderProfileId) : null;
+              const personParam = person?.employeeId || person?.riderProfileId || formData.riderProfileId || "";
+              const vehicleParam = formData.vehicleId || preselectedVehicle?.id || "";
+              const url = `/admin/hr/forms?template=full_custody_form&mode=handover_policy${personParam ? `&personId=${personParam}` : ""}${vehicleParam ? `&vehicleId=${vehicleParam}` : ""}`;
+              window.open(url, "_blank");
+            }}
+            className="flex items-center gap-1.5 border-[#1167c9] text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40 text-xs font-bold"
+          >
+            <Printer className="h-4 w-4" />
+            طباعة نموذج العهدة والسياسة (04)
           </Button>
-          <Button type="submit" disabled={isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[120px]">
-            {isPending ? "جارٍ التجميع والحفظ..." : "تأكيد وتسليم المركبة"}
-          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              إلغاء
+            </Button>
+            <Button type="submit" disabled={isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[120px]">
+              {isPending ? "جارٍ التجميع والحفظ..." : "تأكيد وتسليم المركبة"}
+            </Button>
+          </div>
         </div>
       </form>
     </Modal>

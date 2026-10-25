@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
-import { AlertTriangle, ClipboardList } from "lucide-react";
+import { AlertTriangle, ClipboardList, Printer } from "lucide-react";
 import { VehicleConditionReportModal } from "./VehicleConditionReportModal";
 
 interface Props {
@@ -428,21 +428,37 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
             </div>
           ) : null}
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              إلغاء
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
             <Button
-              type="submit"
-              disabled={isPending}
-              className={needsConditionReport ? "bg-amber-600 hover:bg-amber-700 text-white" : "bg-red-600 hover:bg-red-700"}
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                const vehicleParam = preselectedVehicle?.id || "";
+                const url = `/admin/hr/forms?template=full_custody_form&mode=return_policy${vehicleParam ? `&vehicleId=${vehicleParam}` : ""}`;
+                window.open(url, "_blank");
+              }}
+              className="flex items-center gap-1.5 border-[#1167c9] text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40 text-xs font-bold"
             >
-              {isPending
-                ? "جارٍ الحفظ..."
-                : needsConditionReport
-                ? "متابعة إلى تقرير حالة المركبة"
-                : "إنهاء العهدة واستلام المركبة"}
+              <Printer className="h-4 w-4" />
+              طباعة استرداد العهدة والسياسة (04)
             </Button>
+
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="secondary" onClick={onClose}>
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                disabled={isPending}
+                className={needsConditionReport ? "bg-amber-600 hover:bg-amber-700 text-white" : "bg-red-600 hover:bg-red-700"}
+              >
+                {isPending
+                  ? "جارٍ الحفظ..."
+                  : needsConditionReport
+                  ? "متابعة إلى تقرير حالة المركبة"
+                  : "إنهاء العهدة واستلام المركبة"}
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>
