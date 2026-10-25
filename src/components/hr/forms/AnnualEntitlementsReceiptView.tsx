@@ -133,13 +133,19 @@ export function AnnualEntitlementsReceiptView({ data }: { data: AnnualEntitlemen
               <p className="text-xs sm:text-sm print:text-[10.5px] font-semibold text-gray-900 leading-relaxed text-justify">
                 أقر أنا الموظف الموضح اسمي وبياناتي أعلاه بأنني استلمت كافة مستحقاتي السنوية عن الفترة الموضحة بعاليه استلاماً كاملاً وتاماً ونهائياً، وأبرئ ذمة الشركة من أي مستحقات أو مطالبات مالية تخص الإجازة السنوية عن تلك الفترة، ويُعد هذا إقراراً ملزماً ونهائياً ومسقطاً لأي حق في المطالبة.
               </p>
-              <div className="grid grid-cols-2 gap-4 pt-1 border-t border-black/20 text-xs sm:text-sm print:text-[11px] font-bold">
-                <div className="flex items-center gap-1.5">
-                  <span className="min-w-[70px]">توقيع الموظف:</span>
-                  <span className="border-b border-dotted border-black flex-1 text-transparent select-none">........................</span>
+              <div className="grid grid-cols-1 sm:grid-cols-12 print:grid-cols-12 gap-3 items-center pt-1.5 print:pt-1 border-t border-black/20 text-xs sm:text-sm print:text-[11px] font-bold">
+                <div className="sm:col-span-5 print:col-span-5 flex items-center gap-1.5">
+                  <span className="min-w-[75px] whitespace-nowrap">توقيع الموظف:</span>
+                  <span className="border-b border-dotted border-black flex-1 h-4"></span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="min-w-[45px]">التاريخ:</span>
+                <div className="sm:col-span-4 print:col-span-4 flex items-center gap-2">
+                  <span className="min-w-[45px] whitespace-nowrap">البصمة:</span>
+                  <div className="w-20 h-11 print:w-18 print:h-10 border-2 border-dashed border-black/40 rounded-md bg-white flex items-center justify-center text-[10px] text-gray-400 font-normal select-none">
+                    موضع البصمة
+                  </div>
+                </div>
+                <div className="sm:col-span-3 print:col-span-3 flex items-center gap-1.5 justify-start sm:justify-end">
+                  <span className="min-w-[45px] whitespace-nowrap">التاريخ:</span>
                   <span className="font-mono dir-ltr">{formattedDate}</span>
                 </div>
               </div>
