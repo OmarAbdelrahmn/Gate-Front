@@ -79,6 +79,7 @@ export interface ChefzOrderSettlementResponse {
   riderProfileId: Guid;
   riderName: string;
   riderIqamaNo?: string | null;
+  riderIban?: string | null;
   accountType: "Freelancer" | "FullTime";
   periodFrom: DateOnly;
   periodTo: DateOnly;
@@ -102,6 +103,7 @@ export interface ChefzRiderCycleSettlement {
   riderProfileId: Guid;
   riderName: string;
   riderIqamaNo?: string | null;
+  riderIban?: string | null;
   periodFrom: DateOnly;
   periodTo: DateOnly;
   sourceRows: number;

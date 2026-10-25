@@ -97,6 +97,7 @@ export interface ChefzSettlement {
   riderProfileId: Guid;
   riderName?: string | null;
   riderIqamaNo?: string | null;
+  riderIban?: string | null;
   accountType: ChefzAccountType;
   periodFrom: DateOnly;
   periodTo: DateOnly;
@@ -240,6 +241,7 @@ export interface ChefzAccountPerformanceReport {
   riderProfileId: Guid;
   riderName: string;
   riderIqamaNo?: string | null;
+  accountType?: ChefzAccountType | string | null;
   /** Summary for this account/rider in the requested period. */
   summary: ChefzReportSummary;
   daily: ChefzPerformance[];
@@ -278,6 +280,7 @@ export interface ChefzRatingCounts {
 export interface ChefzRiderAccountSummary {
   accountId: Guid;
   externalAccountId: string;
+  accountType?: ChefzAccountType | string | null;
   summary: ChefzReportSummary;
 }
 

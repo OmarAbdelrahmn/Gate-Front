@@ -365,6 +365,7 @@ export function ChefzBulkOrderSettlementPanel({
     const rows: Array<{
       riderName: string;
       riderIqamaNo: string;
+      riderIban: string;
       riderProfileId: string;
       period: string;
       driverId: string;
@@ -392,10 +393,12 @@ export function ChefzBulkOrderSettlementPanel({
           r.riderName || a.riderName,
           a.accountId
         );
+        const iban = (a as any).riderIban || (r as any).riderIban || "—";
 
         rows.push({
           riderName: r.riderName,
           riderIqamaNo: iqama,
+          riderIban: iban,
           riderProfileId: r.riderProfileId,
           period: `${r.periodFrom} -> ${r.periodTo}`,
           driverId: a.driverId,
@@ -424,6 +427,7 @@ export function ChefzBulkOrderSettlementPanel({
       columns: [
         { header: "المندوب الفعلي", accessor: (d) => d.riderName, isText: true },
         { header: "رقم الإقامة", accessor: (d) => d.riderIqamaNo, isText: true },
+        { header: "آيبان المندوب", accessor: (d) => d.riderIban, isText: true },
         { header: "معرف المندوب", accessor: (d) => d.riderProfileId, isText: true },
         { header: "دورة التصفية", accessor: (d) => d.period, isText: true },
         { header: "رقم الحساب في التقرير", accessor: (d) => d.driverId, isText: true },

@@ -214,6 +214,22 @@ export default function ChefzSettlementsPage() {
     [riderMap, baseAccountMap, chefzAccountMap]
   );
 
+  const resolveSettlementIban = useCallback(
+    (s?: ChefzSettlement | null): string => {
+      if (!s) return "—";
+      const direct = (s.riderIban || (s as any).iban)?.toString().trim();
+      if (direct && direct !== "—" && direct !== "-" && direct !== "null" && direct !== "undefined") {
+        return direct;
+      }
+      const rider = riderMap.get(s.riderProfileId);
+      if (rider?.iban && rider.iban.trim()) {
+        return rider.iban.trim();
+      }
+      return "—";
+    },
+    [riderMap]
+  );
+
   // When modalAccountId changes, fetch its assignment history
   useEffect(() => {
     if (!modalAccountId) {
@@ -547,6 +563,11 @@ export default function ChefzSettlementsPage() {
         {
           header: "رقم الإقامة",
           accessor: (s) => resolveSettlementIqama(s),
+          isText: true,
+        },
+        {
+          header: isEn ? "Rider IBAN" : "آيبان المندوب",
+          accessor: (s) => resolveSettlementIban(s),
           isText: true,
         },
         {
@@ -893,6 +914,11 @@ export default function ChefzSettlementsPage() {
                         <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
                           الإقامة: {resolveSettlementIqama(s)}
                         </div>
+                        {resolveSettlementIban(s) !== "—" && (
+                          <div className="text-[11px] text-[var(--muted)] font-mono truncate max-w-[200px]" dir="ltr" title={resolveSettlementIban(s)}>
+                            IBAN: {resolveSettlementIban(s)}
+                          </div>
+                        )}
                       </td>
 
                       {/* Sponsor */}
@@ -1410,6 +1436,9 @@ export default function ChefzSettlementsPage() {
                     <div className="text-xs text-[var(--muted)] mt-0.5">
                       {previewResult.riderName && <strong className="text-[var(--foreground)] ml-2">{previewResult.riderName}</strong>}
                       <span>رقم الإقامة: <strong className="font-mono text-[var(--foreground)]">{resolveSettlementIqama(previewResult)}</strong></span>
+                      {resolveSettlementIban(previewResult) !== "—" && (
+                        <span className="mr-3">الآيبان: <strong className="font-mono text-[var(--foreground)]" dir="ltr">{resolveSettlementIban(previewResult)}</strong></span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1531,6 +1560,14 @@ export default function ChefzSettlementsPage() {
                   {resolveSettlementIqama(selectedSettlement)}
                 </span>
               </div>
+              {resolveSettlementIban(selectedSettlement) !== "—" && (
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">آيبان المندوب:</span>
+                  <span className="font-mono font-bold text-[var(--foreground)]" dir="ltr">
+                    {resolveSettlementIban(selectedSettlement)}
+                  </span>
+                </div>
+              )}
               {selectedSettlement.sponsorNameAr && (
                 <div className="flex justify-between">
                   <span className="text-[var(--muted)]">الكفيل:</span>

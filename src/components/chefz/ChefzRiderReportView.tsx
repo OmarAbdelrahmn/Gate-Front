@@ -58,6 +58,7 @@ interface Props {
 
 type RatingFilterType = "ALL" | "A" | "B" | "C" | "D" | "CHANGE" | "UNRATED";
 type AccountFilterType = "ALL" | "SINGLE" | "DUAL";
+type AccountTypeFilter = "ALL" | "FullTime" | "Freelancer" | "Unconfigured";
 type SortField = "name" | "orders_desc" | "orders_asc" | "rate_desc" | "rate_asc" | "days_desc";
 
 export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
@@ -91,6 +92,7 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [ratingFilter, setRatingFilter] = useState<RatingFilterType>("ALL");
   const [accountFilter, setAccountFilter] = useState<AccountFilterType>("ALL");
+  const [accountTypeFilter, setAccountTypeFilter] = useState<AccountTypeFilter>("ALL");
   const [sortField, setSortField] = useState<SortField>("name");
 
   // Accordion expanded row state (tracks expanded rider IDs)
@@ -289,6 +291,16 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
         if (accountFilter === "SINGLE" && r.accounts.length !== 1) return false;
         if (accountFilter === "DUAL" && r.accounts.length < 2) return false;
 
+        // Account type filter
+        if (accountTypeFilter !== "ALL") {
+          const target = accountTypeFilter.toLowerCase();
+          const matchesType = (r.accounts || []).some((acc) => {
+            const rawType = (acc.accountType || "Unconfigured").trim().toLowerCase();
+            return rawType === target;
+          });
+          if (!matchesType) return false;
+        }
+
         return true;
       })
       .sort((a, b) => {
@@ -308,7 +320,7 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
             return (a.riderName || "").localeCompare(b.riderName || "", "ar");
         }
       });
-  }, [report, searchQuery, ratingFilter, accountFilter, sortField]);
+  }, [report, searchQuery, ratingFilter, accountFilter, accountTypeFilter, sortField]);
 
   // Export all riders to Excel
   const handleExportAllRidersExcel = () => {
@@ -324,6 +336,17 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
       profileId: r.riderProfileId,
       accountsCount: r.accounts.length,
       accountsList: r.accounts.map((a) => a.externalAccountId || a.accountId).join(", "),
+      accountTypesList: r.accounts
+        .map((a) =>
+          a.accountType === "Freelancer"
+            ? "فريلانسر"
+            : a.accountType === "FullTime"
+            ? "دوام كامل"
+            : a.accountType === "Unconfigured"
+            ? "غير محدد"
+            : a.accountType || "—"
+        )
+        .join(", "),
       halvesWithData: `${r.selectedSummary.halvesWithData} من ${report.requestedHalves}`,
       daysWithData: r.selectedSummary.daysWithData,
       orders: r.selectedSummary.orders,
@@ -351,6 +374,7 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
         { header: "معرف المندوب", accessor: (d) => d.profileId, isText: true },
         { header: "عدد الحسابات", accessor: (d) => d.accountsCount },
         { header: "أرقام الحسابات المرتبطة", accessor: (d) => d.accountsList, isText: true },
+        { header: "نوع الحساب", accessor: (d) => d.accountTypesList, isText: true },
         { header: "فترات البيانات", accessor: (d) => d.halvesWithData, isText: true },
         { header: "أيام العمل المسجلة", accessor: (d) => d.daysWithData },
         { header: "إجمالي الطلبات المقبولة", accessor: (d) => d.orders },
@@ -809,6 +833,18 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
               <option value="SINGLE">حساب واحد فقط</option>
               <option value="DUAL">حسابين للمندوب</option>
             </select>
+
+            {/* Account Type Filter */}
+            <select
+              value={accountTypeFilter}
+              onChange={(e) => setAccountTypeFilter(e.target.value as AccountTypeFilter)}
+              className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--brand)] font-semibold"
+            >
+              <option value="ALL">كافة أنواع الحسابات</option>
+              <option value="FullTime">دوام كامل (FullTime)</option>
+              <option value="Freelancer">فريلانسر (Freelancer)</option>
+              <option value="Unconfigured">غير محدد (Unconfigured)</option>
+            </select>
           </div>
 
           <div className="flex items-center justify-between sm:justify-end gap-3 text-xs text-[var(--muted)]">
@@ -927,7 +963,7 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
                           {/* Linked Accounts */}
                           <td className="px-3 py-3">
                             <div className="flex flex-col gap-1 items-start">
-                              <div className="flex flex-wrap items-center gap-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 {rider.accounts.map((acc, aIdx) => (
                                   <span
                                     key={acc.accountId || aIdx}
@@ -935,7 +971,18 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
                                     dir="ltr"
                                   >
                                     <CreditCard className="h-2.5 w-2.5 text-[var(--muted)]" />
-                                    {acc.externalAccountId || acc.accountId.slice(0, 8)}
+                                    <span>{acc.externalAccountId || acc.accountId.slice(0, 8)}</span>
+                                    {acc.accountType && acc.accountType !== "Unconfigured" && (
+                                      <span
+                                        className={`px-1 rounded text-[9px] font-sans font-bold ${
+                                          acc.accountType === "Freelancer"
+                                            ? "bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300"
+                                            : "bg-orange-100 text-orange-700 dark:bg-orange-950/80 dark:text-orange-300"
+                                        }`}
+                                      >
+                                        {acc.accountType === "Freelancer" ? "فريلانسر" : "دوام كامل"}
+                                      </span>
+                                    )}
                                   </span>
                                 ))}
                               </div>
@@ -1077,6 +1124,14 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
                                             <div className="flex items-center gap-1.5 font-mono font-bold" dir="ltr">
                                               <CreditCard className="h-3.5 w-3.5 text-[var(--brand)]" />
                                               <span>{acc.externalAccountId || acc.accountId}</span>
+                                              {acc.accountType && acc.accountType !== "Unconfigured" && (
+                                                <Badge
+                                                  tone={acc.accountType === "Freelancer" ? "blue" : "orange"}
+                                                  className="text-[10px] py-0.5 px-2"
+                                                >
+                                                  {acc.accountType === "Freelancer" ? "فريلانسر" : "دوام كامل"}
+                                                </Badge>
+                                              )}
                                             </div>
                                             <div>{renderRatingBadge(acc.summary.rating)}</div>
                                           </div>
@@ -1444,8 +1499,16 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
                               <span className="font-bold text-[var(--foreground)]">
                                 حساب شيفز: {acc.externalAccountId || acc.accountId}
                               </span>
+                              {acc.accountType && acc.accountType !== "Unconfigured" && (
+                                <Badge
+                                  tone={acc.accountType === "Freelancer" ? "blue" : "orange"}
+                                  className="text-[10px] py-0.5 px-2"
+                                >
+                                  {acc.accountType === "Freelancer" ? "فريلانسر" : "دوام كامل"}
+                                </Badge>
+                              )}
                               <span className="font-mono text-[11px] text-[var(--muted)]">
-                                (رقم الإقامة: <strong className="text-[var(--foreground)]">{acc.riderIqamaNo ?? riderDetailReport.riderIqamaNo ?? detailModalRider.riderIqamaNo ?? "—"}</strong>)
+                                (رقم الإقامة: <strong className="text-[var(--foreground)]">{acc.riderIqamaNo ?? riderDetailReport.riderIqamaNo ?? detailModalRider?.riderIqamaNo ?? "—"}</strong>)
                               </span>
                             </div>
                             <div>{renderRatingBadge(acc.summary.rating)}</div>

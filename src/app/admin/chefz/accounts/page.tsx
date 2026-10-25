@@ -123,6 +123,45 @@ function translateStatusReason(reason?: string | null): string {
   return trimmed;
 }
 
+function formatTakenDate(rawDate?: string | null): string {
+  if (!rawDate) return "—";
+  const trimmed = String(rawDate).trim();
+  if (!trimmed || trimmed === "—") return "—";
+
+  // YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    const year = ymdMatch[1];
+    const month = ymdMatch[2].padStart(2, "0");
+    const day = ymdMatch[3].padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  // DD-MM-YYYY or DD/MM/YYYY
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, "0");
+    const month = dmyMatch[2].padStart(2, "0");
+    const year = dmyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  try {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+  } catch {
+    // ignore
+  }
+
+  const parts = trimmed.split("T")[0];
+  return parts || "—";
+}
+
 export default function ChefzAccountsPage() {
   const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
@@ -1657,6 +1696,15 @@ export default function ChefzAccountsPage() {
           accessor: (i) => i.chefz?.riderIqamaNo || "—",
           isText: true,
         },
+        {
+          header: isEn ? "Taken Account Date" : "تاريخ أخذ الحساب",
+          accessor: (i) =>
+            formatTakenDate(
+              i.base.currentAssignment?.effectiveFrom ||
+                (i.chefz?.riderIqamaNo ? i.base.startDate : null)
+            ),
+          isText: true,
+        },
         { header: "المدينة", accessor: (i) => i.base.operatingCityNameAr || "—" },
         { header: "الكفيل", accessor: (i) => i.base.sponsorNameAr || "—" },
         {
@@ -2378,7 +2426,7 @@ export default function ChefzAccountsPage() {
                             )}
                             {currentRider?.effectiveFrom && (
                               <div className="text-xs text-[var(--muted)]" dir="ltr">
-                                من {currentRider.effectiveFrom}
+                                من {formatTakenDate(currentRider.effectiveFrom)}
                               </div>
                             )}
                           </div>
