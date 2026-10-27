@@ -35,9 +35,11 @@ import {
 import {
   createPlatformAccount,
   getAllPlatformAccounts,
+  getAccountAssignmentHistory,
   type PlatformResponse,
   type AccountUpsertRequest,
   type AccountResponse,
+  type AssignmentResponse,
 } from "@/lib/platforms/api";
 import {
   listOperatingCities,
@@ -68,6 +70,7 @@ import {
   UserCheck,
   UserMinus,
   KeyRound,
+  History,
   AlertTriangle,
   FileSpreadsheet,
   Copy,
@@ -117,6 +120,10 @@ export default function NinjaAccountsPage() {
   const canReturn = can("ninja.assignments.delete") || canUpdate;
   const canRotatePassword = can("ninja.credentials.rotate") || canUpdate;
   const canCreateAccount = can("platform_accounts.create");
+  const canViewHistory =
+    can("platform_assignments.read") ||
+    can("ninja.read") ||
+    canAny("ninja.assignments.create", "ninja.assignments.delete", "ninja.accounts.update");
 
   // Core Data States
   const [platform, setPlatform] = useState<PlatformResponse | null>(null);
@@ -219,6 +226,12 @@ export default function NinjaAccountsPage() {
   const [createPaymentModel, setCreatePaymentModel] = useState<string>("PayPerOrder");
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
+  // 7. Assignment History Modal
+  const [isAssignmentHistoryOpen, setIsAssignmentHistoryOpen] = useState(false);
+  const [historyAccount, setHistoryAccount] = useState<NinjaAccountResponse | null>(null);
+  const [assignmentHistoryList, setAssignmentHistoryList] = useState<AssignmentResponse[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   // -------------------------------------------------------------
   // Loaders
   // -------------------------------------------------------------
@@ -287,6 +300,15 @@ export default function NinjaAccountsPage() {
   const sponsorMap = useMemo(() => {
     return new Map<string, string>(sponsors.map((s) => [s.id, s.registryNameAr]));
   }, [sponsors]);
+
+  const riderMap = useMemo(() => {
+    const map = new Map<string, Rider>();
+    for (const r of riders) {
+      if (r.id) map.set(r.id.toLowerCase(), r);
+      if (r.employeeId) map.set(r.employeeId.toLowerCase(), r);
+    }
+    return map;
+  }, [riders]);
 
   // Active assignments tracking: identifies riders with active assignments in Ninja and other platforms
   const activeAssignmentRiderSet = useMemo(() => {
@@ -1661,6 +1683,59 @@ export default function NinjaAccountsPage() {
   };
 
   // -------------------------------------------------------------
+  // Actions: Assignment History
+  // -------------------------------------------------------------
+  const handleOpenAssignmentHistory = async (acc: NinjaAccountResponse) => {
+    setHistoryAccount(acc);
+    setIsAssignmentHistoryOpen(true);
+    setHistoryLoading(true);
+    try {
+      const targetId = acc.accountId || acc.id;
+      if (targetId) {
+        const data = await getAccountAssignmentHistory(targetId);
+        setAssignmentHistoryList(Array.isArray(data) ? data : []);
+      } else {
+        setAssignmentHistoryList([]);
+      }
+    } catch (err: any) {
+      console.error("Failed to load ninja account assignment history", err);
+      toast.error("خطأ", "تعذر تحميل سجل تعيينات الحساب.");
+      setAssignmentHistoryList([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const calculateAssignmentDuration = (from?: string | null, to?: string | null) => {
+    if (!from) return "—";
+    try {
+      const fromStr = from.includes("T") ? from.split("T")[0] : from;
+      const toStr = to ? (to.includes("T") ? to.split("T")[0] : to) : null;
+      const start = new Date(fromStr).getTime();
+      const end = toStr ? new Date(toStr).getTime() : Date.now();
+      if (isNaN(start) || isNaN(end) || end < start) return "—";
+      const diffDays = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+      if (diffDays === 1) return isEn ? "1 day" : "يوم واحد";
+      if (diffDays === 2) return isEn ? "2 days" : "يومان";
+      if (diffDays < 30) return isEn ? `${diffDays} days` : `${diffDays} يوم`;
+      const months = Math.floor(diffDays / 30);
+      const remDays = diffDays % 30;
+      if (remDays === 0) {
+        if (isEn) return months === 1 ? "1 month" : `${months} months`;
+        return months === 1 ? "شهر واحد" : months === 2 ? "شهران" : `${months} أشهر`;
+      }
+      if (isEn) {
+        const mStr = months === 1 ? "1 month" : `${months} months`;
+        return `${mStr} and ${remDays} days (${diffDays} days)`;
+      }
+      const monthStr = months === 1 ? "شهر" : months === 2 ? "شهران" : `${months} أشهر`;
+      return `${monthStr} و ${remDays} يوم (${diffDays} يوم)`;
+    } catch {
+      return "—";
+    }
+  };
+
+  // -------------------------------------------------------------
   // Excel Export
   // -------------------------------------------------------------
   const handleExport = () => {
@@ -2308,6 +2383,16 @@ export default function NinjaAccountsPage() {
                               <Copy className="h-3.5 w-3.5" />
                             )}
                           </button>
+                          {canViewHistory && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssignmentHistory(acc)}
+                              className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-950/40"
+                              title="سجل التعيينات (المناديب وفترة الاستخدام)"
+                            >
+                              <History className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                         {acc.code && acc.code !== acc.captainId && (
                           <span className="block text-[11px] font-normal text-[var(--muted)]">
@@ -2377,6 +2462,16 @@ export default function NinjaAccountsPage() {
                             <div className="font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
                               <UserCheck className="h-3.5 w-3.5 shrink-0" />
                               <span>{riderName || "مندوب معين"}</span>
+                              {canViewHistory && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAssignmentHistory(acc)}
+                                  className="rounded p-0.5 text-purple-600 hover:bg-purple-50 hover:text-purple-800 dark:hover:bg-purple-950/40"
+                                  title="عرض سجل فترات وتكليفات هذا الحساب"
+                                >
+                                  <History className="h-3 w-3" />
+                                </button>
+                              )}
                             </div>
                             {acc.actualRider?.iqamaNo && (
                               <span className="text-[11px] font-mono text-[var(--muted)]" dir="ltr">
@@ -2534,78 +2629,80 @@ export default function NinjaAccountsPage() {
                       {/* Actions */}
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          {/* Assignment History */}
+                          {canViewHistory && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssignmentHistory(acc)}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-purple-200 dark:border-purple-900/60 bg-purple-50/60 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 dark:text-purple-300 transition-colors shadow-sm"
+                              title="سجل التعيينات (المناديب وفترة الاستخدام)"
+                            >
+                              <History className="h-4 w-4" />
+                            </button>
+                          )}
+
                           {/* Status Control */}
-                          <Button
-                            variant="secondary"
-                            size="sm"
+                          <button
+                            type="button"
                             disabled={!canUpdate}
                             onClick={() => openStatusModal(acc)}
-                            className="gap-1 text-[11px]"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] hover:bg-[var(--subtle-bg)] text-purple-600 dark:text-purple-400 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                             title="التحكم بحالة الحساب (Active, Suspended, Retired, Archived)"
                           >
-                            <SlidersHorizontal className="h-3 w-3 text-purple-600" />
-                            الحالة
-                          </Button>
+                            <SlidersHorizontal className="h-4 w-4" />
+                          </button>
 
                           {/* Assign Action */}
                           {isAvailable && (
-                            <Button
-                              variant="secondary"
-                              size="sm"
+                            <button
+                              type="button"
                               disabled={!canAssign}
                               onClick={() => openAssignModal(acc)}
-                              className="gap-1 border-purple-200 hover:bg-purple-50 hover:text-purple-700 dark:border-purple-900 dark:hover:bg-purple-950/40 text-[11px] font-bold"
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                               title="تعيين الحساب لمندوب"
                             >
-                              <UserPlus className="h-3.5 w-3.5 text-purple-600" />
-                              تعيين
-                            </Button>
+                              <UserPlus className="h-4 w-4" />
+                            </button>
                           )}
 
                           {/* Return Action */}
                           {isAssigned && (
-                            <Button
-                              variant="secondary"
-                              size="sm"
+                            <button
+                              type="button"
                               disabled={!canReturn}
                               onClick={() => openReturnModal(acc)}
-                              className="gap-1 border-rose-200 hover:bg-rose-50 hover:text-rose-700 dark:border-rose-900 dark:hover:bg-rose-950/40 text-[11px] font-bold"
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                               title="إرجاع الحساب وإنهاء التعيين"
                             >
-                              <UserMinus className="h-3.5 w-3.5 text-rose-600" />
-                              إرجاع
-                            </Button>
+                              <UserMinus className="h-4 w-4" />
+                            </button>
                           )}
 
                           {/* Update Credentials */}
-                          <Button
-                            variant="secondary"
-                            size="sm"
+                          <button
+                            type="button"
                             disabled={!canUpdate}
                             onClick={() => openCredModal(acc)}
-                            className="gap-1 text-[11px]"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 dark:text-amber-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                             title="تحديث رقم الهاتف وكلمة المرور"
                           >
-                            <KeyRound className="h-3.5 w-3.5 text-amber-600" />
-                            بيانات الدخول
-                          </Button>
+                            <KeyRound className="h-4 w-4" />
+                          </button>
 
                           {/* Shared Day Usage Management */}
-                          <Button
-                            variant="secondary"
-                            size="sm"
+                          <button
+                            type="button"
                             onClick={() =>
                               setDayUsageModalAccount({
                                 id: acc.accountId || acc.id || "",
                                 code: acc.code || acc.captainId,
                               })
                             }
-                            className="gap-1 text-[11px]"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 dark:text-blue-300 transition-colors shadow-sm"
                             title="إدارة إنتاجية اليوم المشترك (Day Usage)"
                           >
-                            <Activity className="h-3.5 w-3.5 text-blue-600" />
-                            اليوم المشترك
-                          </Button>
+                            <Activity className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -3796,6 +3893,326 @@ export default function NinjaAccountsPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* ------------------------------------------------------------- */}
+      {/* 7. Modal: Account Assignment History                          */}
+      {/* ------------------------------------------------------------- */}
+      <Modal
+        isOpen={isAssignmentHistoryOpen}
+        onClose={() => {
+          setIsAssignmentHistoryOpen(false);
+          setHistoryAccount(null);
+        }}
+        title={`سجل تعيينات كابتن نينجا — ${historyAccount?.captainId || historyAccount?.code || ""}`}
+        maxWidth="max-w-4xl"
+      >
+        <div className="space-y-4" dir="rtl">
+          {/* Account Quick Context Card */}
+          {historyAccount && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/40 dark:border-purple-900/50 dark:bg-purple-950/20 p-3.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-[var(--foreground)] font-mono" dir="ltr">
+                        #{historyAccount.captainId}
+                      </span>
+                      {historyAccount.code && historyAccount.code !== historyAccount.captainId && (
+                        <span className="text-[11px] font-mono text-[var(--muted)]">
+                          ({historyAccount.code})
+                        </span>
+                      )}
+                      <Badge
+                        tone={
+                          historyAccount.status === "Assigned"
+                            ? "blue"
+                            : historyAccount.status === "Available"
+                            ? "green"
+                            : historyAccount.status === "Suspended"
+                            ? "red"
+                            : "gray"
+                        }
+                      >
+                        {historyAccount.status === "Assigned"
+                          ? "مسند"
+                          : historyAccount.status === "Available"
+                          ? "متاح"
+                          : historyAccount.status === "Suspended"
+                          ? "موقوف"
+                          : historyAccount.status}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-[var(--muted)]">
+                      {historyAccount.owner?.nameAr && (
+                        <span>المالك: <strong className="text-[var(--foreground)]">{historyAccount.owner.nameAr}</strong></span>
+                      )}
+                      {(historyAccount.operatingCityNameAr || cityMap.get(historyAccount.operatingCityId)) && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <MapPin className="h-3 w-3" />
+                          {historyAccount.operatingCityNameAr || cityMap.get(historyAccount.operatingCityId)}
+                        </span>
+                      )}
+                      {(historyAccount.sponsorNameAr || (historyAccount.sponsorId && sponsorMap.get(historyAccount.sponsorId))) && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <Building2 className="h-3 w-3" />
+                          {historyAccount.sponsorNameAr || sponsorMap.get(historyAccount.sponsorId!)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => historyAccount && handleOpenAssignmentHistory(historyAccount)}
+                    disabled={historyLoading}
+                    className="gap-1 text-xs"
+                    title="تحديث السجل"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${historyLoading ? "animate-spin" : ""}`} />
+                    تحديث
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Content */}
+          {historyLoading ? (
+            <div className="py-12 text-center text-xs text-[var(--muted)]">
+              <RefreshCw className="mx-auto mb-3 h-7 w-7 animate-spin text-purple-600" />
+              <p className="font-semibold text-sm text-[var(--foreground)]">جارٍ تحميل سجل التعيينات...</p>
+              <p className="text-[11px] text-[var(--muted)] mt-1">يتم جلب تاريخ استخدام الكابتن وفترات التكليف السابقة للمناديب</p>
+            </div>
+          ) : assignmentHistoryList.length === 0 ? (
+            <div className="py-10 text-center rounded-xl border border-dashed border-[var(--border)] p-6">
+              <History className="mx-auto mb-2 h-10 w-10 text-purple-300 dark:text-purple-900/60" />
+              <h4 className="font-bold text-sm text-[var(--foreground)]">لا يوجد سجل تكليفات سابق</h4>
+              <p className="text-xs text-[var(--muted)] mt-1 max-w-md mx-auto">
+                لم يتم العثور على حركات تعيين سابقة لهذا الحساب في النظام.
+              </p>
+
+              {/* Fallback if currently assigned in Ninja account state */}
+              {(historyAccount?.actualRider || historyAccount?.actualRiderProfileId) && (
+                <div className="mt-4 max-w-md mx-auto rounded-lg border border-purple-200 bg-purple-50/50 dark:border-purple-900/40 dark:bg-purple-950/30 p-3 text-right text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-purple-800 dark:text-purple-300 mb-1">
+                    <UserCheck className="h-4 w-4" />
+                    <span>المندوب الحالي المسجل على الحساب:</span>
+                  </div>
+                  <div className="text-[var(--foreground)] font-semibold">
+                    {historyAccount.actualRider?.nameAr || historyAccount.actualRiderNameAr || "مندوب مسجل"}
+                  </div>
+                  {historyAccount.assignmentEffectiveFrom && (
+                    <div className="text-[var(--muted)] mt-0.5">
+                      تاريخ البدء: <strong className="font-mono text-[var(--foreground)]">{historyAccount.assignmentEffectiveFrom}</strong>
+                      {" "}(المدة: {calculateAssignmentDuration(historyAccount.assignmentEffectiveFrom, null)})
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Summary Counter */}
+              <div className="flex items-center justify-between text-xs text-[var(--muted)] px-1">
+                <span>
+                  إجمالي التكليفات المسجلة: <strong className="text-purple-700 dark:text-purple-300 font-bold font-mono">{assignmentHistoryList.length}</strong>
+                </span>
+                <span className="text-[11px]">
+                  مرتبة من الأحدث إلى الأقدم
+                </span>
+              </div>
+
+              {/* Table View */}
+              <div className="overflow-x-auto rounded-xl border border-[var(--border)] shadow-sm">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-[var(--table-header-bg)] border-b border-[var(--border)] font-bold text-[var(--muted)]">
+                    <tr>
+                      <th className="px-3 py-2.5">#</th>
+                      <th className="px-3 py-2.5">المندوب الفعلي</th>
+                      <th className="px-3 py-2.5">فترة الاستخدام</th>
+                      <th className="px-3 py-2.5">المدة الإجمالية</th>
+                      <th className="px-3 py-2.5">الحالة</th>
+                      <th className="px-3 py-2.5">نموذج الدفع</th>
+                      <th className="px-3 py-2.5">السبب والملاحظات</th>
+                      <th className="px-3 py-2.5 text-center">سجل المندوب</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {assignmentHistoryList.map((asgn, idx) => {
+                      const isActive = asgn.status === "Active" || !asgn.effectiveTo;
+                      const duration = calculateAssignmentDuration(asgn.effectiveFrom, asgn.effectiveTo);
+                      const riderObj = asgn.actualRiderProfileId
+                        ? riderMap.get(asgn.actualRiderProfileId.toLowerCase())
+                        : asgn.actualEmployeeId
+                        ? riderMap.get(asgn.actualEmployeeId.toLowerCase())
+                        : undefined;
+                      const riderName = asgn.actualRiderNameAr || asgn.actualRiderNameEn || riderObj?.fullNameAr || riderObj?.fullNameEn || "مندوب";
+                      const iqamaOrId = riderObj?.iqamaNo;
+
+                      return (
+                        <tr
+                          key={asgn.id || idx}
+                          className={`hover:bg-[var(--subtle-bg)] transition-colors ${
+                            isActive ? "bg-purple-50/20 dark:bg-purple-950/10" : ""
+                          }`}
+                        >
+                          <td className="px-3 py-2.5 font-mono text-[var(--muted)] text-[11px]">
+                            {idx + 1}
+                          </td>
+
+                          {/* Rider Info */}
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              {isActive && (
+                                <span
+                                  className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0"
+                                  title="التكليف الحالي النشط"
+                                />
+                              )}
+                              <div>
+                                <div className="font-bold text-[var(--foreground)] flex items-center gap-1">
+                                  <span>{riderName}</span>
+                                  {isActive && (
+                                    <span className="text-[10px] font-normal text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-1 py-0.2 rounded">
+                                      الحالي
+                                    </span>
+                                  )}
+                                </div>
+                                {iqamaOrId && (
+                                  <span className="text-[10px] font-mono text-[var(--muted)] block" dir="ltr">
+                                    ID: {iqamaOrId}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Period */}
+                          <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap" dir="ltr">
+                            <div className="flex items-center gap-1 text-[var(--foreground)]">
+                              <span className="font-semibold">{asgn.effectiveFrom || "—"}</span>
+                              <span className="text-[var(--muted)]">←</span>
+                              <span className={asgn.effectiveTo ? "font-semibold" : "text-emerald-600 dark:text-emerald-400 font-bold"}>
+                                {asgn.effectiveTo || "حتى الآن"}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Duration */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-md">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              {duration}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {asgn.status === "Active" ? (
+                              <Badge tone="green">نشط</Badge>
+                            ) : asgn.status === "Ended" ? (
+                              <Badge tone="gray">منتهي</Badge>
+                            ) : asgn.status === "Cancelled" ? (
+                              <Badge tone="red">ملغي</Badge>
+                            ) : (
+                              <Badge tone="gray">{asgn.status || "—"}</Badge>
+                            )}
+                          </td>
+
+                          {/* Payment Model */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {asgn.paymentModel ? (
+                              <Badge tone={asgn.paymentModel === "Salary" ? "purple" : "blue"}>
+                                {asgn.paymentModel === "PayPerOrder"
+                                  ? "عمولة"
+                                  : asgn.paymentModel === "Salary"
+                                  ? "راتب"
+                                  : asgn.paymentModel}
+                              </Badge>
+                            ) : (
+                              <span className="text-[var(--muted)] text-[11px]">—</span>
+                            )}
+                          </td>
+
+                          {/* Reasons & Notes */}
+                          <td className="px-3 py-2.5 text-[11px] text-[var(--muted)] max-w-xs">
+                            {asgn.startReason && (
+                              <div>
+                                <span className="text-[var(--foreground)] font-medium">البداية: </span>
+                                <span>{asgn.startReason}</span>
+                              </div>
+                            )}
+                            {asgn.endReason && (
+                              <div>
+                                <span className="text-[var(--foreground)] font-medium">النهاية: </span>
+                                <span>{asgn.endReason}</span>
+                              </div>
+                            )}
+                            {asgn.wasBackdated && (
+                              <div className="text-amber-700 dark:text-amber-300 font-medium text-[10px] mt-0.5">
+                                بأثر رجي: {asgn.backdatedReason || "نعم"}
+                              </div>
+                            )}
+                            {!asgn.startReason && !asgn.endReason && !asgn.wasBackdated && (
+                              <span>—</span>
+                            )}
+                          </td>
+
+                          {/* Rider Platform History link */}
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                            {asgn.actualRiderProfileId ? (
+                              <Link
+                                href={`/admin/platforms/rider-history?riderProfileId=${encodeURIComponent(
+                                  asgn.actualRiderProfileId
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 font-semibold hover:underline"
+                                title="عرض سجل جميع منصات هذا المندوب"
+                              >
+                                <span>سجل المنصات</span>
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            ) : (
+                              <span className="text-[var(--muted)]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+            <div className="text-[11px] text-[var(--muted)]">
+              {historyAccount?.captainId && (
+                <span>كابتن نينجا: <strong className="font-mono text-[var(--foreground)]">{historyAccount.captainId}</strong></span>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsAssignmentHistoryOpen(false);
+                setHistoryAccount(null);
+              }}
+            >
+              إغلاق
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* 6. Modal: Shared Account Day Usage Management */}
