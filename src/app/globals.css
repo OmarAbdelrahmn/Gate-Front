@@ -282,7 +282,7 @@ html[data-theme="dark"] form label:not(.field-shell):has(> :is(input, select, te
 @media print {
   @page {
     size: A4 portrait;
-    margin: 5mm 6mm;
+    margin: 4mm 5mm;
   }
 
   html,
@@ -326,13 +326,28 @@ html[data-theme="dark"] form label:not(.field-shell):has(> :is(input, select, te
   }
 
   .print-page-frame {
-    height: 275mm !important;
-    max-height: 275mm !important;
-    min-height: 275mm !important;
+    height: auto !important;
+    min-height: 255mm !important;
+    max-height: 282mm !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
-    page-break-after: avoid !important;
+    break-inside: avoid-page !important;
     overflow: hidden !important;
+  }
+
+  .print-page-flow {
+    min-height: 255mm !important;
+    max-height: 282mm !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+  }
+
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
   }
 }
 

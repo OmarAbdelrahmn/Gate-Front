@@ -53,15 +53,18 @@ import { OperationsEvaluationView } from "@/components/hr/forms/OperationsEvalua
 import { AbsenceWarningView } from "@/components/hr/forms/AbsenceWarningView";
 import { JobOfferView } from "@/components/hr/forms/JobOfferView";
 import {
-  FullCustodyFormView,
-  CustodyItemHandover,
-  CustodyItemReturn,
+  VehicleCustodyFormView,
   VehicleInspectionPart,
   PolicyTermItem,
-  INITIAL_CUSTODY_ITEMS,
   INITIAL_VEHICLE_PARTS,
   INITIAL_POLICY_TERMS,
-} from "@/components/hr/forms/FullCustodyFormView";
+} from "@/components/hr/forms/VehicleCustodyFormView";
+import {
+  CustodyItemsFormView,
+  CustodyItemHandover,
+  CustodyItemReturn,
+  INITIAL_PHYSICAL_CUSTODY_ITEMS,
+} from "@/components/hr/forms/CustodyItemsFormView";
 import { getVehiclesLookup } from "@/lib/fleet/api";
 import type { VehicleLookupResponse } from "@/lib/fleet/types";
 import { Card } from "@/components/ui/Card";
@@ -206,48 +209,36 @@ export default function HrFormsPage() {
   const [simFormNo, setSimFormNo] = useState<string>("SIM-2026/001");
   const [simEmployeeCode, setSimEmployeeCode] = useState<string>("");
 
-  // 04 - Full Custody & Fleet Policy Template State
-  const [fcModels, setFcModels] = useState<{ handover: boolean; returnCustody: boolean; fleetPolicy: boolean }>({
+  // 04 - Vehicle & Fleet Policy Template State
+  const [vcModels, setVcModels] = useState<{ handover: boolean; returnVehicle: boolean; fleetPolicy: boolean }>({
     handover: true,
-    returnCustody: false,
+    returnVehicle: false,
     fleetPolicy: true,
   });
-  const [fcLanguage, setFcLanguage] = useState<"ar" | "en" | "both">("both");
-  const [fcRecordNo, setFcRecordNo] = useState<string>("REC-2026/001");
-  const [fcTime, setFcTime] = useState<string>("10:00 ص");
-  const [fcBranch, setFcBranch] = useState<string>("الفرع الرئيسي - جدة");
-  const [fcPrevDeliveryRef, setFcPrevDeliveryRef] = useState<string>("REC-2026/HANDOVER-001");
-  const [fcRiderCode, setFcRiderCode] = useState<string>("");
+  const [vcLanguage, setVcLanguage] = useState<"ar" | "en" | "both">("both");
+  const [vcRecordNo, setVcRecordNo] = useState<string>("REC-2026/001");
+  const [vcTime, setVcTime] = useState<string>("10:00 ص");
+  const [vcBranch, setVcBranch] = useState<string>("الفرع الرئيسي - جدة");
+  const [vcPrevDeliveryRef, setVcPrevDeliveryRef] = useState<string>("REC-2026/HANDOVER-001");
+  const [vcRiderCode, setVcRiderCode] = useState<string>("");
 
-  // Full Custody: Vehicle details
+  // Vehicle details
   const [fleetVehicles, setFleetVehicles] = useState<VehicleLookupResponse[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
-  const [fcVehicleType, setFcVehicleType] = useState<string>("سيارة");
-  const [fcMakeModel, setFcMakeModel] = useState<string>("تويوتا يارس 2024");
-  const [fcColor, setFcColor] = useState<string>("أبيض");
-  const [fcPlateNumber, setFcPlateNumber] = useState<string>("أ ب ج 1234");
-  const [fcChassisNumber, setFcChassisNumber] = useState<string>("JT1234567890ABCD");
-  const [fcSerialNumber, setFcSerialNumber] = useState<string>("SN-987654");
-  const [fcOdometer, setFcOdometer] = useState<string>("45,200");
-  const [fcFuelLevel, setFcFuelLevel] = useState<string>("ممتلئ (Full)");
-  const [fcKeysCount, setFcKeysCount] = useState<string>("2");
-  const [fcRegistrationStatus, setFcRegistrationStatus] = useState<string>("سارية ومجددة");
+  const [vcVehicleType, setVcVehicleType] = useState<string>("سيارة");
+  const [vcMakeModel, setVcMakeModel] = useState<string>("تويوتا يارس 2024");
+  const [vcColor, setVcColor] = useState<string>("أبيض");
+  const [vcPlateNumber, setVcPlateNumber] = useState<string>("أ ب ج 1234");
+  const [vcChassisNumber, setVcChassisNumber] = useState<string>("JT1234567890ABCD");
+  const [vcSerialNumber, setVcSerialNumber] = useState<string>("SN-987654");
+  const [vcOdometer, setVcOdometer] = useState<string>("45,200");
+  const [vcFuelLevel, setVcFuelLevel] = useState<string>("ممتلئ (Full)");
+  const [vcKeysCount, setVcKeysCount] = useState<string>("2");
+  const [vcRegistrationStatus, setVcRegistrationStatus] = useState<string>("سارية ومجددة");
 
-  // Model 1: Handover items & inspection
-  const [fcHandoverItems, setFcHandoverItems] = useState<CustodyItemHandover[]>(() =>
-    INITIAL_CUSTODY_ITEMS.map((item) => ({
-      id: item.id,
-      selected: item.defaultSelected,
-      nameAr: item.nameAr,
-      nameEn: item.nameEn,
-      quantity: item.defaultQty,
-      unitPrice: item.unitPrice,
-      condition: item.defaultCondition,
-    }))
-  );
-  const [fcHandoverCustodyNotes, setFcHandoverCustodyNotes] = useState<string>("");
-  const [fcHandoverExteriorCondition, setFcHandoverExteriorCondition] = useState<"excellent" | "good" | "remarks">("excellent");
-  const [fcHandoverParts, setFcHandoverParts] = useState<VehicleInspectionPart[]>(() =>
+  // Model 1: Vehicle Handover
+  const [vcHandoverExteriorCondition, setVcHandoverExteriorCondition] = useState<"excellent" | "good" | "remarks">("excellent");
+  const [vcHandoverParts, setVcHandoverParts] = useState<VehicleInspectionPart[]>(() =>
     INITIAL_VEHICLE_PARTS.map((p) => ({
       id: p.id,
       nameAr: p.nameAr,
@@ -255,16 +246,17 @@ export default function HrFormsPage() {
       condition: p.defaultCondition,
     }))
   );
-  const [fcHandoverSpareTire, setFcHandoverSpareTire] = useState<"present" | "not_present" | "remarks">("present");
-  const [fcHandoverFaults, setFcHandoverFaults] = useState<{ id: number; checked: boolean; text: string }[]>([
+  const [vcHandoverSpareTire, setVcHandoverSpareTire] = useState<"present" | "not_present" | "remarks">("present");
+  const [vcHandoverFaults, setVcHandoverFaults] = useState<{ id: number; checked: boolean; text: string }[]>([
     { id: 1, checked: false, text: "صدمة أو خدش عميق بالصدام" },
     { id: 2, checked: false, text: "صوت بالمكينة أو العكوس" },
     { id: 3, checked: false, text: "اهتزاز بالفرامل أو رجة" },
     { id: 4, checked: false, text: "كسر في الزجاج أو المرايا" },
     { id: 5, checked: false, text: "لمبة المكينة أو فحص المحرك تعمل" },
   ]);
-  const [fcHandoverVisibleScratches, setFcHandoverVisibleScratches] = useState<string>("");
-  const [fcHandoverAttachments, setFcHandoverAttachments] = useState<{
+  const [vcHandoverVisibleScratches, setVcHandoverVisibleScratches] = useState<string>("");
+  const [vcHandoverVehicleNotes, setVcHandoverVehicleNotes] = useState<string>("");
+  const [vcHandoverAttachments, setVcHandoverAttachments] = useState<{
     front: boolean;
     rear: boolean;
     sides: boolean;
@@ -280,9 +272,77 @@ export default function HrFormsPage() {
     damages: false,
   });
 
-  // Model 2: Return items & inspection
-  const [fcReturnItems, setFcReturnItems] = useState<CustodyItemReturn[]>(() =>
-    INITIAL_CUSTODY_ITEMS.map((item) => ({
+  // Model 2: Vehicle Return
+  const [vcReturnExteriorCondition, setVcReturnExteriorCondition] = useState<"excellent" | "good" | "remarks">("good");
+  const [vcReturnParts, setVcReturnParts] = useState<VehicleInspectionPart[]>(() =>
+    INITIAL_VEHICLE_PARTS.map((p) => ({
+      id: p.id,
+      nameAr: p.nameAr,
+      nameEn: p.nameEn,
+      condition: p.defaultCondition,
+    }))
+  );
+  const [vcReturnSpareTire, setVcReturnSpareTire] = useState<"present" | "not_present" | "remarks">("present");
+  const [vcReturnFaults, setVcReturnFaults] = useState<{ id: number; checked: boolean; text: string }[]>([
+    { id: 1, checked: false, text: "صدمة أو خدش عميق بالصدام" },
+    { id: 2, checked: false, text: "صوت بالمكينة أو العكوس" },
+    { id: 3, checked: false, text: "اهتزاز بالفرامل أو رجة" },
+    { id: 4, checked: false, text: "كسر في الزجاج أو المرايا" },
+    { id: 5, checked: false, text: "لمبة المكينة أو فحص المحرك تعمل" },
+  ]);
+  const [vcReturnVisibleScratches, setVcReturnVisibleScratches] = useState<string>("");
+  const [vcReturnVehicleNotes, setVcReturnVehicleNotes] = useState<string>("");
+  const [vcReturnAttachments, setVcReturnAttachments] = useState<{
+    front: boolean;
+    rear: boolean;
+    sides: boolean;
+    interior: boolean;
+    odometer: boolean;
+    damages: boolean;
+  }>({
+    front: true,
+    rear: true,
+    sides: true,
+    interior: true,
+    odometer: true,
+    damages: false,
+  });
+
+  // Model 3: Policy terms (14 items - for vehicles only)
+  const [vcPolicyTerms, setVcPolicyTerms] = useState<PolicyTermItem[]>(() =>
+    INITIAL_POLICY_TERMS.map((t) => ({ ...t, selected: true }))
+  );
+
+  const [vcCompanyRepName, setVcCompanyRepName] = useState<string>("مسؤول قسم الأسطول والتشغيل");
+  const [vcCompanyRepTitle, setVcCompanyRepTitle] = useState<string>("مشرف الأسطول والعهد");
+
+  // 05 - Custody Items Handover & Return State
+  const [ciModels, setCiModels] = useState<{ handover: boolean; returnCustody: boolean }>({
+    handover: true,
+    returnCustody: false,
+  });
+  const [ciLanguage, setCiLanguage] = useState<"ar" | "en" | "both">("both");
+  const [ciRecordNo, setCiRecordNo] = useState<string>("REC-2026/001");
+  const [ciTime, setCiTime] = useState<string>("10:00 ص");
+  const [ciBranch, setCiBranch] = useState<string>("الفرع الرئيسي - جدة");
+  const [ciPrevDeliveryRef, setCiPrevDeliveryRef] = useState<string>("REC-2026/HANDOVER-001");
+  const [ciRiderCode, setCiRiderCode] = useState<string>("");
+
+  const [ciHandoverItems, setCiHandoverItems] = useState<CustodyItemHandover[]>(() =>
+    INITIAL_PHYSICAL_CUSTODY_ITEMS.map((item) => ({
+      id: item.id,
+      selected: item.defaultSelected,
+      nameAr: item.nameAr,
+      nameEn: item.nameEn,
+      quantity: item.defaultQty,
+      unitPrice: item.unitPrice,
+      condition: item.defaultCondition,
+    }))
+  );
+  const [ciHandoverCustodyNotes, setCiHandoverCustodyNotes] = useState<string>("");
+
+  const [ciReturnItems, setCiReturnItems] = useState<CustodyItemReturn[]>(() =>
+    INITIAL_PHYSICAL_CUSTODY_ITEMS.map((item) => ({
       id: item.id,
       selected: item.defaultSelected,
       nameAr: item.nameAr,
@@ -293,49 +353,9 @@ export default function HrFormsPage() {
       missingQty: 0,
     }))
   );
-  const [fcReturnCustodyNotes, setFcReturnCustodyNotes] = useState<string>("");
-  const [fcReturnExteriorCondition, setFcReturnExteriorCondition] = useState<"excellent" | "good" | "remarks">("good");
-  const [fcReturnParts, setFcReturnParts] = useState<VehicleInspectionPart[]>(() =>
-    INITIAL_VEHICLE_PARTS.map((p) => ({
-      id: p.id,
-      nameAr: p.nameAr,
-      nameEn: p.nameEn,
-      condition: p.defaultCondition,
-    }))
-  );
-  const [fcReturnSpareTire, setFcReturnSpareTire] = useState<"present" | "not_present" | "remarks">("present");
-  const [fcReturnFaults, setFcReturnFaults] = useState<{ id: number; checked: boolean; text: string }[]>([
-    { id: 1, checked: false, text: "صدمة أو خدش عميق بالصدام" },
-    { id: 2, checked: false, text: "صوت بالمكينة أو العكوس" },
-    { id: 3, checked: false, text: "اهتزاز بالفرامل أو رجة" },
-    { id: 4, checked: false, text: "كسر في الزجاج أو المرايا" },
-    { id: 5, checked: false, text: "لمبة المكينة أو فحص المحرك تعمل" },
-  ]);
-  const [fcReturnVisibleScratches, setFcReturnVisibleScratches] = useState<string>("");
-  const [fcReturnAttachments, setFcReturnAttachments] = useState<{
-    front: boolean;
-    rear: boolean;
-    sides: boolean;
-    interior: boolean;
-    odometer: boolean;
-    damages: boolean;
-  }>({
-    front: true,
-    rear: true,
-    sides: true,
-    interior: true,
-    odometer: true,
-    damages: false,
-  });
-
-  // Model 3: Policy terms (14 items)
-  const [fcPolicyTerms, setFcPolicyTerms] = useState<PolicyTermItem[]>(() =>
-    INITIAL_POLICY_TERMS.map((t) => ({ ...t, selected: true }))
-  );
-
-  // Administrative
-  const [fcCompanyRepName, setFcCompanyRepName] = useState<string>("مسؤول قسم الأسطول والتشغيل");
-  const [fcCompanyRepTitle, setFcCompanyRepTitle] = useState<string>("مشرف الأسطول والعهد");
+  const [ciReturnCustodyNotes, setCiReturnCustodyNotes] = useState<string>("");
+  const [ciCompanyRepName, setCiCompanyRepName] = useState<string>("مسؤول قسم العهد والتشغيل");
+  const [ciCompanyRepTitle, setCiCompanyRepTitle] = useState<string>("مشرف العهد والمستودع");
 
   // Load fleet vehicles lookup
   useEffect(() => {
@@ -362,13 +382,13 @@ export default function HrFormsPage() {
     const v = fleetVehicles.find((x) => x.id === selectedVehicleId);
     if (v) {
       if (v.manufacturer || v.model) {
-        setFcMakeModel(`${v.manufacturer || ""} ${v.model || ""}`.trim());
+        setVcMakeModel(`${v.manufacturer || ""} ${v.model || ""}`.trim());
       }
       if (v.plateNumberAr || v.plateNumberEn) {
-        setFcPlateNumber(v.plateNumberAr || v.plateNumberEn || "");
+        setVcPlateNumber(v.plateNumberAr || v.plateNumberEn || "");
       }
       if (v.assetNumber) {
-        setFcSerialNumber(v.assetNumber);
+        setVcSerialNumber(v.assetNumber);
       }
     }
   }, [selectedVehicleId, fleetVehicles]);
@@ -385,12 +405,16 @@ export default function HrFormsPage() {
     setActualStartDate(formattedDate);
     setAmountInWords(tafreetArabicNumber(15000, false));
 
-    // Support URL search params e.g. /admin/hr/forms?template=full_custody_form&personId=...
+    // Support URL search params e.g. /admin/hr/forms?template=vehicle_custody_form&personId=...
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tplParam = params.get("template");
-      if (tplParam && FORM_TEMPLATES.some((t) => t.id === tplParam)) {
-        setSelectedTemplateId(tplParam);
+      if (tplParam) {
+        if (tplParam === "full_custody_form" || tplParam === "vehicle_custody_form") {
+          setSelectedTemplateId("vehicle_custody_form");
+        } else if (FORM_TEMPLATES.some((t) => t.id === tplParam)) {
+          setSelectedTemplateId(tplParam);
+        }
       }
       const personParam = params.get("personId");
       if (personParam) {
@@ -402,17 +426,20 @@ export default function HrFormsPage() {
       }
       const modeParam = params.get("mode");
       if (modeParam === "handover_policy") {
-        setFcModels({ handover: true, returnCustody: false, fleetPolicy: true });
+        setVcModels({ handover: true, returnVehicle: false, fleetPolicy: true });
       } else if (modeParam === "return_policy") {
-        setFcModels({ handover: false, returnCustody: true, fleetPolicy: true });
+        setVcModels({ handover: false, returnVehicle: true, fleetPolicy: true });
       } else if (modeParam === "handover") {
-        setFcModels({ handover: true, returnCustody: false, fleetPolicy: false });
+        setVcModels({ handover: true, returnVehicle: false, fleetPolicy: false });
+        setCiModels({ handover: true, returnCustody: false });
       } else if (modeParam === "return") {
-        setFcModels({ handover: false, returnCustody: true, fleetPolicy: false });
+        setVcModels({ handover: false, returnVehicle: true, fleetPolicy: false });
+        setCiModels({ handover: false, returnCustody: true });
       } else if (modeParam === "policy") {
-        setFcModels({ handover: false, returnCustody: false, fleetPolicy: true });
+        setVcModels({ handover: false, returnVehicle: false, fleetPolicy: true });
       } else if (modeParam === "all") {
-        setFcModels({ handover: true, returnCustody: true, fleetPolicy: true });
+        setVcModels({ handover: true, returnVehicle: true, fleetPolicy: true });
+        setCiModels({ handover: true, returnCustody: true });
       }
     }
   }, []);
@@ -2069,18 +2096,18 @@ export default function HrFormsPage() {
                 </div>
               )}
 
-              {/* 04 - Full Custody & Fleet Policy Controls */}
-              {selectedTemplateId === "full_custody_form" && (
+              {/* 04 - Vehicle & Fleet Policy Form Controls */}
+              {(selectedTemplateId === "vehicle_custody_form" || selectedTemplateId === "full_custody_form") && (
                 <div className="space-y-4 pt-3 border-t border-[var(--border)]">
                   {/* Model Selection Checkboxes */}
                   <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black text-blue-950 dark:text-blue-100 flex items-center gap-1.5">
                         <CheckCircle2 size={15} className="text-[#1167c9]" />
-                        اختيار النماذج المطلوب طباعتها (من النماذج الثلاثة):
+                        اختيار نماذج المركبة المطلوب طباعتها (من النماذج الثلاثة):
                       </span>
                       <span className="text-[10.5px] font-bold text-blue-800 dark:text-blue-300">
-                        {Object.values(fcModels).filter(Boolean).length} محددة
+                        {Object.values(vcModels).filter(Boolean).length} محددة
                       </span>
                     </div>
 
@@ -2088,39 +2115,39 @@ export default function HrFormsPage() {
                       <label className="flex items-center gap-2.5 p-2 bg-white dark:bg-[var(--surface)] border border-[var(--border)] rounded-lg cursor-pointer hover:border-[#1167c9] transition-colors">
                         <input
                           type="checkbox"
-                          checked={fcModels.handover}
-                          onChange={(e) => setFcModels({ ...fcModels, handover: e.target.checked })}
+                          checked={vcModels.handover}
+                          onChange={(e) => setVcModels({ ...vcModels, handover: e.target.checked })}
                           className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
                         />
                         <div className="flex-1">
-                          <span className="text-xs font-black block">1. نموذج تسليم مركبة وعهدة للمندوب (Handover)</span>
-                          <span className="text-[10px] text-[var(--muted)]">محضر استلام العهدة، فحص المركبة، المرفقات، والإقرار والتعهد</span>
+                          <span className="text-xs font-black block">1. نموذج تسليم مركبة للمندوب (Vehicle Handover)</span>
+                          <span className="text-[10px] text-[var(--muted)]">محضر استلام المركبة، فحص الأجزاء والمحرك، المرفقات، والإقرار والتعهد</span>
                         </div>
                       </label>
 
                       <label className="flex items-center gap-2.5 p-2 bg-white dark:bg-[var(--surface)] border border-[var(--border)] rounded-lg cursor-pointer hover:border-[#1167c9] transition-colors">
                         <input
                           type="checkbox"
-                          checked={fcModels.returnCustody}
-                          onChange={(e) => setFcModels({ ...fcModels, returnCustody: e.target.checked })}
+                          checked={vcModels.returnVehicle}
+                          onChange={(e) => setVcModels({ ...vcModels, returnVehicle: e.target.checked })}
                           className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
                         />
                         <div className="flex-1">
-                          <span className="text-xs font-black block">2. نموذج استرداد مركبة وعهدة من المندوب (Return)</span>
-                          <span className="text-[10px] text-[var(--muted)]">محضر استرجاع العهدة، النواقص، فحص الاسترداد، وإقرار المنشأة</span>
+                          <span className="text-xs font-black block">2. نموذج استرداد مركبة من المندوب (Vehicle Return)</span>
+                          <span className="text-[10px] text-[var(--muted)]">محضر استرجاع المركبة، فحص الاسترداد، حصر التلفيات والأعطال، وإقرار الاسترداد</span>
                         </div>
                       </label>
 
                       <label className="flex items-center gap-2.5 p-2 bg-white dark:bg-[var(--surface)] border border-[var(--border)] rounded-lg cursor-pointer hover:border-[#1167c9] transition-colors">
                         <input
                           type="checkbox"
-                          checked={fcModels.fleetPolicy}
-                          onChange={(e) => setFcModels({ ...fcModels, fleetPolicy: e.target.checked })}
+                          checked={vcModels.fleetPolicy}
+                          onChange={(e) => setVcModels({ ...vcModels, fleetPolicy: e.target.checked })}
                           className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
                         />
                         <div className="flex-1">
-                          <span className="text-xs font-black block">3. بنود سياسة قسم الأسطول (Fleet Policy)</span>
-                          <span className="text-[10px] text-[var(--muted)]">الـ 14 بنداً الرسمية لسياسة الأسطول وإقرار الاطلاع والالتزام</span>
+                          <span className="text-xs font-black block">3. بنود سياسة قسم الأسطول (Fleet Policy - خاص بالمركبات)</span>
+                          <span className="text-[10px] text-[var(--muted)]">الـ 14 بنداً الرسمية لسياسة أسطول المركبات وإقرار الاطلاع والالتزام</span>
                         </div>
                       </label>
                     </div>
@@ -2129,35 +2156,42 @@ export default function HrFormsPage() {
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       <button
                         type="button"
-                        onClick={() => setFcModels({ handover: true, returnCustody: false, fleetPolicy: true })}
+                        onClick={() => setVcModels({ handover: true, returnVehicle: false, fleetPolicy: true })}
                         className="text-[10.5px] px-2 py-1 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold transition-colors"
                       >
                         تسليم + سياسة الأسطول
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFcModels({ handover: false, returnCustody: true, fleetPolicy: true })}
+                        onClick={() => setVcModels({ handover: false, returnVehicle: true, fleetPolicy: true })}
                         className="text-[10.5px] px-2 py-1 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold transition-colors"
                       >
                         استرداد + سياسة الأسطول
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFcModels({ handover: true, returnCustody: true, fleetPolicy: true })}
+                        onClick={() => setVcModels({ handover: true, returnVehicle: true, fleetPolicy: true })}
                         className="text-[10.5px] px-2 py-1 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold transition-colors"
                       >
                         النماذج الثلاثة كاملة
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFcModels({ handover: true, returnCustody: false, fleetPolicy: false })}
+                        onClick={() => setVcModels({ handover: true, returnVehicle: false, fleetPolicy: false })}
                         className="text-[10.5px] px-2 py-1 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium transition-colors"
                       >
                         تسليم فقط
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFcModels({ handover: false, returnCustody: false, fleetPolicy: true })}
+                        onClick={() => setVcModels({ handover: false, returnVehicle: true, fleetPolicy: false })}
+                        className="text-[10.5px] px-2 py-1 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium transition-colors"
+                      >
+                        استرداد فقط
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVcModels({ handover: false, returnVehicle: false, fleetPolicy: true })}
                         className="text-[10.5px] px-2 py-1 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium transition-colors"
                       >
                         سياسة الأسطول فقط
@@ -2173,9 +2207,9 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
-                        onClick={() => setFcLanguage("ar")}
+                        onClick={() => setVcLanguage("ar")}
                         className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
-                          fcLanguage === "ar"
+                          vcLanguage === "ar"
                             ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
                             : "bg-white dark:bg-slate-800 text-[var(--foreground)] border-[var(--border)] hover:bg-slate-50"
                         }`}
@@ -2184,9 +2218,9 @@ export default function HrFormsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFcLanguage("en")}
+                        onClick={() => setVcLanguage("en")}
                         className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
-                          fcLanguage === "en"
+                          vcLanguage === "en"
                             ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
                             : "bg-white dark:bg-slate-800 text-[var(--foreground)] border-[var(--border)] hover:bg-slate-50"
                         }`}
@@ -2195,9 +2229,9 @@ export default function HrFormsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFcLanguage("both")}
+                        onClick={() => setVcLanguage("both")}
                         className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
-                          fcLanguage === "both"
+                          vcLanguage === "both"
                             ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
                             : "bg-white dark:bg-slate-800 text-[var(--foreground)] border-[var(--border)] hover:bg-slate-50"
                         }`}
@@ -2212,15 +2246,14 @@ export default function HrFormsPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black flex items-center gap-1.5 text-[var(--foreground)]">
                         <Car size={15} className="text-[#1167c9]" />
-                        بيانات المركبة التابعة للعهدة:
+                        بيانات ومواصفات المركبة:
                       </span>
                     </div>
 
-                    {/* Quick Select from Fleet Vehicles */}
                     {fleetVehicles.length > 0 && (
                       <div>
                         <label className="block text-[11px] font-bold text-[var(--muted)] mb-1">
-                          اختيار سريع لمركبة من أسطول المنشأة (اختياري لتعبئة البيانات تلقائياً):
+                          اختيار سريع لمركبة من أسطول المنشأة (لتعبئة البيانات تلقائياً):
                         </label>
                         <SearchableSelect
                           options={vehicleOptions}
@@ -2230,13 +2263,13 @@ export default function HrFormsPage() {
                             const v = fleetVehicles.find((x) => x.id === val);
                             if (v) {
                               if (v.manufacturer || v.model) {
-                                setFcMakeModel(`${v.manufacturer || ""} ${v.model || ""}`.trim());
+                                setVcMakeModel(`${v.manufacturer || ""} ${v.model || ""}`.trim());
                               }
                               if (v.plateNumberAr || v.plateNumberEn) {
-                                setFcPlateNumber(v.plateNumberAr || v.plateNumberEn || "");
+                                setVcPlateNumber(v.plateNumberAr || v.plateNumberEn || "");
                               }
                               if (v.assetNumber) {
-                                setFcSerialNumber(v.assetNumber);
+                                setVcSerialNumber(v.assetNumber);
                               }
                             }
                           }}
@@ -2248,14 +2281,14 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="نوع المركبة"
-                        value={fcVehicleType}
-                        onChange={(e) => setFcVehicleType(e.target.value)}
+                        value={vcVehicleType}
+                        onChange={(e) => setVcVehicleType(e.target.value)}
                         placeholder="سيارة / دراجة نارية"
                       />
                       <Input
                         label="الماركة والموديل"
-                        value={fcMakeModel}
-                        onChange={(e) => setFcMakeModel(e.target.value)}
+                        value={vcMakeModel}
+                        onChange={(e) => setVcMakeModel(e.target.value)}
                         placeholder="تويوتا يارس 2024"
                       />
                     </div>
@@ -2263,14 +2296,14 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="رقم اللوحة"
-                        value={fcPlateNumber}
-                        onChange={(e) => setFcPlateNumber(e.target.value)}
+                        value={vcPlateNumber}
+                        onChange={(e) => setVcPlateNumber(e.target.value)}
                         placeholder="أ ب ج 1234"
                       />
                       <Input
                         label="اللون"
-                        value={fcColor}
-                        onChange={(e) => setFcColor(e.target.value)}
+                        value={vcColor}
+                        onChange={(e) => setVcColor(e.target.value)}
                         placeholder="أبيض"
                       />
                     </div>
@@ -2278,15 +2311,15 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="العداد (كم)"
-                        value={fcOdometer}
-                        onChange={(e) => setFcOdometer(e.target.value)}
+                        value={vcOdometer}
+                        onChange={(e) => setVcOdometer(e.target.value)}
                         placeholder="45,200"
                         dir="ltr"
                       />
                       <Input
                         label="مستوى الوقود"
-                        value={fcFuelLevel}
-                        onChange={(e) => setFcFuelLevel(e.target.value)}
+                        value={vcFuelLevel}
+                        onChange={(e) => setVcFuelLevel(e.target.value)}
                         placeholder="ممتلئ / نصف / ربع"
                       />
                     </div>
@@ -2294,15 +2327,15 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="رقم الهيكل (VIN)"
-                        value={fcChassisNumber}
-                        onChange={(e) => setFcChassisNumber(e.target.value)}
+                        value={vcChassisNumber}
+                        onChange={(e) => setVcChassisNumber(e.target.value)}
                         placeholder="JT1234567890ABCD"
                         dir="ltr"
                       />
                       <Input
                         label="الرقم التسلسلي"
-                        value={fcSerialNumber}
-                        onChange={(e) => setFcSerialNumber(e.target.value)}
+                        value={vcSerialNumber}
+                        onChange={(e) => setVcSerialNumber(e.target.value)}
                         placeholder="SN-987654"
                         dir="ltr"
                       />
@@ -2311,208 +2344,22 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="عدد المفاتيح"
-                        value={fcKeysCount}
-                        onChange={(e) => setFcKeysCount(e.target.value)}
+                        value={vcKeysCount}
+                        onChange={(e) => setVcKeysCount(e.target.value)}
                         placeholder="2"
                         dir="ltr"
                       />
                       <Input
                         label="رخصة السير (الاستمارة)"
-                        value={fcRegistrationStatus}
-                        onChange={(e) => setFcRegistrationStatus(e.target.value)}
+                        value={vcRegistrationStatus}
+                        onChange={(e) => setVcRegistrationStatus(e.target.value)}
                         placeholder="سارية ومجددة"
                       />
                     </div>
                   </div>
 
-                  {/* Handover Custody Items Checklist */}
-                  {fcModels.handover && (
-                    <div className="p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-[var(--foreground)]">
-                          أصناف العهدة المسلّمة (حدد ما يستلمه المندوب فعلياً):
-                        </span>
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setFcHandoverItems((prev) => prev.map((i) => ({ ...i, selected: true })))}
-                            className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold"
-                          >
-                            تحديد الكل
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setFcHandoverItems((prev) => prev.map((i) => ({ ...i, selected: false })))}
-                            className="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold"
-                          >
-                            إلغاء الكل
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="max-h-60 overflow-y-auto space-y-1 pr-1 text-xs">
-                        {fcHandoverItems.map((item) => (
-                          <label
-                            key={item.id}
-                            className={`flex items-center justify-between p-1.5 rounded-lg border cursor-pointer transition-colors ${
-                              item.selected
-                                ? "bg-blue-50/60 dark:bg-blue-950/20 border-[#1167c9]"
-                                : "bg-white dark:bg-slate-800/40 border-[var(--border)] opacity-60"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={item.selected}
-                                onChange={() =>
-                                  setFcHandoverItems((prev) =>
-                                    prev.map((i) => (i.id === item.id ? { ...i, selected: !i.selected } : i))
-                                  )
-                                }
-                                className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
-                              />
-                              <span className="font-bold text-gray-900 dark:text-gray-100">
-                                {item.nameAr} <span className="text-[10px] text-gray-500 font-normal dir-ltr">({item.nameEn})</span>
-                              </span>
-                            </div>
-                            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
-                              {item.unitPrice} ريال
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-
-                      <Input
-                        label="ملاحظات العهدة وحالتها"
-                        value={fcHandoverCustodyNotes}
-                        onChange={(e) => setFcHandoverCustodyNotes(e.target.value)}
-                        placeholder="أي ملاحظات عامة حول العهدة المسلّمة..."
-                      />
-                    </div>
-                  )}
-
-                  {/* Return Custody Items Checklist */}
-                  {fcModels.returnCustody && (
-                    <div className="p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-[var(--foreground)]">
-                          أصناف العهدة المستردة ونواقصها:
-                        </span>
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setFcReturnItems((prev) => prev.map((i) => ({ ...i, selected: true })))}
-                            className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold"
-                          >
-                            تحديد الكل
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setFcReturnItems((prev) => prev.map((i) => ({ ...i, selected: false })))}
-                            className="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold"
-                          >
-                            إلغاء الكل
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 text-xs">
-                        {fcReturnItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className={`p-2 rounded-lg border space-y-1.5 ${
-                              item.selected
-                                ? "bg-blue-50/60 dark:bg-blue-950/20 border-[#1167c9]"
-                                : "bg-white dark:bg-slate-800/40 border-[var(--border)] opacity-60"
-                            }`}
-                          >
-                            <label className="flex items-center justify-between cursor-pointer">
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={item.selected}
-                                  onChange={() =>
-                                    setFcReturnItems((prev) =>
-                                      prev.map((i) => (i.id === item.id ? { ...i, selected: !i.selected } : i))
-                                    )
-                                  }
-                                  className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
-                                />
-                                <span className="font-bold text-gray-900 dark:text-gray-100">
-                                  {item.nameAr}
-                                </span>
-                              </div>
-                              <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
-                                {item.unitPrice} ريال
-                              </span>
-                            </label>
-
-                            {item.selected && (
-                              <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-gray-200 dark:border-gray-700 text-[11px]">
-                                <div>
-                                  <span className="text-gray-500 block text-[10px]">الكمية الأصلية</span>
-                                  <input
-                                    type="text"
-                                    value={item.originalQty}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFcReturnItems((prev) =>
-                                        prev.map((i) => (i.id === item.id ? { ...i, originalQty: val } : i))
-                                      );
-                                    }}
-                                    className="w-full p-1 border rounded text-center text-xs"
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-emerald-600 font-bold block text-[10px]">المعاد</span>
-                                  <input
-                                    type="text"
-                                    value={item.returnedQty}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFcReturnItems((prev) =>
-                                        prev.map((i) => {
-                                          if (i.id !== item.id) return i;
-                                          const orig = Number(i.originalQty) || 0;
-                                          const ret = Number(val) || 0;
-                                          return { ...i, returnedQty: val, missingQty: Math.max(0, orig - ret) };
-                                        })
-                                      );
-                                    }}
-                                    className="w-full p-1 border rounded text-center text-xs font-bold text-emerald-700"
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-red-600 font-bold block text-[10px]">الناقص</span>
-                                  <input
-                                    type="text"
-                                    value={item.missingQty}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFcReturnItems((prev) =>
-                                        prev.map((i) => (i.id === item.id ? { ...i, missingQty: val } : i))
-                                      );
-                                    }}
-                                    className="w-full p-1 border rounded text-center text-xs font-bold text-red-700"
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-
-                      <Input
-                        label="ملاحظات الاسترداد"
-                        value={fcReturnCustodyNotes}
-                        onChange={(e) => setFcReturnCustodyNotes(e.target.value)}
-                        placeholder="أي ملاحظات حول العهدة المستردة..."
-                      />
-                    </div>
-                  )}
-
-                  {/* Fleet Policy 14 Terms Checklist */}
-                  {fcModels.fleetPolicy && (
+                  {/* Fleet Policy 14 Terms Checklist (with vehicle only) */}
+                  {vcModels.fleetPolicy && (
                     <div className="p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-black text-[var(--foreground)]">
@@ -2521,14 +2368,14 @@ export default function HrFormsPage() {
                         <div className="flex gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setFcPolicyTerms((prev) => prev.map((t) => ({ ...t, selected: true })))}
+                            onClick={() => setVcPolicyTerms((prev) => prev.map((t) => ({ ...t, selected: true })))}
                             className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold"
                           >
                             تحديد الكل
                           </button>
                           <button
                             type="button"
-                            onClick={() => setFcPolicyTerms((prev) => prev.map((t) => ({ ...t, selected: false })))}
+                            onClick={() => setVcPolicyTerms((prev) => prev.map((t) => ({ ...t, selected: false })))}
                             className="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold"
                           >
                             إلغاء الكل
@@ -2537,7 +2384,7 @@ export default function HrFormsPage() {
                       </div>
 
                       <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 text-xs">
-                        {fcPolicyTerms.map((term, index) => (
+                        {vcPolicyTerms.map((term, index) => (
                           <label
                             key={term.id}
                             className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
@@ -2550,7 +2397,7 @@ export default function HrFormsPage() {
                               type="checkbox"
                               checked={term.selected}
                               onChange={() =>
-                                setFcPolicyTerms((prev) =>
+                                setVcPolicyTerms((prev) =>
                                   prev.map((t) => (t.id === term.id ? { ...t, selected: !t.selected } : t))
                                 )
                               }
@@ -2574,29 +2421,29 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="رقم المحضر (Record No)"
-                        value={fcRecordNo}
-                        onChange={(e) => setFcRecordNo(e.target.value)}
+                        value={vcRecordNo}
+                        onChange={(e) => setVcRecordNo(e.target.value)}
                         placeholder="REC-2026/001"
                         dir="ltr"
                       />
                       <Input
                         label="الوقت"
-                        value={fcTime}
-                        onChange={(e) => setFcTime(e.target.value)}
+                        value={vcTime}
+                        onChange={(e) => setVcTime(e.target.value)}
                         placeholder="10:00 ص"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="الفرع"
-                        value={fcBranch}
-                        onChange={(e) => setFcBranch(e.target.value)}
+                        value={vcBranch}
+                        onChange={(e) => setVcBranch(e.target.value)}
                         placeholder="الفرع الرئيسي - جدة"
                       />
                       <Input
                         label="مرجع التسليم السابق (للاسترداد)"
-                        value={fcPrevDeliveryRef}
-                        onChange={(e) => setFcPrevDeliveryRef(e.target.value)}
+                        value={vcPrevDeliveryRef}
+                        onChange={(e) => setVcPrevDeliveryRef(e.target.value)}
                         placeholder="REC-2026/HANDOVER-001"
                         dir="ltr"
                       />
@@ -2604,14 +2451,14 @@ export default function HrFormsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         label="اسم ممثل الشركة المستلم/المسلّم"
-                        value={fcCompanyRepName}
-                        onChange={(e) => setFcCompanyRepName(e.target.value)}
+                        value={vcCompanyRepName}
+                        onChange={(e) => setVcCompanyRepName(e.target.value)}
                         placeholder="مسؤول قسم الأسطول والتشغيل"
                       />
                       <Input
                         label="صفة ممثل الشركة"
-                        value={fcCompanyRepTitle}
-                        onChange={(e) => setFcCompanyRepTitle(e.target.value)}
+                        value={vcCompanyRepTitle}
+                        onChange={(e) => setVcCompanyRepTitle(e.target.value)}
                         placeholder="مشرف الأسطول والعهد"
                       />
                     </div>
@@ -2619,8 +2466,358 @@ export default function HrFormsPage() {
                 </div>
               )}
 
+              {/* 05 - Custody Items Handover & Return Form Controls */}
+              {selectedTemplateId === "custody_items_form" && (
+                <div className="space-y-4 pt-3 border-t border-[var(--border)]">
+                  {/* Model Selection Checkboxes */}
+                  <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-blue-950 dark:text-blue-100 flex items-center gap-1.5">
+                        <CheckCircle2 size={15} className="text-[#1167c9]" />
+                        اختيار نماذج العهدة العينية المطلوب طباعتها:
+                      </span>
+                      <span className="text-[10.5px] font-bold text-blue-800 dark:text-blue-300">
+                        {Object.values(ciModels).filter(Boolean).length} محددة
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2.5 p-2 bg-white dark:bg-[var(--surface)] border border-[var(--border)] rounded-lg cursor-pointer hover:border-[#1167c9] transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={ciModels.handover}
+                          onChange={(e) => setCiModels({ ...ciModels, handover: e.target.checked })}
+                          className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
+                        />
+                        <div className="flex-1">
+                          <span className="text-xs font-black block">1. نموذج تسليم عهدة عينية وتجهيزات (Handover)</span>
+                          <span className="text-[10px] text-[var(--muted)]">محضر استلام الأدوات والتجهيزات، الكميات، الحالات، والإقرار والتعهد</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2.5 p-2 bg-white dark:bg-[var(--surface)] border border-[var(--border)] rounded-lg cursor-pointer hover:border-[#1167c9] transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={ciModels.returnCustody}
+                          onChange={(e) => setCiModels({ ...ciModels, returnCustody: e.target.checked })}
+                          className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
+                        />
+                        <div className="flex-1">
+                          <span className="text-xs font-black block">2. نموذج استرداد عهدة عينية وتجهيزات (Return)</span>
+                          <span className="text-[10px] text-[var(--muted)]">محضر استرجاع العهدة، حصر النواقص، إقرار الاستلام والخصومات</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setCiModels({ handover: true, returnCustody: false })}
+                        className="text-[10.5px] px-2 py-1 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold transition-colors"
+                      >
+                        تسليم عهدة فقط
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCiModels({ handover: false, returnCustody: true })}
+                        className="text-[10.5px] px-2 py-1 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold transition-colors"
+                      >
+                        استرداد عهدة فقط
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCiModels({ handover: true, returnCustody: true })}
+                        className="text-[10.5px] px-2 py-1 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold transition-colors"
+                      >
+                        تسليم + استرداد
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Language Selection */}
+                  <div className="p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl space-y-2">
+                    <label className="block text-xs font-black text-[var(--foreground)]">
+                      لغة النموذج (Language):
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCiLanguage("ar")}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                          ciLanguage === "ar"
+                            ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
+                            : "bg-white dark:bg-slate-800 text-[var(--foreground)] border-[var(--border)] hover:bg-slate-50"
+                        }`}
+                      >
+                        عربي فقط
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCiLanguage("en")}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                          ciLanguage === "en"
+                            ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
+                            : "bg-white dark:bg-slate-800 text-[var(--foreground)] border-[var(--border)] hover:bg-slate-50"
+                        }`}
+                      >
+                        English Only
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCiLanguage("both")}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                          ciLanguage === "both"
+                            ? "bg-[#1167c9] text-white border-[#1167c9] shadow-xs"
+                            : "bg-white dark:bg-slate-800 text-[var(--foreground)] border-[var(--border)] hover:bg-slate-50"
+                        }`}
+                      >
+                        ثنائي اللغة (Both)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Handover Custody Items Checklist */}
+                  {ciModels.handover && (
+                    <div className="p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-[var(--foreground)]">
+                          أصناف العهدة المسلّمة (حدد ما يستلمه المندوب فعلياً):
+                        </span>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCiHandoverItems((prev) => prev.map((i) => ({ ...i, selected: true })))}
+                            className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold"
+                          >
+                            تحديد الكل
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCiHandoverItems((prev) => prev.map((i) => ({ ...i, selected: false })))}
+                            className="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold"
+                          >
+                            إلغاء الكل
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-60 overflow-y-auto space-y-1 pr-1 text-xs">
+                        {ciHandoverItems.map((item) => (
+                          <label
+                            key={item.id}
+                            className={`flex items-center justify-between p-1.5 rounded-lg border cursor-pointer transition-colors ${
+                              item.selected
+                                ? "bg-blue-50/60 dark:bg-blue-950/20 border-[#1167c9]"
+                                : "bg-white dark:bg-slate-800/40 border-[var(--border)] opacity-60"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={item.selected}
+                                onChange={() =>
+                                  setCiHandoverItems((prev) =>
+                                    prev.map((i) => (i.id === item.id ? { ...i, selected: !i.selected } : i))
+                                  )
+                                }
+                                className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
+                              />
+                              <span className="font-bold text-gray-900 dark:text-gray-100">
+                                {item.nameAr} <span className="text-[10px] text-gray-500 font-normal dir-ltr">({item.nameEn})</span>
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
+                              {item.unitPrice} ريال
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <Input
+                        label="ملاحظات العهدة وحالتها"
+                        value={ciHandoverCustodyNotes}
+                        onChange={(e) => setCiHandoverCustodyNotes(e.target.value)}
+                        placeholder="أي ملاحظات عامة حول العهدة المسلّمة..."
+                      />
+                    </div>
+                  )}
+
+                  {/* Return Custody Items Checklist */}
+                  {ciModels.returnCustody && (
+                    <div className="p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-[var(--foreground)]">
+                          أصناف العهدة المستردة ونواقصها:
+                        </span>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCiReturnItems((prev) => prev.map((i) => ({ ...i, selected: true })))}
+                            className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold"
+                          >
+                            تحديد الكل
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCiReturnItems((prev) => prev.map((i) => ({ ...i, selected: false })))}
+                            className="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold"
+                          >
+                            إلغاء الكل
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                        {ciReturnItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`p-2 rounded-lg border space-y-1.5 ${
+                              item.selected
+                                ? "bg-blue-50/60 dark:bg-blue-950/20 border-[#1167c9]"
+                                : "bg-white dark:bg-slate-800/40 border-[var(--border)] opacity-60"
+                            }`}
+                          >
+                            <label className="flex items-center justify-between cursor-pointer">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={item.selected}
+                                  onChange={() =>
+                                    setCiReturnItems((prev) =>
+                                      prev.map((i) => (i.id === item.id ? { ...i, selected: !i.selected } : i))
+                                    )
+                                  }
+                                  className="w-4 h-4 rounded text-[#1167c9] focus:ring-[#1167c9]"
+                                />
+                                <span className="font-bold text-gray-900 dark:text-gray-100">
+                                  {item.nameAr}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
+                                {item.unitPrice} ريال
+                              </span>
+                            </label>
+
+                            {item.selected && (
+                              <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-gray-200 dark:border-gray-700 text-[11px]">
+                                <div>
+                                  <span className="text-gray-500 block text-[10px]">الكمية الأصلية</span>
+                                  <input
+                                    type="text"
+                                    value={item.originalQty}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setCiReturnItems((prev) =>
+                                        prev.map((i) => (i.id === item.id ? { ...i, originalQty: val } : i))
+                                      );
+                                    }}
+                                    className="w-full p-1 border rounded text-center text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-emerald-600 font-bold block text-[10px]">المعاد</span>
+                                  <input
+                                    type="text"
+                                    value={item.returnedQty}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setCiReturnItems((prev) =>
+                                        prev.map((i) => {
+                                          if (i.id !== item.id) return i;
+                                          const orig = Number(i.originalQty) || 0;
+                                          const ret = Number(val) || 0;
+                                          return { ...i, returnedQty: val, missingQty: Math.max(0, orig - ret) };
+                                        })
+                                      );
+                                    }}
+                                    className="w-full p-1 border rounded text-center text-xs font-bold text-emerald-700"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-red-600 font-bold block text-[10px]">الناقص</span>
+                                  <input
+                                    type="text"
+                                    value={item.missingQty}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setCiReturnItems((prev) =>
+                                        prev.map((i) => (i.id === item.id ? { ...i, missingQty: val } : i))
+                                      );
+                                    }}
+                                    className="w-full p-1 border rounded text-center text-xs font-bold text-red-700"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <Input
+                        label="ملاحظات الاسترداد"
+                        value={ciReturnCustodyNotes}
+                        onChange={(e) => setCiReturnCustodyNotes(e.target.value)}
+                        placeholder="أي ملاحظات حول العهدة المستردة..."
+                      />
+                    </div>
+                  )}
+
+                  {/* Administrative & Record Details */}
+                  <div className="p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl space-y-2.5">
+                    <span className="text-xs font-black text-[var(--foreground)] block">
+                      بيانات المحضر والإدارة والاعتماد:
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        label="رقم المحضر (Record No)"
+                        value={ciRecordNo}
+                        onChange={(e) => setCiRecordNo(e.target.value)}
+                        placeholder="REC-2026/001"
+                        dir="ltr"
+                      />
+                      <Input
+                        label="الوقت"
+                        value={ciTime}
+                        onChange={(e) => setCiTime(e.target.value)}
+                        placeholder="10:00 ص"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        label="الفرع"
+                        value={ciBranch}
+                        onChange={(e) => setCiBranch(e.target.value)}
+                        placeholder="الفرع الرئيسي - جدة"
+                      />
+                      <Input
+                        label="مرجع التسليم السابق (للاسترداد)"
+                        value={ciPrevDeliveryRef}
+                        onChange={(e) => setCiPrevDeliveryRef(e.target.value)}
+                        placeholder="REC-2026/HANDOVER-001"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        label="اسم ممثل الشركة المستلم/المسلّم"
+                        value={ciCompanyRepName}
+                        onChange={(e) => setCiCompanyRepName(e.target.value)}
+                        placeholder="مسؤول قسم العهد والتشغيل"
+                      />
+                      <Input
+                        label="صفة ممثل الشركة"
+                        value={ciCompanyRepTitle}
+                        onChange={(e) => setCiCompanyRepTitle(e.target.value)}
+                        placeholder="مشرف العهد والمستودع"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* City for templates requiring city */}
-              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "custody_receipt" && selectedTemplateId !== "full_custody_form" && (
+              {activeTemplate.requiresCity && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "custody_receipt" && selectedTemplateId !== "full_custody_form" && selectedTemplateId !== "vehicle_custody_form" && selectedTemplateId !== "custody_items_form" && (
                 <Input
                   label="المدينة / الفرع"
                   value={issueCity}
@@ -2644,7 +2841,7 @@ export default function HrFormsPage() {
               )}
 
               {/* Generic Document notes */}
-              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "custody_receipt" && selectedTemplateId !== "full_custody_form" && (
+              {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "custody_receipt" && selectedTemplateId !== "full_custody_form" && selectedTemplateId !== "vehicle_custody_form" && selectedTemplateId !== "custody_items_form" && (
                 <div className="pt-2 border-t border-[var(--border)]">
                   <label className="block text-xs font-bold text-[var(--muted)] mb-1">
                     ملاحظات إضافية (اختياري)
@@ -3036,97 +3233,124 @@ export default function HrFormsPage() {
               </LetterheadFrame>
             )}
 
-            {selectedTemplateId === "full_custody_form" && (
-              <FullCustodyFormView
+            {(selectedTemplateId === "vehicle_custody_form" || selectedTemplateId === "full_custody_form") && (
+              <VehicleCustodyFormView
                 data={{
-                  selectedModels: fcModels,
-                  language: fcLanguage,
+                  selectedModels: vcModels,
+                  language: vcLanguage,
                   letterheadId: selectedLetterhead,
                   companyName,
-                  recordNumber: fcRecordNo,
+                  recordNumber: vcRecordNo,
                   date,
-                  time: fcTime,
-                  branch: fcBranch,
-                  prevDeliveryRef: fcPrevDeliveryRef,
+                  time: vcTime,
+                  branch: vcBranch,
+                  prevDeliveryRef: vcPrevDeliveryRef,
                   riderName,
                   iqamaNo,
                   nationality,
                   mobile,
                   jobTitle,
-                  riderCode: fcRiderCode || (selectedPersonId ? selectedPersonId.slice(0, 8) : ""),
-                  vehicleType: fcVehicleType,
-                  makeModel: fcMakeModel,
-                  color: fcColor,
-                  plateNumber: fcPlateNumber,
-                  chassisNumber: fcChassisNumber,
-                  serialNumber: fcSerialNumber,
-                  odometer: fcOdometer,
-                  fuelLevel: fcFuelLevel,
-                  keysCount: fcKeysCount,
-                  registrationStatus: fcRegistrationStatus,
-                  handoverItems: fcHandoverItems,
-                  handoverCustodyNotes: fcHandoverCustodyNotes,
-                  handoverExteriorCondition: fcHandoverExteriorCondition,
-                  handoverParts: fcHandoverParts,
-                  handoverSpareTire: fcHandoverSpareTire,
-                  handoverFaults: fcHandoverFaults,
-                  handoverVisibleScratches: fcHandoverVisibleScratches,
-                  handoverAttachments: fcHandoverAttachments,
-                  returnItems: fcReturnItems,
-                  returnCustodyNotes: fcReturnCustodyNotes,
-                  returnExteriorCondition: fcReturnExteriorCondition,
-                  returnParts: fcReturnParts,
-                  returnSpareTire: fcReturnSpareTire,
-                  returnFaults: fcReturnFaults,
-                  returnVisibleScratches: fcReturnVisibleScratches,
-                  returnAttachments: fcReturnAttachments,
-                  policyTerms: fcPolicyTerms,
-                  companyRepName: fcCompanyRepName,
-                  companyRepTitle: fcCompanyRepTitle,
-                  onToggleModel: (model) => setFcModels((prev) => ({ ...prev, [model]: !prev[model] })),
-                  onToggleHandoverItem: (id) =>
-                    setFcHandoverItems((prev) =>
-                      prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item))
-                    ),
-                  onToggleReturnItem: (id) =>
-                    setFcReturnItems((prev) =>
-                      prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item))
-                    ),
+                  riderCode: vcRiderCode || (selectedPersonId ? selectedPersonId.slice(0, 8) : ""),
+                  vehicleType: vcVehicleType,
+                  makeModel: vcMakeModel,
+                  color: vcColor,
+                  plateNumber: vcPlateNumber,
+                  chassisNumber: vcChassisNumber,
+                  serialNumber: vcSerialNumber,
+                  odometer: vcOdometer,
+                  fuelLevel: vcFuelLevel,
+                  keysCount: vcKeysCount,
+                  registrationStatus: vcRegistrationStatus,
+                  handoverExteriorCondition: vcHandoverExteriorCondition,
+                  handoverParts: vcHandoverParts,
+                  handoverSpareTire: vcHandoverSpareTire,
+                  handoverFaults: vcHandoverFaults,
+                  handoverVisibleScratches: vcHandoverVisibleScratches,
+                  handoverVehicleNotes: vcHandoverVehicleNotes,
+                  handoverAttachments: vcHandoverAttachments,
+                  returnExteriorCondition: vcReturnExteriorCondition,
+                  returnParts: vcReturnParts,
+                  returnSpareTire: vcReturnSpareTire,
+                  returnFaults: vcReturnFaults,
+                  returnVisibleScratches: vcReturnVisibleScratches,
+                  returnVehicleNotes: vcReturnVehicleNotes,
+                  returnAttachments: vcReturnAttachments,
+                  policyTerms: vcPolicyTerms,
+                  companyRepName: vcCompanyRepName,
+                  companyRepTitle: vcCompanyRepTitle,
+                  onToggleModel: (model) => setVcModels((prev) => ({ ...prev, [model]: !prev[model] })),
                   onTogglePolicyTerm: (id) =>
-                    setFcPolicyTerms((prev) =>
+                    setVcPolicyTerms((prev) =>
                       prev.map((t) => (t.id === id ? { ...t, selected: !t.selected } : t))
                     ),
                   onToggleAttachment: (type, key) => {
                     if (type === "handover") {
-                      setFcHandoverAttachments((prev: any) => ({ ...prev, [key]: !prev[key] }));
+                      setVcHandoverAttachments((prev: any) => ({ ...prev, [key]: !prev[key] }));
                     } else {
-                      setFcReturnAttachments((prev: any) => ({ ...prev, [key]: !prev[key] }));
+                      setVcReturnAttachments((prev: any) => ({ ...prev, [key]: !prev[key] }));
                     }
                   },
                   onToggleFault: (type, id) => {
                     if (type === "handover") {
-                      setFcHandoverFaults((prev) =>
+                      setVcHandoverFaults((prev) =>
                         prev.map((f) => (f.id === id ? { ...f, checked: !f.checked } : f))
                       );
                     } else {
-                      setFcReturnFaults((prev) =>
+                      setVcReturnFaults((prev) =>
                         prev.map((f) => (f.id === id ? { ...f, checked: !f.checked } : f))
                       );
                     }
                   },
                   onSelectExteriorCondition: (type, val) => {
-                    if (type === "handover") setFcHandoverExteriorCondition(val);
-                    else setFcReturnExteriorCondition(val);
+                    if (type === "handover") setVcHandoverExteriorCondition(val);
+                    else setVcReturnExteriorCondition(val);
                   },
                   onSelectSpareTire: (type, val) => {
-                    if (type === "handover") setFcHandoverSpareTire(val);
-                    else setFcReturnSpareTire(val);
+                    if (type === "handover") setVcHandoverSpareTire(val);
+                    else setVcReturnSpareTire(val);
                   },
                 }}
               />
             )}
 
-            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "custody_receipt" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "job_offer" && selectedTemplateId !== "full_custody_form" && (
+            {selectedTemplateId === "custody_items_form" && (
+              <CustodyItemsFormView
+                data={{
+                  selectedModels: ciModels,
+                  language: ciLanguage,
+                  letterheadId: selectedLetterhead,
+                  companyName,
+                  recordNumber: ciRecordNo,
+                  date,
+                  time: ciTime,
+                  branch: ciBranch,
+                  prevDeliveryRef: ciPrevDeliveryRef,
+                  riderName,
+                  iqamaNo,
+                  nationality,
+                  mobile,
+                  jobTitle,
+                  riderCode: ciRiderCode || (selectedPersonId ? selectedPersonId.slice(0, 8) : ""),
+                  handoverItems: ciHandoverItems,
+                  handoverCustodyNotes: ciHandoverCustodyNotes,
+                  returnItems: ciReturnItems,
+                  returnCustodyNotes: ciReturnCustodyNotes,
+                  companyRepName: ciCompanyRepName,
+                  companyRepTitle: ciCompanyRepTitle,
+                  onToggleModel: (model) => setCiModels((prev) => ({ ...prev, [model]: !prev[model] })),
+                  onToggleHandoverItem: (id) =>
+                    setCiHandoverItems((prev) =>
+                      prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item))
+                    ),
+                  onToggleReturnItem: (id) =>
+                    setCiReturnItems((prev) =>
+                      prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item))
+                    ),
+                }}
+              />
+            )}
+
+            {selectedTemplateId !== "cash_disbursement" && selectedTemplateId !== "promissory_note" && selectedTemplateId !== "financial_advance" && selectedTemplateId !== "cash_custody_promissory" && selectedTemplateId !== "custody_receipt" && selectedTemplateId !== "leave_request" && selectedTemplateId !== "salary_certificate" && selectedTemplateId !== "clearance_form" && selectedTemplateId !== "resignation_form" && selectedTemplateId !== "final_settlement" && selectedTemplateId !== "hr_interview" && selectedTemplateId !== "operations_evaluation" && selectedTemplateId !== "work_commencement" && selectedTemplateId !== "disciplinary_action" && selectedTemplateId !== "annual_entitlements_receipt" && selectedTemplateId !== "sim_handover_receipt" && selectedTemplateId !== "absence_warning" && selectedTemplateId !== "job_offer" && selectedTemplateId !== "full_custody_form" && selectedTemplateId !== "vehicle_custody_form" && selectedTemplateId !== "custody_items_form" && (
               <GenericDocumentView
                 template={activeTemplate}
                 data={{

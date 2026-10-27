@@ -108,20 +108,22 @@ export function LetterheadHeader({
   companyName,
   date,
   refNo,
+  compact = false,
 }: {
   letterheadId?: LetterheadId;
   companyName?: string;
   date?: string;
   refNo?: string;
+  compact?: boolean;
 }) {
   const current = LETTERHEAD_TEMPLATES.find((t) => t.id === letterheadId) || LETTERHEAD_TEMPLATES[0];
   const effectiveCompanyName = companyName || current.companyName;
 
   if (letterheadId === "standard") {
     return (
-      <div className="flex justify-between items-center border-b-2 border-black pb-3 mb-4 text-black font-sans">
+      <div className={`flex justify-between items-center border-b-2 border-black ${compact ? "pb-1.5 mb-2 print:pb-0.5 print:mb-1" : "pb-3 mb-4"} text-black font-sans`}>
         <div>
-          <h1 className="text-lg font-extrabold">{effectiveCompanyName}</h1>
+          <h1 className={`${compact ? "text-base print:text-[14px]" : "text-lg"} font-extrabold`}>{effectiveCompanyName}</h1>
           <p className="text-xs font-semibold text-gray-700">إدارة الموارد البشرية والشؤون الإدارية</p>
         </div>
         <div className="text-left text-xs font-bold">
@@ -134,11 +136,11 @@ export function LetterheadHeader({
 
   if (letterheadId === "bawaba") {
     return (
-      <div className="mb-4 text-black dir-rtl print:mb-2 relative z-10" style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
-        <div className="flex justify-between items-start border-b-2 border-gray-800 pb-3">
+      <div className={`${compact ? "mb-2 print:mb-1" : "mb-4 print:mb-2"} text-black dir-rtl relative z-10`} style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
+        <div className={`flex justify-between items-start border-b-2 border-gray-800 ${compact ? "pb-1.5 print:pb-0.5" : "pb-3"}`}>
           {/* Logo on Left (RTL layout) */}
           {current.logoUrl && (
-            <div className="w-16 h-16 shrink-0 flex items-center justify-center">
+            <div className={`${compact ? "w-14 h-14 print:w-11 print:h-11" : "w-16 h-16"} shrink-0 flex items-center justify-center`}>
               <img
                 src={current.logoUrl}
                 alt="Logo"
@@ -150,14 +152,14 @@ export function LetterheadHeader({
           
           {/* Company Titles on Right */}
           <div className="text-right space-y-0.5">
-            <h1 className="text-lg md:text-xl font-black text-gray-900 tracking-tight">{effectiveCompanyName}</h1>
+            <h1 className={`${compact ? "text-base md:text-lg print:text-[14px]" : "text-lg md:text-xl"} font-black text-gray-900 tracking-tight`}>{effectiveCompanyName}</h1>
             <p className="text-xs font-bold text-gray-700 dir-ltr text-right">{current.titleEn}</p>
             <p className="text-xs font-bold text-gray-600">الرقم الضريبي: <span className="font-mono">{current.taxNumber}</span></p>
           </div>
         </div>
 
         {/* Metadata line */}
-        <div className="flex justify-between items-center text-xs font-bold text-gray-700 pt-2 px-1">
+        <div className={`flex justify-between items-center text-xs font-bold text-gray-700 ${compact ? "pt-1 px-1 print:pt-0.5" : "pt-2 px-1"}`}>
           <span>إدارة الموارد البشرية والشؤون الإدارية</span>
           <div className="flex gap-4 font-mono">
             <span>التاريخ: {date || "2026/08/30"}</span>
@@ -170,10 +172,10 @@ export function LetterheadHeader({
 
   if (letterheadId === "commercial") {
     return (
-      <div className="mb-4 text-black dir-rtl print:mb-2 relative z-10" style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
-        <div className="flex justify-between items-start border-b-2 border-emerald-800 pb-3">
+      <div className={`${compact ? "mb-2 print:mb-1" : "mb-4 print:mb-2"} text-black dir-rtl relative z-10`} style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
+        <div className={`flex justify-between items-start border-b-2 border-emerald-800 ${compact ? "pb-1.5 print:pb-0.5" : "pb-3"}`}>
           {current.logoUrl && (
-            <div className="w-16 h-16 shrink-0 flex items-center justify-center">
+            <div className={`${compact ? "w-14 h-14 print:w-11 print:h-11" : "w-16 h-16"} shrink-0 flex items-center justify-center`}>
               <img
                 src={current.logoUrl}
                 alt="Logo"
@@ -184,13 +186,13 @@ export function LetterheadHeader({
           )}
           
           <div className="text-right space-y-0.5">
-            <h1 className="text-lg md:text-xl font-black text-emerald-950 tracking-tight">{effectiveCompanyName}</h1>
+            <h1 className={`${compact ? "text-base md:text-lg print:text-[14px]" : "text-lg md:text-xl"} font-black text-emerald-950 tracking-tight`}>{effectiveCompanyName}</h1>
             <p className="text-xs font-bold text-emerald-800 dir-ltr text-right">{current.titleEn}</p>
             <p className="text-xs font-bold text-gray-600">الرقم الضريبي: <span className="font-mono">{current.taxNumber}</span></p>
           </div>
         </div>
 
-        <div className="flex justify-between items-center text-xs font-bold text-gray-700 pt-2 px-1">
+        <div className={`flex justify-between items-center text-xs font-bold text-gray-700 ${compact ? "pt-1 px-1 print:pt-0.5" : "pt-2 px-1"}`}>
           <span>مؤسسة تجارية معتمدة</span>
           <div className="flex gap-4 font-mono">
             <span>التاريخ: {date || "2026/08/30"}</span>
@@ -203,10 +205,10 @@ export function LetterheadHeader({
 
   // Default: Express 02
   return (
-    <div className="mb-4 text-black dir-rtl print:mb-2 relative z-10" style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
-      <div className="flex justify-between items-start border-b-2 border-blue-900 pb-3">
+    <div className={`${compact ? "mb-2 print:mb-1" : "mb-4 print:mb-2"} text-black dir-rtl relative z-10`} style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
+      <div className={`flex justify-between items-start border-b-2 border-blue-900 ${compact ? "pb-1.5 print:pb-0.5" : "pb-3"}`}>
         {current.logoUrl && (
-          <div className="w-16 h-16 shrink-0 flex items-center justify-center">
+          <div className={`${compact ? "w-14 h-14 print:w-11 print:h-11" : "w-16 h-16"} shrink-0 flex items-center justify-center`}>
             <img
               src={current.logoUrl}
               alt="Logo"
@@ -217,13 +219,13 @@ export function LetterheadHeader({
         )}
         
         <div className="text-right space-y-0.5">
-          <h1 className="text-lg md:text-xl font-black text-blue-950 tracking-tight">{effectiveCompanyName}</h1>
+          <h1 className={`${compact ? "text-base md:text-lg print:text-[14px]" : "text-lg md:text-xl"} font-black text-blue-950 tracking-tight`}>{effectiveCompanyName}</h1>
           <p className="text-xs font-bold text-red-600 dir-ltr text-right">{current.titleEn}</p>
           <p className="text-xs font-bold text-gray-600">رقم التسجيل الضريبي: <span className="font-mono">{current.taxNumber}</span></p>
         </div>
       </div>
 
-      <div className="flex justify-between items-center text-xs font-bold text-gray-700 pt-2 px-1">
+      <div className={`flex justify-between items-center text-xs font-bold text-gray-700 ${compact ? "pt-1 px-1 print:pt-0.5" : "pt-2 px-1"}`}>
         <span>إدارة الموارد البشرية والعمليات اللوجستية</span>
         <div className="flex gap-4 font-mono">
           <span>التاريخ: {date || "2026/08/30"}</span>
@@ -234,32 +236,38 @@ export function LetterheadHeader({
   );
 }
 
-export function LetterheadFooter({ letterheadId = "express" }: { letterheadId?: LetterheadId }) {
+export function LetterheadFooter({
+  letterheadId = "express",
+  compact = false,
+}: {
+  letterheadId?: LetterheadId;
+  compact?: boolean;
+}) {
   if (letterheadId === "standard") return null;
 
   const current = LETTERHEAD_TEMPLATES.find((t) => t.id === letterheadId) || LETTERHEAD_TEMPLATES[0];
 
   return (
     <div
-      className="mt-6 pt-3 border-t-2 border-gray-800 text-xs font-bold text-gray-800 dir-rtl print:mt-2 print:pt-1.5 relative z-10"
+      className={`${compact ? "mt-2 pt-1 print:mt-1 print:pt-0.5 text-[10.5px] print:text-[9px]" : "mt-6 pt-3 print:mt-2 print:pt-1.5 text-xs"} border-t-2 border-gray-800 font-bold text-gray-800 dir-rtl relative z-10`}
       style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 text-[11px]">
+      <div className={`flex flex-wrap items-center justify-between ${compact ? "gap-2" : "gap-3"}`}>
         {current.email && (
           <div className="flex items-center gap-1.5 dir-ltr">
-            <Mail size={13} className="text-gray-700 shrink-0" />
+            <Mail size={compact ? 11 : 13} className="text-gray-700 shrink-0" />
             <span>{current.email}</span>
           </div>
         )}
         {current.phone && (
           <div className="flex items-center gap-1.5 dir-ltr">
-            <Phone size={13} className="text-gray-700 shrink-0" />
+            <Phone size={compact ? 11 : 13} className="text-gray-700 shrink-0" />
             <span>{current.phone}</span>
           </div>
         )}
         {current.address && (
           <div className="flex items-center gap-1.5 dir-ltr">
-            <MapPin size={13} className="text-gray-700 shrink-0" />
+            <MapPin size={compact ? 11 : 13} className="text-gray-700 shrink-0" />
             <span>{current.address}</span>
           </div>
         )}

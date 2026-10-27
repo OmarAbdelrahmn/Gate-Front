@@ -1221,13 +1221,13 @@ export function TakeVehicleModal({ isOpen, onClose, onSuccess, preselectedVehicl
               const person = formData.riderProfileId ? personMetaMapRef.current.get(formData.riderProfileId) : null;
               const personParam = person?.employeeId || person?.riderProfileId || formData.riderProfileId || "";
               const vehicleParam = formData.vehicleId || preselectedVehicle?.id || "";
-              const url = `/admin/hr/forms?template=full_custody_form&mode=handover_policy${personParam ? `&personId=${personParam}` : ""}${vehicleParam ? `&vehicleId=${vehicleParam}` : ""}`;
+              const url = `/admin/hr/forms?template=vehicle_custody_form&mode=handover_policy${personParam ? `&personId=${personParam}` : ""}${vehicleParam ? `&vehicleId=${vehicleParam}` : ""}`;
               window.open(url, "_blank");
             }}
             className="flex items-center gap-1.5 border-[#1167c9] text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40 text-xs font-bold"
           >
             <Printer className="h-4 w-4" />
-            طباعة نموذج العهدة والسياسة (04)
+            طباعة نموذج تسليم المركبة والسياسة (04)
           </Button>
 
           <div className="flex items-center gap-2">

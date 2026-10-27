@@ -434,13 +434,13 @@ export function ReturnVehicleModal({ isOpen, onClose, onSuccess, preselectedVehi
               variant="secondary"
               onClick={() => {
                 const vehicleParam = preselectedVehicle?.id || "";
-                const url = `/admin/hr/forms?template=full_custody_form&mode=return_policy${vehicleParam ? `&vehicleId=${vehicleParam}` : ""}`;
+                const url = `/admin/hr/forms?template=vehicle_custody_form&mode=return_policy${vehicleParam ? `&vehicleId=${vehicleParam}` : ""}`;
                 window.open(url, "_blank");
               }}
               className="flex items-center gap-1.5 border-[#1167c9] text-[#1167c9] hover:bg-blue-50 dark:hover:bg-blue-950/40 text-xs font-bold"
             >
               <Printer className="h-4 w-4" />
-              طباعة استرداد العهدة والسياسة (04)
+              طباعة استرداد المركبة والسياسة (04)
             </Button>
 
             <div className="flex items-center gap-2">

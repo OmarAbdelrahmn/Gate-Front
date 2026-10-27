@@ -14,6 +14,8 @@ import {
   Layers,
   Smartphone,
   ClipboardCheck,
+  Car,
+  Package,
 } from "lucide-react";
 
 export type FormCategory = "financial" | "custody" | "employment" | "leave" | "administrative";
@@ -146,16 +148,28 @@ export const FORM_TEMPLATES: FormTemplate[] = [
     requiresRider: true,
   },
   {
-    id: "full_custody_form",
-    titleAr: "04 - النموذج الكامل للعهدة (تسليم / استرداد / سياسة الأسطول)",
-    titleEn: "04 - Full Custody & Fleet Policy Form",
+    id: "vehicle_custody_form",
+    titleAr: "04 - نموذج تسليم واسترداد المركبة وسياسة الأسطول",
+    titleEn: "04 - Vehicle Handover, Return & Fleet Policy Form",
     category: "custody",
     categoryNameAr: "العهد والتسليم",
-    descriptionAr: "النموذج الشامل والمكتمل للعهدة وحالة فحص المركبة وبنود سياسة قسم الأسطول (تسليم عهدة، استرداد عهدة، سياسة الأسطول) مع خيارات اختيار النماذج واللغات والبنود.",
-    icon: Building2,
+    descriptionAr: "محضر تسليم واسترداد المركبة مع فحص الهيكل والمحرك والأجزاء، الأعطال، المرفقات، وبنود سياسة قسم الأسطول (14 بنداً).",
+    icon: Car,
     requiresDate: true,
     requiresRider: true,
-    badge: "عربي / إنجليزي / ثلاثي",
+    badge: "مركبة + سياسة أسطول",
+  },
+  {
+    id: "custody_items_form",
+    titleAr: "05 - نموذج تسليم واسترداد العهدة العينية والتجهيزات",
+    titleEn: "05 - Custody Items Handover & Return Form",
+    category: "custody",
+    categoryNameAr: "العهد والتسليم",
+    descriptionAr: "محضر تسليم واسترداد العهد والأدوات العينية والتجهيزات (هواتف، شرائح، حقائب توصيل، زي رسمي، مستلزمات) مع تحديد النواقص والإقرار والتعهد.",
+    icon: Package,
+    requiresDate: true,
+    requiresRider: true,
+    badge: "عهدة عينية وتجهيزات",
   },
   {
     id: "sim_handover_receipt",
