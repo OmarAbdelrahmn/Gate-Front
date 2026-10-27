@@ -15,6 +15,8 @@ export interface DateInputProps {
   id?: string;
   min?: string;
   max?: string;
+  /** Display Arabic-Indic digits while keeping the stored date in ISO format. */
+  locale?: "ar" | "en";
 }
 
 // Convert YYYY-MM-DD to DD/MM/YYYY
@@ -61,6 +63,7 @@ export function DateInput({
   id,
   min,
   max,
+  locale,
 }: DateInputProps) {
   const [inputText, setInputText] = useState<string>(() => ymdToDmy(value));
   const hiddenDateRef = useRef<HTMLInputElement>(null);
@@ -72,7 +75,7 @@ export function DateInput({
 
   // Handle typing in text input with auto-formatting
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let raw = e.target.value;
+    let raw = e.target.value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
     // Allow only digits and slashes
     raw = raw.replace(/[^\d\/]/g, "");
 
@@ -156,7 +159,7 @@ export function DateInput({
           type="text"
           dir="ltr"
           inputMode="numeric"
-          value={inputText}
+          value={locale === "ar" ? inputText.replace(/[0-9]/g, (digit) => "٠١٢٣٤٥٦٧٨٩"[Number(digit)]) : inputText}
           onChange={handleTextChange}
           onBlur={handleBlur}
           placeholder={placeholder}

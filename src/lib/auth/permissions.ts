@@ -164,6 +164,8 @@ export const PERMISSIONS = [
   "ninja.credentials.rotate",
   "ninja.performance.import",
   "ninja.deductions.import",
+  "ninja.evaluation.manage",
+  "ninja.evaluation.export",
 
   // Reporting
   "reports.read",

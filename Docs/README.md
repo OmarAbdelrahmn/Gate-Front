@@ -1,79 +1,36 @@
-# جاهز — حزمة التسليم إلى فريق الواجهة الأمامية
+# Ninja performance and suggested earnings
 
-هذه الحزمة تصف الربط مع **الباك إند المنفذ حالياً** لخزائن جاهز V3، وتكمل شاشات الحسابات والرسوم والتصفيات والديون الموجودة في V2. تاريخ المراجعة: 19 أكتوبر 2026. تنفيذ شاشات Next.js يتم في مستودع الواجهة المنفصل.
+Backend implementation: 26 October 2026. This pack describes **suggestions for monitoring**, not actual salary or Ninja's final settlement. Official invoice processing is outside v1.
 
-## الملفات المطلوب تسليمها
+## Read in this order
 
-| الملف | المحتوى |
+1. [Performance evaluation endpoints](01-performance-api.md): report queries, coverage, historical assignments, daily drilldown.
+2. [Suggested money](02-suggested-money.md): contract rates, proration, hours, forecasts and examples.
+3. [Performance imports](03-performance-imports.md): CSV/XLSX, preview/confirm, atomicity and provenance.
+4. [Frontend integration](04-frontend-handoff-ar.md): Arabic labels, horizontal grid and UI states.
+5. [Services and persistence](05-services-and-data.md): service boundaries, tables, revisions and snapshots.
+6. [Deployment and verification](06-deployment-and-verification.md): migrations, feature flag, tests and hosted import evidence.
+
+Use [TypeScript contracts](contracts.ts) and [the transport-injected client](client.ts) with the application's authenticated HTTP client. All paths are below `/api/ninja`.
+
+## Status and permissions
+
+New routes require the new API binary **and** `Features:NinjaEvaluation=true` (`Features__NinjaEvaluation=true` as an environment variable). The repository default is false. A successful database migration does not deploy or enable the API.
+
+| Action | Permission, scoped to Ninja |
 |---|---|
-| [01-screens-and-workflows-ar.md](01-screens-and-workflows-ar.md) | الشاشات والحقول ودورة التمويل والتسليم والصلاحيات |
-| [02-api-integration-ar.md](02-api-integration-ar.md) | جميع المسارات والطلبات والاستجابات والأخطاء وأمثلة الربط |
-| [03-reports-and-exports-ar.md](03-reports-and-exports-ar.md) | التقارير الخمسة والحسابات والفلاتر والتنزيل والأسماء |
-| [04-acceptance-and-release-ar.md](04-acceptance-and-release-ar.md) | سيناريوهات الاختبار وترتيب التنفيذ وموانع الإطلاق |
-| [عقود TypeScript](../jahez-treasury-api-contracts.ts) | أسماء الحقول والأنواع والـenums |
-| [عميل TypeScript](../jahez-treasury-client.ts) | دوال الطلبات الجاهزة لجميع واجهات V3 |
-| [عقود V2](../jahez-v2-api-contracts.ts) و[عميل V2](../jahez-v2-client.ts) | العمليات الحالية التي تستمر بعد إضافة الخزائن |
+| Reports, policy, context, responsibility reads, snapshot reads | `ninja.read` |
+| Preview, confirmation, input template | `ninja.performance.import` |
+| Context/responsibility revisions and snapshot creation | `ninja.evaluation.manage` |
+| XLSX export | `ninja.evaluation.export` plus `ninja.read` |
 
-انسخ ملفات TypeScript الأربعة معاً مع الحفاظ على مسارات الاستيراد، أو عدل الاستيرادات بما يناسب المشروع. ملفات Markdown وحدها كافية لقراءة المتطلبات، والعقود هي المرجع التفصيلي لأسماء الحقول. أمثلة المسارات داخل هذه الحزمة نسبية إلى خادم API، وليست مسارات صفحات Next.js.
+Only system administrators receive the two new grants by default. Reading Ninja never grants import/manage/export. The legacy Ninja controller and its 19 endpoints retain their routes and response shapes.
 
-## مرجع دورة جاهز الموجودة
+## Core distinctions
 
-للتسليم الكامل انسخ هذه الحزمة مع مراجع V2 التالية؛ الخزائن تمتد فوقها ولا تستبدل دورة الحساب والمندوب والموافقات:
-
-- [دليل V2 الكامل للشاشات والعمليات والموافقات](../jahez-v2-frontend-handoff-ar.md).
-- [تصحيح بداية العمولة والتحديثات المالية](../jahez-commission-start-correction-frontend-handoff.md).
-- [التحقق من مراجع الدفع](../jahez-payment-reference-validation.md).
-- [استجابات الطلبات الموسعة](../jahez-requests-enriched-response.md).
-- [مرجع جاهز العام](../jahez-backend-api.md).
-
-عند تعارض وصف تسليم قديم في V2 مع هذه الحزمة، استخدم V3 للتسليم بعد التفعيل. تبقى عقود عمليات الحساب والموافقات والتصفيات V2 كما هي، مع إضافات الملكية الموضحة هنا. إذا سلمت الملفات خارج المستودع، أرفق المراجع المرتبطة أيضاً حتى تعمل الروابط النسبية، أو احفظ مجلد `docs` كله.
-
-## المطلوب تنفيذه
-
-1. لوحة أرصدة الخزائن الفعلية وشجرة الحسابات ودفتر الحركات.
-2. تمويل عهدة التصفيات والتحويلات والقبض والصرف المركزي.
-3. تقديم العهدة، ثم عد النقدية واعتمادها من محاسب آخر، ثم طباعة المحضر.
-4. إثبات تمويل بترو آب وكشوف المحفظة ومطابقة التحصيل.
-5. التقارير الخمسة وتنزيل Excel/PDF من الخادم.
-6. تحديث شاشات V2 لعرض كفيل الملكية المثبت والتفريق بين الرصيد الفعلي والنشاط غير المسلم.
-7. أدوات مراجعة الترحيل للمالية فقط إذا كانت ضمن صلاحيات المستخدم؛ لا تظهر ضمن دورة عمل المشرف اليومية.
-
-## القواعد المالية التي يجب أن تنعكس في الواجهة
-
-- **المال يتبع كفيل حساب جاهز**، ولا يتبع كفيل الموظف أو المندوب الفعلي. لا تضف اختياراً يغير الملكية في نموذج دفع رسوم أو تنفيذ تصفية V2.
-- الرسوم القائمة والديون المرحلة تحتفظ بملكيتها الأصلية عند تغيير كفيل الحساب. اعرض الاسم المثبت في استجابة الحركة، ولا تستبدله بمالك الحساب الحالي.
-- توجد عهدة تشغيل مشتركة بين المشرفين، مفصولة إلى حسابات لكل كفيل ولكل غرض؛ ليست محفظة مستقلة لكل مستخدم.
-- عهدة الرسوم منفصلة عن عهدة التصفيات. وجود رسوم في الخزنة لا يعني توفر تمويل لصرف تصفية.
-- الصرف يحتاج رصيداً للكفيل نفسه، غير محجوز في تسليم معلق. الخادم يحسم كفاية الرصيد.
-- تحصيل الرسوم وتصفيات التجارية يبقيان في العهدة حتى استلام المحاسب. لا تعتبر المبالغ وصلت للمركز بمجرد التحصيل.
-- التأكيد ينقل العهدة المدرجة في المحضر فقط. الحركات اللاحقة لا تدخل المحضر، حتى لو لها اليوم المحاسبي نفسه. منتصف الليل لا يصفر الرصيد.
-- إثبات تمويل محفظة بترو آب ليس تحصيلاً جديداً من المندوب. لا ترسل معه طلب إيصال آخر.
-- التحويل الداخلي يغير موقع المال؛ لا يضاف إلى الإيرادات كتحصيل جديد. هذه تقارير خزينة وليست حساب أرباح أو أستاذاً عاماً كاملاً.
-
-## الأسماء بدلاً من المعرفات
-
-اعرض اسم المستخدم واسم المندوب واسم الشركة واسم الحساب في الشاشات والملفات. لا تستخدم GUID كبديل لاسم مفقود. المعرفات تظل داخل الطلبات وربط الصفوف والتنقل فقط؛ هذا ضروري للـAPI ولا يعني عرضها للمستخدم.
-
-| المعروض | المصدر |
-|---|---|
-| منفذ حركة الخزينة | `posting.actorNameAr` |
-| المندوب الفعلي في الدفتر | `driverNameAr` |
-| كفيل الحركة | `sponsorNameAr` المثبت في صف الحركة |
-| المشرف المسلم | `handover.requestedByNameAr` |
-| المحاسب المستلم | `handover.accountantNameAr` |
-| حساب الخزينة | `accountNameAr` أو `nameAr` |
-| رقم محضر مفهوم للمستخدم | `documentNumber`، مثل `JH-0000000001` |
-
-اسم المستخدم المفقود: «اسم المستخدم غير متاح». المندوب المفقود في حركة يفترض أن ترتبط بمندوب: «اسم المندوب غير متاح». الحركة المركزية أو التحويل الذي لا يخص مندوباً يعرض «—». بعض قراءات المحاضر القديمة قد ترجع أسماء فارغة أو معرفاً قديماً؛ لا تطبعه، واستخدم دليل المستخدمين الموجود في النظام إن كان مسموحاً، وإلا العبارة البديلة. تقارير الخادم تستكمل الأسماء القديمة عند توفرها وتمنع طباعة GUID.
-
-أرقام المستندات والمراجع التجارية وأرقام الإقامة ليست معرفات داخلية عشوائية؛ يمكن عرضها بعناوينها المناسبة. ملفات التنزيل تصدر من الخادم، ولا تعيد الواجهة بناء نسخة أخرى من التقرير باستخدام المعرفات.
-
-## التوافق والجاهزية
-
-جذر الخزائن: `/api/jahez/v3/treasury`. تستمر أوامر الرسوم والتصفيات والديون الحالية في V2، ويحدد الخادم ملكيتها وتوجيهها. بعد التفعيل تُرفض **كتابات تسليم العهدة القديمة V2** بتعارض ترقية؛ تبقى قراءات التاريخ متاحة.
-
-`/v2/funds` هو نشاط غير مسلم، وليس الرصيد الفعلي. استخدم V3 `balances` للرصيد الفعلي. لا تجمع القيمتين في بطاقة واحدة ولا تعتبر إحداهما بديلاً حسابياً للأخرى.
-
-الخزينة غير مفعلة افتراضياً. لا تجعل تحميل الصفحة ينفذ التفعيل أو الترحيل. واجهة `migration/readiness` متاحة لصلاحية التسويات فقط؛ لا يوجد مسار حالة تفعيل عام مخصص للمشرف في هذه الإضافة. استخدم إعداد الإطلاق المعتمد في مشروع الواجهة، وتعامل مع رفض الخادم عند عدم التفعيل. لا تعتبر ظهور أرصدة صفرية دليلاً على جاهزية بيانات التاريخ.
-
-الاختبارات والبناء المحلي موثقة في [سجل التحقق](../../outputs/jahez-treasury-verification/verification.md). تشغيل اختبارات SQL Server ومراجعة المالية والمطابقة شرطان للإطلاق؛ لم تنفذ هذه الحزمة تفعيل الإنتاج. انظر أيضاً [دليل الباك إند والترحيل](../jahez-treasury-v3-ar.md).
+- Account results use account/day source totals; rider results use saved historical assignment shares.
+- Planned responsibility distributes targets; actual attendance does not reduce the target.
+- Missing data is unknown, not zero or absence.
+- Acceptance, timing, uniform and leave-compliance are unknown in v1. They do not create invented penalties.
+- `suggestedMoney`, `forecast.suggestedMoney`, and account/rider comparisons are advisory. `actualInvoiceAmount` remains null.
+- The evaluation services never write payroll, treasury, payment, debt, invoice or operational-status records.

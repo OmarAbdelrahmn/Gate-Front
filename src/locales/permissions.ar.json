@@ -109,6 +109,8 @@
   "ninja.credentials.rotate": "تدوير وتحديث كلمات مرور حسابات نينجا",
   "ninja.performance.import": "رفع واستيراد تقارير أداء نينجا اليومية",
   "ninja.deductions.import": "رفع واستيراد خصومات نينجا اليومية",
+  "ninja.evaluation.manage": "إدارة سياق التسعير والمسؤولية ولقطات تقييم نينجا",
+  "ninja.evaluation.export": "تصدير تقارير تقييم أداء نينجا والمبالغ المقترحة (XLSX)",
   "roles.create": "إضافة الأدوار",
   "roles.update": "تعديل الأدوار",
   "roles.delete": "حذف / أرشفة الأدوار",

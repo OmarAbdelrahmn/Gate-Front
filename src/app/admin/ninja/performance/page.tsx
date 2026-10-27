@@ -7,9 +7,12 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
   getNinjaPerformance,
+  getAllNinjaPerformance,
   getNinjaPerformanceReport,
   getNinjaDailyReport,
+  getAllNinjaDailyReport,
   getNinjaRiderReport,
+  getAllNinjaRiderReport,
   importNinjaPerformance,
   getAllNinjaAccounts,
   getRiyadhTodayDate,
@@ -67,7 +70,8 @@ export default function NinjaPerformancePage() {
   const isEn = locale === "en";
 
   const canRead = can("ninja.read") || can("ninja.performance.import");
-  const canImport = can("ninja.performance.import") || can("ninja.read");
+  // Strictly require ninja.performance.import — never infer import access from ninja.read!
+  const canImport = can("ninja.performance.import");
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFrom = useMemo(() => {
@@ -93,25 +97,21 @@ export default function NinjaPerformancePage() {
   const [summaryReport, setSummaryReport] = useState<NinjaPerformanceReport | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
-  // 2. Rider Performance Report State
+  // 2. Rider Performance Report State (Loads all riders in period)
   const [riderReportItems, setRiderReportItems] = useState<NinjaRiderReport[]>([]);
-  const [riderPage, setRiderPage] = useState(1);
   const [riderLoading, setRiderLoading] = useState(false);
   const [riderSearch, setRiderSearch] = useState("");
-  const riderPageSize = 50;
 
-  // 3. Daily Trend Report State
+  // 3. Daily Trend Report State (Loads all days in period)
   const [dailyReportItems, setDailyReportItems] = useState<NinjaDailyReport[]>([]);
-  const [dailyPage, setDailyPage] = useState(1);
   const [dailyLoading, setDailyLoading] = useState(false);
-  const dailyPageSize = 50;
 
-  // 4. Raw Records State
+  // 4. Raw Records State (Loads all records in period with optional view-all)
   const [records, setRecords] = useState<NinjaPerformanceResponse[]>([]);
-  const [recordsPage, setRecordsPage] = useState(1);
   const [recordsLoading, setRecordsLoading] = useState(false);
-  const [recordsHasMore, setRecordsHasMore] = useState(false);
-  const recordsPageSize = 50;
+  const [recordsSearch, setRecordsSearch] = useState("");
+  const [recordsPageSize, setRecordsPageSize] = useState<number | "all">("all");
+  const [recordsPage, setRecordsPage] = useState(1);
 
   // Upload Modal State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -162,13 +162,13 @@ export default function NinjaPerformancePage() {
     }
   };
 
-  // Load Rider Report
-  const loadRiderReport = async (page = riderPage) => {
+  // Load Rider Report (fetches all riders for the period)
+  const loadRiderReport = async () => {
     if (!canRead || !filterFrom || !filterTo) return;
     setRiderLoading(true);
     try {
-      const res = await getNinjaRiderReport({ ...baseQuery, page, pageSize: riderPageSize });
-      setRiderReportItems(res?.items || []);
+      const items = await getAllNinjaRiderReport(baseQuery);
+      setRiderReportItems(items);
     } catch (err: any) {
       console.warn("Could not load rider report", err);
       setRiderReportItems([]);
@@ -177,13 +177,13 @@ export default function NinjaPerformancePage() {
     }
   };
 
-  // Load Daily Trend
-  const loadDailyReport = async (page = dailyPage) => {
+  // Load Daily Trend (fetches all days for the period)
+  const loadDailyReport = async () => {
     if (!canRead || !filterFrom || !filterTo) return;
     setDailyLoading(true);
     try {
-      const res = await getNinjaDailyReport({ ...baseQuery, page, pageSize: dailyPageSize });
-      setDailyReportItems(res?.items || []);
+      const items = await getAllNinjaDailyReport(baseQuery);
+      setDailyReportItems(items);
     } catch (err: any) {
       console.warn("Could not load daily report", err);
       setDailyReportItems([]);
@@ -192,15 +192,14 @@ export default function NinjaPerformancePage() {
     }
   };
 
-  // Load Raw Records
-  const loadRawRecords = async (page = recordsPage) => {
+  // Load Raw Records (fetches all performance records for the period)
+  const loadRawRecords = async () => {
     if (!canRead || !filterFrom || !filterTo) return;
     setRecordsLoading(true);
     try {
-      const res = await getNinjaPerformance({ ...baseQuery, page, pageSize: recordsPageSize });
-      const items = res?.items || [];
+      const items = await getAllNinjaPerformance(baseQuery);
       setRecords(items);
-      setRecordsHasMore(items.length >= recordsPageSize);
+      setRecordsPage(1);
     } catch (err: any) {
       console.warn("Could not load raw performance records", err);
       setRecords([]);
@@ -212,17 +211,17 @@ export default function NinjaPerformancePage() {
   // Refetch when filters change
   useEffect(() => {
     loadSummary();
-    if (activeTab === "riders") loadRiderReport(1);
-    if (activeTab === "daily") loadDailyReport(1);
-    if (activeTab === "records") loadRawRecords(1);
+    if (activeTab === "riders") loadRiderReport();
+    if (activeTab === "daily") loadDailyReport();
+    if (activeTab === "records") loadRawRecords();
   }, [filterFrom, filterTo, filterAccountId, filterRiderId]);
 
   useEffect(() => {
     if (activeTab === "summary") loadSummary();
-    else if (activeTab === "riders") loadRiderReport(riderPage);
-    else if (activeTab === "daily") loadDailyReport(dailyPage);
-    else if (activeTab === "records") loadRawRecords(recordsPage);
-  }, [activeTab, riderPage, dailyPage, recordsPage]);
+    else if (activeTab === "riders") loadRiderReport();
+    else if (activeTab === "daily") loadDailyReport();
+    else if (activeTab === "records") loadRawRecords();
+  }, [activeTab]);
 
   // Handle Upload
   const handleUpload = async (e: React.FormEvent) => {
@@ -259,8 +258,9 @@ export default function NinjaPerformancePage() {
           `تم استيراد ${outcome.importedRows} صف وتخطي ${outcome.skippedRows} صف مكرر.`
         );
         loadSummary();
-        if (activeTab === "daily") loadDailyReport(1);
-        if (activeTab === "records") loadRawRecords(1);
+        if (activeTab === "daily") loadDailyReport();
+        if (activeTab === "records") loadRawRecords();
+        if (activeTab === "riders") loadRiderReport();
       }
     } catch (err: any) {
       console.error("Upload error", err);
@@ -336,6 +336,50 @@ export default function NinjaPerformancePage() {
     });
   };
 
+  // Filtered and paged records for Raw Records tab
+  const filteredRecords = useMemo(() => {
+    if (!recordsSearch.trim()) return records;
+    const q = recordsSearch.trim().toLowerCase();
+    return records.filter((r) => {
+      const capId = (r.captainId || "").toLowerCase();
+      const rider = riders.find((rd) => rd.id === r.riderProfileId);
+      const riderName = (rider?.fullNameAr || rider?.fullNameEn || "").toLowerCase();
+      return capId.includes(q) || riderName.includes(q);
+    });
+  }, [records, recordsSearch, riders]);
+
+  const totalRecordPages = useMemo(() => {
+    if (recordsPageSize === "all" || recordsPageSize <= 0) return 1;
+    return Math.max(1, Math.ceil(filteredRecords.length / recordsPageSize));
+  }, [filteredRecords.length, recordsPageSize]);
+
+  const pagedRecords = useMemo(() => {
+    if (recordsPageSize === "all") return filteredRecords;
+    const start = (recordsPage - 1) * recordsPageSize;
+    return filteredRecords.slice(start, start + recordsPageSize);
+  }, [filteredRecords, recordsPage, recordsPageSize]);
+
+  const exportRecords = () => {
+    exportToExcel({
+      filename: `ninja-raw-records-${filterFrom}-to-${filterTo}`,
+      sheetName: "السجلات الخام",
+      data: filteredRecords,
+      columns: [
+        { header: "التاريخ", accessor: (r) => r.reportDate, isText: true },
+        { header: "كابتن ID", accessor: (r) => r.captainId, isText: true },
+        {
+          header: "المندوب الفعلي المنسوب",
+          accessor: (r) => {
+            const rd = riders.find((x) => x.id === r.riderProfileId);
+            return rd?.fullNameAr || rd?.fullNameEn || "—";
+          },
+        },
+        { header: "إجمالي الطلبات", accessor: (r) => r.totalOrders },
+        { header: "ساعات العمل", accessor: (r) => Number(Number(r.totalWorkingHours).toFixed(2)) },
+      ],
+    });
+  };
+
   if (!canRead) {
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-3 text-center" dir={isEn ? "ltr" : "rtl"}>
@@ -383,6 +427,13 @@ export default function NinjaPerformancePage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/ninja/evaluation">
+            <Button variant="secondary" className="gap-2 border-blue-200 bg-blue-50/70 text-blue-700 hover:bg-blue-100 text-xs font-bold">
+              <Award className="h-4 w-4 text-blue-600" />
+              {isEn ? "Evaluation & Suggested Earnings" : "تقييم الأداء والمبالغ المقترحة"}
+            </Button>
+          </Link>
+
           <Link href="/admin/ninja/accounts">
             <Button variant="secondary" className="gap-2 text-xs">
               <Zap className="h-4 w-4 text-purple-600" />
@@ -394,9 +445,9 @@ export default function NinjaPerformancePage() {
             variant="secondary"
             onClick={() => {
               loadSummary();
-              if (activeTab === "riders") loadRiderReport(1);
-              if (activeTab === "daily") loadDailyReport(1);
-              if (activeTab === "records") loadRawRecords(1);
+              if (activeTab === "riders") loadRiderReport();
+              if (activeTab === "daily") loadDailyReport();
+              if (activeTab === "records") loadRawRecords();
             }}
             disabled={summaryLoading || riderLoading || dailyLoading || recordsLoading}
             className="gap-2 text-xs"
@@ -658,20 +709,29 @@ export default function NinjaPerformancePage() {
       {activeTab === "riders" && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden space-y-4 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative min-w-[260px]">
-              <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)] rtl:right-3 ltr:left-3" />
-              <Input
-                placeholder="بحث باسم المندوب، الهوية أو الهاتف..."
-                value={riderSearch}
-                onChange={(e) => setRiderSearch(e.target.value)}
-                className="h-8.5 text-xs pr-8 rtl:pr-8 ltr:pl-8"
-              />
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm text-[var(--foreground)]">تقرير أداء المناديب</span>
+              <Badge tone="purple" className="text-xs">
+                {filteredRiders.length} مندوب
+              </Badge>
             </div>
 
-            <Button variant="secondary" size="sm" onClick={exportRiders} className="gap-2 text-xs">
-              <Download className="h-3.5 w-3.5 text-emerald-600" />
-              تصدير المناديب (Excel)
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[260px]">
+                <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)] rtl:right-3 ltr:left-3" />
+                <Input
+                  placeholder="بحث باسم المندوب، الهوية أو الهاتف..."
+                  value={riderSearch}
+                  onChange={(e) => setRiderSearch(e.target.value)}
+                  className="h-8.5 text-xs pr-8 rtl:pr-8 ltr:pl-8"
+                />
+              </div>
+
+              <Button variant="secondary" size="sm" onClick={exportRiders} className="gap-2 text-xs">
+                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                تصدير المناديب (Excel)
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -765,9 +825,14 @@ export default function NinjaPerformancePage() {
       {activeTab === "daily" && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden space-y-4 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-[var(--muted)]">
-              تقرير الاتجاهات اليومية بالأيام المسجلة
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm text-[var(--foreground)]">
+                تقرير الاتجاهات اليومية بالأيام المسجلة
+              </span>
+              <Badge tone="purple" className="text-xs">
+                {dailyReportItems.length} يوم
+              </Badge>
+            </div>
             <Button variant="secondary" size="sm" onClick={exportDaily} className="gap-2 text-xs">
               <Download className="h-3.5 w-3.5 text-emerald-600" />
               تصدير الأيام (Excel)
@@ -841,12 +906,52 @@ export default function NinjaPerformancePage() {
       {/* TAB 4: Raw Daily Records                                       */}
       {/* ------------------------------------------------------------- */}
       {activeTab === "records" && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
-            <span className="font-bold text-sm text-[var(--foreground)]">سجلات الأداء اليومية الخام</span>
-            <Badge tone="gray" className="text-xs">
-              {records.length} سجل بالصفحة
-            </Badge>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden space-y-4 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm text-[var(--foreground)]">سجلات الأداء اليومية الخام</span>
+              <Badge tone="purple" className="text-xs">
+                {filteredRecords.length} سجل
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[220px]">
+                <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)] rtl:right-3 ltr:left-3" />
+                <Input
+                  placeholder="بحث بكابتن ID أو اسم المندوب..."
+                  value={recordsSearch}
+                  onChange={(e) => {
+                    setRecordsSearch(e.target.value);
+                    setRecordsPage(1);
+                  }}
+                  className="h-8.5 text-xs pr-8 rtl:pr-8 ltr:pl-8"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--muted)]">
+                <span>عرض:</span>
+                <select
+                  value={recordsPageSize}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRecordsPageSize(val === "all" ? "all" : Number(val));
+                    setRecordsPage(1);
+                  }}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs font-bold text-[var(--foreground)]"
+                >
+                  <option value="all">عرض الكل ({filteredRecords.length})</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="250">250</option>
+                </select>
+              </div>
+
+              <Button variant="secondary" size="sm" onClick={exportRecords} className="gap-2 text-xs">
+                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                تصدير السجلات (Excel)
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -868,14 +973,14 @@ export default function NinjaPerformancePage() {
                       <p className="text-xs text-[var(--muted)]">جارٍ جلب السجلات الخام...</p>
                     </td>
                   </tr>
-                ) : records.length === 0 ? (
+                ) : filteredRecords.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-12 text-center text-[var(--muted)]">
                       لا توجد سجلات أداء مطابقة.
                     </td>
                   </tr>
                 ) : (
-                  records.map((r) => {
+                  pagedRecords.map((r) => {
                     const rider = riders.find((rd) => rd.id === r.riderProfileId);
                     return (
                       <tr key={r.id} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
@@ -904,27 +1009,31 @@ export default function NinjaPerformancePage() {
             </table>
           </div>
 
-          <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
-            <div className="text-[var(--muted)]">صفحة {recordsPage}</div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={recordsPage <= 1 || recordsLoading}
-                onClick={() => setRecordsPage((p) => Math.max(1, p - 1))}
-              >
-                السابق
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!recordsHasMore || recordsLoading}
-                onClick={() => setRecordsPage((p) => p + 1)}
-              >
-                التالي
-              </Button>
+          {recordsPageSize !== "all" && totalRecordPages > 1 && (
+            <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
+              <div className="text-[var(--muted)]">
+                صفحة {recordsPage} من {totalRecordPages} (إجمالي {filteredRecords.length} سجل)
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={recordsPage <= 1 || recordsLoading}
+                  onClick={() => setRecordsPage((p) => Math.max(1, p - 1))}
+                >
+                  السابق
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={recordsPage >= totalRecordPages || recordsLoading}
+                  onClick={() => setRecordsPage((p) => p + 1)}
+                >
+                  التالي
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

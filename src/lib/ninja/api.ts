@@ -30,6 +30,10 @@ import {
 } from "./ninja-api-contracts";
 
 export * from "./ninja-api-contracts";
+export * from "./evaluation-contracts";
+export * from "./evaluation-client";
+// Keep legacy import types unambiguous alongside the evaluation contracts.
+export type { Guid, NinjaImportIssue, NinjaImportResponse } from "./ninja-api-contracts";
 
 export const NINJA_PLATFORM_CODE = "NINJA";
 
@@ -71,7 +75,7 @@ export function formatRiyadhDateTime(
     const date = new Date(utcDateStr);
     if (isNaN(date.getTime())) return utcDateStr;
 
-    const formatter = new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-GB", {
+    const formatter = new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-GB", {
       timeZone: "Asia/Riyadh",
       year: "numeric",
       month: "short",
@@ -490,6 +494,54 @@ export async function getNinjaRiderReport(
     `${ninjaPaths.riderReport}?${query.toString()}`,
     { method: "GET", signal }
   );
+}
+
+export async function getAllNinjaDailyReport(
+  params: Omit<NinjaReportQuery, "page" | "pageSize">,
+  pageSize = 100,
+  signal?: AbortSignal
+): Promise<NinjaDailyReport[]> {
+  const all: NinjaDailyReport[] = [];
+  let page = 1;
+  const maxPages = 50;
+
+  while (page <= maxPages) {
+    const res = await getNinjaDailyReport({ ...params, page, pageSize }, signal);
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    all.push(...items);
+    if (items.length < (res?.pageSize || pageSize)) {
+      break;
+    }
+    page++;
+  }
+
+  return all;
+}
+
+export async function getAllNinjaRiderReport(
+  params: Omit<NinjaReportQuery, "page" | "pageSize">,
+  pageSize = 100,
+  signal?: AbortSignal
+): Promise<NinjaRiderReport[]> {
+  const all: NinjaRiderReport[] = [];
+  let page = 1;
+  const maxPages = 50;
+
+  while (page <= maxPages) {
+    const res = await getNinjaRiderReport({ ...params, page, pageSize }, signal);
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    all.push(...items);
+    if (items.length < (res?.pageSize || pageSize)) {
+      break;
+    }
+    page++;
+  }
+
+  return all;
 }
 
 // -------------------------------------------------------------

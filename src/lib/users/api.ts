@@ -269,6 +269,30 @@ export const NINJA_PERMISSION_CATALOG_ITEMS: PermissionCatalogItem[] = [
     requiresHousingScope: false,
     requiresClientScope: false,
   },
+  {
+    key: "ninja.evaluation.manage",
+    module: "Ninja",
+    nameAr: "إدارة سياق التسعير والمسؤولية ولقطات تقييم نينجا",
+    nameEn: "Manage Ninja Evaluation Context, Responsibility & Snapshots",
+    descriptionAr: "تعديل سياق التسعير وأوزان المسؤولية التعاقدية وإنشاء لقطات تقييم نينجا",
+    descriptionEn: "Manage pricing context, planned responsibility schedules, and create evaluation snapshots",
+    isSensitive: true,
+    isHighTrust: true,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
+  {
+    key: "ninja.evaluation.export",
+    module: "Ninja",
+    nameAr: "تصدير نتائج تقييم أداء نينجا (XLSX)",
+    nameEn: "Export Ninja Evaluation Results (XLSX)",
+    descriptionAr: "تصدير نتائج تقييم أداء نينجا والمبالغ المقترحة كملف إكسل كامل",
+    descriptionEn: "Export complete filtered Ninja evaluation reports and suggestions as XLSX",
+    isSensitive: false,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: false,
+  },
 ];
 
 export const CHEFZ_PERMISSION_CATALOG_ITEMS: PermissionCatalogItem[] = [

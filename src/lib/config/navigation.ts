@@ -424,6 +424,8 @@ export const navigation: NavItem[] = [
       "ninja.credentials.rotate",
       "ninja.performance.import",
       "ninja.deductions.import",
+      "ninja.evaluation.manage",
+      "ninja.evaluation.export",
     ],
     children: [
       {
@@ -437,6 +439,18 @@ export const navigation: NavItem[] = [
           "ninja.assignments.create",
           "ninja.assignments.delete",
           "ninja.credentials.rotate",
+        ],
+      },
+      {
+        label: "تقييم الأداء والمبالغ المقترحة",
+        labelKey: "nav.ninjaEvaluation",
+        href: "/admin/ninja/evaluation",
+        icon: Scale,
+        permissionsAny: [
+          "ninja.read",
+          "ninja.performance.import",
+          "ninja.evaluation.manage",
+          "ninja.evaluation.export",
         ],
       },
       {

@@ -109,6 +109,8 @@
   "ninja.credentials.rotate": "Rotate Ninja credentials and passwords",
   "ninja.performance.import": "Import Ninja daily performance sheets",
   "ninja.deductions.import": "Import Ninja daily deductions sheets",
+  "ninja.evaluation.manage": "Manage Ninja evaluation context, responsibility schedule, and snapshots",
+  "ninja.evaluation.export": "Export Ninja performance evaluation and suggested earnings (XLSX)",
   "roles.create": "Create roles",
   "roles.update": "Edit roles",
   "roles.delete": "Delete / archive roles",

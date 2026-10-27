@@ -346,6 +346,15 @@ export function getFriendlyErrorMessage(
         return "هذا الحساب تابع لمنصة نينجا؛ يرجى استخدام شاشات وإجراءات نينجا المخصصة لإدارته.";
       case "ninja.password_cooldown":
         return "لم تتغير كلمة المرور؛ لا يمكن تغييرها قبل انتهاء فترة الانتظار (72 ساعة).";
+      case "ninja.preview_stale":
+        return "تغيرت بيانات التعيينات أو حصص اليوم المشترك أو جدول المسؤولية منذ إنشاء المعاينة. يرجى إعادة فحص ومعاينة الملف قبل التأكيد.";
+      case "ninja.preview_expired":
+        return "انتهت صلاحية معاينة الاستيراد (30 دقيقة). يرجى إعادة تشغيل المعاينة للملف نفسه ثم التأكيد.";
+      case "ninja.frozen_snapshot_required":
+      case "ninja.snapshot_review_required":
+        return rawMessage || "توجد لقطة تقييم مجمّدة لهذه الفترة؛ يلزم تمرير معرف اللقطة المراجَعة (reviewedSnapshotId) وسبب التعديل.";
+      case "ninja.revision_conflict":
+        return rawMessage || "تعارض في رقم المراجعة (expectedRevisionId)؛ تم تحديث السجل بواسطة مستخدم آخر.";
     }
   }
 
@@ -422,9 +431,10 @@ async function parseResponse<T>(
     const errorCode = body?.errorCode || body?.title || body?.code;
     const friendlyMsg = getFriendlyErrorMessage(response.status, rawMsg, errorCode);
 
-    const error = new Error(friendlyMsg) as AuthApiError;
+    const error = new Error(friendlyMsg) as AuthApiError & { code?: string };
     error.status = response.status;
     error.details = body;
+    if (errorCode) error.code = String(errorCode);
 
     const isGet = options?.method === "GET";
     const shouldShowToast = !options?.suppressErrorToast && response.status !== 404 && !isGet;
