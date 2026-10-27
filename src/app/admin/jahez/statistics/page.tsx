@@ -1,7 +1,7 @@
 // src/app/admin/jahez/statistics/page.tsx
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -47,6 +47,11 @@ import {
   Coins,
   X,
   Activity,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Filter,
+  RotateCcw,
 } from "lucide-react";
 import { JahezProfitReportTab } from "@/components/jahez/JahezProfitReportTab";
 
@@ -81,6 +86,22 @@ export default function JahezStatisticsAndReportsPage() {
 
   // Search & Filter
   const [search, setSearch] = useState("");
+  const [debtSortOrder, setDebtSortOrder] = useState<"none" | "desc" | "asc">("none");
+  const [debtTypeFilter, setDebtTypeFilter] = useState<"ALL" | "POSITIVE" | "ZERO" | "NEGATIVE">("ALL");
+  const [isDebtFilterMenuOpen, setIsDebtFilterMenuOpen] = useState(false);
+  const debtFilterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (debtFilterRef.current && !debtFilterRef.current.contains(e.target as Node)) {
+        setIsDebtFilterMenuOpen(false);
+      }
+    }
+    if (isDebtFilterMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isDebtFilterMenuOpen]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -199,15 +220,34 @@ export default function JahezStatisticsAndReportsPage() {
     return s.nameAr?.toLowerCase().includes(search.trim().toLowerCase());
   });
 
-  const filteredAdminDebts = adminDebts.filter((d) => {
-    if (!search.trim()) return true;
-    const q = search.trim().toLowerCase();
-    return (
-      d.externalAccountId?.toLowerCase().includes(q) ||
-      d.riderNameAr?.toLowerCase().includes(q) ||
-      d.handoverId.toLowerCase().includes(q)
-    );
-  });
+  const filteredAdminDebts = useMemo(() => {
+    let list = adminDebts.filter((d) => {
+      const q = search.trim().toLowerCase();
+      if (q) {
+        const matchesSearch =
+          d.externalAccountId?.toLowerCase().includes(q) ||
+          d.riderNameAr?.toLowerCase().includes(q) ||
+          d.handoverId.toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+      }
+
+      const debt = Number(d.platformDebt) || 0;
+      if (debtTypeFilter === "POSITIVE" && debt <= 0) return false;
+      if (debtTypeFilter === "ZERO" && debt !== 0) return false;
+      if (debtTypeFilter === "NEGATIVE" && debt >= 0) return false;
+
+      return true;
+    });
+
+    if (debtSortOrder === "desc") {
+      list = [...list].sort((a, b) => (Number(b.platformDebt) || 0) - (Number(a.platformDebt) || 0));
+    } else if (debtSortOrder === "asc") {
+      list = [...list].sort((a, b) => (Number(a.platformDebt) || 0) - (Number(b.platformDebt) || 0));
+    }
+
+    return list;
+  }, [adminDebts, search, debtSortOrder, debtTypeFilter]);
+
 
   const totalAdminDebt = useMemo(() => {
     return adminDebts.reduce((sum, d) => sum + (Number(d.platformDebt) || 0), 0);
@@ -448,7 +488,7 @@ export default function JahezStatisticsAndReportsPage() {
                   <span className="text-2xl font-black text-gray-900 dark:text-white">
                     {adminDebts.length.toLocaleString()}
                   </span>
-                  {search.trim() && (
+                  {(search.trim() || debtTypeFilter !== "ALL" || debtSortOrder !== "none") && (
                     <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
                       (المطابق: {filteredAdminDebts.length})
                     </span>
@@ -515,7 +555,50 @@ export default function JahezStatisticsAndReportsPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Debt Sort Quick Controls */}
+              <div className="inline-flex items-center gap-1 bg-white dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs text-xs">
+                <span className="text-gray-500 dark:text-gray-400 font-medium px-1.5 hidden md:inline">
+                  ترتيب المديونية:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDebtSortOrder("desc")}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    debtSortOrder === "desc"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                  title="ترتيب تنازلي: من الأكبر إلى الأصغر"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                  <span>الأكبر للأصغر</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDebtSortOrder("asc")}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    debtSortOrder === "asc"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                  title="ترتيب تصاعدي: من الأصغر للأكبر"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                  <span>الأصغر للأكبر</span>
+                </button>
+                {debtSortOrder !== "none" && (
+                  <button
+                    type="button"
+                    onClick={() => setDebtSortOrder("none")}
+                    className="p-1 rounded-lg text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                    title="إلغاء الترتيب"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
               <Button
                 variant="secondary"
                 size="sm"
@@ -537,7 +620,245 @@ export default function JahezStatisticsAndReportsPage() {
                     <th className="py-3 px-3 w-12 text-center">#</th>
                     <th className="py-3 px-3">رقم الحساب</th>
                     <th className="py-3 px-3">المندوب الفعلي</th>
-                    <th className="py-3 px-3 text-center">مديونية المنصة (Platform Debt)</th>
+                    <th className="py-3 px-3 text-center">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <div className="relative inline-flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDebtSortOrder((prev) => (prev === "desc" ? "asc" : prev === "asc" ? "none" : "desc"));
+                            }}
+                            className="inline-flex items-center justify-center gap-1.5 font-bold hover:text-purple-600 dark:hover:text-purple-400 transition-colors group cursor-pointer"
+                            title="انقر للترتيب: من الأكبر إلى الأصغر / من الأصغر إلى الأكبر"
+                          >
+                            <span>مديونية المنصة (Platform Debt)</span>
+                            {debtSortOrder === "desc" ? (
+                              <span className="flex items-center text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-950/80 p-0.5 rounded shadow-2xs">
+                                <ArrowDown className="h-3.5 w-3.5" />
+                              </span>
+                            ) : debtSortOrder === "asc" ? (
+                              <span className="flex items-center text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-950/80 p-0.5 rounded shadow-2xs">
+                                <ArrowUp className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              <ArrowUpDown className="h-3.5 w-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300" />
+                            )}
+                          </button>
+
+                          {/* Filter Dropdown Trigger */}
+                          <div className="relative" ref={debtFilterRef}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsDebtFilterMenuOpen((prev) => !prev);
+                              }}
+                              className={`p-1 rounded-md transition-colors cursor-pointer ${
+                                debtSortOrder !== "none" || debtTypeFilter !== "ALL"
+                                  ? "bg-purple-600 text-white"
+                                  : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              }`}
+                              title="خيارات الفرز والفلترة لمديونية المنصة"
+                              aria-label="خيارات الفرز والفلترة"
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+
+                            {/* Dropdown Menu */}
+                            {isDebtFilterMenuOpen && (
+                              <div
+                                className="absolute left-1/2 -translate-x-1/2 mt-2 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-gray-700 dark:bg-gray-800 z-50 text-right text-xs"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="px-2 py-1.5 font-bold text-gray-900 dark:text-gray-100 border-b border-gray-100 dark:border-gray-700 mb-1 flex items-center justify-between">
+                                  <span>خيارات الترتيب والفلترة</span>
+                                  {(debtSortOrder !== "none" || debtTypeFilter !== "ALL") && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDebtSortOrder("none");
+                                        setDebtTypeFilter("ALL");
+                                      }}
+                                      className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                                    >
+                                      إعادة تعيين
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Sort options */}
+                                <div className="py-1">
+                                  <p className="px-2 py-1 text-[11px] font-semibold text-gray-400">الترتيب:</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDebtSortOrder("desc");
+                                      setIsDebtFilterMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      debtSortOrder === "desc"
+                                        ? "bg-purple-50 text-purple-700 font-bold dark:bg-purple-950/50 dark:text-purple-300"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <ArrowDown className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                                      <span>من الأكبر إلى الأصغر</span>
+                                    </div>
+                                    {debtSortOrder === "desc" && <Check className="h-3.5 w-3.5 text-purple-600" />}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDebtSortOrder("asc");
+                                      setIsDebtFilterMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      debtSortOrder === "asc"
+                                        ? "bg-purple-50 text-purple-700 font-bold dark:bg-purple-950/50 dark:text-purple-300"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <ArrowUp className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                                      <span>من الأصغر إلى الأكبر</span>
+                                    </div>
+                                    {debtSortOrder === "asc" && <Check className="h-3.5 w-3.5 text-purple-600" />}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDebtSortOrder("none");
+                                      setIsDebtFilterMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      debtSortOrder === "none"
+                                        ? "bg-gray-100 text-gray-800 font-bold dark:bg-gray-700 dark:text-gray-200"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <RotateCcw className="h-3.5 w-3.5 text-gray-400" />
+                                      <span>الترتيب الافتراضي</span>
+                                    </div>
+                                    {debtSortOrder === "none" && <Check className="h-3.5 w-3.5 text-gray-500" />}
+                                  </button>
+                                </div>
+
+                                {/* Type/Value filter */}
+                                <div className="border-t border-gray-100 dark:border-gray-700 pt-1 mt-1">
+                                  <p className="px-2 py-1 text-[11px] font-semibold text-gray-400">تصفية القيمة:</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDebtTypeFilter("ALL");
+                                      setIsDebtFilterMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      debtTypeFilter === "ALL"
+                                        ? "bg-purple-50 text-purple-700 font-bold dark:bg-purple-950/50 dark:text-purple-300"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    }`}
+                                  >
+                                    <span>جميع السجلات</span>
+                                    {debtTypeFilter === "ALL" && <Check className="h-3.5 w-3.5 text-purple-600" />}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDebtTypeFilter("POSITIVE");
+                                      setIsDebtFilterMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      debtTypeFilter === "POSITIVE"
+                                        ? "bg-purple-50 text-purple-700 font-bold dark:bg-purple-950/50 dark:text-purple-300"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    }`}
+                                  >
+                                    <span>مديونية موجبة (&gt; 0 ر.س)</span>
+                                    {debtTypeFilter === "POSITIVE" && <Check className="h-3.5 w-3.5 text-purple-600" />}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDebtTypeFilter("ZERO");
+                                      setIsDebtFilterMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      debtTypeFilter === "ZERO"
+                                        ? "bg-purple-50 text-purple-700 font-bold dark:bg-purple-950/50 dark:text-purple-300"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    }`}
+                                  >
+                                    <span>أرصدة صفرية (= 0 ر.س)</span>
+                                    {debtTypeFilter === "ZERO" && <Check className="h-3.5 w-3.5 text-purple-600" />}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDebtTypeFilter("NEGATIVE");
+                                      setIsDebtFilterMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      debtTypeFilter === "NEGATIVE"
+                                        ? "bg-purple-50 text-purple-700 font-bold dark:bg-purple-950/50 dark:text-purple-300"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                    }`}
+                                  >
+                                    <span>أرصدة دائنة (&lt; 0 ر.س)</span>
+                                    {debtTypeFilter === "NEGATIVE" && <Check className="h-3.5 w-3.5 text-purple-600" />}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Header quick filter pill buttons */}
+                        <div className="inline-flex items-center gap-1 bg-white dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs text-[11px] font-normal">
+                          <button
+                            type="button"
+                            onClick={() => setDebtSortOrder("desc")}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              debtSortOrder === "desc"
+                                ? "bg-purple-600 text-white font-bold shadow-2xs"
+                                : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                            }`}
+                            title="ترتيب تنازلي: من الأكبر إلى الأصغر"
+                          >
+                            <ArrowDown className="h-3 w-3" />
+                            <span>الأكبر</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDebtSortOrder("asc")}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              debtSortOrder === "asc"
+                                ? "bg-purple-600 text-white font-bold shadow-2xs"
+                                : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                            }`}
+                            title="ترتيب تصاعدي: من الأصغر إلى الأكبر"
+                          >
+                            <ArrowUp className="h-3 w-3" />
+                            <span>الأصغر</span>
+                          </button>
+
+                          {debtSortOrder !== "none" && (
+                            <button
+                              type="button"
+                              onClick={() => setDebtSortOrder("none")}
+                              className="p-1 rounded-md text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                              title="إلغاء الترتيب"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
