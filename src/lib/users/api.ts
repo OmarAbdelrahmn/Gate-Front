@@ -1,4 +1,4 @@
-import { authFetch } from "../auth/api";
+ import { authFetch } from "../auth/api";
 import type {
   CreateManagedUserRequest,
   CurrentUserProfile,
@@ -232,6 +232,18 @@ export const NINJA_PERMISSION_CATALOG_ITEMS: PermissionCatalogItem[] = [
     isHighTrust: false,
     requiresHousingScope: false,
     requiresClientScope: false,
+  },
+  {
+    key: "ninja.assignments.dates.update",
+    module: "Ninja",
+    nameAr: "تعديل تواريخ تكليفات نينجا",
+    nameEn: "Edit Ninja assignment dates",
+    descriptionAr: "تصحيح وتعديل تواريخ بدء وانتهاء فترات التكليف لحسابات نينجا",
+    descriptionEn: "Correct and edit start and end dates for Ninja account assignments",
+    isSensitive: true,
+    isHighTrust: false,
+    requiresHousingScope: false,
+    requiresClientScope: true,
   },
   {
     key: "ninja.credentials.rotate",

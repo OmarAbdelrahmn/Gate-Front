@@ -27,6 +27,8 @@ import {
   type NinjaAccountUpdateRowResponse,
   type NinjaAccountUpdateRowQuery,
   type NinjaAccountUpdateNoteRequest,
+  type NinjaUpdateAssignmentDatesRequest,
+  type NinjaUpdateAssignmentDatesResponse,
 } from "./ninja-api-contracts";
 
 export * from "./ninja-api-contracts";
@@ -324,6 +326,21 @@ export async function updateNinjaCredentials(
     body: JSON.stringify(data),
     suppressErrorToast: false,
   });
+}
+
+export async function updateNinjaAssignmentDates(
+  accountId: string,
+  assignmentId: string,
+  data: NinjaUpdateAssignmentDatesRequest
+): Promise<NinjaUpdateAssignmentDatesResponse> {
+  return authFetch<NinjaUpdateAssignmentDatesResponse>(
+    ninjaPaths.assignmentDates(accountId, assignmentId),
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+      suppressErrorToast: true, // We handle errors and conflict detail in modal
+    }
+  );
 }
 
 // -------------------------------------------------------------

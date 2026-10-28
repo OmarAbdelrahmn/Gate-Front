@@ -85,6 +85,8 @@ export const ninjaPaths = {
   assign: (accountId: string) => `/api/ninja/accounts/${encodeURIComponent(accountId)}/assign`,
   return: (accountId: string) => `/api/ninja/accounts/${encodeURIComponent(accountId)}/return`,
   credentials: (accountId: string) => `/api/ninja/accounts/${encodeURIComponent(accountId)}/credentials`,
+  assignmentDates: (accountId: string, assignmentId: string) =>
+    `/api/ninja/accounts/${encodeURIComponent(accountId)}/assignments/${encodeURIComponent(assignmentId)}/dates`,
 
   // Daily Imports (raw .xlsx)
   importPerformance: "/api/ninja/performance/import",
@@ -305,6 +307,22 @@ export interface NinjaLifecycleResponse {
   account?: NinjaAccountResponse;
   assignment: NinjaAssignmentResponse;
   credentials: NinjaCredentialResponse;
+}
+
+export interface NinjaUpdateAssignmentDatesRequest {
+  effectiveFrom: DateOnly;
+  effectiveTo: DateOnly | null;
+  reason: string;
+  rowVersion: string;
+}
+
+export interface NinjaUpdateAssignmentDatesResponse {
+  accountId: Guid;
+  assignmentId: Guid;
+  effectiveFrom: DateOnly;
+  effectiveTo: DateOnly | null;
+  status: string;
+  rowVersion: string;
 }
 
 // -------------------------------------------------------------
@@ -763,5 +781,44 @@ export function createNinjaClient(send: AuthenticatedFetch) {
       });
       return handleResponse<NinjaAccountUpdateUploadResponse>(res);
     },
+
+    async updateAssignmentDates(
+      accountId: string,
+      assignmentId: string,
+      request: NinjaUpdateAssignmentDatesRequest
+    ): Promise<NinjaUpdateAssignmentDatesResponse> {
+      const res = await send(ninjaPaths.assignmentDates(accountId, assignmentId), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      return handleResponse<NinjaUpdateAssignmentDatesResponse>(res);
+    },
   };
+}
+
+export class NinjaApiClient {
+  private origin: string;
+  private getToken: () => string | Promise<string>;
+
+  constructor(origin: string = "", getToken: () => string | Promise<string> = () => "") {
+    this.origin = origin.replace(/\/$/, "");
+    this.getToken = getToken;
+  }
+
+  private async fetch(path: string, init?: RequestInit): Promise<Response> {
+    const token = await this.getToken();
+    const headers = new Headers(init?.headers || {});
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    headers.set("Accept", "application/json");
+    return fetch(`${this.origin}${path}`, { ...init, headers });
+  }
+
+  get client() {
+    return createNinjaClient(this.fetch.bind(this));
+  }
+
+  updateAssignmentDates(accountId: string, assignmentId: string, req: NinjaUpdateAssignmentDatesRequest) {
+    return this.client.updateAssignmentDates(accountId, assignmentId, req);
+  }
 }

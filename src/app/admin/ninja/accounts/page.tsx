@@ -15,7 +15,9 @@ import {
   assignNinjaAccount,
   returnNinjaAccount,
   updateNinjaCredentials,
+  updateNinjaAssignmentDates,
   getRiyadhTodayDate,
+  isAfterRiyadhToday,
   formatRiyadhDateTime,
   isCooldownActive,
   formatRemainingCooldown,
@@ -96,6 +98,7 @@ import {
   Activity,
   Car,
   Bike,
+  Calendar,
 } from "lucide-react";
 import { DayUsageFields } from "@/components/shared/DayUsageFields";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
@@ -120,9 +123,11 @@ export default function NinjaAccountsPage() {
   const canReturn = can("ninja.assignments.delete") || canUpdate;
   const canRotatePassword = can("ninja.credentials.rotate") || canUpdate;
   const canCreateAccount = can("platform_accounts.create");
+  const canCorrectDates = can("ninja.assignments.dates.update");
   const canViewHistory =
     can("platform_assignments.read") ||
     can("ninja.read") ||
+    canCorrectDates ||
     canAny("ninja.assignments.create", "ninja.assignments.delete", "ninja.accounts.update");
 
   // Core Data States
@@ -231,6 +236,17 @@ export default function NinjaAccountsPage() {
   const [historyAccount, setHistoryAccount] = useState<NinjaAccountResponse | null>(null);
   const [assignmentHistoryList, setAssignmentHistoryList] = useState<AssignmentResponse[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // 8. Assignment Dates Correction Modal (ninja.assignments.dates.update)
+  const [isDateCorrectionOpen, setIsDateCorrectionOpen] = useState(false);
+  const [correctingAssignment, setCorrectingAssignment] = useState<AssignmentResponse | null>(null);
+  const [corrEffectiveFrom, setCorrEffectiveFrom] = useState("");
+  const [corrEffectiveTo, setCorrEffectiveTo] = useState("");
+  const [corrReason, setCorrReason] = useState("");
+  const [corrSubmitting, setCorrSubmitting] = useState(false);
+  const [corrError, setCorrError] = useState<string | null>(null);
+  const [corrIsConflict, setCorrIsConflict] = useState(false);
+  const [corrConflictDetail, setCorrConflictDetail] = useState<string | null>(null);
 
   // -------------------------------------------------------------
   // Loaders
@@ -1703,6 +1719,207 @@ export default function NinjaAccountsPage() {
       setAssignmentHistoryList([]);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Actions: Ninja Assignment Dates Correction (ninja.assignments.dates.update)
+  // -------------------------------------------------------------
+  const isCorrectionEligible = (asgn: AssignmentResponse) => {
+    const status = (asgn.status || "").trim();
+    const hasEnd = Boolean(asgn.effectiveTo && asgn.effectiveTo.trim());
+    if (status === "Active" && !hasEnd) return true;
+    if (status === "Ended" && hasEnd) return true;
+    return false;
+  };
+
+  const handleOpenDateCorrection = (asgn: AssignmentResponse) => {
+    setCorrectingAssignment(asgn);
+    setCorrEffectiveFrom(asgn.effectiveFrom ? asgn.effectiveFrom.split("T")[0] : "");
+    setCorrEffectiveTo(
+      asgn.status === "Active"
+        ? ""
+        : asgn.effectiveTo
+        ? asgn.effectiveTo.split("T")[0]
+        : ""
+    );
+    setCorrReason("");
+    setCorrError(null);
+    setCorrIsConflict(false);
+    setCorrConflictDetail(null);
+    setIsDateCorrectionOpen(true);
+  };
+
+  const handleReloadCorrectingAssignment = async () => {
+    if (!historyAccount || !correctingAssignment) return;
+    const targetId = historyAccount.accountId || historyAccount.id;
+    if (!targetId) return;
+
+    setCorrSubmitting(true);
+    try {
+      const list = await getAccountAssignmentHistory(targetId);
+      if (Array.isArray(list)) {
+        setAssignmentHistoryList(list);
+        const fresh = list.find((a) => a.id === correctingAssignment.id);
+        if (fresh) {
+          setCorrectingAssignment(fresh);
+          setCorrEffectiveFrom(fresh.effectiveFrom ? fresh.effectiveFrom.split("T")[0] : "");
+          setCorrEffectiveTo(
+            fresh.status === "Active"
+              ? ""
+              : fresh.effectiveTo
+              ? fresh.effectiveTo.split("T")[0]
+              : ""
+          );
+          setCorrError(null);
+          setCorrIsConflict(false);
+          setCorrConflictDetail(null);
+          toast.info("تم التحديث", "تم تحميل أحدث بيانات للتكليف بنجاح. يمكنك مراجعة التواريخ وإعادة الحفظ.");
+        } else {
+          setCorrError("لم يتم العثور على التكليف في سجل الحساب المحدث.");
+        }
+      }
+    } catch (err: any) {
+      toast.error("خطأ", "تعذر إعادة تحميل بيانات التكليف.");
+    } finally {
+      setCorrSubmitting(false);
+    }
+  };
+
+  const handleSaveDateCorrection = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!correctingAssignment || !historyAccount) return;
+
+    const accountId = historyAccount.accountId || historyAccount.id;
+    if (!accountId) {
+      toast.error("خطأ", "معرف الحساب غير صالح.");
+      return;
+    }
+
+    const assignmentId = correctingAssignment.id;
+    if (!assignmentId) {
+      toast.error("خطأ", "معرف التكليف غير صالح.");
+      return;
+    }
+
+    const fromVal = corrEffectiveFrom.trim();
+    if (!fromVal) {
+      setCorrError("تاريخ البدء مطلوب.");
+      return;
+    }
+
+    if (isAfterRiyadhToday(fromVal)) {
+      setCorrError("تاريخ البدء لا يمكن أن يكون بعد تاريخ اليوم بتوقيت الرياض.");
+      return;
+    }
+
+    const isActive = correctingAssignment.status === "Active";
+    let toVal: string | null = null;
+
+    if (!isActive) {
+      toVal = corrEffectiveTo.trim();
+      if (!toVal) {
+        setCorrError("تاريخ الانتهاء مطلوب للتكليفات المنتهية.");
+        return;
+      }
+      if (isAfterRiyadhToday(toVal)) {
+        setCorrError("تاريخ الانتهاء لا يمكن أن يكون بعد تاريخ اليوم بتوقيت الرياض.");
+        return;
+      }
+      if (toVal < fromVal) {
+        setCorrError("تاريخ الانتهاء يجب أن يكون في نفس تاريخ البدء أو بعده.");
+        return;
+      }
+    }
+
+    const trimmedReason = corrReason.trim();
+    if (!trimmedReason) {
+      setCorrError("سبب التعديل مطلوب ولا يمكن أن يكون فارغاً.");
+      return;
+    }
+
+    if (trimmedReason.length > 1000) {
+      setCorrError("سبب التعديل يجب ألا يتجاوز 1000 حرف.");
+      return;
+    }
+
+    const rowVersion =
+      correctingAssignment.rowVersion ||
+      (historyAccount.currentAssignmentId === assignmentId
+        ? historyAccount.assignmentRowVersion
+        : "") ||
+      "";
+
+    if (!rowVersion) {
+      setCorrError("رمز التحقق بالتزامن (rowVersion) مفقود للتكليف. يرجى الضغط على زر التحديث أدناه للمحاولة مجدداً.");
+      setCorrIsConflict(true);
+      return;
+    }
+
+    setCorrSubmitting(true);
+    setCorrError(null);
+    setCorrConflictDetail(null);
+    setCorrIsConflict(false);
+
+    try {
+      const saved = await updateNinjaAssignmentDates(accountId, assignmentId, {
+        effectiveFrom: fromVal,
+        effectiveTo: isActive ? null : toVal,
+        reason: trimmedReason,
+        rowVersion: rowVersion,
+      });
+
+      // On HTTP 200, replace the edited row's dates and assignment rowversion with returned values
+      setAssignmentHistoryList((prev) =>
+        prev.map((row) => {
+          if (row.id === saved.assignmentId || row.id === assignmentId) {
+            return {
+              ...row,
+              effectiveFrom: saved.effectiveFrom,
+              effectiveTo: saved.effectiveTo,
+              status: (saved.status as any) || row.status,
+              rowVersion: saved.rowVersion,
+            };
+          }
+          return row;
+        })
+      );
+
+      toast.success("تم بنجاح", "تم تعديل وتصحيح تواريخ التكليف بنجاح.");
+      setIsDateCorrectionOpen(false);
+      setCorrectingAssignment(null);
+
+      // Refresh assignment history and accounts
+      if (historyAccount) {
+        handleOpenAssignmentHistory(historyAccount).catch(() => {});
+      }
+      loadAccounts().catch(() => {});
+    } catch (err: any) {
+      console.error("Failed to correct assignment dates", err);
+      const status = err?.status;
+      const details = err?.details;
+      const errorCode = details?.errorCode || err?.code;
+      const detailMsg = details?.detail || err?.message || "حدث خطأ أثناء تعديل تواريخ التكليف.";
+
+      if (status === 409) {
+        setCorrIsConflict(true);
+        setCorrConflictDetail(detailMsg);
+        if (errorCode === "ninja.conflict" || errorCode === "system.concurrency_conflict") {
+          setCorrError("تعارض في التحديث: تم تعديل بيانات هذا التكليف بواسطة عملية أخرى. يرجى الضغط على زر 'تحديث بيانات التكليف' أدناه لمراجعة أحدث بيانات ثم إعادة الحفظ.");
+        } else {
+          setCorrError(detailMsg || "تعارض في البيانات: التواريخ تتداخل مع تكليف آخر أو سجلات أداء وخصومات مسجلة.");
+        }
+      } else if (status === 403) {
+        setCorrError("تم رفض الوصول (403): يتطلب الإجراء صلاحية 'ninja.assignments.dates.update' بنطاق منصة نينجا.");
+      } else if (status === 400) {
+        setCorrError(detailMsg || "طلب غير صالح: يرجى التحقق من صحة التواريخ والسبب.");
+      } else if (status === 404) {
+        setCorrError(detailMsg || "الحساب أو التكليف غير موجود في النظام.");
+      } else {
+        setCorrError(detailMsg);
+      }
+    } finally {
+      setCorrSubmitting(false);
     }
   };
 
@@ -4043,6 +4260,9 @@ export default function NinjaAccountsPage() {
                       <th className="px-3 py-2.5">نموذج الدفع</th>
                       <th className="px-3 py-2.5">السبب والملاحظات</th>
                       <th className="px-3 py-2.5 text-center">سجل المندوب</th>
+                      {canCorrectDates && (
+                        <th className="px-3 py-2.5 text-center">تعديل تواريخ التكليف</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
@@ -4099,7 +4319,7 @@ export default function NinjaAccountsPage() {
                           <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap" dir="ltr">
                             <div className="flex items-center gap-1 text-[var(--foreground)]">
                               <span className="font-semibold">{asgn.effectiveFrom || "—"}</span>
-                              <span className="text-[var(--muted)]">←</span>
+                              <span className="text-[var(--muted)]">→</span>
                               <span className={asgn.effectiveTo ? "font-semibold" : "text-emerald-600 dark:text-emerald-400 font-bold"}>
                                 {asgn.effectiveTo || "حتى الآن"}
                               </span>
@@ -4185,6 +4405,27 @@ export default function NinjaAccountsPage() {
                               <span className="text-[var(--muted)]">—</span>
                             )}
                           </td>
+
+                          {/* Date Correction action */}
+                          {canCorrectDates && (
+                            <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                              {isCorrectionEligible(asgn) ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => handleOpenDateCorrection(asgn)}
+                                  className="inline-flex items-center gap-1.5 text-[11px] h-7 px-2.5 border-purple-200 dark:border-purple-900/60 text-purple-700 hover:text-purple-900 hover:bg-purple-100 dark:text-purple-300 dark:hover:bg-purple-900/50 shadow-xs font-medium"
+                                  title="تعديل تواريخ التكليف"
+                                >
+                                  <Calendar className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                                  <span>تعديل تواريخ التكليف</span>
+                                </Button>
+                              ) : (
+                                <span className="text-[var(--muted)] text-[11px]">—</span>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -4213,6 +4454,180 @@ export default function NinjaAccountsPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* ------------------------------------------------------------- */}
+      {/* 8. Modal: Ninja Assignment Date Corrections                   */}
+      {/* ------------------------------------------------------------- */}
+      <Modal
+        isOpen={isDateCorrectionOpen}
+        onClose={() => {
+          if (!corrSubmitting) {
+            setIsDateCorrectionOpen(false);
+            setCorrectingAssignment(null);
+          }
+        }}
+        title={`تعديل تواريخ التكليف — ${historyAccount?.captainId ? `#${historyAccount.captainId}` : ""}`}
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={handleSaveDateCorrection} className="space-y-4 text-xs" dir="rtl">
+          {/* Rider & Account Info banner */}
+          {correctingAssignment && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-900/40 dark:bg-purple-950/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold shrink-0">
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-[var(--foreground)]">
+                      {correctingAssignment.actualRiderNameAr ||
+                        correctingAssignment.actualRiderNameEn ||
+                        riderMap.get(correctingAssignment.actualRiderProfileId?.toLowerCase())?.fullNameAr ||
+                        "مندوب مسجل"}
+                    </div>
+                    <div className="text-[11px] text-[var(--muted)] font-mono" dir="ltr">
+                      كابتن: #{historyAccount?.captainId}
+                    </div>
+                  </div>
+                </div>
+                <Badge tone={correctingAssignment.status === "Active" ? "green" : "gray"}>
+                  {correctingAssignment.status === "Active" ? "تكليف نشط" : "تكليف منتهي"}
+                </Badge>
+              </div>
+            </div>
+          )}
+
+          {/* Error / Conflict Alert */}
+          {corrError && (
+            <div className="rounded-xl border border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/40 p-3 text-red-900 dark:text-red-200 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <div className="text-xs leading-relaxed font-medium">
+                  {corrError}
+                </div>
+              </div>
+              {corrIsConflict && (
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleReloadCorrectingAssignment}
+                    disabled={corrSubmitting}
+                    className="text-xs gap-1.5 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/40"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${corrSubmitting ? "animate-spin" : ""}`} />
+                    تحديث بيانات التكليف وإعادة المحاولة
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Effective From */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[var(--foreground)] flex items-center justify-between">
+              <span>تاريخ بدء التكليف (Effective From) <span className="text-red-500">*</span></span>
+              <span className="text-[10px] text-[var(--muted)] font-normal">لا يتجاوز تاريخ اليوم</span>
+            </label>
+            <DateInput
+              value={corrEffectiveFrom}
+              onChange={setCorrEffectiveFrom}
+              max={todayRiyadh}
+              required
+              disabled={corrSubmitting}
+            />
+          </div>
+
+          {/* Effective To */}
+          {correctingAssignment?.status === "Active" ? (
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[var(--foreground)]">
+                تاريخ انتهاء التكليف (Effective To)
+              </label>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20 p-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>حتى الآن (تكليف مستمر)</span>
+                </div>
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1">
+                  التكليف الحالي النشط يقبل فقط تعديل تاريخ البدء (يتم إرسال تاريخ النهاية كـ null تلقائياً). لإنهاء التكليف يرجى استخدام زر الإرجاع الرئيسي.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[var(--foreground)] flex items-center justify-between">
+                <span>تاريخ انتهاء التكليف (Effective To) <span className="text-red-500">*</span></span>
+                <span className="text-[10px] text-[var(--muted)] font-normal">على أو بعد تاريخ البدء</span>
+              </label>
+              <DateInput
+                value={corrEffectiveTo}
+                onChange={setCorrEffectiveTo}
+                min={corrEffectiveFrom || undefined}
+                max={todayRiyadh}
+                required
+                disabled={corrSubmitting}
+              />
+              <p className="text-[10px] text-[var(--muted)]">
+                مطلوب للتكليفات المنتهية ويجب ألا يتجاوز تاريخ اليوم بتوقيت الرياض.
+              </p>
+            </div>
+          )}
+
+          {/* Reason */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[var(--foreground)]">
+                سبب تعديل التواريخ <span className="text-red-500">*</span>
+              </label>
+              <span className={`text-[10px] font-mono ${corrReason.length > 950 ? "text-amber-600 font-bold" : "text-[var(--muted)]"}`}>
+                {corrReason.trim().length} / 1000
+              </span>
+            </div>
+            <textarea
+              value={corrReason}
+              onChange={(e) => setCorrReason(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              required
+              disabled={corrSubmitting}
+              placeholder="اكتب سبباً واضحاً ومفصلاً لتصحيح تواريخ فترة التكليف..."
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5 text-xs text-[var(--foreground)] outline-none focus:border-purple-600 transition-colors"
+            />
+            <p className="text-[10px] text-[var(--muted)]">
+              يتم توثيق هذا السبب في سجل أحداث التكليف (RiderAssignmentEvent) للتدقيق والامتثال.
+            </p>
+          </div>
+
+          {/* Modal Actions */}
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsDateCorrectionOpen(false);
+                setCorrectingAssignment(null);
+              }}
+              disabled={corrSubmitting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                corrSubmitting ||
+                !corrReason.trim() ||
+                !corrEffectiveFrom ||
+                (correctingAssignment?.status === "Ended" && !corrEffectiveTo)
+              }
+              className="bg-purple-600 text-white hover:bg-purple-700 min-w-[120px]"
+            >
+              {corrSubmitting ? "جارٍ الحفظ..." : "حفظ التعديلات"}
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       {/* 6. Modal: Shared Account Day Usage Management */}

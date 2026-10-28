@@ -161,6 +161,7 @@ export const PERMISSIONS = [
   "ninja.accounts.update",
   "ninja.assignments.create",
   "ninja.assignments.delete",
+  "ninja.assignments.dates.update",
   "ninja.credentials.rotate",
   "ninja.performance.import",
   "ninja.deductions.import",

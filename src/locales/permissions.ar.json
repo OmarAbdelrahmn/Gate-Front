@@ -106,6 +106,7 @@
   "ninja.accounts.update": "تعديل وإعداد حسابات وشيتات نينجا",
   "ninja.assignments.create": "إسناد وتسليم حسابات نينجا للمناديب",
   "ninja.assignments.delete": "سحب وإلغاء إسناد حسابات نينجا",
+  "ninja.assignments.dates.update": "تعديل تواريخ تكليفات نينجا",
   "ninja.credentials.rotate": "تدوير وتحديث كلمات مرور حسابات نينجا",
   "ninja.performance.import": "رفع واستيراد تقارير أداء نينجا اليومية",
   "ninja.deductions.import": "رفع واستيراد خصومات نينجا اليومية",

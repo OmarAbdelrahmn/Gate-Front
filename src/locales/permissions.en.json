@@ -106,6 +106,7 @@
   "ninja.accounts.update": "Configure and update Ninja accounts and sheets",
   "ninja.assignments.create": "Assign Ninja accounts to riders",
   "ninja.assignments.delete": "Release Ninja accounts from riders",
+  "ninja.assignments.dates.update": "Edit Ninja assignment dates",
   "ninja.credentials.rotate": "Rotate Ninja credentials and passwords",
   "ninja.performance.import": "Import Ninja daily performance sheets",
   "ninja.deductions.import": "Import Ninja daily deductions sheets",
