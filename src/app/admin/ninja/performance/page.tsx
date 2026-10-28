@@ -1,7 +1,7 @@
 // src/app/admin/ninja/performance/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -16,9 +16,11 @@ import {
   importNinjaPerformance,
   getAllNinjaAccounts,
   getRiyadhTodayDate,
+  getRiyadhFirstDayOfMonth,
   type NinjaPerformanceResponse,
   type NinjaPerformanceReport,
   type NinjaDailyReport,
+  type NinjaDailySponsorReport,
   type NinjaRiderReport,
   type NinjaAccountResponse,
   type NinjaImportResponse,
@@ -55,6 +57,7 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Download,
   Users,
   Wallet,
@@ -74,11 +77,7 @@ export default function NinjaPerformancePage() {
   const canImport = can("ninja.performance.import");
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
-  const defaultFrom = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 14); // Last 14 days default
-    return d.toISOString().split("T")[0];
-  }, []);
+  const defaultFrom = useMemo(() => getRiyadhFirstDayOfMonth(), []);
 
   // Filter States
   const [filterFrom, setFilterFrom] = useState(defaultFrom);
@@ -105,6 +104,27 @@ export default function NinjaPerformancePage() {
   // 3. Daily Trend Report State (Loads all days in period)
   const [dailyReportItems, setDailyReportItems] = useState<NinjaDailyReport[]>([]);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+
+  const toggleDayExpand = (dateStr: string) => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) {
+        next.delete(dateStr);
+      } else {
+        next.add(dateStr);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllDays = () => {
+    if (expandedDays.size === dailyReportItems.length) {
+      setExpandedDays(new Set());
+    } else {
+      setExpandedDays(new Set(dailyReportItems.map((d) => d.date)));
+    }
+  };
 
   // 4. Raw Records State (Loads all records in period with optional view-all)
   const [records, setRecords] = useState<NinjaPerformanceResponse[]>([]);
@@ -313,25 +333,68 @@ export default function NinjaPerformancePage() {
   };
 
   const exportDaily = () => {
+    const rows: Array<{
+      date: string;
+      sponsor: string;
+      perfRecords: number;
+      dedRecords: number;
+      orders: number;
+      hours: number;
+      prod: number | string;
+      collected: number;
+      deductions: number;
+    }> = [];
+
+    dailyReportItems.forEach((day) => {
+      rows.push({
+        date: day.date,
+        sponsor: day.sponsors && day.sponsors.length > 0 ? "إجمالي اليوم" : "—",
+        perfRecords: day.metrics?.performanceRecords || 0,
+        dedRecords: day.metrics?.deductionRecords || 0,
+        orders: day.metrics?.totalOrders || 0,
+        hours: Number((day.metrics?.totalWorkingHours || 0).toFixed(2)),
+        prod:
+          day.metrics?.ordersPerWorkingHour !== null && day.metrics?.ordersPerWorkingHour !== undefined
+            ? Number(day.metrics.ordersPerWorkingHour.toFixed(2))
+            : "—",
+        collected: day.metrics?.totalCollectedAmountAtDelivery || 0,
+        deductions: day.metrics?.totalDeductions || 0,
+      });
+
+      if (day.sponsors && day.sponsors.length > 0) {
+        day.sponsors.forEach((sp) => {
+          rows.push({
+            date: day.date,
+            sponsor: sp.sponsorNameAr || sp.sponsorNameEn || "كفيل غير محدد",
+            perfRecords: sp.metrics?.performanceRecords || 0,
+            dedRecords: sp.metrics?.deductionRecords || 0,
+            orders: sp.metrics?.totalOrders || 0,
+            hours: Number((sp.metrics?.totalWorkingHours || 0).toFixed(2)),
+            prod:
+              sp.metrics?.ordersPerWorkingHour !== null && sp.metrics?.ordersPerWorkingHour !== undefined
+                ? Number(sp.metrics.ordersPerWorkingHour.toFixed(2))
+                : "—",
+            collected: sp.metrics?.totalCollectedAmountAtDelivery || 0,
+            deductions: sp.metrics?.totalDeductions || 0,
+          });
+        });
+      }
+    });
+
     exportToExcel({
       filename: `ninja-daily-trend-${filterFrom}-to-${filterTo}`,
-      sheetName: "تقرير الأيام",
-      data: dailyReportItems,
+      sheetName: "تقرير الأيام والكفلاء",
+      data: rows,
       columns: [
-        { header: "التاريخ", accessor: (d) => d.date, isText: true },
-        { header: "سجلات الأداء", accessor: (d) => d.metrics?.performanceRecords || 0 },
-        { header: "سجلات الخصومات", accessor: (d) => d.metrics?.deductionRecords || 0 },
-        { header: "إجمالي الطلبات", accessor: (d) => d.metrics?.totalOrders || 0 },
-        { header: "ساعات العمل", accessor: (d) => Number((d.metrics?.totalWorkingHours || 0).toFixed(2)) },
-        {
-          header: "الإنتاجية (طلب/ساعة)",
-          accessor: (d) =>
-            d.metrics?.ordersPerWorkingHour !== null && d.metrics?.ordersPerWorkingHour !== undefined
-              ? Number(d.metrics.ordersPerWorkingHour.toFixed(2))
-              : "—",
-        },
-        { header: "المبالغ المحصلة", accessor: (d) => d.metrics?.totalCollectedAmountAtDelivery || 0 },
-        { header: "الخصومات", accessor: (d) => d.metrics?.totalDeductions || 0 },
+        { header: "التاريخ", accessor: (r) => r.date, isText: true },
+        { header: "الكفيل / البيان", accessor: (r) => r.sponsor, isText: true },
+        { header: "سجلات الأداء", accessor: (r) => r.perfRecords },
+        { header: "سجلات الخصومات", accessor: (r) => r.dedRecords },
+        { header: "إجمالي الطلبات", accessor: (r) => r.orders },
+        { header: "ساعات العمل", accessor: (r) => r.hours },
+        { header: "الإنتاجية (طلب/ساعة)", accessor: (r) => r.prod },
+        { header: "المبالغ المحصلة", accessor: (r) => r.collected },
+        { header: "الخصومات", accessor: (r) => r.deductions },
       ],
     });
   };
@@ -824,7 +887,7 @@ export default function NinjaPerformancePage() {
       {/* ------------------------------------------------------------- */}
       {activeTab === "daily" && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden space-y-4 p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="font-bold text-sm text-[var(--foreground)]">
                 تقرير الاتجاهات اليومية بالأيام المسجلة
@@ -832,18 +895,35 @@ export default function NinjaPerformancePage() {
               <Badge tone="purple" className="text-xs">
                 {dailyReportItems.length} يوم
               </Badge>
+              {dailyReportItems.length > 0 && (
+                <span className="text-[11px] text-[var(--muted)] hidden sm:inline">
+                  (اضغط على اليوم لعرض تفاصيل الكفلاء)
+                </span>
+              )}
             </div>
-            <Button variant="secondary" size="sm" onClick={exportDaily} className="gap-2 text-xs">
-              <Download className="h-3.5 w-3.5 text-emerald-600" />
-              تصدير الأيام (Excel)
-            </Button>
+            <div className="flex items-center gap-2">
+              {dailyReportItems.some((d) => d.sponsors && d.sponsors.length > 0) && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={toggleAllDays}
+                  className="gap-1.5 text-xs"
+                >
+                  {expandedDays.size === dailyReportItems.length ? "طي الكل" : "توسيع الكل"}
+                </Button>
+              )}
+              <Button variant="secondary" size="sm" onClick={exportDaily} className="gap-2 text-xs">
+                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                تصدير الأيام والكفلاء (Excel)
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-right border-collapse">
               <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
                 <tr>
-                  <th className="px-4 py-3 font-bold">التاريخ</th>
+                  <th className="px-4 py-3 font-bold">التاريخ / الكفيل</th>
                   <th className="px-4 py-3 font-bold text-center">سجلات الأداء</th>
                   <th className="px-4 py-3 font-bold text-center">سجلات الخصم</th>
                   <th className="px-4 py-3 font-bold text-center">إجمالي الطلبات</th>
@@ -869,30 +949,128 @@ export default function NinjaPerformancePage() {
                   </tr>
                 ) : (
                   dailyReportItems.map((day, idx) => {
+                    const isExpanded = expandedDays.has(day.date);
+                    const hasSponsors = !!(day.sponsors && day.sponsors.length > 0);
                     const prod = day.metrics?.ordersPerWorkingHour;
+
                     return (
-                      <tr key={idx} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
-                        <td className="px-4 py-3 font-mono font-bold text-sm text-[var(--foreground)]" dir="ltr">
-                          {day.date}
-                        </td>
-                        <td className="px-4 py-3 text-center">{day.metrics?.performanceRecords || 0}</td>
-                        <td className="px-4 py-3 text-center">{day.metrics?.deductionRecords || 0}</td>
-                        <td className="px-4 py-3 text-center font-black text-purple-700 dark:text-purple-300">
-                          {day.metrics?.totalOrders || 0}
-                        </td>
-                        <td className="px-4 py-3 text-center font-bold">
-                          {Number((day.metrics?.totalWorkingHours || 0).toFixed(2))}
-                        </td>
-                        <td className="px-4 py-3 text-center font-bold text-emerald-600">
-                          {prod !== null && prod !== undefined ? Number(prod.toFixed(2)) : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-center font-mono">
-                          {day.metrics?.totalCollectedAmountAtDelivery || 0}
-                        </td>
-                        <td className="px-4 py-3 text-center font-mono font-bold text-rose-600">
-                          {day.metrics?.totalDeductions || 0}
-                        </td>
-                      </tr>
+                      <React.Fragment key={day.date || idx}>
+                        <tr
+                          onClick={() => toggleDayExpand(day.date)}
+                          className={`cursor-pointer transition-colors select-none ${
+                            isExpanded
+                              ? "bg-purple-50/70 dark:bg-purple-950/30"
+                              : "hover:bg-[var(--subtle-bg)]/50"
+                          }`}
+                          title="اضغط لعرض أو إخفاء تفاصيل الكفلاء"
+                        >
+                          <td className="px-4 py-3 font-mono font-bold text-sm text-[var(--foreground)]">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                aria-label={isExpanded ? "طي" : "توسيع"}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleDayExpand(day.date);
+                                }}
+                                className={`h-5 w-5 flex items-center justify-center rounded transition-transform ${
+                                  hasSponsors ? "text-purple-600 dark:text-purple-400" : "text-[var(--muted)] opacity-40"
+                                }`}
+                              >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform duration-200 ${
+                                    isExpanded ? "rotate-0" : "-rotate-90 rtl:rotate-90"
+                                  }`}
+                                />
+                              </button>
+                              <span dir="ltr">{day.date}</span>
+                              {hasSponsors && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                                  <Building2 className="h-3 w-3" />
+                                  {day.sponsors!.length} كفيل
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">{day.metrics?.performanceRecords || 0}</td>
+                          <td className="px-4 py-3 text-center">{day.metrics?.deductionRecords || 0}</td>
+                          <td className="px-4 py-3 text-center font-black text-purple-700 dark:text-purple-300">
+                            {day.metrics?.totalOrders || 0}
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold">
+                            {Number((day.metrics?.totalWorkingHours || 0).toFixed(2))}
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-emerald-600">
+                            {prod !== null && prod !== undefined ? Number(prod.toFixed(2)) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono">
+                            {day.metrics?.totalCollectedAmountAtDelivery || 0}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono font-bold text-rose-600">
+                            {day.metrics?.totalDeductions || 0}
+                          </td>
+                        </tr>
+
+                        {/* Expanded Sponsors Rows */}
+                        {isExpanded && (
+                          <>
+                            {hasSponsors ? (
+                              day.sponsors!.map((sp, spIdx) => {
+                                const spProd = sp.metrics?.ordersPerWorkingHour;
+                                return (
+                                  <tr
+                                    key={`${day.date}-sponsor-${sp.sponsorId || spIdx}`}
+                                    className="bg-purple-50/25 dark:bg-purple-950/15 hover:bg-purple-50/50 dark:hover:bg-purple-950/25 transition-colors border-t border-dashed border-[var(--border)]"
+                                  >
+                                    <td className="px-4 py-2.5 ps-11 text-[var(--foreground)]">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[var(--muted)] font-mono text-[11px]">↳</span>
+                                        <Building2 className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                                        <span className="font-semibold text-xs text-[var(--foreground)]">
+                                          {sp.sponsorNameAr || sp.sponsorNameEn || "كفيل غير محدد"}
+                                        </span>
+                                        <span className="text-[10px] text-[var(--muted)] bg-[var(--card)] px-1.5 py-0.2 rounded border border-[var(--border)]">
+                                          كفيل
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center text-xs text-[var(--muted)]">
+                                      {sp.metrics?.performanceRecords || 0}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center text-xs text-[var(--muted)]">
+                                      {sp.metrics?.deductionRecords || 0}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center font-bold text-xs text-purple-600 dark:text-purple-400">
+                                      {sp.metrics?.totalOrders || 0}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center text-xs">
+                                      {Number((sp.metrics?.totalWorkingHours || 0).toFixed(2))}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center font-semibold text-xs text-emerald-600">
+                                      {spProd !== null && spProd !== undefined ? Number(spProd.toFixed(2)) : "—"}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-xs">
+                                      {sp.metrics?.totalCollectedAmountAtDelivery || 0}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center font-mono font-semibold text-xs text-rose-600">
+                                      {sp.metrics?.totalDeductions || 0}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr className="bg-[var(--subtle-bg)]/20 border-t border-dashed border-[var(--border)]">
+                                <td colSpan={8} className="py-3 ps-11 text-xs text-[var(--muted)]">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[var(--muted)] font-mono text-[11px]">↳</span>
+                                    <span>لا توجد بيانات تفصيلية للكفلاء لهذا اليوم.</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        )}
+                      </React.Fragment>
                     );
                   })
                 )}

@@ -10,6 +10,7 @@ import {
   importNinjaDeductions,
   getAllNinjaAccounts,
   getRiyadhTodayDate,
+  getRiyadhFirstDayOfMonth,
   type NinjaDeductionResponse,
   type NinjaAccountResponse,
   type NinjaImportResponse,
@@ -49,11 +50,7 @@ export default function NinjaDeductionsPage() {
   const canImport = can("ninja.deductions.import") || can("ninja.read");
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
-  const defaultFrom = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 14); // Last 14 days default
-    return d.toISOString().split("T")[0];
-  }, []);
+  const defaultFrom = useMemo(() => getRiyadhFirstDayOfMonth(), []);
 
   // Filter States
   const [filterFrom, setFilterFrom] = useState(defaultFrom);

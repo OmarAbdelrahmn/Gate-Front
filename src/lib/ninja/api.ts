@@ -55,6 +55,14 @@ export function getRiyadhTodayDate(): string {
 }
 
 /**
+ * Returns the first day of the current month in Asia/Riyadh timezone (UTC+3) formatted as YYYY-MM-01.
+ */
+export function getRiyadhFirstDayOfMonth(): string {
+  const today = getRiyadhTodayDate();
+  return `${today.substring(0, 7)}-01`;
+}
+
+/**
  * Validates if a date (YYYY-MM-DD) is in the future relative to Asia/Riyadh today.
  */
 export function isAfterRiyadhToday(dateStr: string): boolean {

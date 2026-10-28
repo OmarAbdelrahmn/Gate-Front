@@ -401,9 +401,17 @@ export interface NinjaPerformanceReport {
   metrics: NinjaReportMetrics;
 }
 
+export interface NinjaDailySponsorReport {
+  sponsorId?: Guid | string | null;
+  sponsorNameAr?: string | null;
+  sponsorNameEn?: string | null;
+  metrics?: NinjaReportMetrics | null;
+}
+
 export interface NinjaDailyReport {
   date: DateOnly;
   metrics: NinjaReportMetrics;
+  sponsors?: NinjaDailySponsorReport[];
 }
 
 export interface NinjaRiderReport {
