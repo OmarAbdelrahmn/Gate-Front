@@ -9,6 +9,7 @@ import type {
   JahezRiderPerformanceItem,
   JahezRiderPerformanceDaily,
   JahezRiderPerformanceAccountBreakdown,
+  JahezRiderPerformanceSummary,
   JahezRiderPerformanceParams,
 } from "@/lib/jahez/types";
 import { Button } from "@/components/ui/Button";
