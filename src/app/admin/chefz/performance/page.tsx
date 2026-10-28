@@ -1,7 +1,7 @@
 // src/app/admin/chefz/performance/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback, Fragment } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -46,6 +46,10 @@ import {
   CheckCircle2,
   Calendar,
   User,
+  Users,
+  CreditCard,
+  ChevronDown,
+  ChevronUp,
   Info,
   XCircle,
   FileText,
@@ -86,7 +90,10 @@ export default function ChefzPerformancePage() {
   const [dailyLoading, setDailyLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"matrix" | "flat">("matrix");
+  const [entityView, setEntityView] = useState<"riders" | "accounts">("riders");
   const [matrixMetric, setMatrixMetric] = useState<"accepted" | "valid" | "rate">("accepted");
+  const [expandedMatrixRiders, setExpandedMatrixRiders] = useState<Set<string>>(new Set());
+  const [expandedMatrixAccounts, setExpandedMatrixAccounts] = useState<Set<string>>(new Set());
 
   const todayStr = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFromStr = useMemo(() => {
@@ -233,7 +240,26 @@ export default function ChefzPerformancePage() {
     return days;
   }, [filterFrom, filterTo]);
 
-  // Group records by Rider into Matrix Rows
+  // Accordion row expansion toggle handlers
+  const toggleMatrixRiderExpand = (riderKey: string) => {
+    setExpandedMatrixRiders((prev) => {
+      const next = new Set(prev);
+      if (next.has(riderKey)) next.delete(riderKey);
+      else next.add(riderKey);
+      return next;
+    });
+  };
+
+  const toggleMatrixAccountExpand = (accountKey: string) => {
+    setExpandedMatrixAccounts((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountKey)) next.delete(accountKey);
+      else next.add(accountKey);
+      return next;
+    });
+  };
+
+  // Group records by Rider into Matrix Rows (Riders View)
   const matrixRiderRows = useMemo(() => {
     if (filteredPerformanceRecords.length === 0) return [];
 
@@ -246,6 +272,24 @@ export default function ChefzPerformancePage() {
         riderIqamaNo: string | null;
         idNumber: string;
         accountCodesSet: Set<string>;
+        accountsMap: Map<
+          string,
+          {
+            accountKey: string;
+            accountCode: string;
+            accountId: string;
+            daysMap: Map<
+              string,
+              {
+                acceptedOffers: number;
+                totalValidOffers: number;
+                declinedOffers: number;
+                missedOffers: number;
+                acceptanceRate: number;
+              }
+            >;
+          }
+        >;
         daysMap: Map<
           string,
           {
@@ -281,6 +325,7 @@ export default function ChefzPerformancePage() {
           riderIqamaNo: iqama,
           idNumber: idNo,
           accountCodesSet: new Set<string>(),
+          accountsMap: new Map(),
           daysMap: new Map(),
         };
         groupMap.set(key, group);
@@ -290,9 +335,42 @@ export default function ChefzPerformancePage() {
 
       const acc = baseAccountMap.get(p.accountId);
       const code = acc?.code || p.externalAccountId || "";
+      const accKey = p.accountId || code || "unknown";
       if (code) group.accountCodesSet.add(code);
 
+      // Account breakdown under rider
+      let accEntry = group.accountsMap.get(accKey);
+      if (!accEntry) {
+        accEntry = {
+          accountKey: accKey,
+          accountCode: code || (p.accountId ? p.accountId.slice(0, 8) : "حساب"),
+          accountId: p.accountId,
+          daysMap: new Map(),
+        };
+        group.accountsMap.set(accKey, accEntry);
+      }
+
       const dStr = p.reportDate;
+      const existingAccDay = accEntry.daysMap.get(dStr);
+      if (existingAccDay) {
+        existingAccDay.acceptedOffers += p.acceptedOffers || 0;
+        existingAccDay.totalValidOffers += p.totalValidOffers || 0;
+        existingAccDay.declinedOffers += p.declinedOffers || 0;
+        existingAccDay.missedOffers += p.missedOffers || 0;
+        existingAccDay.acceptanceRate =
+          existingAccDay.totalValidOffers > 0
+            ? Math.round((existingAccDay.acceptedOffers / existingAccDay.totalValidOffers) * 100)
+            : 0;
+      } else {
+        accEntry.daysMap.set(dStr, {
+          acceptedOffers: p.acceptedOffers || 0,
+          totalValidOffers: p.totalValidOffers || 0,
+          declinedOffers: p.declinedOffers || 0,
+          missedOffers: p.missedOffers || 0,
+          acceptanceRate: p.acceptanceRate || 0,
+        });
+      }
+
       const existing = group.daysMap.get(dStr);
       if (existing) {
         existing.acceptedOffers += p.acceptedOffers || 0;
@@ -325,7 +403,6 @@ export default function ChefzPerformancePage() {
       let totalMissed = 0;
       let activeDaysCount = 0;
 
-      // Sum strictly across the selected date range daysList
       for (const d of daysList) {
         const cell = g.daysMap.get(d.dateStr);
         if (cell) {
@@ -342,6 +419,41 @@ export default function ChefzPerformancePage() {
       const avgAcceptanceRate =
         totalValid > 0 ? Math.round((totalAccepted / totalValid) * 100) : 0;
 
+      const accountsList = Array.from(g.accountsMap.values()).map((a) => {
+        let aAccepted = 0;
+        let aValid = 0;
+        let aDeclined = 0;
+        let aMissed = 0;
+        let aActiveDays = 0;
+
+        for (const d of daysList) {
+          const c = a.daysMap.get(d.dateStr);
+          if (c) {
+            aAccepted += c.acceptedOffers;
+            aValid += c.totalValidOffers;
+            aDeclined += c.declinedOffers;
+            aMissed += c.missedOffers;
+            if (c.acceptedOffers > 0 || c.totalValidOffers > 0) {
+              aActiveDays++;
+            }
+          }
+        }
+
+        const aAvgRate = aValid > 0 ? Math.round((aAccepted / aValid) * 100) : 0;
+
+        return {
+          ...a,
+          totalAccepted: aAccepted,
+          totalValid: aValid,
+          totalDeclined: aDeclined,
+          totalMissed: aMissed,
+          activeDaysCount: aActiveDays,
+          avgAcceptanceRate: aAvgRate,
+        };
+      });
+
+      accountsList.sort((a, b) => b.totalAccepted - a.totalAccepted || a.accountCode.localeCompare(b.accountCode));
+
       return {
         riderKey: g.riderKey,
         riderId: g.riderId,
@@ -349,6 +461,7 @@ export default function ChefzPerformancePage() {
         riderIqamaNo: g.riderIqamaNo,
         idNumber: g.idNumber,
         accountCodes: Array.from(g.accountCodesSet),
+        accounts: accountsList,
         daysData: g.daysMap,
         totalAccepted,
         totalValid,
@@ -359,7 +472,6 @@ export default function ChefzPerformancePage() {
       };
     });
 
-    // Sort by total accepted offers descending
     rows.sort((a, b) => b.totalAccepted - a.totalAccepted || a.riderName.localeCompare(b.riderName));
     return rows;
   }, [filteredPerformanceRecords, riderMap, baseAccountMap, daysList]);
@@ -377,30 +489,297 @@ export default function ChefzPerformancePage() {
     );
   }, [matrixRiderRows, searchQuery]);
 
-  // Day totals for the matrix footer
-  const dayTotals = useMemo(() => {
-    const totals: Record<string, { accepted: number; valid: number; activeRiders: number }> = {};
-    for (const d of daysList) {
-      totals[d.dateStr] = { accepted: 0, valid: 0, activeRiders: 0 };
+  // Group records by Account into Matrix Rows (Accounts View)
+  const matrixAccountRows = useMemo(() => {
+    if (filteredPerformanceRecords.length === 0) return [];
+
+    const accountGroupMap = new Map<
+      string,
+      {
+        accountKey: string;
+        accountId: string;
+        accountCode: string;
+        accountExternalId: string;
+        ridersMap: Map<
+          string,
+          {
+            riderKey: string;
+            riderId: string;
+            riderName: string;
+            riderIqamaNo: string | null;
+            idNumber: string;
+            daysMap: Map<
+              string,
+              {
+                acceptedOffers: number;
+                totalValidOffers: number;
+                declinedOffers: number;
+                missedOffers: number;
+                acceptanceRate: number;
+              }
+            >;
+          }
+        >;
+        daysMap: Map<
+          string,
+          {
+            acceptedOffers: number;
+            totalValidOffers: number;
+            declinedOffers: number;
+            missedOffers: number;
+            acceptanceRate: number;
+          }
+        >;
+      }
+    >();
+
+    for (const p of filteredPerformanceRecords) {
+      const acc = baseAccountMap.get(p.accountId);
+      const code = acc?.code || p.externalAccountId || "";
+      const key = p.accountId || code || "unknown";
+
+      const effectiveRiderId =
+        p.riderProfileId && p.riderProfileId !== "00000000-0000-0000-0000-000000000000"
+          ? p.riderProfileId
+          : "";
+      const riderLookup = effectiveRiderId ? riderMap.get(effectiveRiderId) : undefined;
+      const name = p.riderName || riderLookup?.fullNameAr || "مندوب غير محدد";
+      const idNo = p.reportIdNumber || riderLookup?.iqamaNo || "—";
+      const iqama = p.riderIqamaNo !== undefined ? p.riderIqamaNo : (riderLookup?.iqamaNo ?? null);
+      const riderKey = effectiveRiderId || (idNo !== "—" ? idNo : name);
+
+      let group = accountGroupMap.get(key);
+      if (!group) {
+        group = {
+          accountKey: key,
+          accountId: p.accountId,
+          accountCode: code || (p.accountId ? p.accountId.slice(0, 8) : "حساب غير محدد"),
+          accountExternalId: p.externalAccountId || acc?.externalAccountId || "",
+          ridersMap: new Map(),
+          daysMap: new Map(),
+        };
+        accountGroupMap.set(key, group);
+      } else {
+        if (!group.accountCode && code) group.accountCode = code;
+        if (!group.accountExternalId && (p.externalAccountId || acc?.externalAccountId)) {
+          group.accountExternalId = p.externalAccountId || acc?.externalAccountId || "";
+        }
+      }
+
+      // Add / update rider on this account
+      let riderEntry = group.ridersMap.get(riderKey);
+      if (!riderEntry) {
+        riderEntry = {
+          riderKey,
+          riderId: effectiveRiderId,
+          riderName: name,
+          riderIqamaNo: iqama,
+          idNumber: idNo,
+          daysMap: new Map(),
+        };
+        group.ridersMap.set(riderKey, riderEntry);
+      } else if (riderEntry.riderIqamaNo === null && iqama !== null) {
+        riderEntry.riderIqamaNo = iqama;
+      }
+
+      const dStr = p.reportDate;
+
+      // Update rider's daily on this account
+      const existingRiderDay = riderEntry.daysMap.get(dStr);
+      if (existingRiderDay) {
+        existingRiderDay.acceptedOffers += p.acceptedOffers || 0;
+        existingRiderDay.totalValidOffers += p.totalValidOffers || 0;
+        existingRiderDay.declinedOffers += p.declinedOffers || 0;
+        existingRiderDay.missedOffers += p.missedOffers || 0;
+        existingRiderDay.acceptanceRate =
+          existingRiderDay.totalValidOffers > 0
+            ? Math.round((existingRiderDay.acceptedOffers / existingRiderDay.totalValidOffers) * 100)
+            : 0;
+      } else {
+        riderEntry.daysMap.set(dStr, {
+          acceptedOffers: p.acceptedOffers || 0,
+          totalValidOffers: p.totalValidOffers || 0,
+          declinedOffers: p.declinedOffers || 0,
+          missedOffers: p.missedOffers || 0,
+          acceptanceRate: p.acceptanceRate || 0,
+        });
+      }
+
+      // Update account's daily overall
+      const existingAccDay = group.daysMap.get(dStr);
+      if (existingAccDay) {
+        existingAccDay.acceptedOffers += p.acceptedOffers || 0;
+        existingAccDay.totalValidOffers += p.totalValidOffers || 0;
+        existingAccDay.declinedOffers += p.declinedOffers || 0;
+        existingAccDay.missedOffers += p.missedOffers || 0;
+        existingAccDay.acceptanceRate =
+          existingAccDay.totalValidOffers > 0
+            ? Math.round((existingAccDay.acceptedOffers / existingAccDay.totalValidOffers) * 100)
+            : 0;
+      } else {
+        group.daysMap.set(dStr, {
+          acceptedOffers: p.acceptedOffers || 0,
+          totalValidOffers: p.totalValidOffers || 0,
+          declinedOffers: p.declinedOffers || 0,
+          missedOffers: p.missedOffers || 0,
+          acceptanceRate: p.acceptanceRate || 0,
+        });
+      }
     }
-    for (const row of filteredMatrixRows) {
+
+    const rows = Array.from(accountGroupMap.values()).map((g) => {
+      let totalAccepted = 0;
+      let totalValid = 0;
+      let totalDeclined = 0;
+      let totalMissed = 0;
+      let activeDaysCount = 0;
+
+      for (const d of daysList) {
+        const cell = g.daysMap.get(d.dateStr);
+        if (cell) {
+          totalAccepted += cell.acceptedOffers;
+          totalValid += cell.totalValidOffers;
+          totalDeclined += cell.declinedOffers;
+          totalMissed += cell.missedOffers;
+          if (cell.acceptedOffers > 0 || cell.totalValidOffers > 0) {
+            activeDaysCount++;
+          }
+        }
+      }
+
+      const avgAcceptanceRate =
+        totalValid > 0 ? Math.round((totalAccepted / totalValid) * 100) : 0;
+
+      // Compute stats for each rider under this account
+      const ridersList = Array.from(g.ridersMap.values()).map((r) => {
+        let rAccepted = 0;
+        let rValid = 0;
+        let rDeclined = 0;
+        let rMissed = 0;
+        let rActiveDays = 0;
+
+        for (const d of daysList) {
+          const c = r.daysMap.get(d.dateStr);
+          if (c) {
+            rAccepted += c.acceptedOffers;
+            rValid += c.totalValidOffers;
+            rDeclined += c.declinedOffers;
+            rMissed += c.missedOffers;
+            if (c.acceptedOffers > 0 || c.totalValidOffers > 0) {
+              rActiveDays++;
+            }
+          }
+        }
+
+        const rAvgRate = rValid > 0 ? Math.round((rAccepted / rValid) * 100) : 0;
+
+        return {
+          ...r,
+          totalAccepted: rAccepted,
+          totalValid: rValid,
+          totalDeclined: rDeclined,
+          totalMissed: rMissed,
+          activeDaysCount: rActiveDays,
+          avgAcceptanceRate: rAvgRate,
+        };
+      });
+
+      ridersList.sort((a, b) => b.totalAccepted - a.totalAccepted || a.riderName.localeCompare(b.riderName));
+
+      return {
+        accountKey: g.accountKey,
+        accountId: g.accountId,
+        accountCode: g.accountCode,
+        accountExternalId: g.accountExternalId,
+        riders: ridersList,
+        daysData: g.daysMap,
+        totalAccepted,
+        totalValid,
+        totalDeclined,
+        totalMissed,
+        activeDaysCount,
+        avgAcceptanceRate,
+      };
+    });
+
+    rows.sort((a, b) => b.totalAccepted - a.totalAccepted || a.accountCode.localeCompare(b.accountCode));
+    return rows;
+  }, [filteredPerformanceRecords, riderMap, baseAccountMap, daysList]);
+
+  // Quick filter on account matrix rows
+  const filteredMatrixAccountRows = useMemo(() => {
+    if (!searchQuery.trim()) return matrixAccountRows;
+    const q = searchQuery.trim().toLowerCase();
+    return matrixAccountRows.filter(
+      (a) =>
+        a.accountCode.toLowerCase().includes(q) ||
+        a.accountExternalId.toLowerCase().includes(q) ||
+        a.accountId.toLowerCase().includes(q) ||
+        a.riders.some(
+          (r) =>
+            r.riderName.toLowerCase().includes(q) ||
+            (r.riderIqamaNo && r.riderIqamaNo.toLowerCase().includes(q)) ||
+            r.idNumber.toLowerCase().includes(q)
+        )
+    );
+  }, [matrixAccountRows, searchQuery]);
+
+  // Day totals for the matrix footer (Adapts dynamically to entityView)
+  const dayTotals = useMemo(() => {
+    const totals: Record<string, { accepted: number; valid: number; activeCount: number }> = {};
+    for (const d of daysList) {
+      totals[d.dateStr] = { accepted: 0, valid: 0, activeCount: 0 };
+    }
+    const rows = entityView === "riders" ? filteredMatrixRows : filteredMatrixAccountRows;
+    for (const row of rows) {
       for (const d of daysList) {
         const cell = row.daysData.get(d.dateStr);
         if (cell) {
           totals[d.dateStr].accepted += cell.acceptedOffers;
           totals[d.dateStr].valid += cell.totalValidOffers;
           if (cell.acceptedOffers > 0 || cell.totalValidOffers > 0) {
-            totals[d.dateStr].activeRiders++;
+            totals[d.dateStr].activeCount++;
           }
         }
       }
     }
     return totals;
-  }, [daysList, filteredMatrixRows]);
+  }, [daysList, entityView, filteredMatrixRows, filteredMatrixAccountRows]);
 
   const grandTotalAccepted = useMemo(() => {
-    return filteredMatrixRows.reduce((sum, r) => sum + r.totalAccepted, 0);
-  }, [filteredMatrixRows]);
+    return (entityView === "riders" ? filteredMatrixRows : filteredMatrixAccountRows).reduce(
+      (sum, r) => sum + r.totalAccepted,
+      0
+    );
+  }, [entityView, filteredMatrixRows, filteredMatrixAccountRows]);
+
+  const grandTotalValid = useMemo(() => {
+    return (entityView === "riders" ? filteredMatrixRows : filteredMatrixAccountRows).reduce(
+      (sum, r) => sum + r.totalValid,
+      0
+    );
+  }, [entityView, filteredMatrixRows, filteredMatrixAccountRows]);
+
+  const overallAcceptanceRate = useMemo(() => {
+    return grandTotalValid > 0 ? Math.round((grandTotalAccepted / grandTotalValid) * 100) : 0;
+  }, [grandTotalAccepted, grandTotalValid]);
+
+  // Bulk expand/collapse matrix sub-rows
+  const expandAllMatrixRows = () => {
+    if (entityView === "riders") {
+      setExpandedMatrixRiders(new Set(filteredMatrixRows.map((r) => r.riderKey)));
+    } else {
+      setExpandedMatrixAccounts(new Set(filteredMatrixAccountRows.map((a) => a.accountKey)));
+    }
+  };
+
+  const collapseAllMatrixRows = () => {
+    if (entityView === "riders") {
+      setExpandedMatrixRiders(new Set());
+    } else {
+      setExpandedMatrixAccounts(new Set());
+    }
+  };
 
   // Handle Upload
   const handleUpload = async (e: React.FormEvent) => {
@@ -446,37 +825,74 @@ export default function ChefzPerformancePage() {
   // Export Daily Performance to Excel (Supports Matrix with day columns or Raw list)
   const handleExportDailyExcel = () => {
     if (viewMode === "matrix") {
-      exportToExcel({
-        filename: `مصفوفة-الأداء-اليومي-شيفز-${filterFrom}-إلى-${filterTo}`,
-        sheetName: "Daily Performance Matrix",
-        data: filteredMatrixRows,
-        columns: [
-          { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
-          { header: "المندوب", accessor: (r) => r.riderName, width: 25 },
-          { header: "رقم الإقامة", accessor: (r) => r.riderIqamaNo ?? "—", isText: true, width: 16 },
-          { header: "رقم الهوية بالتقرير", accessor: (r) => r.idNumber, isText: true, width: 16 },
-          {
-            header: "الحسابات",
-            accessor: (r) => r.accountCodes.join(" / ") || "—",
-            isText: true,
-            width: 18,
-          },
-          { header: "إجمالي الطلبات المقبولة", accessor: (r) => r.totalAccepted, width: 14 },
-          { header: "أيام العمل", accessor: (r) => r.activeDaysCount, width: 12 },
-          {
-            header: "متوسط نسبة القبول",
-            accessor: (r) => `${r.avgAcceptanceRate}%`,
-            isText: true,
-            width: 14,
-          },
-          ...daysList.map((d) => ({
-            header: `يوم ${d.dayNumber} (${d.dayFormatted})`,
-            accessor: (r: (typeof filteredMatrixRows)[0]) =>
-              r.daysData.get(d.dateStr)?.acceptedOffers ?? 0,
-            width: 12,
-          })),
-        ],
-      });
+      if (entityView === "riders") {
+        exportToExcel({
+          filename: `مصفوفة-الأداء-اليومي-مناديب-شيفز-${filterFrom}-إلى-${filterTo}`,
+          sheetName: "Daily Riders Performance Matrix",
+          data: filteredMatrixRows,
+          columns: [
+            { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+            { header: "المندوب", accessor: (r) => r.riderName, width: 25 },
+            { header: "رقم الإقامة", accessor: (r) => r.riderIqamaNo ?? "—", isText: true, width: 16 },
+            { header: "رقم الهوية بالتقرير", accessor: (r) => r.idNumber, isText: true, width: 16 },
+            {
+              header: "الحسابات",
+              accessor: (r) => r.accountCodes.join(" / ") || "—",
+              isText: true,
+              width: 18,
+            },
+            { header: "إجمالي الطلبات المقبولة", accessor: (r) => r.totalAccepted, width: 14 },
+            { header: "أيام العمل", accessor: (r) => r.activeDaysCount, width: 12 },
+            {
+              header: "متوسط نسبة القبول",
+              accessor: (r) => `${r.avgAcceptanceRate}%`,
+              isText: true,
+              width: 14,
+            },
+            ...daysList.map((d) => ({
+              header: `يوم ${d.dayNumber} (${d.dayFormatted})`,
+              accessor: (r: (typeof filteredMatrixRows)[0]) =>
+                r.daysData.get(d.dateStr)?.acceptedOffers ?? 0,
+              width: 12,
+            })),
+          ],
+        });
+      } else {
+        exportToExcel({
+          filename: `مصفوفة-الأداء-اليومي-حسابات-شيفز-${filterFrom}-إلى-${filterTo}`,
+          sheetName: "Daily Accounts Performance Matrix",
+          data: filteredMatrixAccountRows,
+          columns: [
+            { header: "#", accessor: (_, idx) => idx + 1, width: 6 },
+            { header: "كود الحساب", accessor: (a) => a.accountCode, width: 20 },
+            { header: "المعرف الخارجي", accessor: (a) => a.accountExternalId || "—", isText: true, width: 18 },
+            {
+              header: "المناديب المشغلين",
+              accessor: (a) =>
+                a.riders
+                  .map((r) => `${r.riderName}${r.riderIqamaNo ? ` (${r.riderIqamaNo})` : ""}`)
+                  .join(" / ") || "—",
+              isText: true,
+              width: 28,
+            },
+            { header: "عدد المناديب", accessor: (a) => a.riders.length, width: 12 },
+            { header: "إجمالي الطلبات المقبولة", accessor: (a) => a.totalAccepted, width: 14 },
+            { header: "أيام العمل", accessor: (a) => a.activeDaysCount, width: 12 },
+            {
+              header: "متوسط نسبة القبول",
+              accessor: (a) => `${a.avgAcceptanceRate}%`,
+              isText: true,
+              width: 14,
+            },
+            ...daysList.map((d) => ({
+              header: `يوم ${d.dayNumber} (${d.dayFormatted})`,
+              accessor: (a: (typeof filteredMatrixAccountRows)[0]) =>
+                a.daysData.get(d.dateStr)?.acceptedOffers ?? 0,
+              width: 12,
+            })),
+          ],
+        });
+      }
     } else {
       exportToExcel({
         filename: `سجلات-الأداء-اليومي-شيفز-${filterFrom}-إلى-${filterTo}`,
@@ -640,11 +1056,47 @@ export default function ChefzPerformancePage() {
                 سجلات الأداء اليومي المستوردة
               </h2>
               <p className="mt-0.5 text-xs text-[var(--muted)]">
-                استعراض مصفوفة الأداء اليومي بالأيام لكل مندوب من {filterFrom} إلى {filterTo}، وتحميل كافة البيانات دون اقتطاع.
+                استعراض مصفوفة الأداء اليومي بالأيام {entityView === "riders" ? "لكل مندوب وحساباته" : "لكل حساب والمناديب المشغلين له"} من {filterFrom} إلى {filterTo}، وتحميل كافة البيانات دون اقتطاع.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Entity View Toggle: Riders vs Accounts */}
+              <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-1 text-xs shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setEntityView("riders")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
+                    entityView === "riders"
+                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                  title="عرض مصفوفة الأداء للمناديب مع تفاصيل حساباتهم"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span>عرض المناديب</span>
+                  <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.2 text-[10px] font-bold text-[var(--brand)]">
+                    {matrixRiderRows.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEntityView("accounts")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
+                    entityView === "accounts"
+                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                  title="عرض مصفوفة الأداء للحسابات مع تفاصيل المناديب المشغلين"
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  <span>عرض الحسابات</span>
+                  <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.2 text-[10px] font-bold text-[var(--brand)]">
+                    {matrixAccountRows.length}
+                  </span>
+                </button>
+              </div>
+
               {/* View Mode Toggle */}
               <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-1 text-xs">
                 <button
@@ -655,7 +1107,7 @@ export default function ChefzPerformancePage() {
                       ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
                       : "text-[var(--muted)] hover:text-[var(--foreground)]"
                   }`}
-                  title="عرض مصفوفة الأيام لكل مندوب"
+                  title="عرض مصفوفة الأيام"
                 >
                   <LayoutGrid className="h-3.5 w-3.5" />
                   مصفوفة الأيام
@@ -726,11 +1178,20 @@ export default function ChefzPerformancePage() {
           {/* KPI Summary Cards */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-3.5 shadow-sm">
-              <div className="text-[11px] font-semibold text-[var(--muted)]">إجمالي المناديب</div>
-              <div className="mt-1 font-mono text-xl font-black text-[var(--foreground)]">
-                {filteredMatrixRows.length.toLocaleString()}
+              <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--muted)]">
+                <span>{entityView === "riders" ? "إجمالي المناديب" : "إجمالي الحسابات"}</span>
+                {entityView === "riders" ? (
+                  <Users className="h-3.5 w-3.5 text-[var(--brand)]" />
+                ) : (
+                  <CreditCard className="h-3.5 w-3.5 text-[var(--brand)]" />
+                )}
               </div>
-              <div className="mt-0.5 text-[10px] text-[var(--muted)]">مندوب لديهم سجلات أداء</div>
+              <div className="mt-1 font-mono text-xl font-black text-[var(--foreground)]">
+                {(entityView === "riders" ? filteredMatrixRows.length : filteredMatrixAccountRows.length).toLocaleString()}
+              </div>
+              <div className="mt-0.5 text-[10px] text-[var(--muted)]">
+                {entityView === "riders" ? "مندوب لديهم سجلات أداء" : "حساب شيفز لديهم سجلات أداء"}
+              </div>
             </div>
 
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-3.5 shadow-sm">
@@ -838,7 +1299,11 @@ export default function ChefzPerformancePage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="اسم المندوب، الهوية، كود الحساب..."
+                    placeholder={
+                      entityView === "riders"
+                        ? "اسم المندوب، الهوية، كود الحساب..."
+                        : "كود الحساب، كود خارجي، اسم المندوب، الهوية..."
+                    }
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pr-9 pl-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
                   />
                   <Search className="absolute right-3 top-2.5 h-4 w-4 text-[var(--muted)]" />
@@ -892,6 +1357,30 @@ export default function ChefzPerformancePage() {
                     </button>
                   </div>
                 )}
+
+                {viewMode === "matrix" && (
+                  <div className="flex items-center gap-1.5 bg-[var(--subtle-bg)] px-2.5 py-1 rounded-lg border border-[var(--border)]">
+                    <button
+                      type="button"
+                      onClick={expandAllMatrixRows}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--brand)] hover:opacity-80"
+                      title={entityView === "riders" ? "توسيع كافة المناديب لعرض حساباتهم" : "توسيع كافة الحسابات لعرض مناديبهم"}
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                      توسيع الكل
+                    </button>
+                    <span className="text-[var(--border)]">|</span>
+                    <button
+                      type="button"
+                      onClick={collapseAllMatrixRows}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--foreground)]"
+                      title="طي كافة الصفوف الفرعية"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                      طي الكل
+                    </button>
+                  </div>
+                )}
               </div>
 
               {(filterAccountId ||
@@ -916,7 +1405,7 @@ export default function ChefzPerformancePage() {
             </div>
           </div>
 
-          {/* VIEW 1: MATRIX TABLE (Each Rider One Row, Columns are Days) */}
+          {/* VIEW 1: MATRIX TABLE (Riders View or Accounts View) */}
           {viewMode === "matrix" && (
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] shadow-sm">
               <div className="overflow-x-auto">
@@ -924,9 +1413,19 @@ export default function ChefzPerformancePage() {
                   <thead className="border-b border-[var(--border)] bg-[var(--table-header-bg)] text-xs font-bold text-[var(--muted)]">
                     <tr>
                       <th className="px-3 py-3.5 text-center w-10">#</th>
-                      <th className="px-4 py-3.5 min-w-[170px]">المندوب</th>
-                      <th className="px-3 py-3.5 min-w-[110px] text-center font-mono">رقم الإقامة</th>
-                      <th className="px-3 py-3.5 min-w-[110px] text-center">كود الحساب</th>
+                      {entityView === "riders" ? (
+                        <>
+                          <th className="px-4 py-3.5 min-w-[190px]">المندوب</th>
+                          <th className="px-3 py-3.5 min-w-[110px] text-center font-mono">رقم الإقامة</th>
+                          <th className="px-3 py-3.5 min-w-[120px] text-center">الحسابات المشغلة</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="px-4 py-3.5 min-w-[190px]">الحساب (كود المنصة)</th>
+                          <th className="px-3 py-3.5 min-w-[190px] text-center">المناديب المشغلين</th>
+                          <th className="px-3 py-3.5 min-w-[110px] text-center font-mono">كود خارجي</th>
+                        </>
+                      )}
                       <th className="px-3 py-3.5 text-center min-w-[90px] bg-[var(--brand)]/5 text-[var(--brand)] font-black">
                         المجموع
                       </th>
@@ -958,165 +1457,534 @@ export default function ChefzPerformancePage() {
                           className="py-16 text-center text-sm text-[var(--muted)]"
                         >
                           <RefreshCw className="mx-auto mb-2 h-7 w-7 animate-spin text-[var(--brand)]" />
-                          جارٍ تحميل كافة سجلات الأداء اليومي المستوردة لجميع المناديب...
+                          جارٍ تحميل كافة سجلات الأداء اليومي المستوردة...
                         </td>
                       </tr>
-                    ) : filteredMatrixRows.length === 0 ? (
+                    ) : (entityView === "riders" ? filteredMatrixRows.length === 0 : filteredMatrixAccountRows.length === 0) ? (
                       <tr>
                         <td
                           colSpan={7 + daysList.length}
                           className="py-16 text-center text-sm text-[var(--muted)]"
                         >
-                          لا توجد بيانات أداء مستوردة تطابق معايير البحث في الفترة المحددة.
+                          لا توجد بيانات أداء مستوردة {entityView === "riders" ? "للمناديب" : "للحسابات"} تطابق معايير البحث في الفترة المحددة.
                         </td>
                       </tr>
-                    ) : (
-                      filteredMatrixRows.map((r, rIdx) => (
-                        <tr
-                          key={r.riderKey}
-                          className="transition-colors hover:bg-[var(--table-row-hover)]"
-                        >
-                          {/* Row Index */}
-                          <td className="px-3 py-2.5 text-center font-mono text-[var(--muted)]">
-                            {rIdx + 1}
-                          </td>
+                    ) : entityView === "riders" ? (
+                      /* RIDERS VIEW ROWS */
+                      filteredMatrixRows.map((r, rIdx) => {
+                        const isExpanded = expandedMatrixRiders.has(r.riderKey);
+                        const hasSubAccounts = r.accounts && r.accounts.length > 0;
 
-                          {/* Rider Name */}
-                          <td className="px-4 py-2.5 font-bold text-[var(--foreground)]">
-                            <div className="truncate max-w-[200px]" title={r.riderName}>
-                              {r.riderName}
-                            </div>
-                          </td>
-
-                          {/* Iqama */}
-                          <td className="px-3 py-2.5 text-center font-mono text-xs" dir="ltr">
-                            <span className="font-semibold text-[var(--foreground)]">
-                              {r.riderIqamaNo ?? "—"}
-                            </span>
-                            {r.idNumber && r.idNumber !== "—" && r.idNumber !== r.riderIqamaNo && (
-                              <div className="text-[10px] text-[var(--muted)]" title="رقم الهوية في التقرير">
-                                تقرير: {r.idNumber}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Account Codes */}
-                          <td className="px-3 py-2.5 text-center">
-                            {r.accountCodes.length > 0 ? (
-                              <div className="flex flex-wrap items-center justify-center gap-1 font-mono text-xs font-semibold text-[var(--brand)]">
-                                {r.accountCodes.map((code) => (
-                                  <span
-                                    key={code}
-                                    className="rounded bg-[var(--subtle-bg)] px-1.5 py-0.5 border border-[var(--border)]"
-                                  >
-                                    {code}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-[var(--muted)]">—</span>
-                            )}
-                          </td>
-
-                          {/* Total Accepted Offers */}
-                          <td className="px-3 py-2.5 text-center font-black font-mono text-sm bg-[var(--brand)]/5 text-[var(--brand)]">
-                            {r.totalAccepted.toLocaleString()}
-                          </td>
-
-                          {/* Active Days */}
-                          <td className="px-3 py-2.5 text-center font-mono font-semibold">
-                            <span className="text-emerald-700 dark:text-emerald-400 font-bold">
-                              {r.activeDaysCount}
-                            </span>
-                            <span className="text-[var(--muted)] font-normal text-[10px]">
-                              {" "}
-                              / {daysList.length}
-                            </span>
-                          </td>
-
-                          {/* Average Acceptance Rate */}
-                          <td className="px-3 py-2.5 text-center">
-                            <span
-                              className={`inline-block rounded px-2 py-0.5 font-bold text-[11px] ${
-                                r.avgAcceptanceRate >= 80
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                  : r.avgAcceptanceRate >= 60
-                                  ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
-                                  : "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                        return (
+                          <Fragment key={r.riderKey}>
+                            <tr
+                              className={`transition-colors hover:bg-[var(--table-row-hover)] ${
+                                isExpanded ? "bg-[var(--brand)]/5" : ""
                               }`}
                             >
-                              {r.avgAcceptanceRate}%
-                            </span>
-                          </td>
+                              {/* Row Index */}
+                              <td className="px-3 py-2.5 text-center font-mono text-[var(--muted)]">
+                                {rIdx + 1}
+                              </td>
 
-                          {/* Days Columns */}
-                          {daysList.map((d) => {
-                            const cell = r.daysData.get(d.dateStr);
+                              {/* Rider Name + Expand Toggle */}
+                              <td className="px-4 py-2.5 font-bold text-[var(--foreground)]">
+                                <div className="flex items-center gap-2">
+                                  {hasSubAccounts ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMatrixRiderExpand(r.riderKey)}
+                                      className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--subtle-bg)] hover:text-[var(--brand)] transition-colors"
+                                      title={isExpanded ? "طي تفاصيل الحسابات" : "عرض تفاصيل الحسابات المشغلة"}
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronUp className="h-3.5 w-3.5 text-[var(--brand)]" />
+                                      ) : (
+                                        <ChevronDown className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className="w-5" />
+                                  )}
+                                  <div className="truncate max-w-[180px]" title={r.riderName}>
+                                    {r.riderName}
+                                  </div>
+                                </div>
+                              </td>
 
-                            let cellValue: number | string = 0;
-                            let hasData = false;
-
-                            if (cell) {
-                              if (matrixMetric === "accepted") {
-                                cellValue = cell.acceptedOffers;
-                                hasData = cell.acceptedOffers > 0;
-                              } else if (matrixMetric === "valid") {
-                                cellValue = cell.totalValidOffers;
-                                hasData = cell.totalValidOffers > 0;
-                              } else {
-                                cellValue = `${cell.acceptanceRate}%`;
-                                hasData = cell.totalValidOffers > 0;
-                              }
-                            }
-
-                            return (
-                              <td
-                                key={d.dateStr}
-                                className={`px-1.5 py-2 text-center border-r border-[var(--border)]/40 ${
-                                  hasData ? "bg-emerald-500/5" : ""
-                                }`}
-                                title={
-                                  cell
-                                    ? `التاريخ: ${d.dateStr} (${d.dayNameAr})\nالمندوب: ${r.riderName}\nالطلبات المقبولة: ${cell.acceptedOffers}\nإجمالي الطلبات: ${cell.totalValidOffers}\nالمرفوضة: ${cell.declinedOffers}\nالفائتة: ${cell.missedOffers}\nنسبة القبول: ${cell.acceptanceRate}%\nالحسابات: ${cell.accountCodes.join(" / ") || "—"}`
-                                    : `التاريخ: ${d.dateStr} (${d.dayNameAr})\nلا توجد بيانات مسجلة لهذا المندوب (0)`
-                                }
-                              >
-                                {hasData ? (
-                                  <span className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300">
-                                    {cellValue}
-                                  </span>
-                                ) : (
-                                  <span className="font-mono text-xs text-gray-300 dark:text-gray-600">
-                                    0
-                                  </span>
+                              {/* Iqama */}
+                              <td className="px-3 py-2.5 text-center font-mono text-xs" dir="ltr">
+                                <span className="font-semibold text-[var(--foreground)]">
+                                  {r.riderIqamaNo ?? "—"}
+                                </span>
+                                {r.idNumber && r.idNumber !== "—" && r.idNumber !== r.riderIqamaNo && (
+                                  <div className="text-[10px] text-[var(--muted)]" title="رقم الهوية في التقرير">
+                                    تقرير: {r.idNumber}
+                                  </div>
                                 )}
                               </td>
-                            );
-                          })}
-                        </tr>
-                      ))
+
+                              {/* Account Codes */}
+                              <td className="px-3 py-2.5 text-center">
+                                {r.accountCodes.length > 0 ? (
+                                  <div className="flex flex-wrap items-center justify-center gap-1 font-mono text-xs font-semibold text-[var(--brand)]">
+                                    {r.accountCodes.map((code) => (
+                                      <span
+                                        key={code}
+                                        className="rounded bg-[var(--subtle-bg)] px-1.5 py-0.5 border border-[var(--border)]"
+                                      >
+                                        {code}
+                                      </span>
+                                    ))}
+                                    {r.accounts.length > 1 && (
+                                      <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.2 text-[10px] text-[var(--brand)] font-bold">
+                                        {r.accounts.length} حسابات
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-[var(--muted)]">—</span>
+                                )}
+                              </td>
+
+                              {/* Total Accepted Offers */}
+                              <td className="px-3 py-2.5 text-center font-black font-mono text-sm bg-[var(--brand)]/5 text-[var(--brand)]">
+                                {r.totalAccepted.toLocaleString()}
+                              </td>
+
+                              {/* Active Days */}
+                              <td className="px-3 py-2.5 text-center font-mono font-semibold">
+                                <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                                  {r.activeDaysCount}
+                                </span>
+                                <span className="text-[var(--muted)] font-normal text-[10px]">
+                                  {" "}
+                                  / {daysList.length}
+                                </span>
+                              </td>
+
+                              {/* Average Acceptance Rate */}
+                              <td className="px-3 py-2.5 text-center">
+                                <span
+                                  className={`inline-block rounded px-2 py-0.5 font-bold text-[11px] ${
+                                    r.avgAcceptanceRate >= 80
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                      : r.avgAcceptanceRate >= 60
+                                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                      : "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                                  }`}
+                                >
+                                  {r.avgAcceptanceRate}%
+                                </span>
+                              </td>
+
+                              {/* Days Columns */}
+                              {daysList.map((d) => {
+                                const cell = r.daysData.get(d.dateStr);
+                                let cellValue: number | string = 0;
+                                let hasData = false;
+
+                                if (cell) {
+                                  if (matrixMetric === "accepted") {
+                                    cellValue = cell.acceptedOffers;
+                                    hasData = cell.acceptedOffers > 0;
+                                  } else if (matrixMetric === "valid") {
+                                    cellValue = cell.totalValidOffers;
+                                    hasData = cell.totalValidOffers > 0;
+                                  } else {
+                                    cellValue = `${cell.acceptanceRate}%`;
+                                    hasData = cell.totalValidOffers > 0;
+                                  }
+                                }
+
+                                return (
+                                  <td
+                                    key={d.dateStr}
+                                    className={`px-1.5 py-2 text-center border-r border-[var(--border)]/40 ${
+                                      hasData ? "bg-emerald-500/5" : ""
+                                    }`}
+                                    title={
+                                      cell
+                                        ? `التاريخ: ${d.dateStr} (${d.dayNameAr})\nالمندوب: ${r.riderName}\nالطلبات المقبولة: ${cell.acceptedOffers}\nإجمالي الطلبات: ${cell.totalValidOffers}\nالمرفوضة: ${cell.declinedOffers}\nالفائتة: ${cell.missedOffers}\nنسبة القبول: ${cell.acceptanceRate}%\nالحسابات: ${cell.accountCodes.join(" / ") || "—"}`
+                                        : `التاريخ: ${d.dateStr} (${d.dayNameAr})\nلا توجد بيانات مسجلة لهذا المندوب (0)`
+                                    }
+                                  >
+                                    {hasData ? (
+                                      <span className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                                        {cellValue}
+                                      </span>
+                                    ) : (
+                                      <span className="font-mono text-xs text-gray-300 dark:text-gray-600">
+                                        0
+                                      </span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+
+                            {/* Sub-rows for rider's individual accounts */}
+                            {isExpanded &&
+                              r.accounts.map((acc, aIdx) => (
+                                <tr
+                                  key={acc.accountKey || aIdx}
+                                  className="bg-[var(--brand)]/5 text-[11px] border-b border-[var(--border)]/50"
+                                >
+                                  <td className="px-3 py-1.5 text-center font-mono text-[var(--muted)]">
+                                    ↳
+                                  </td>
+                                  <td className="px-4 py-1.5 font-semibold text-[var(--foreground)] pr-8">
+                                    <div className="flex items-center gap-1.5">
+                                      <CreditCard className="h-3 w-3 text-[var(--brand)] shrink-0" />
+                                      {acc.accountId ? (
+                                        <Link
+                                          href={`/admin/chefz/accounts/${acc.accountId}`}
+                                          className="text-[var(--brand)] hover:underline font-mono"
+                                        >
+                                          {acc.accountCode}
+                                        </Link>
+                                      ) : (
+                                        <span className="font-mono">{acc.accountCode}</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono text-[10px] text-[var(--muted)]" dir="ltr">
+                                    —
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center text-[10px] text-[var(--muted)]">
+                                    حساب تشغيلي
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-bold font-mono text-xs text-[var(--brand)] bg-[var(--brand)]/10">
+                                    {acc.totalAccepted.toLocaleString()}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono font-semibold text-emerald-700 dark:text-emerald-400">
+                                    {acc.activeDaysCount}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono text-[10px]">
+                                    {acc.avgAcceptanceRate}%
+                                  </td>
+
+                                  {/* Days values for this account */}
+                                  {daysList.map((d) => {
+                                    const cell = acc.daysMap.get(d.dateStr);
+                                    let cellValue: number | string = 0;
+                                    let hasData = false;
+                                    if (cell) {
+                                      if (matrixMetric === "accepted") {
+                                        cellValue = cell.acceptedOffers;
+                                        hasData = cell.acceptedOffers > 0;
+                                      } else if (matrixMetric === "valid") {
+                                        cellValue = cell.totalValidOffers;
+                                        hasData = cell.totalValidOffers > 0;
+                                      } else {
+                                        cellValue = `${cell.acceptanceRate}%`;
+                                        hasData = cell.totalValidOffers > 0;
+                                      }
+                                    }
+
+                                    return (
+                                      <td
+                                        key={d.dateStr}
+                                        className="px-1.5 py-1 text-center border-r border-[var(--border)]/30 font-mono text-[10px]"
+                                      >
+                                        {hasData ? (
+                                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                            {cellValue}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-300 dark:text-gray-600">0</span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                          </Fragment>
+                        );
+                      })
+                    ) : (
+                      /* ACCOUNTS VIEW ROWS */
+                      filteredMatrixAccountRows.map((acc, aIdx) => {
+                        const isExpanded = expandedMatrixAccounts.has(acc.accountKey);
+                        const hasSubRiders = acc.riders && acc.riders.length > 0;
+
+                        return (
+                          <Fragment key={acc.accountKey}>
+                            <tr
+                              className={`transition-colors hover:bg-[var(--table-row-hover)] ${
+                                isExpanded ? "bg-[var(--brand)]/5" : ""
+                              }`}
+                            >
+                              {/* Row Index */}
+                              <td className="px-3 py-2.5 text-center font-mono text-[var(--muted)]">
+                                {aIdx + 1}
+                              </td>
+
+                              {/* Account Code + Expand Toggle */}
+                              <td className="px-4 py-2.5 font-bold text-[var(--foreground)]">
+                                <div className="flex items-center gap-2">
+                                  {hasSubRiders ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMatrixAccountExpand(acc.accountKey)}
+                                      className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--subtle-bg)] hover:text-[var(--brand)] transition-colors"
+                                      title={isExpanded ? "طي تفاصيل المناديب" : "عرض تفاصيل المناديب المشغلين"}
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronUp className="h-3.5 w-3.5 text-[var(--brand)]" />
+                                      ) : (
+                                        <ChevronDown className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className="w-5" />
+                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                    <CreditCard className="h-3.5 w-3.5 text-[var(--brand)] shrink-0" />
+                                    {acc.accountId ? (
+                                      <Link
+                                        href={`/admin/chefz/accounts/${acc.accountId}`}
+                                        className="font-mono text-xs font-bold text-[var(--brand)] hover:underline truncate max-w-[160px]"
+                                        title={`عرض حساب ${acc.accountCode}`}
+                                      >
+                                        {acc.accountCode}
+                                      </Link>
+                                    ) : (
+                                      <span className="font-mono text-xs font-bold text-[var(--foreground)] truncate max-w-[160px]">
+                                        {acc.accountCode}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Riders on this Account */}
+                              <td className="px-3 py-2.5 text-center">
+                                {acc.riders.length === 1 ? (
+                                  <div className="flex items-center justify-center gap-1.5 text-xs">
+                                    <Users className="h-3.5 w-3.5 text-[var(--brand)] shrink-0" />
+                                    <span
+                                      className="font-bold text-[var(--foreground)] truncate max-w-[130px]"
+                                      title={acc.riders[0].riderName}
+                                    >
+                                      {acc.riders[0].riderName}
+                                    </span>
+                                    {acc.riders[0].riderIqamaNo && (
+                                      <span className="text-[10px] text-[var(--muted)] font-mono">
+                                        ({acc.riders[0].riderIqamaNo})
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : acc.riders.length > 1 ? (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="rounded-full bg-[var(--brand)]/10 px-2 py-0.5 text-[10px] font-bold text-[var(--brand)]">
+                                      {acc.riders.length} مناديب
+                                    </span>
+                                    <div className="flex flex-wrap justify-center gap-1 max-w-[200px]">
+                                      {acc.riders.map((r, rIdx) => (
+                                        <span
+                                          key={r.riderKey || rIdx}
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-[var(--subtle-bg)] text-[var(--foreground)] border border-[var(--border)]"
+                                          title={`هوية: ${r.riderIqamaNo || "-"}`}
+                                        >
+                                          <span className="truncate max-w-[70px]">{r.riderName}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[var(--muted)]">—</span>
+                                )}
+                              </td>
+
+                              {/* External ID / UUID */}
+                              <td className="px-3 py-2.5 text-center font-mono text-xs text-[var(--muted)]" dir="ltr">
+                                {acc.accountExternalId || (acc.accountId ? `${acc.accountId.slice(0, 8)}...` : "—")}
+                              </td>
+
+                              {/* Total Accepted Offers */}
+                              <td className="px-3 py-2.5 text-center font-black font-mono text-sm bg-[var(--brand)]/5 text-[var(--brand)]">
+                                {acc.totalAccepted.toLocaleString()}
+                              </td>
+
+                              {/* Active Days */}
+                              <td className="px-3 py-2.5 text-center font-mono font-semibold">
+                                <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                                  {acc.activeDaysCount}
+                                </span>
+                                <span className="text-[var(--muted)] font-normal text-[10px]">
+                                  {" "}
+                                  / {daysList.length}
+                                </span>
+                              </td>
+
+                              {/* Average Acceptance Rate */}
+                              <td className="px-3 py-2.5 text-center">
+                                <span
+                                  className={`inline-block rounded px-2 py-0.5 font-bold text-[11px] ${
+                                    acc.avgAcceptanceRate >= 80
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                      : acc.avgAcceptanceRate >= 60
+                                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                      : "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                                  }`}
+                                >
+                                  {acc.avgAcceptanceRate}%
+                                </span>
+                              </td>
+
+                              {/* Days Columns */}
+                              {daysList.map((d) => {
+                                const cell = acc.daysData.get(d.dateStr);
+                                let cellValue: number | string = 0;
+                                let hasData = false;
+
+                                if (cell) {
+                                  if (matrixMetric === "accepted") {
+                                    cellValue = cell.acceptedOffers;
+                                    hasData = cell.acceptedOffers > 0;
+                                  } else if (matrixMetric === "valid") {
+                                    cellValue = cell.totalValidOffers;
+                                    hasData = cell.totalValidOffers > 0;
+                                  } else {
+                                    cellValue = `${cell.acceptanceRate}%`;
+                                    hasData = cell.totalValidOffers > 0;
+                                  }
+                                }
+
+                                return (
+                                  <td
+                                    key={d.dateStr}
+                                    className={`px-1.5 py-2 text-center border-r border-[var(--border)]/40 ${
+                                      hasData ? "bg-emerald-500/5" : ""
+                                    }`}
+                                    title={
+                                      cell
+                                        ? `التاريخ: ${d.dateStr} (${d.dayNameAr})\nالحساب: ${acc.accountCode}\nالطلبات المقبولة: ${cell.acceptedOffers}\nإجمالي الطلبات: ${cell.totalValidOffers}\nالمرفوضة: ${cell.declinedOffers}\nالفائتة: ${cell.missedOffers}\nنسبة القبول: ${cell.acceptanceRate}%`
+                                        : `التاريخ: ${d.dateStr} (${d.dayNameAr})\nلا توجد بيانات مسجلة لهذا الحساب (0)`
+                                    }
+                                  >
+                                    {hasData ? (
+                                      <span className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                                        {cellValue}
+                                      </span>
+                                    ) : (
+                                      <span className="font-mono text-xs text-gray-300 dark:text-gray-600">
+                                        0
+                                      </span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+
+                            {/* Sub-rows for account's individual riders */}
+                            {isExpanded &&
+                              acc.riders.map((r, rIdx) => (
+                                <tr
+                                  key={r.riderKey || rIdx}
+                                  className="bg-[var(--brand)]/5 text-[11px] border-b border-[var(--border)]/50"
+                                >
+                                  <td className="px-3 py-1.5 text-center font-mono text-[var(--muted)]">
+                                    ↳
+                                  </td>
+                                  <td className="px-4 py-1.5 font-semibold text-[var(--foreground)] pr-8">
+                                    <div className="flex items-center gap-1.5">
+                                      <Users className="h-3 w-3 text-[var(--brand)] shrink-0" />
+                                      <span className="truncate max-w-[170px]" title={r.riderName}>
+                                        {r.riderName}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono text-xs" dir="ltr">
+                                    {r.riderIqamaNo || r.idNumber || "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center text-[10px] text-[var(--muted)]">
+                                    مندوب مشغل
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-bold font-mono text-xs text-[var(--brand)] bg-[var(--brand)]/10">
+                                    {r.totalAccepted.toLocaleString()}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono font-semibold text-emerald-700 dark:text-emerald-400">
+                                    {r.activeDaysCount}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono text-[10px]">
+                                    {r.avgAcceptanceRate}%
+                                  </td>
+
+                                  {/* Days values for this rider on this account */}
+                                  {daysList.map((d) => {
+                                    const cell = r.daysMap.get(d.dateStr);
+                                    let cellValue: number | string = 0;
+                                    let hasData = false;
+                                    if (cell) {
+                                      if (matrixMetric === "accepted") {
+                                        cellValue = cell.acceptedOffers;
+                                        hasData = cell.acceptedOffers > 0;
+                                      } else if (matrixMetric === "valid") {
+                                        cellValue = cell.totalValidOffers;
+                                        hasData = cell.totalValidOffers > 0;
+                                      } else {
+                                        cellValue = `${cell.acceptanceRate}%`;
+                                        hasData = cell.totalValidOffers > 0;
+                                      }
+                                    }
+
+                                    return (
+                                      <td
+                                        key={d.dateStr}
+                                        className="px-1.5 py-1 text-center border-r border-[var(--border)]/30 font-mono text-[10px]"
+                                      >
+                                        {hasData ? (
+                                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                            {cellValue}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-300 dark:text-gray-600">0</span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                          </Fragment>
+                        );
+                      })
                     )}
                   </tbody>
 
                   {/* Matrix Table Footer with Day Totals */}
-                  {filteredMatrixRows.length > 0 && !dailyLoading && (
+                  {((entityView === "riders" && filteredMatrixRows.length > 0) ||
+                    (entityView === "accounts" && filteredMatrixAccountRows.length > 0)) &&
+                    !dailyLoading && (
                     <tfoot className="border-t-2 border-[var(--border)] bg-[var(--table-header-bg)] font-bold">
                       <tr>
                         <td className="px-3 py-3 text-center font-mono">∑</td>
                         <td className="px-4 py-3 font-bold text-[var(--foreground)]" colSpan={3}>
-                          إجمالي اليوم (لكافة المناديب في الجدول)
+                          {entityView === "riders"
+                            ? "إجمالي اليوم (لكافة المناديب في الجدول)"
+                            : "إجمالي اليوم (لكافة الحسابات في الجدول)"}
                         </td>
                         <td className="px-3 py-3 text-center font-black font-mono text-sm bg-[var(--brand)]/10 text-[var(--brand)]">
                           {grandTotalAccepted.toLocaleString()}
                         </td>
                         <td className="px-3 py-3 text-center font-mono text-xs">
-                          {filteredMatrixRows.filter((r) => r.totalAccepted > 0).length} نشط
+                          {entityView === "riders"
+                            ? `${filteredMatrixRows.filter((r) => r.totalAccepted > 0).length} نشط`
+                            : `${filteredMatrixAccountRows.filter((a) => a.totalAccepted > 0).length} نشط`}
                         </td>
                         <td className="px-3 py-3 text-center font-mono text-xs">
-                          {filteredMatrixRows.length > 0
+                          {entityView === "riders"
+                            ? filteredMatrixRows.length > 0
+                              ? Math.round(
+                                  filteredMatrixRows.reduce((acc, r) => acc + r.avgAcceptanceRate, 0) /
+                                    filteredMatrixRows.length
+                                )
+                              : 0
+                            : filteredMatrixAccountRows.length > 0
                             ? Math.round(
-                                filteredMatrixRows.reduce((acc, r) => acc + r.avgAcceptanceRate, 0) /
-                                  filteredMatrixRows.length
+                                filteredMatrixAccountRows.reduce((acc, a) => acc + a.avgAcceptanceRate, 0) /
+                                  filteredMatrixAccountRows.length
                               )
                             : 0}
                           %
@@ -1131,11 +1999,11 @@ export default function ChefzPerformancePage() {
                             <td
                               key={d.dateStr}
                               className="px-1.5 py-2 text-center border-r border-[var(--border)]/40 font-mono text-xs font-black text-[var(--foreground)]"
-                              title={`إجمالي ${d.dateStr}: ${val.toLocaleString()} (${tot?.activeRiders || 0} مندوب نشط)`}
+                              title={`إجمالي ${d.dateStr}: ${val.toLocaleString()} (${tot?.activeCount || 0} ${entityView === "riders" ? "مندوب نشط" : "حساب نشط"})`}
                             >
                               <div className="leading-tight">{val > 0 ? val.toLocaleString() : "0"}</div>
                               <div className="text-[9px] text-[var(--muted)] font-normal">
-                                {tot?.activeRiders || 0} م
+                                {tot?.activeCount || 0} {entityView === "riders" ? "م" : "ح"}
                               </div>
                             </td>
                           );
