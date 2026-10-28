@@ -12,15 +12,32 @@ import {
   uploadNinjaAccountSheet,
   updateNinjaAccountSheetNote,
   formatRiyadhDateTime,
+  ensureNinjaPlatform,
   type NinjaAccountUpdateUploadResponse,
   type NinjaAccountUpdateRowResponse,
   type NinjaAccountUpdateRowQuery,
   type NinjaImportIssue,
 } from "@/lib/ninja/api";
+import {
+  createPlatformAccount,
+  type PlatformResponse,
+  type AccountUpsertRequest,
+} from "@/lib/platforms/api";
+import {
+  listOperatingCities,
+  listSponsors,
+  listEmployees,
+  listRiders,
+  createEmployeeRiderProfile,
+  type OperatingCity,
+  type Sponsor,
+} from "@/lib/workforce/api";
+import type { Employee, Rider } from "@/lib/workforce/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
 import {
@@ -51,6 +68,9 @@ import {
   Check,
   Zap,
   Filter,
+  UserPlus,
+  Sparkles,
+  MapPin,
 } from "lucide-react";
 
 export default function NinjaSheetUpdatesPage() {
@@ -62,6 +82,32 @@ export default function NinjaSheetUpdatesPage() {
     can("ninja.read") ||
     canAny("ninja.accounts.update", "ninja.performance.import", "ninja.deductions.import");
   const canUpdate = can("ninja.accounts.update") || can("ninja.read");
+  const canCreateAccount =
+    can("platform_accounts.create") ||
+    can("ninja.accounts.update") ||
+    can("ninja.read");
+
+  // Lookups State for creating accounts in ERP
+  const [platform, setPlatform] = useState<PlatformResponse | null>(null);
+  const [cities, setCities] = useState<OperatingCity[]>([]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [riders, setRiders] = useState<Rider[]>([]);
+  const [lookupsLoaded, setLookupsLoaded] = useState(false);
+
+  // State: Add Account to System Modal (from NotFound Row)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedRowForCreate, setSelectedRowForCreate] = useState<NinjaAccountUpdateRowResponse | null>(null);
+  const [createCaptainId, setCreateCaptainId] = useState("");
+  const [createCode, setCreateCode] = useState("");
+  const [createCityId, setCreateCityId] = useState("");
+  const [createSponsorId, setCreateSponsorId] = useState("");
+  const [suggestedSponsorId, setSuggestedSponsorId] = useState("");
+  const [createOwnerRiderId, setCreateOwnerRiderId] = useState("");
+  const [createPaymentModel, setCreatePaymentModel] = useState<string>("PayPerOrder");
+  const [createNotes, setCreateNotes] = useState("");
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createdAccountCaptainIds, setCreatedAccountCaptainIds] = useState<Set<string>>(new Set());
 
   // State: List of Uploads
   const [uploads, setUploads] = useState<NinjaAccountUpdateUploadResponse[]>([]);
@@ -105,6 +151,34 @@ export default function NinjaSheetUpdatesPage() {
 
   // Copy helper
   const [copiedHash, setCopiedHash] = useState(false);
+
+  // -------------------------------------------------------------
+  // Load Lookups for Account Creation
+  // -------------------------------------------------------------
+  const loadLookups = async () => {
+    if (lookupsLoaded) return;
+    try {
+      const [plat, cityList, sponsorList, empList, riderList] = await Promise.all([
+        ensureNinjaPlatform().catch(() => null),
+        listOperatingCities().catch(() => []),
+        listSponsors().catch(() => []),
+        listEmployees().catch(() => []),
+        listRiders().catch(() => []),
+      ]);
+      if (plat) setPlatform(plat);
+      setCities(Array.isArray(cityList) ? cityList : []);
+      setSponsors(Array.isArray(sponsorList) ? sponsorList : []);
+      setEmployees(Array.isArray(empList) ? empList : []);
+      setRiders(Array.isArray(riderList) ? riderList : []);
+      setLookupsLoaded(true);
+    } catch (e) {
+      console.warn("Could not load lookups for account creation", e);
+    }
+  };
+
+  useEffect(() => {
+    loadLookups();
+  }, []);
 
   // -------------------------------------------------------------
   // Load Uploads
@@ -274,6 +348,248 @@ export default function NinjaSheetUpdatesPage() {
     if (!selectedUpload) return;
     setEditingNote(selectedUpload.note || "");
     setIsNoteModalOpen(true);
+  };
+
+  // -------------------------------------------------------------
+  // Lookups Helpers & Account Creation Options
+  // -------------------------------------------------------------
+  const isValidGuid = (id?: string | null): id is string => {
+    return Boolean(id && id !== "00000000-0000-0000-0000-000000000000" && id.trim() !== "");
+  };
+
+  const sponsorMap = useMemo(() => {
+    return new Map<string, Sponsor>(sponsors.map((s) => [s.id, s]));
+  }, [sponsors]);
+
+  const cityMap = useMemo(() => {
+    return new Map<string, OperatingCity>(cities.map((c) => [c.id, c]));
+  }, [cities]);
+
+  // Options for Owner Rider Profile SearchableSelect
+  const employeeOptions = useMemo(() => {
+    const empToRiderProfileMap = new Map<string, string>();
+    riders.forEach((r) => {
+      if (r.employeeId && isValidGuid(r.id)) {
+        empToRiderProfileMap.set(r.employeeId, r.id);
+      }
+    });
+
+    const options: { value: string; label: string; sublabel?: string }[] = [];
+    const usedIds = new Set<string>();
+
+    employees.forEach((e) => {
+      const validRId =
+        (isValidGuid(e.riderProfileId) ? e.riderProfileId : null) ||
+        (isValidGuid(e.rider?.id) ? e.rider.id : null) ||
+        empToRiderProfileMap.get(e.id);
+
+      const targetId = validRId || (isValidGuid(e.id) ? e.id : null);
+      if (!targetId || usedIds.has(targetId)) return;
+
+      usedIds.add(targetId);
+      const iqamaStr = e.iqamaNo ? `هوية: ${e.iqamaNo}` : "";
+      const sponsorStr =
+        e.sponsorNameAr || e.sponsor?.nameAr
+          ? `كفيل: ${e.sponsorNameAr || e.sponsor?.nameAr}`
+          : "";
+      const sub = [iqamaStr, sponsorStr].filter(Boolean).join(" • ");
+
+      options.push({
+        value: targetId,
+        label: `${e.fullNameAr}${e.fullNameEn ? ` (${e.fullNameEn})` : ""}`,
+        sublabel: sub || undefined,
+      });
+    });
+
+    // Include riders from listRiders() who are not yet in options (e.g. outside riders)
+    riders.forEach((r) => {
+      if (!isValidGuid(r.id) || usedIds.has(r.id)) return;
+      usedIds.add(r.id);
+      options.push({
+        value: r.id,
+        label: `${r.fullNameAr}${r.fullNameEn ? ` (${r.fullNameEn})` : ""}`,
+        sublabel: r.iqamaNo ? `هوية: ${r.iqamaNo}` : undefined,
+      });
+    });
+
+    return options;
+  }, [employees, riders]);
+
+  // Open Create Account Modal from a Sheet Row
+  const handleOpenCreateAccount = (row: NinjaAccountUpdateRowResponse) => {
+    setSelectedRowForCreate(row);
+    setCreateCaptainId(row.captainId || "");
+    setCreateCode(`NINJA-${(row.captainId || "").trim()}`);
+    setCreatePaymentModel("PayPerOrder");
+    setCreateNotes(
+      selectedUpload?.fileName
+        ? `تم الإنشاء من فحص شيت نينجا (${selectedUpload.fileName}) - صف #${row.sourceRowNumber}`
+        : `تم الإنشاء من فحص شيت نينجا - كابتن ID: ${row.captainId}`
+    );
+
+    // 1. Operating City:
+    // Match registered city with sheet city name (Arabic or English or code)
+    let matchedCityId = "";
+    if (row.sheetCity && cities.length > 0) {
+      const cleanSheetCity = row.sheetCity.trim().toLowerCase();
+      const city = cities.find((c) => {
+        const ar = (c.globalCityAr || "").trim().toLowerCase();
+        const en = (c.globalCityEn || "").trim().toLowerCase();
+        const code = (c.code || "").trim().toLowerCase();
+        return (
+          ar === cleanSheetCity ||
+          en === cleanSheetCity ||
+          code === cleanSheetCity ||
+          ar.includes(cleanSheetCity) ||
+          cleanSheetCity.includes(ar)
+        );
+      });
+      if (city) matchedCityId = city.id;
+    }
+    setCreateCityId(matchedCityId);
+
+    // 2. Owner Rider & Sponsor Suggestion:
+    // Try auto-matching by sheet iqama if present
+    const cleanIqama = (row.sheetIqamaNo || "").trim();
+    let matchedOwnerId = "";
+    let suggestedSponsor = "";
+
+    if (cleanIqama) {
+      const matchedEmp = employees.find((e) => (e.iqamaNo || "").trim() === cleanIqama);
+      const matchedRider = riders.find((r) => (r.iqamaNo || "").trim() === cleanIqama);
+
+      if (matchedRider && isValidGuid(matchedRider.id)) {
+        matchedOwnerId = matchedRider.id;
+      } else if (matchedEmp) {
+        matchedOwnerId =
+          matchedEmp.riderProfileId ||
+          matchedEmp.rider?.id ||
+          (isValidGuid(matchedEmp.id) ? matchedEmp.id : "");
+      }
+
+      // Find sponsor from the employee record
+      const empForSponsor =
+        matchedEmp ||
+        (matchedRider?.employeeId ? employees.find((e) => e.id === matchedRider.employeeId) : null);
+      if (empForSponsor) {
+        const sId = empForSponsor.sponsorId || empForSponsor.sponsor?.id;
+        if (sId) {
+          suggestedSponsor = sId;
+        }
+      }
+    }
+
+    setCreateOwnerRiderId(matchedOwnerId);
+    setCreateSponsorId(suggestedSponsor);
+    setSuggestedSponsorId(suggestedSponsor);
+    setIsCreateModalOpen(true);
+  };
+
+  // Change Owner Rider in modal: dynamically suggest their sponsor
+  const handleOwnerRiderChange = (newOwnerId: string) => {
+    setCreateOwnerRiderId(newOwnerId);
+
+    const emp = employees.find(
+      (e) =>
+        e.riderProfileId === newOwnerId ||
+        e.rider?.id === newOwnerId ||
+        e.id === newOwnerId ||
+        riders.find((r) => r.id === newOwnerId)?.employeeId === e.id
+    );
+
+    const sId = emp?.sponsorId || emp?.sponsor?.id;
+    if (sId) {
+      setCreateSponsorId(sId);
+      setSuggestedSponsorId(sId);
+    }
+  };
+
+  // Submit Platform Account Creation
+  const handleCreateAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canCreateAccount) {
+      toast.error("غير مصرح", "لا تملك صلاحية إنشاء حسابات منصة.");
+      return;
+    }
+
+    if (!createCaptainId.trim()) {
+      toast.error("تنبيه", "يرجى إدخال رقم الكابتن (Captain ID).");
+      return;
+    }
+    if (!createCityId) {
+      toast.error("تنبيه", "يرجى اختيار مدينة التشغيل.");
+      return;
+    }
+    if (!createSponsorId) {
+      toast.error("تنبيه", "يرجى اختيار الكفيل.");
+      return;
+    }
+    if (!createOwnerRiderId) {
+      toast.error("تنبيه", "يرجى اختيار ملف المندوب المالك للحساب.");
+      return;
+    }
+
+    setCreateSubmitting(true);
+    try {
+      // 1. Ensure rider profile if the ID belongs to an employee directly without a rider profile
+      let finalRiderProfileId = createOwnerRiderId;
+      const isDirectRider = riders.some((r) => r.id === createOwnerRiderId);
+      if (!isDirectRider) {
+        const emp = employees.find((e) => e.id === createOwnerRiderId);
+        if (emp && !emp.riderProfileId && !emp.rider?.id) {
+          try {
+            const riderRes = await createEmployeeRiderProfile(emp.id);
+            const riderResId = riderRes?.riderProfileId || riderRes?.rider?.id || riderRes?.id;
+            if (riderResId) {
+              finalRiderProfileId = riderResId;
+            }
+          } catch (rErr) {
+            console.warn("Could not auto-create employee rider profile", rErr);
+          }
+        } else if (emp && (emp.riderProfileId || emp.rider?.id)) {
+          finalRiderProfileId = emp.riderProfileId || emp.rider!.id;
+        }
+      }
+
+      // 2. Ensure Ninja platform exists in ERP
+      const ninjaPlat = platform || (await ensureNinjaPlatform());
+      if (!ninjaPlat?.id) {
+        throw new Error("تعذر الوصول لمنصة نينجا في النظام.");
+      }
+
+      // 3. Create platform account
+      const payload: AccountUpsertRequest = {
+        platformId: ninjaPlat.id,
+        operatingCityId: createCityId,
+        sponsorId: createSponsorId,
+        ownerRiderProfileId: finalRiderProfileId,
+        code: createCode.trim() || `NINJA-${createCaptainId.trim()}`,
+        externalAccountId: createCaptainId.trim(),
+        paymentModel: createPaymentModel,
+        status: "Available",
+        notes: createNotes.trim() || undefined,
+      };
+
+      await createPlatformAccount(payload);
+
+      toast.success(
+        "تم بنجاح",
+        `تم إنشاء حساب نينجا برقم كابتن ${createCaptainId.trim()} في النظام بنجاح.`
+      );
+
+      setCreatedAccountCaptainIds((prev) => new Set(prev).add(createCaptainId.trim()));
+      setIsCreateModalOpen(false);
+
+      // Refresh rows
+      if (selectedUploadId) {
+        loadRows(selectedUploadId, rowsPage);
+      }
+    } catch (err: any) {
+      console.error("Failed to create platform account from sheet row", err);
+      toast.error("خطأ", err?.message || "تعذر إنشاء حساب المنصة.");
+    } finally {
+      setCreateSubmitting(false);
+    }
   };
 
   // -------------------------------------------------------------
@@ -765,6 +1081,7 @@ export default function NinjaSheetUpdatesPage() {
                       <th className="px-3 py-3 font-bold">بيانات الشيت (الملف)</th>
                       <th className="px-3 py-3 font-bold">بيانات النظام المستخرجة</th>
                       <th className="px-3 py-3 font-bold">المشاكل والفروقات</th>
+                      <th className="px-3 py-3 font-bold text-center">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
@@ -895,6 +1212,42 @@ export default function NinjaSheetUpdatesPage() {
                               <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                                 <Check className="h-3.5 w-3.5" />
                                 سليم ومطابق
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Actions: Add to System button for NotFound rows */}
+                          <td className="px-3 py-3 text-center whitespace-nowrap">
+                            {isNotFound ? (
+                              createdAccountCaptainIds.has(row.captainId) ? (
+                                <span className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  تمت الإضافة
+                                </span>
+                              ) : (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => handleOpenCreateAccount(row)}
+                                  disabled={!canCreateAccount}
+                                  className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm transition-all hover:scale-[1.02]"
+                                  title={
+                                    !canCreateAccount
+                                      ? "لا تملك صلاحية إضافة حسابات للمنصة"
+                                      : "إضافة هذا السجل كحساب نينجا جديد في النظام"
+                                  }
+                                >
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                  إضافة للنظام
+                                </Button>
+                              )
+                            ) : isFound ? (
+                              <span className="text-[11px] text-[var(--muted)] font-medium">
+                                مسجل بالنظام
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                                متعدد
                               </span>
                             )}
                           </td>
@@ -1292,6 +1645,268 @@ export default function NinjaSheetUpdatesPage() {
             </div>
           </div>
         </div>
+      </Modal>
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL 3: Add NotFound Sheet Record to System                   */}
+      {/* ------------------------------------------------------------- */}
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => !createSubmitting && setIsCreateModalOpen(false)}
+        title="إضافة حساب نينجا جديد في النظام من بيانات الشيت"
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleCreateAccountSubmit} className="space-y-4 text-xs" dir="rtl">
+          <p className="text-xs text-[var(--muted)]">
+            يقوم هذا النموذج بإنشاء حساب منصة نينجا جديد في النظام بالاعتماد على بيانات الشيت المقروءة،
+            مع إمكانية تحديد المدينة واختيار أو تعديل الكفيل المقترح.
+          </p>
+
+          {/* Sheet Data Preview Card */}
+          {selectedRowForCreate && (
+            <div className="rounded-xl border border-purple-200/70 dark:border-purple-900/40 bg-purple-50/40 dark:bg-purple-950/20 p-3 space-y-2">
+              <div className="text-[11px] font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                <FileSpreadsheet className="h-3.5 w-3.5 text-purple-600" />
+                بيانات السجل المقروءة من الشيت (صف #{selectedRowForCreate.sourceRowNumber}):
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="rounded-lg bg-[var(--card)] p-2 border border-[var(--border)]">
+                  <div className="text-[10px] text-[var(--muted)] font-medium">كابتن ID</div>
+                  <div className="font-mono font-bold text-[var(--foreground)] mt-0.5" dir="ltr">
+                    {selectedRowForCreate.captainId}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-[var(--card)] p-2 border border-[var(--border)]">
+                  <div className="text-[10px] text-[var(--muted)] font-medium">رقم هوية الشيت</div>
+                  <div className="font-mono font-bold text-[var(--foreground)] mt-0.5" dir="ltr">
+                    {selectedRowForCreate.sheetIqamaNo || "—"}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-[var(--card)] p-2 border border-[var(--border)]">
+                  <div className="text-[10px] text-[var(--muted)] font-medium">اسم المالك بالشيت</div>
+                  <div className="font-bold text-[var(--foreground)] truncate mt-0.5" title={selectedRowForCreate.sheetOwnerName}>
+                    {selectedRowForCreate.sheetOwnerName || "—"}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-[var(--card)] p-2 border border-[var(--border)]">
+                  <div className="text-[10px] text-[var(--muted)] font-medium">مدينة الشيت</div>
+                  <div className="font-bold text-[var(--foreground)] mt-0.5">
+                    {selectedRowForCreate.sheetCity || "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Captain ID & Account Code */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[var(--foreground)]">
+                رقم الكابتن (Captain ID) <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="text"
+                value={createCaptainId}
+                onChange={(e) => setCreateCaptainId(e.target.value)}
+                placeholder="مثال: 0012345 أو 98765"
+                required
+                className="font-mono text-xs"
+                dir="ltr"
+              />
+              <p className="text-[10px] text-[var(--muted)]">
+                تم جلبه من الشيت. يتم الحفاظ على الأصفار في البداية إن وجدت.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[var(--foreground)]">
+                كود الحساب الداخلي (اختياري)
+              </label>
+              <Input
+                type="text"
+                value={createCode}
+                onChange={(e) => setCreateCode(e.target.value)}
+                placeholder={`افتراضي: NINJA-${createCaptainId || "XXXX"}`}
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-[var(--muted)]">
+                رمز تعريف الحساب داخل شاشات ERP.
+              </p>
+            </div>
+          </div>
+
+          {/* Owner Rider Profile */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[var(--foreground)]">
+                المندوب المالك للحساب (Owner Rider Profile) <span className="text-red-500">*</span>
+              </label>
+              {selectedRowForCreate?.sheetIqamaNo && (
+                <span className="text-[11px] text-[var(--muted)]">
+                  هوية الشيت: <strong className="font-mono text-[var(--foreground)]">{selectedRowForCreate.sheetIqamaNo}</strong>
+                </span>
+              )}
+            </div>
+            <SearchableSelect
+              options={employeeOptions}
+              value={createOwnerRiderId}
+              onChange={handleOwnerRiderChange}
+              placeholder="اختر ملف المندوب المالك للحساب..."
+              required
+            />
+            {createOwnerRiderId ? (
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                <Check className="h-3 w-3" />
+                تم تحديد ملف المندوب المالك للحساب.
+              </p>
+            ) : (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                يرجى اختيار ملف المندوب المالك للحساب في النظام.
+              </p>
+            )}
+          </div>
+
+          {/* Operating City */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[var(--foreground)]">
+                مدينة التشغيل <span className="text-red-500">*</span>
+              </label>
+              {selectedRowForCreate?.sheetCity && (
+                <span className="text-[11px] text-[var(--muted)]">
+                  مدينة الشيت: <strong className="text-[var(--foreground)]">{selectedRowForCreate.sheetCity}</strong>
+                </span>
+              )}
+            </div>
+            <SearchableSelect
+              options={cities.map((c) => ({
+                value: c.id,
+                label: c.globalCityAr || c.globalCityEn || c.code,
+                sublabel: c.code ? `كود: ${c.code}` : undefined,
+              }))}
+              value={createCityId}
+              onChange={setCreateCityId}
+              placeholder="اختر أو ابحث عن مدينة التشغيل..."
+              required
+            />
+            {createCityId && (
+              <p className="text-[11px] text-[var(--muted)]">
+                المدينة المختارة: <strong className="text-[var(--foreground)]">{cityMap.get(createCityId)?.globalCityAr || "—"}</strong>
+              </p>
+            )}
+          </div>
+
+          {/* Sponsor Selection with Suggestion */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[var(--foreground)]">
+                الكفيل النشط <span className="text-red-500">*</span>
+              </label>
+              {suggestedSponsorId && (
+                <span className="text-[11px] text-purple-700 dark:text-purple-300 font-medium flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-purple-500" />
+                  اقتراح بناءً على كفيل المندوب
+                </span>
+              )}
+            </div>
+            <SearchableSelect
+              options={sponsors.map((s) => ({
+                value: s.id,
+                label: s.registryNameAr || s.employerIdentityNumber,
+                sublabel: s.employerIdentityNumber ? `رقم المنشأة: ${s.employerIdentityNumber}` : undefined,
+              }))}
+              value={createSponsorId}
+              onChange={setCreateSponsorId}
+              placeholder="اختر الكفيل..."
+              required
+            />
+
+            {/* Sponsor suggestion indicator */}
+            {createSponsorId && suggestedSponsorId && createSponsorId === suggestedSponsorId ? (
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-[11px] text-purple-800 dark:text-purple-300">
+                <Sparkles className="h-4 w-4 shrink-0 text-purple-600 dark:text-purple-400 mt-0.5" />
+                <span>
+                  <strong>اقتراح تلقائي:</strong> تم اقتراح هذا الكفيل بناءً على ملف المندوب المختار. يمكنك اعتماده أو تغييره واختيار أي كفيل آخر من القائمة بحرية.
+                </span>
+              </div>
+            ) : suggestedSponsorId && createSponsorId !== suggestedSponsorId ? (
+              <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-[11px] text-amber-800 dark:text-amber-300">
+                <span>تم اختيار كفيل مختلف عن كفيل المندوب المقترح ({sponsorMap.get(suggestedSponsorId)?.registryNameAr || "الكفيل المقترح"}).</span>
+                <button
+                  type="button"
+                  onClick={() => setCreateSponsorId(suggestedSponsorId)}
+                  className="underline font-bold text-amber-900 dark:text-amber-200 hover:text-amber-700"
+                >
+                  استعادة المقترح
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Payment Model & Notes */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[var(--foreground)]">نموذج الدفع المعتمد</label>
+              <select
+                value={createPaymentModel}
+                onChange={(e) => setCreatePaymentModel(e.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-bg)] py-2 px-3 text-xs text-[var(--foreground)] outline-none focus:border-purple-600 h-9"
+              >
+                <option value="PayPerOrder">بالطلب (PayPerOrder)</option>
+                <option value="Salary">راتب شهري (Salary)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[var(--foreground)]">حالة الحساب عند الإنشاء</label>
+              <div className="flex items-center h-9 px-3 rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                متاح للتشغيل (Available)
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[var(--foreground)]">ملاحظات الحساب (اختياري)</label>
+            <Input
+              type="text"
+              value={createNotes}
+              onChange={(e) => setCreateNotes(e.target.value)}
+              placeholder="أي ملاحظات إضافية على الحساب..."
+              className="text-xs"
+            />
+          </div>
+
+          {/* Form Actions */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={createSubmitting}
+              onClick={() => setIsCreateModalOpen(false)}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={createSubmitting}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold gap-2 min-w-[140px]"
+            >
+              {createSubmitting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  جارِ الإنشاء...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4" />
+                  إنشاء وربط الحساب
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );
