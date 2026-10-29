@@ -1,8 +1,13 @@
 // src/app/admin/jahez/approvals/page.tsx
 "use client";
 
-import { useEffect, useState, useTransition, useMemo } from "react";
+import { useEffect, useState, useTransition, useMemo, useRef } from "react";
 import Link from "next/link";
+import {
+  AssignmentContextSection,
+  type AssignmentContextSectionRef,
+} from "@/components/shared/AssignmentContextSection";
+import type { PreviousDayUsageInput } from "@/lib/platforms/day-usage-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
@@ -85,6 +90,10 @@ export default function JahezApprovalsPage() {
   const [decisionSubmitting, setDecisionSubmitting] = useState(false);
   const [confirmTransferApproveOpen, setConfirmTransferApproveOpen] = useState(false);
   const [commissionConflictNotice, setCommissionConflictNotice] = useState<string | null>(null);
+  const switchContextRef = useRef<AssignmentContextSectionRef>(null);
+  const [switchContextValid, setSwitchContextValid] = useState(true);
+  const [switchPreviousDayUsages, setSwitchPreviousDayUsages] = useState<PreviousDayUsageInput[] | null>(null);
+  const [switchRequiresUsage, setSwitchRequiresUsage] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [manualHandoverMode, setManualHandoverMode] = useState(false);
   const [manualTargetAccountMode, setManualTargetAccountMode] = useState(false);
@@ -454,6 +463,9 @@ export default function JahezApprovalsPage() {
       setUseOriginalValues(false);
       setApprovedNet(app.request.proposedNet ?? "");
       setApprovedCommission(app.request.proposedCommission ?? "");
+      setSwitchContextValid(true);
+      setSwitchPreviousDayUsages(null);
+      setSwitchRequiresUsage(false);
       setIsDecisionOpen(true);
     } catch {
       toast.error("خطأ", "تعذر جلب تفاصيل الطلب");
@@ -473,6 +485,16 @@ export default function JahezApprovalsPage() {
     }
 
     const isTransfer = selectedApproval.request.kind === ApprovalKind.SettlementTransfer;
+    const isAccountSwitch = selectedApproval.request.kind === ApprovalKind.AccountSwitch;
+
+    if (isAccountSwitch && approve && switchRequiresUsage && !switchContextValid) {
+      toast.warning(
+        "بيانات الاستخدام السابقة مطلوبة",
+        "يجب استكمال عدد طلبات المندوبين السابقين (أو تأكيد القيمة 0) قبل اعتماد تبديل الحساب.",
+      );
+      return;
+    }
+
     if (isTransfer) {
       if (approve && !canApproveTransfer) {
         toast.error(
@@ -513,6 +535,10 @@ export default function JahezApprovalsPage() {
           !isTransfer && approve && !useOriginalValues && approvedCommission !== ""
             ? Number(approvedCommission)
             : undefined,
+        previousDayUsages:
+          isAccountSwitch && approve && switchPreviousDayUsages && switchPreviousDayUsages.length > 0
+            ? switchPreviousDayUsages
+            : undefined,
       });
 
       setConfirmTransferApproveOpen(false);
@@ -523,8 +549,9 @@ export default function JahezApprovalsPage() {
       const status = (err as { status?: number })?.status;
       setConfirmTransferApproveOpen(false);
       if (status === 409 || msg.includes("409") || msg.includes("عمولة") || msg.includes("تعارض")) {
+        switchContextRef.current?.reloadContext();
         setCommissionConflictNotice(
-          "تغيرت بيانات العمولة أو حالة العملية في الخادم (409). تم تحديث تفاصيل الطلب؛ لا تعِد الاعتماد عشوائياً ووجّه العملية لمسار التعديل (Adjustment) إذا لزم الأمر.",
+          "تغيرت بيانات العمولة أو حالة العملية في الخادم (409). تم تحديث تفاصيل الطلب وسياق التعيين؛ لا تعِد الاعتماد عشوائياً ووجّه العملية لمسار التعديل (Adjustment) إذا لزم الأمر.",
         );
         try {
           const fresh = await getJahezRequestDetails(selectedApproval.request.id);
@@ -1598,6 +1625,34 @@ export default function JahezApprovalsPage() {
                     </div>
                   )}
 
+                  {selectedApproval.request.kind === ApprovalKind.AccountSwitch &&
+                    selectedApproval.request.targetAccountId && (() => {
+                      const switchDate = selectedApproval.request.effectiveAtUtc
+                        ? new Date(selectedApproval.request.effectiveAtUtc).toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" })
+                        : selectedApproval.request.fromDate || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+                      const incomingRiderId =
+                        selectedApproval.request.userRider?.riderProfileId ||
+                        selectedApproval.request.assignment?.riderProfileId ||
+                        "";
+                      if (!incomingRiderId) return null;
+                      return (
+                        <div className="pt-2">
+                          <AssignmentContextSection
+                            ref={switchContextRef}
+                            accountId={selectedApproval.request.targetAccountId}
+                            businessDate={switchDate}
+                            riderProfileId={incomingRiderId}
+                            platform="jahez"
+                            onChange={(payload) => {
+                              setSwitchContextValid(payload.isValid);
+                              setSwitchPreviousDayUsages(payload.previousDayUsages || null);
+                              setSwitchRequiresUsage(payload.requiresPreviousUsage);
+                            }}
+                          />
+                        </div>
+                      );
+                    })()}
+
                   <div>
                     <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                       مبرر / سبب القرار *
@@ -1667,7 +1722,10 @@ export default function JahezApprovalsPage() {
                                 decisionSubmitting ||
                                 !decisionReason.trim() ||
                                 missingTransferDetails ||
-                                (isTransfer && !canApproveTransfer)
+                                (isTransfer && !canApproveTransfer) ||
+                                (selectedApproval.request.kind === ApprovalKind.AccountSwitch &&
+                                  switchRequiresUsage &&
+                                  !switchContextValid)
                               }
                               className={`${
                                 isTransfer

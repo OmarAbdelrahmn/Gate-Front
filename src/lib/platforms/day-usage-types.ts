@@ -27,6 +27,7 @@ export interface PlatformAccountDayResponse {
   accountId: string;
   businessDate: string; // Riyadh YYYY-MM-DD
   assignments: PlatformAccountDayParticipant[];
+  contributions?: PlatformDayContribution[];
 }
 
 export interface PlatformAccountDayUpdateRequest {
@@ -37,6 +38,7 @@ export interface PlatformAccountDayUpdateRequest {
     rowVersion?: string | null;
   }>;
   reason: string;
+  contributions?: PreviousDayUsageInput[] | null;
 }
 
 export interface JahezResolvedDispatchAllocation {
@@ -49,4 +51,41 @@ export interface JahezResolvedDispatchAllocation {
 // Jahez import previews now also expose resolvedAllocations, including automatic splits.
 export interface WithResolvedDispatchAllocations {
   resolvedAllocations: JahezResolvedDispatchAllocation[];
+}
+
+// Send with generic assign, legacy assignment create, Ninja assign, and Jahez handover.
+// FreeSwitch approval accepts this on the approval decision body.
+export interface WithPreviousDayUsages {
+  previousDayUsages?: PreviousDayUsageInput[] | null;
+}
+
+export interface PreviousDayUsageInput {
+  assignmentIds: string[]; // exact ordered membership from assignment-context
+  figures: PlatformAccountDayUsageInput; // send complete object; ordersCount required for prior riders
+  rowVersion: string | null;
+  usageRowVersions: Record<string, string | null>;
+}
+
+export interface PlatformDayContribution {
+  assignmentIds: string[];
+  riderProfileId: string;
+  riderNameAr: string;
+  figures: PlatformAccountDayUsageInput;
+  rowVersion: string | null;
+  usageRowVersions: Record<string, string | null>;
+  missingRequiredFields: string[];
+  missingOptionalFields: string[];
+}
+
+export interface PlatformAssignmentContext {
+  accountId: string;
+  businessDate: string;
+  riderProfileId: string;
+  requiresPreviousUsage: boolean;
+  contributions: PlatformDayContribution[];
+}
+
+export interface MonthlyAccountUsage {
+  monthlyUsageStatus: 'Used' | 'Unused';
+  usageMonth: string; // current Riyadh Gregorian month, YYYY-MM
 }

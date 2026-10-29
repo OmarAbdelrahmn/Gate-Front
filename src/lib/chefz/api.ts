@@ -442,6 +442,7 @@ export async function getChefzPerformance(params: {
   to: string;
   accountId?: string;
   riderId?: string;
+  accountType?: string;
   page?: number;
   pageSize?: number;
 }): Promise<ChefzPage<ChefzPerformance>> {
@@ -456,6 +457,9 @@ export async function getChefzPerformance(params: {
   query.set("dateTo", params.to);
   if (params.accountId) query.set("accountId", params.accountId);
   if (params.riderId) query.set("riderId", params.riderId);
+  if (params.accountType && params.accountType !== "ALL") {
+    query.set("accountType", params.accountType);
+  }
   if (params.page) query.set("page", String(params.page));
   if (params.pageSize) query.set("pageSize", String(params.pageSize));
   const queryString = query.toString();
@@ -472,12 +476,18 @@ export async function getAllChefzPerformance(params: {
   to: string;
   accountId?: string;
   riderId?: string;
+  accountType?: string;
   pageSize?: number;
 }): Promise<ChefzPerformance[]> {
   const filterByDateBounds = (list: ChefzPerformance[]) => {
     return list.filter((item) => {
       if (params.from && item.reportDate && item.reportDate < params.from) return false;
       if (params.to && item.reportDate && item.reportDate > params.to) return false;
+      if (params.accountType && params.accountType !== "ALL") {
+        const target = params.accountType.trim().toLowerCase();
+        const itemType = (item.accountType || "").trim().toLowerCase();
+        if (itemType !== target) return false;
+      }
       return true;
     });
   };

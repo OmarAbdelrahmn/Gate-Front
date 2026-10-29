@@ -49,7 +49,7 @@ export interface AssignmentResponse {
   rowVersion: string;
 }
 
-export interface AccountResponse {
+export interface AccountResponse extends Partial<MonthlyAccountUsage> {
   id: string;
   platformId: string;
   platformCode?: string | null;
@@ -98,7 +98,18 @@ export interface AccountUpsertRequest {
   rowVersion?: string | null;
 }
 
-export interface AssignRequest {
+export * from "./day-usage-types";
+import type {
+  PlatformAccountDayUsageInput,
+  PlatformAccountDayResponse,
+  PlatformAccountDayUpdateRequest,
+  PlatformAssignmentContext,
+  WithPreviousDayUsages,
+  PreviousDayUsageInput,
+  MonthlyAccountUsage,
+} from "./day-usage-types";
+
+export interface AssignRequest extends WithPreviousDayUsages {
   actualRiderProfileId: string;
   effectiveFrom: string;
   paymentModel?: PaymentModel | string | null;
@@ -106,9 +117,6 @@ export interface AssignRequest {
   wasBackdated?: boolean;
   backdatedReason?: string | null;
 }
-
-export * from "./day-usage-types";
-import type { PlatformAccountDayUsageInput, PlatformAccountDayResponse, PlatformAccountDayUpdateRequest } from "./day-usage-types";
 
 export interface ReleaseRequest {
   effectiveTo: string;
@@ -435,5 +443,16 @@ export const updatePlatformAccountDayUsage = (
     body: JSON.stringify(payload),
     notifySuccess: "تم تحديث بيانات استخدام الحساب المشترك بنجاح",
   });
+};
+
+// 16. GET /api/platform-accounts/{accountId}/assignment-context?date=YYYY-MM-DD&riderProfileId={incomingRiderId}
+export const getPlatformAssignmentContext = (
+  accountId: string,
+  date: string,
+  riderProfileId: string
+) => {
+  return authFetch<PlatformAssignmentContext>(
+    `/api/platform-accounts/${encodeURIComponent(accountId)}/assignment-context?date=${encodeURIComponent(date)}&riderProfileId=${encodeURIComponent(riderProfileId)}`
+  );
 };
 

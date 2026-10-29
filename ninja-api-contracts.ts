@@ -207,6 +207,10 @@ export interface NinjaAccountResponse {
   paymentModel?: string | null;
   riderType?: NinjaRiderType | string | null;
   assignmentEffectiveFrom?: DateOnly | null;
+
+  // Monthly Usage
+  monthlyUsageStatus?: "Used" | "Unused";
+  usageMonth?: string;
 }
 
 export interface NinjaAccountStatusRequest {
@@ -219,6 +223,13 @@ export interface NinjaAccountStatusRequest {
 // Lifecycle: Assign, Return, Credentials
 // -------------------------------------------------------------
 
+export interface PreviousDayUsageInput {
+  assignmentIds: string[];
+  figures: PlatformAccountDayUsageInput;
+  rowVersion: string | null;
+  usageRowVersions: Record<string, string | null>;
+}
+
 export interface NinjaAssignRequest {
   actualRiderProfileId: Guid;
   effectiveFrom: DateOnly;
@@ -229,6 +240,7 @@ export interface NinjaAssignRequest {
   reason?: string | null;
   wasBackdated?: boolean;
   backdatedReason?: string | null;
+  previousDayUsages?: PreviousDayUsageInput[] | null;
 }
 
 export interface PlatformAccountDayUsageInput {

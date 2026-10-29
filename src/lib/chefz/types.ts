@@ -74,6 +74,8 @@ export interface ChefzAccount {
   isOperationallyBlocked: boolean;
   operationalBlockReason: string | null;
   riderIqamaNo?: string | null;
+  monthlyUsageStatus?: "Used" | "Unused";
+  usageMonth?: string;
 }
 
 export interface ChefzPasswordRequest {
@@ -147,6 +149,7 @@ export interface ChefzPerformance {
   declinedOffers: number;
   missedOffers: number;
   acceptanceRate: number;
+  accountType?: ChefzAccountType | string | null;
 }
 
 export interface ChefzPerformanceResponse extends ChefzPerformance {

@@ -98,9 +98,16 @@ import {
   X,
   Activity,
 } from "lucide-react";
-import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { MonthlyUsageBadge } from "@/components/shared/MonthlyUsageBadge";
+import {
+  AssignmentContextSection,
+  type AssignmentContextSectionRef,
+} from "@/components/shared/AssignmentContextSection";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
-import type { PlatformAccountDayUsageInput } from "@/lib/platforms/day-usage-types";
+import type {
+  PlatformAccountDayUsageInput,
+  PreviousDayUsageInput,
+} from "@/lib/platforms/day-usage-types";
 
 interface JoinedAccount {
   base: AccountResponse;
@@ -234,6 +241,10 @@ export default function ChefzAccountsPage() {
   const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignLimitDetails, setAssignLimitDetails] = useState<PlatformAssignmentLimit | null>(null);
+  const assignContextRef = useRef<AssignmentContextSectionRef>(null);
+  const [assignContextValid, setAssignContextValid] = useState(true);
+  const [assignPreviousDayUsages, setAssignPreviousDayUsages] = useState<PreviousDayUsageInput[] | null>(null);
+  const [assignRequiresUsage, setAssignRequiresUsage] = useState(false);
   const [selectedRiderActiveAccounts, setSelectedRiderActiveAccounts] = useState<AccountResponse[]>([]);
   const [riderOpenAssignments, setRiderOpenAssignments] = useState<AssignmentForCapacity[]>([]);
   const [checkingRiderAccounts, setCheckingRiderAccounts] = useState(false);
@@ -380,7 +391,27 @@ export default function ChefzAccountsPage() {
       // 4b. Lifecycle Status filter (Toolbar & Column)
       const currentLifecycleStatus = chefz?.status || base.status;
       if (filterLifecycleStatus !== "all" && currentLifecycleStatus !== filterLifecycleStatus) return false;
-      if (colFilterStatus.length > 0 && !colFilterStatus.includes(currentLifecycleStatus)) return false;
+      if (colFilterStatus.length > 0) {
+        const monthlyValues = colFilterStatus.filter(
+          (v) => v === "MONTHLY_USED" || v === "MONTHLY_UNUSED"
+        );
+        const operationalValues = colFilterStatus.filter(
+          (v) => v !== "MONTHLY_USED" && v !== "MONTHLY_UNUSED"
+        );
+        let matchesMonthly = true;
+        if (monthlyValues.length > 0) {
+          matchesMonthly = monthlyValues.some((val) => {
+            if (val === "MONTHLY_USED") return base.monthlyUsageStatus === "Used";
+            if (val === "MONTHLY_UNUSED") return base.monthlyUsageStatus === "Unused";
+            return false;
+          });
+        }
+        let matchesOperational = true;
+        if (operationalValues.length > 0) {
+          matchesOperational = operationalValues.includes(currentLifecycleStatus);
+        }
+        if (!matchesMonthly || !matchesOperational) return false;
+      }
 
       // 5. Column Filter: Reminders & Block Warnings
       if (colFilterReminders.length > 0) {
@@ -831,6 +862,8 @@ export default function ChefzAccountsPage() {
     let suspendedCount = 0;
     let retiredCount = 0;
     let archivedCount = 0;
+    let monthlyUsedCount = 0;
+    let monthlyUnusedCount = 0;
 
     for (const a of accounts) {
       const s = a.chefz?.status || a.base.status;
@@ -839,9 +872,24 @@ export default function ChefzAccountsPage() {
       else if (s === "Suspended") suspendedCount++;
       else if (s === "Retired") retiredCount++;
       else if (s === "Archived") archivedCount++;
+
+      if (a.base.monthlyUsageStatus === "Used") monthlyUsedCount++;
+      else if (a.base.monthlyUsageStatus === "Unused") monthlyUnusedCount++;
     }
 
     return [
+      {
+        value: "MONTHLY_USED",
+        label: "مستخدم (Used)",
+        sublabel: "ارتبط بعهدة متداخلة مع الشهر الحالي",
+        count: monthlyUsedCount,
+      },
+      {
+        value: "MONTHLY_UNUSED",
+        label: "غير مستخدم (Unused)",
+        sublabel: "لم يرتبط بأي عهدة هذا الشهر",
+        count: monthlyUnusedCount,
+      },
       {
         value: "Available",
         label: "متاح",
@@ -1302,6 +1350,9 @@ export default function ChefzAccountsPage() {
     setAssignReason("تسليم الحساب للمندوب");
     setAssignError(null);
     setAssignLimitDetails(null);
+    setAssignContextValid(true);
+    setAssignPreviousDayUsages(null);
+    setAssignRequiresUsage(false);
   };
 
   const handlePersonChange = (key: string) => {
@@ -1459,6 +1510,14 @@ export default function ChefzAccountsPage() {
       return;
     }
 
+    if (assignRequiresUsage && !assignContextValid) {
+      toast.warning(
+        "بيانات الاستخدام السابقة مطلوبة",
+        "يجب استكمال عدد طلبات المندوبين السابقين (أو تأكيد القيمة 0) قبل تعيين الحساب.",
+      );
+      return;
+    }
+
     setAssignSubmitting(true);
     setAssignError(null);
     setAssignLimitDetails(null);
@@ -1467,6 +1526,10 @@ export default function ChefzAccountsPage() {
         actualRiderProfileId: targetRiderProfileId,
         effectiveFrom: assignEffectiveFrom,
         reason: assignReason.trim() || null,
+        previousDayUsages:
+          assignPreviousDayUsages && assignPreviousDayUsages.length > 0
+            ? assignPreviousDayUsages
+            : undefined,
       });
 
       await loadData();
@@ -1483,6 +1546,10 @@ export default function ChefzAccountsPage() {
       const problem = e.problem || e.details;
       const errorCode = problem?.errorCode;
       const limit = problem?.assignmentLimit;
+
+      if (e.status === 409 || errorCode === "conflict" || problem?.errorCode === "conflict") {
+        assignContextRef.current?.reloadContext();
+      }
 
       if (limit) {
         setAssignLimitDetails(limit);
@@ -2518,6 +2585,12 @@ export default function ChefzAccountsPage() {
                               {translateStatusReason(chefz.statusReason)}
                             </span>
                           )}
+
+                          <MonthlyUsageBadge
+                            monthlyUsageStatus={base.monthlyUsageStatus || chefz?.monthlyUsageStatus}
+                            usageMonth={base.usageMonth || chefz?.usageMonth}
+                            size="sm"
+                          />
                         </div>
                       </td>
 
@@ -2983,6 +3056,15 @@ export default function ChefzAccountsPage() {
       >
         {assigningAccount && (
           <form onSubmit={handleAssignRider} className="space-y-4" dir="rtl">
+            <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5 text-xs">
+              <span className="text-[var(--muted)] font-medium">الاستخدام الشهري للحساب:</span>
+              <MonthlyUsageBadge
+                monthlyUsageStatus={assigningAccount.monthlyUsageStatus}
+                usageMonth={assigningAccount.usageMonth}
+                size="sm"
+              />
+            </div>
+
             {/* Informational note on two accounts allowance */}
             <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
               <Info className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
@@ -3210,6 +3292,22 @@ export default function ChefzAccountsPage() {
               />
             </div>
 
+            {/* Platform Assignment Context Section (Prior riders & figure splits) */}
+            {assigningAccount && selectedRiderId && assignEffectiveFrom && (
+              <AssignmentContextSection
+                ref={assignContextRef}
+                accountId={assigningAccount.id}
+                businessDate={assignEffectiveFrom}
+                riderProfileId={selectedRiderId}
+                platform="chefz"
+                onChange={(payload) => {
+                  setAssignContextValid(payload.isValid);
+                  setAssignPreviousDayUsages(payload.previousDayUsages || null);
+                  setAssignRequiresUsage(payload.requiresPreviousUsage);
+                }}
+              />
+            )}
+
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[var(--foreground)]">سبب التعيين</label>
               <input
@@ -3237,7 +3335,8 @@ export default function ChefzAccountsPage() {
                   isEnsuringProfile ||
                   !selectedRiderId ||
                   !isCapacityAllowed ||
-                  checkingRiderAccounts
+                  checkingRiderAccounts ||
+                  (assignRequiresUsage && !assignContextValid)
                 }
                 className={
                   !isCapacityAllowed
@@ -3313,20 +3412,6 @@ export default function ChefzAccountsPage() {
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
               />
             </div>
-
-            {(() => {
-              const joined = accounts.find((a) => a.base.id === releasingAccount.id);
-              if (joined?.chefz?.accountType === "FullTime") return null;
-              return (
-                <DayUsageFields
-                  value={releaseDayUsage}
-                  onChange={setReleaseDayUsage}
-                  platform="chefz"
-                  riderName={releasingAccount.currentAssignment.actualRiderNameAr}
-                  effectiveDate={releaseEffectiveTo}
-                />
-              );
-            })()}
 
             <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
               <Button
@@ -3462,6 +3547,14 @@ export default function ChefzAccountsPage() {
                 <span className="font-bold">
                   {statusAccount.base.currentAssignment?.actualRiderNameAr || "لا يوجد مندوب مرتبط"}
                 </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--muted)]">الاستخدام الشهري:</span>
+                <MonthlyUsageBadge
+                  monthlyUsageStatus={statusAccount.base.monthlyUsageStatus || statusAccount.chefz?.monthlyUsageStatus}
+                  usageMonth={statusAccount.base.usageMonth || statusAccount.chefz?.usageMonth}
+                  size="sm"
+                />
               </div>
             </div>
 

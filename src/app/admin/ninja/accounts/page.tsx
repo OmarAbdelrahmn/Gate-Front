@@ -1,7 +1,7 @@
 // src/app/admin/ninja/accounts/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -99,10 +99,15 @@ import {
   Car,
   Bike,
   Calendar,
+  CircleDashed,
 } from "lucide-react";
-import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { MonthlyUsageBadge } from "@/components/shared/MonthlyUsageBadge";
+import {
+  AssignmentContextSection,
+  type AssignmentContextSectionRef,
+} from "@/components/shared/AssignmentContextSection";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
-import type { PlatformAccountDayUsageInput } from "@/lib/platforms/day-usage-types";
+import type { PlatformAccountDayUsageInput, PreviousDayUsageInput } from "@/lib/platforms/day-usage-types";
 
 export default function NinjaAccountsPage() {
   const { can, canAny, locale } = useAuth();
@@ -508,14 +513,39 @@ export default function NinjaAccountsPage() {
   const statusFilterOptions: FilterOption[] = useMemo(() => {
     const statusCounts = new Map<string, number>();
     let hasReasonCount = 0;
+    let monthlyUsedCount = 0;
+    let monthlyUnusedCount = 0;
+
     for (const a of accounts) {
       const s = a.status || "Available";
       statusCounts.set(s, (statusCounts.get(s) || 0) + 1);
       if (a.statusReason?.trim()) {
         hasReasonCount++;
       }
+      if (a.monthlyUsageStatus === "Used") {
+        monthlyUsedCount++;
+      } else if (a.monthlyUsageStatus === "Unused") {
+        monthlyUnusedCount++;
+      }
     }
+
     const standard: FilterOption[] = [
+      {
+        value: "MONTHLY_USED",
+        label: isEn ? "Used (This month)" : "مستخدم (Used)",
+        sublabel: isEn
+          ? "Active or historical assignment overlapping current month"
+          : "ارتبط بعهدة متداخلة مع الشهر الحالي",
+        count: monthlyUsedCount,
+      },
+      {
+        value: "MONTHLY_UNUSED",
+        label: isEn ? "Unused (This month)" : "غير مستخدم (Unused)",
+        sublabel: isEn
+          ? "No assignments recorded in current month"
+          : "لم يرتبط بأي عهدة هذا الشهر",
+        count: monthlyUnusedCount,
+      },
       {
         value: "Available",
         label: "متاح (Available)",
@@ -556,7 +586,7 @@ export default function NinjaAccountsPage() {
       });
     }
     return standard;
-  }, [accounts]);
+  }, [accounts, isEn]);
 
   // 3. Registered Owner Filter Options
   const ownerFilterOptions: FilterOption[] = useMemo(() => {
@@ -980,7 +1010,11 @@ export default function NinjaAccountsPage() {
 
     // Toolbar Status
     if (filterStatus !== "all") {
-      result = result.filter((a) => (a.status || "").toLowerCase() === filterStatus.toLowerCase());
+      if (filterStatus === "Used" || filterStatus === "Unused") {
+        result = result.filter((a) => a.monthlyUsageStatus === filterStatus);
+      } else {
+        result = result.filter((a) => (a.status || "").toLowerCase() === filterStatus.toLowerCase());
+      }
     }
 
     // Toolbar Cooldown
@@ -1014,12 +1048,33 @@ export default function NinjaAccountsPage() {
 
     // Column Filter: Status
     if (colFilterStatus.length > 0) {
+      const monthlyValues = colFilterStatus.filter(
+        (v) => v === "MONTHLY_USED" || v === "MONTHLY_UNUSED"
+      );
+      const operationalValues = colFilterStatus.filter(
+        (v) => v !== "MONTHLY_USED" && v !== "MONTHLY_UNUSED"
+      );
+
       result = result.filter((a) => {
-        const s = (a.status || "").toLowerCase();
-        return colFilterStatus.some((val) => {
-          if (val === "HAS_REASON") return Boolean(a.statusReason?.trim());
-          return s === val.toLowerCase();
-        });
+        let matchesMonthly = true;
+        if (monthlyValues.length > 0) {
+          matchesMonthly = monthlyValues.some((val) => {
+            if (val === "MONTHLY_USED") return a.monthlyUsageStatus === "Used";
+            if (val === "MONTHLY_UNUSED") return a.monthlyUsageStatus === "Unused";
+            return false;
+          });
+        }
+
+        let matchesOperational = true;
+        if (operationalValues.length > 0) {
+          const s = (a.status || "").toLowerCase();
+          matchesOperational = operationalValues.some((val) => {
+            if (val === "HAS_REASON") return Boolean(a.statusReason?.trim());
+            return s === val.toLowerCase();
+          });
+        }
+
+        return matchesMonthly && matchesOperational;
       });
     }
 
@@ -1320,6 +1375,12 @@ export default function NinjaAccountsPage() {
     setAssignBackdatedReason("");
   };
 
+  // Assignment Context state
+  const ninjaAssignContextRef = useRef<AssignmentContextSectionRef>(null);
+  const [ninjaContextValid, setNinjaContextValid] = useState(true);
+  const [ninjaPreviousDayUsages, setNinjaPreviousDayUsages] = useState<PreviousDayUsageInput[] | null | undefined>(undefined);
+  const [ninjaContextRequiresUsage, setNinjaContextRequiresUsage] = useState(false);
+
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assigningAccount) return;
@@ -1372,6 +1433,16 @@ export default function NinjaAccountsPage() {
       return;
     }
 
+    if (ninjaContextRequiresUsage && !ninjaContextValid) {
+      toast.warning(
+        isEn ? "Usage figures required" : "بيانات مطلوبة",
+        isEn
+          ? "Please enter OrdersCount for prior riders before assignment. A confirmed 0 is valid."
+          : "يرجى إدخال عدد الطلبات (OrdersCount) للمندوب السابق قبل التعيين. الصفر (0) مدخل صحيح ومؤكد."
+      );
+      return;
+    }
+
     setAssignSubmitting(true);
     try {
       const targetId = assigningAccount.accountId || assigningAccount.id;
@@ -1387,6 +1458,9 @@ export default function NinjaAccountsPage() {
         reason: assignReason.trim() || null,
         wasBackdated: isBackdated,
         backdatedReason: isBackdated ? assignBackdatedReason.trim() : null,
+        ...(ninjaPreviousDayUsages && ninjaPreviousDayUsages.length > 0
+          ? { previousDayUsages: ninjaPreviousDayUsages }
+          : {}),
       };
 
       const res = await assignNinjaAccount(targetId, payload);
@@ -1407,6 +1481,7 @@ export default function NinjaAccountsPage() {
     } catch (err: any) {
       console.error("Assign error", err);
       if (err?.status === 409) {
+        ninjaAssignContextRef.current?.reloadContext();
         const isUnsupportedModel =
           err?.code === "platform.payment_model_not_supported" ||
           err?.problem?.code === "platform.payment_model_not_supported" ||
@@ -1424,8 +1499,8 @@ export default function NinjaAccountsPage() {
             isEn ? "Conflict / Limit Exceeded (409)" : "تعارض في السجل (409)",
             err?.message ||
               (isEn
-                ? "Account concurrency conflict or rider salary/account limit exceeded."
-                : "تم تعديل الحساب بالتزامن أو تجاوز سقف حسابات المندوب. يرجى مراجعة البيانات الحالية وإعادة المحاولة.")
+                ? "Account concurrency conflict, usage token conflict, or rider salary/account limit exceeded. Context reloaded for review."
+                : "تم تعديل الحساب بالتزامن أو تعارضت بيانات اليوم المشترك أو تجاوز سقف الحسابات. تم تحديث السياق لمراجعته.")
           );
         }
         loadAccounts();
@@ -2142,6 +2217,8 @@ export default function NinjaAccountsPage() {
               className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
             >
               <option value="all">جميع الحالات</option>
+              <option value="Used">مستخدم هذا الشهر (Used)</option>
+              <option value="Unused">غير مستخدم هذا الشهر (Unused)</option>
               <option value="Available">متاح (Available)</option>
               <option value="Assigned">معين (Assigned)</option>
               <option value="Suspended">موقوف (Suspended)</option>
@@ -2212,13 +2289,60 @@ export default function NinjaAccountsPage() {
               </span>
             )}
 
+            {filterStatus !== "all" && (
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold border ${
+                  filterStatus === "Used"
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                    : filterStatus === "Unused"
+                    ? "bg-slate-100 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
+                    : "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                }`}
+              >
+                {filterStatus === "Used" && (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                )}
+                {filterStatus === "Unused" && (
+                  <CircleDashed className="h-3 w-3 text-slate-500" />
+                )}
+                <span>
+                  {filterStatus === "Used"
+                    ? "مستخدم هذا الشهر (Used)"
+                    : filterStatus === "Unused"
+                    ? "غير مستخدم هذا الشهر (Unused)"
+                    : filterStatus}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFilterStatus("all")}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
             {colFilterStatus.map((val) => {
               const opt = statusFilterOptions.find((o) => o.value === val);
+              const isMonthlyUsed = val === "MONTHLY_USED";
+              const isMonthlyUnused = val === "MONTHLY_UNUSED";
               return (
                 <span
                   key={val}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold border ${
+                    isMonthlyUsed
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                      : isMonthlyUnused
+                      ? "bg-slate-100 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
+                      : "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                  }`}
                 >
+                  {isMonthlyUsed && (
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  )}
+                  {isMonthlyUnused && (
+                    <CircleDashed className="h-3 w-3 text-slate-500" />
+                  )}
                   <span>{opt?.label || val}</span>
                   <button
                     type="button"
@@ -2391,11 +2515,11 @@ export default function NinjaAccountsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-right border-collapse">
+          <table className="w-full min-w-[1360px] text-xs text-right border-collapse">
             <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
               <tr>
                 {/* 1. Captain ID */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[130px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>كابتن ID</span>
                     <TableHeaderColumnFilter
@@ -2410,7 +2534,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 2. Status */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[170px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>حالة الحساب</span>
                     <TableHeaderColumnFilter
@@ -2425,7 +2549,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 3. Owner & City/Sponsor */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[210px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>المالك والمدينة/الكفيل</span>
                     <TableHeaderDualFilter
@@ -2454,7 +2578,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 4. Actual Rider */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[170px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>المندوب الفعلي</span>
                     <TableHeaderColumnFilter
@@ -2469,7 +2593,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 5. Rider Type */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[130px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>نوع المندوب</span>
                     <TableHeaderColumnFilter
@@ -2484,7 +2608,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 6. Payment Model */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[110px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>طريقة الدفع</span>
                     <TableHeaderColumnFilter
@@ -2499,7 +2623,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 5. Phone */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[130px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>هاتف الدخول</span>
                     <TableHeaderColumnFilter
@@ -2514,7 +2638,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 6. Password & Cooldown */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[170px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>كلمة المرور وفترة الانتظار</span>
                     <TableHeaderColumnFilter
@@ -2529,7 +2653,7 @@ export default function NinjaAccountsPage() {
                 </th>
 
                 {/* 7. Sheet Checkup */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap">
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[160px]">
                   <div className="flex items-center gap-1.5 justify-start">
                     <span>آخر فحص بالشيت</span>
                     <TableHeaderColumnFilter
@@ -2543,8 +2667,10 @@ export default function NinjaAccountsPage() {
                   </div>
                 </th>
 
-                {/* 8. Actions */}
-                <th className="px-4 py-3 font-bold text-center whitespace-nowrap">إجراءات</th>
+                {/* 8. Actions (Sticky on the left for permanent visibility) */}
+                <th className="px-3 py-3 font-bold text-center whitespace-nowrap min-w-[210px] w-[210px] sticky left-0 z-20 bg-[var(--subtle-bg)] shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] border-r border-[var(--border)]">
+                  إجراءات
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -2572,8 +2698,11 @@ export default function NinjaAccountsPage() {
               ) : (
                 displayedAccounts.map((acc) => {
                   const accId = acc.accountId || acc.id || "";
-                  const isAssigned = (acc.status || "").toLowerCase() === "assigned";
-                  const isAvailable = (acc.status || "").toLowerCase() === "available";
+                  const isAssigned =
+                    (acc.status || "").toLowerCase() === "assigned" ||
+                    Boolean(acc.actualRiderProfileId || acc.currentAssignmentId);
+                  const isAvailable =
+                    (acc.status || "").toLowerCase() === "available" && !isAssigned;
                   const isSuspended = (acc.status || "").toLowerCase() === "suspended";
                   const isRetired = (acc.status || "").toLowerCase() === "retired";
                   const isArchived = (acc.status || "").toLowerCase() === "archived";
@@ -2583,7 +2712,7 @@ export default function NinjaAccountsPage() {
                   const riderName = acc.actualRider?.nameAr || acc.actualRider?.nameEn || acc.actualRiderNameAr || acc.actualRiderNameEn;
 
                   return (
-                    <tr key={accId} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
+                    <tr key={accId} className="group hover:bg-[var(--subtle-bg)]/40 transition-colors">
                       {/* Captain ID */}
                       <td className="px-4 py-3 font-mono font-bold text-sm text-[var(--foreground)]">
                         <div className="flex items-center gap-1.5" dir="ltr">
@@ -2639,6 +2768,16 @@ export default function NinjaAccountsPage() {
                                   {statusInfo.isSuspended && <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />}
                                   <span>{statusInfo.detailText}</span>
                                 </span>
+                              )}
+
+                              {acc.monthlyUsageStatus && (
+                                <div className="mt-1">
+                                  <MonthlyUsageBadge
+                                    monthlyUsageStatus={acc.monthlyUsageStatus}
+                                    usageMonth={acc.usageMonth}
+                                    isEn={isEn}
+                                  />
+                                </div>
                               )}
                             </div>
                           );
@@ -2843,15 +2982,15 @@ export default function NinjaAccountsPage() {
                         )}
                       </td>
 
-                      {/* Actions */}
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                      {/* Actions (Sticky on the left matching the header) */}
+                      <td className="px-3 py-3 text-center whitespace-nowrap min-w-[210px] w-[210px] sticky left-0 z-10 bg-[var(--card)] group-hover:bg-[var(--subtle-bg)] shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] border-r border-[var(--border)]">
+                        <div className="flex items-center justify-center gap-1.5 flex-nowrap min-w-max">
                           {/* Assignment History */}
                           {canViewHistory && (
                             <button
                               type="button"
                               onClick={() => handleOpenAssignmentHistory(acc)}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-purple-200 dark:border-purple-900/60 bg-purple-50/60 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 dark:text-purple-300 transition-colors shadow-sm"
+                              className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-purple-200 dark:border-purple-900/60 bg-purple-50/60 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 dark:text-purple-300 transition-colors shadow-sm"
                               title="سجل التعيينات (المناديب وفترة الاستخدام)"
                             >
                               <History className="h-4 w-4" />
@@ -2863,7 +3002,7 @@ export default function NinjaAccountsPage() {
                             type="button"
                             disabled={!canUpdate}
                             onClick={() => openStatusModal(acc)}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] hover:bg-[var(--subtle-bg)] text-purple-600 dark:text-purple-400 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] hover:bg-[var(--subtle-bg)] text-purple-600 dark:text-purple-400 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                             title="التحكم بحالة الحساب (Active, Suspended, Retired, Archived)"
                           >
                             <SlidersHorizontal className="h-4 w-4" />
@@ -2875,7 +3014,7 @@ export default function NinjaAccountsPage() {
                               type="button"
                               disabled={!canAssign}
                               onClick={() => openAssignModal(acc)}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                               title="تعيين الحساب لمندوب"
                             >
                               <UserPlus className="h-4 w-4" />
@@ -2888,7 +3027,7 @@ export default function NinjaAccountsPage() {
                               type="button"
                               disabled={!canReturn}
                               onClick={() => openReturnModal(acc)}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                               title="إرجاع الحساب وإنهاء التعيين"
                             >
                               <UserMinus className="h-4 w-4" />
@@ -2900,7 +3039,7 @@ export default function NinjaAccountsPage() {
                             type="button"
                             disabled={!canUpdate}
                             onClick={() => openCredModal(acc)}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 dark:text-amber-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 dark:text-amber-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                             title="تحديث رقم الهاتف وكلمة المرور"
                           >
                             <KeyRound className="h-4 w-4" />
@@ -2915,7 +3054,7 @@ export default function NinjaAccountsPage() {
                                 code: acc.code || acc.captainId,
                               })
                             }
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 dark:text-blue-300 transition-colors shadow-sm"
+                            className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 dark:text-blue-300 transition-colors shadow-sm"
                             title="إدارة إنتاجية اليوم المشترك (Day Usage)"
                           >
                             <Activity className="h-4 w-4" />
@@ -3586,6 +3725,21 @@ export default function NinjaAccountsPage() {
               />
             </div>
 
+            {/* Assignment Context & Prior Day Contributions */}
+            <AssignmentContextSection
+              ref={ninjaAssignContextRef}
+              accountId={assigningAccount.accountId || assigningAccount.id}
+              businessDate={assignEffectiveFrom}
+              riderProfileId={assignRiderId}
+              platform="ninja"
+              isEn={isEn}
+              onChange={(payload) => {
+                setNinjaContextValid(payload.isValid);
+                setNinjaPreviousDayUsages(payload.previousDayUsages);
+                setNinjaContextRequiresUsage(payload.requiresPreviousUsage);
+              }}
+            />
+
             <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
               <Button
                 type="button"
@@ -3597,7 +3751,7 @@ export default function NinjaAccountsPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={assignSubmitting}
+                disabled={assignSubmitting || (ninjaContextRequiresUsage && !ninjaContextValid)}
                 className="bg-purple-600 text-white hover:bg-purple-700 min-w-[120px]"
               >
                 {assignSubmitting ? "جارٍ الحفظ..." : "تأكيد تعيين الحساب"}
@@ -3744,15 +3898,6 @@ export default function NinjaAccountsPage() {
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5 text-xs text-[var(--foreground)] outline-none focus:border-rose-600"
               />
             </div>
-
-            {/* Day Usage Input Section */}
-            <DayUsageFields
-              value={returnDayUsage}
-              onChange={setReturnDayUsage}
-              platform="ninja"
-              riderName={releasingAccount.actualRider?.nameAr || releasingAccount.actualRiderNameAr}
-              effectiveDate={returnEffectiveTo}
-            />
 
             <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
               <Button

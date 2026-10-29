@@ -21,6 +21,10 @@ import {
   type PlatformAccountDayUsageInput,
   type PlatformAccountDayUpdateRequest,
 } from "@/lib/platforms/api";
+import type {
+  PlatformDayContribution,
+  PreviousDayUsageInput,
+} from "@/lib/platforms/day-usage-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 interface SharedAccountDayUsageModalProps {
@@ -96,6 +100,9 @@ export function SharedAccountDayUsageModal({
   const [participants, setParticipants] = useState<PlatformAccountDayParticipant[]>([]);
   const [editedFigures, setEditedFigures] = useState<Record<string, PlatformAccountDayUsageInput | null>>({});
   const [dirtyAssignments, setDirtyAssignments] = useState<Record<string, boolean>>({});
+  const [contributions, setContributions] = useState<PlatformDayContribution[]>([]);
+  const [editedContribFigures, setEditedContribFigures] = useState<Record<number, PlatformAccountDayUsageInput>>({});
+  const [dirtyContribs, setDirtyContribs] = useState<Record<number, boolean>>({});
   const [reason, setReason] = useState<string>("استكمال وتحديث إنتاجية اليوم المشترك");
 
   const loadDayUsage = useCallback(
@@ -130,6 +137,22 @@ export function SharedAccountDayUsageModal({
         }
         setEditedFigures(initialFigMap);
         setDirtyAssignments({});
+
+        setContributions(res.contributions || []);
+        const initialContribMap: Record<number, PlatformAccountDayUsageInput> = {};
+        (res.contributions || []).forEach((c, idx) => {
+          initialContribMap[idx] = {
+            ordersCount: c.figures?.ordersCount ?? null,
+            workingHours: c.figures?.workingHours ?? null,
+            collectedAmount: c.figures?.collectedAmount ?? null,
+            deductionsAmount: c.figures?.deductionsAmount ?? null,
+            totalValidOffers: c.figures?.totalValidOffers ?? null,
+            declinedOffers: c.figures?.declinedOffers ?? null,
+            missedOffers: c.figures?.missedOffers ?? null,
+          };
+        });
+        setEditedContribFigures(initialContribMap);
+        setDirtyContribs({});
       } catch (err: unknown) {
         console.error("Failed to load day usage:", err);
         const e = err as { message?: string; status?: number };
@@ -226,6 +249,38 @@ export function SharedAccountDayUsageModal({
     }));
   };
 
+  const handleContribFigureChange = (
+    index: number,
+    field: keyof PlatformAccountDayUsageInput,
+    rawVal: string,
+  ) => {
+    let nextVal: number | null = null;
+    const trimmed = rawVal.trim();
+    if (trimmed !== "") {
+      const num = Number(trimmed);
+      if (!Number.isNaN(num)) {
+        nextVal = num;
+      }
+    }
+    setDirtyContribs((prev) => ({ ...prev, [index]: true }));
+    setEditedContribFigures((prev) => {
+      const current = prev[index] || {};
+      return {
+        ...prev,
+        [index]: {
+          ordersCount: current.ordersCount ?? null,
+          workingHours: current.workingHours ?? null,
+          collectedAmount: current.collectedAmount ?? null,
+          deductionsAmount: current.deductionsAmount ?? null,
+          totalValidOffers: current.totalValidOffers ?? null,
+          declinedOffers: current.declinedOffers ?? null,
+          missedOffers: current.missedOffers ?? null,
+          [field]: nextVal,
+        },
+      };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canUpdateDayUsage) {
@@ -265,6 +320,27 @@ export function SharedAccountDayUsageModal({
           };
         }),
         reason: reason.trim(),
+        contributions:
+          contributions.length > 0
+            ? contributions.map((c, idx) => {
+                const isDirty = Boolean(dirtyContribs[idx]);
+                const fig = isDirty ? editedContribFigures[idx] : c.figures;
+                return {
+                  assignmentIds: c.assignmentIds,
+                  figures: {
+                    ordersCount: fig?.ordersCount ?? null,
+                    workingHours: fig?.workingHours ?? null,
+                    collectedAmount: fig?.collectedAmount ?? null,
+                    deductionsAmount: fig?.deductionsAmount ?? null,
+                    totalValidOffers: fig?.totalValidOffers ?? null,
+                    declinedOffers: fig?.declinedOffers ?? null,
+                    missedOffers: fig?.missedOffers ?? null,
+                  },
+                  rowVersion: c.rowVersion,
+                  usageRowVersions: c.usageRowVersions,
+                };
+              })
+            : undefined,
       };
 
       await updatePlatformAccountDayUsage(accountId, payload, date);
@@ -672,6 +748,146 @@ export function SharedAccountDayUsageModal({
                 );
               })}
             </div>
+
+            {/* Grouped Day Contributions Section */}
+            {contributions.length > 0 && (
+              <div className="space-y-3 rounded-2xl border border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/50 dark:bg-indigo-950/20 p-3.5">
+                <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-900/40 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-indigo-950 dark:text-indigo-200">
+                      مساهمات الفترات المتتالية لنفس المندوب (Grouped Contributions)
+                    </span>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 font-bold px-2 py-0.5 rounded-full">
+                      {contributions.length} مساهمة
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {contributions.map((c, idx) => {
+                    const fig = editedContribFigures[idx] || c.figures || {};
+                    return (
+                      <div
+                        key={idx}
+                        className="rounded-xl border border-indigo-100 bg-white p-3 shadow-xs dark:border-indigo-900/40 dark:bg-gray-900 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-gray-900 dark:text-gray-100">
+                            {c.riderNameAr || "مندوب سابق"} (تغطي {c.assignmentIds.length} فترات تكليف)
+                          </span>
+                          {c.missingRequiredFields && c.missingRequiredFields.length > 0 && (
+                            <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-full dark:bg-rose-950/40 dark:text-rose-400">
+                              مطلوب: {c.missingRequiredFields.join(", ")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                          <div>
+                            <label className="mb-1 block text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                              عدد الطلبات
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              disabled={!canUpdateDayUsage}
+                              placeholder="0"
+                              value={fig.ordersCount !== undefined && fig.ordersCount !== null ? fig.ordersCount : ""}
+                              onChange={(e) => handleContribFigureChange(idx, "ordersCount", e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-900 outline-none focus:border-indigo-600 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                            />
+                          </div>
+                          {resolvedPlatform !== "jahez" && (
+                            <div>
+                              <label className="mb-1 block text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                                ساعات العمل
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="24"
+                                step="any"
+                                disabled={!canUpdateDayUsage}
+                                placeholder="0"
+                                value={fig.workingHours !== undefined && fig.workingHours !== null ? fig.workingHours : ""}
+                                onChange={(e) => handleContribFigureChange(idx, "workingHours", e.target.value)}
+                                className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-900 outline-none focus:border-indigo-600 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                              />
+                            </div>
+                          )}
+                          {resolvedPlatform === "ninja" && (
+                            <>
+                              <div>
+                                <label className="mb-1 block text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                                  المحصل كاش
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  disabled={!canUpdateDayUsage}
+                                  placeholder="0.00"
+                                  value={fig.collectedAmount !== undefined && fig.collectedAmount !== null ? fig.collectedAmount : ""}
+                                  onChange={(e) => handleContribFigureChange(idx, "collectedAmount", e.target.value)}
+                                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-900 outline-none focus:border-indigo-600 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                                  الخصومات
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  disabled={!canUpdateDayUsage}
+                                  placeholder="0.00"
+                                  value={fig.deductionsAmount !== undefined && fig.deductionsAmount !== null ? fig.deductionsAmount : ""}
+                                  onChange={(e) => handleContribFigureChange(idx, "deductionsAmount", e.target.value)}
+                                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-900 outline-none focus:border-indigo-600 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                                />
+                              </div>
+                            </>
+                          )}
+                          {resolvedPlatform === "chefz" && (
+                            <>
+                              <div>
+                                <label className="mb-1 block text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                                  العروض الصالحة
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  disabled={!canUpdateDayUsage}
+                                  placeholder="0"
+                                  value={fig.totalValidOffers !== undefined && fig.totalValidOffers !== null ? fig.totalValidOffers : ""}
+                                  onChange={(e) => handleContribFigureChange(idx, "totalValidOffers", e.target.value)}
+                                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-900 outline-none focus:border-indigo-600 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                                  العروض المرفوضة
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  disabled={!canUpdateDayUsage}
+                                  placeholder="0"
+                                  value={fig.declinedOffers !== undefined && fig.declinedOffers !== null ? fig.declinedOffers : ""}
+                                  onChange={(e) => handleContribFigureChange(idx, "declinedOffers", e.target.value)}
+                                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-900 outline-none focus:border-indigo-600 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Reason Input */}
             {canUpdateDayUsage && (

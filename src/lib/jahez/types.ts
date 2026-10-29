@@ -14,6 +14,7 @@ import {
   ImportKind,
   CashboxHandoverStatus,
 } from "./constants";
+import type { PreviousDayUsageInput, MonthlyAccountUsage } from "../platforms/day-usage-types";
 
 export * from "./constants";
 
@@ -51,7 +52,7 @@ export interface Person {
   sponsorId: Id | null;
 }
 
-export interface Account {
+export interface Account extends Partial<MonthlyAccountUsage> {
   accountId: Id;
   code: string;
   externalAccountId: string;
@@ -340,6 +341,7 @@ export interface DecisionRequest {
   approvedCommission?: number | null;
   approvedDebtAdjustment?: number | null;
   useOriginalValues?: boolean;
+  previousDayUsages?: PreviousDayUsageInput[] | null;
 }
 
 export interface Decision {
@@ -647,6 +649,7 @@ export interface HandoverCreate {
   reason: string;
   initialFeePayment?: number;
   paymentReference?: string | null;
+  previousDayUsages?: PreviousDayUsageInput[] | null;
 }
 
 export interface Handover {

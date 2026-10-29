@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
@@ -56,9 +56,13 @@ import {
   Activity,
 } from "lucide-react";
 import { exportToExcel } from "@/lib/export-excel";
-import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { MonthlyUsageBadge } from "@/components/shared/MonthlyUsageBadge";
+import {
+  AssignmentContextSection,
+  type AssignmentContextSectionRef,
+} from "@/components/shared/AssignmentContextSection";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
-import type { PlatformAccountDayUsageInput } from "@/lib/platforms/day-usage-types";
+import type { PlatformAccountDayUsageInput, PreviousDayUsageInput } from "@/lib/platforms/day-usage-types";
 
 export default function PlatformAccountsPage() {
   const { can, locale, refreshSession } = useAuth();
@@ -158,6 +162,12 @@ export default function PlatformAccountsPage() {
     reason: "",
   });
   const [releaseDayUsage, setReleaseDayUsage] = useState<PlatformAccountDayUsageInput | null>(null);
+
+  // Assignment Context state
+  const assignmentContextRef = useRef<AssignmentContextSectionRef>(null);
+  const [contextValid, setContextValid] = useState(true);
+  const [previousDayUsages, setPreviousDayUsages] = useState<PreviousDayUsageInput[] | null | undefined>(undefined);
+  const [contextRequiresUsage, setContextRequiresUsage] = useState(false);
 
   // Supplementary Day Usage Modal State
   const [dayUsageModalAccount, setDayUsageModalAccount] = useState<{
@@ -766,6 +776,16 @@ export default function PlatformAccountsPage() {
       return;
     }
 
+    if (contextRequiresUsage && !contextValid) {
+      toast.warning(
+        isEn ? "Usage figures required" : "بيانات مطلوبة",
+        isEn
+          ? "Please enter OrdersCount for prior riders before assignment. A confirmed 0 is valid."
+          : "يرجى إدخال عدد الطلبات (OrdersCount) للمندوب السابق قبل التعيين. الصفر (0) مدخل صحيح ومؤكد."
+      );
+      return;
+    }
+
     startTransition(async () => {
       try {
         const payload: AssignRequest = {
@@ -775,6 +795,7 @@ export default function PlatformAccountsPage() {
           ...(assignFormData.wasBackdated
             ? { wasBackdated: true, backdatedReason: assignFormData.backdatedReason?.trim() }
             : {}),
+          ...(previousDayUsages && previousDayUsages.length > 0 ? { previousDayUsages } : {}),
         };
         console.log("=== Sending Assign Platform Account Payload ===");
         console.log("Account ID:", assigningAccount.id);
@@ -789,6 +810,15 @@ export default function PlatformAccountsPage() {
         const details = err?.details || err?.problem;
         const errorCode = details?.errorCode || err?.errorCode;
         const limit: PlatformAssignmentLimit | undefined = details?.assignmentLimit;
+
+        if (err?.status === 409 || err?.statusCode === 409) {
+          toast.error(
+            isEn ? "Concurrency Conflict (409)" : "تعارض في سجل اليوم المشترك (409)",
+            details?.detail || err?.message || (isEn ? "Data changed or token conflict. Context reloaded for review." : "تم تغيير بيانات اليوم المشترك أو رمز التزامن. تم إعادة تحميل السياق لمراجعته قبل المحاولة ثانية.")
+          );
+          assignmentContextRef.current?.reloadContext();
+          return;
+        }
 
         if (errorCode === "platform.rider_account_limit_reached" || limit) {
           const max = limit?.maximumActiveAccounts ?? 3;
@@ -1244,6 +1274,15 @@ export default function PlatformAccountsPage() {
 
                     <td className="px-6 py-4">
                       {renderStatusBadge(acc.status, acc.platformCode)}
+                      {acc.monthlyUsageStatus && (
+                        <div className="mt-1">
+                          <MonthlyUsageBadge
+                            monthlyUsageStatus={acc.monthlyUsageStatus}
+                            usageMonth={acc.usageMonth}
+                            isEn={isEn}
+                          />
+                        </div>
+                      )}
                       {(acc.platformCode === "JAHEZ" || acc.platformNameAr?.includes("جاهز") || acc.platformNameEn?.toLowerCase().includes("jahez")) &&
                         acc.status === "Suspended" && (
                           <span className="block text-[10px] text-rose-600 dark:text-rose-400 font-medium mt-1 leading-tight max-w-[180px]">
@@ -1730,11 +1769,30 @@ export default function PlatformAccountsPage() {
             )}
           </div>
 
+          {/* Assignment Context & Prior Day Contributions */}
+          <AssignmentContextSection
+            ref={assignmentContextRef}
+            accountId={assigningAccount?.id}
+            businessDate={assignFormData.effectiveFrom}
+            riderProfileId={assignFormData.actualRiderProfileId}
+            platform="generic"
+            isEn={isEn}
+            onChange={(payload) => {
+              setContextValid(payload.isValid);
+              setPreviousDayUsages(payload.previousDayUsages);
+              setContextRequiresUsage(payload.requiresPreviousUsage);
+            }}
+          />
+
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <Button type="button" variant="secondary" onClick={() => setIsAssignOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={isPending} className="bg-emerald-600 text-white hover:bg-emerald-700">
+            <Button
+              type="submit"
+              disabled={isPending || (contextRequiresUsage && !contextValid)}
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+            >
               {isPending ? t("common.loading") : t("platforms.assignRider")}
             </Button>
           </div>
@@ -1790,14 +1848,6 @@ export default function PlatformAccountsPage() {
               required
             />
           </div>
-
-          <DayUsageFields
-            value={releaseDayUsage}
-            onChange={setReleaseDayUsage}
-            platform="generic"
-            riderName={releasingAccount?.currentAssignment?.actualRiderNameAr}
-            effectiveDate={releaseFormData.effectiveTo}
-          />
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <Button type="button" variant="secondary" onClick={() => setIsReleaseOpen(false)}>

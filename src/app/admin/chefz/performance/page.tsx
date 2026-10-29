@@ -61,6 +61,7 @@ import {
   Clock,
   LayoutGrid,
   List,
+  RotateCcw,
 } from "lucide-react";
 
 type PerformanceTab = "riderReport" | "managementReport" | "dailyRecords" | "settings";
@@ -106,6 +107,25 @@ export default function ChefzPerformancePage() {
   const [filterTo, setFilterTo] = useState(todayStr);
   const [filterAccountId, setFilterAccountId] = useState("");
   const [filterRiderId, setFilterRiderId] = useState("");
+  const [filterAccountType, setFilterAccountType] = useState<string>("ALL");
+
+  const hasActiveFilters = Boolean(
+    filterAccountType !== "ALL" ||
+    filterAccountId ||
+    filterRiderId ||
+    searchQuery.trim() ||
+    filterFrom !== defaultFromStr ||
+    filterTo !== todayStr
+  );
+
+  const resetFilters = useCallback(() => {
+    setFilterAccountType("ALL");
+    setFilterAccountId("");
+    setFilterRiderId("");
+    setSearchQuery("");
+    setFilterFrom(defaultFromStr);
+    setFilterTo(todayStr);
+  }, [defaultFromStr, todayStr]);
 
   // Stale request guard ref to prevent out-of-order API responses from overwriting newer filters
   const activeDailyReqIdRef = useRef(0);
@@ -156,6 +176,7 @@ export default function ChefzPerformancePage() {
         to: filterTo,
         accountId: filterAccountId || undefined,
         riderId: filterRiderId || undefined,
+        accountType: filterAccountType !== "ALL" ? filterAccountType : undefined,
       });
       // Stale response guard: discard if a newer filter change triggered another request
       if (reqId !== activeDailyReqIdRef.current) return;
@@ -168,7 +189,7 @@ export default function ChefzPerformancePage() {
         setDailyLoading(false);
       }
     }
-  }, [filterFrom, filterTo, filterAccountId, filterRiderId]);
+  }, [filterFrom, filterTo, filterAccountId, filterRiderId, filterAccountType]);
 
   useEffect(() => {
     if (activeTab === "dailyRecords") {
@@ -176,7 +197,7 @@ export default function ChefzPerformancePage() {
     }
   }, [activeTab, loadDailyPerformance]);
 
-  // Strictly filter records by from/to dates and account/rider filters
+  // Strictly filter records by from/to dates, account/rider filters, and accountType
   const filteredPerformanceRecords = useMemo(() => {
     if (!performanceRecords || performanceRecords.length === 0) return [];
     return performanceRecords.filter((p) => {
@@ -184,9 +205,41 @@ export default function ChefzPerformancePage() {
       if (filterTo && p.reportDate > filterTo) return false;
       if (filterAccountId && p.accountId !== filterAccountId) return false;
       if (filterRiderId && p.riderProfileId !== filterRiderId) return false;
+      if (filterAccountType && filterAccountType !== "ALL") {
+        const target = filterAccountType.trim().toLowerCase();
+        const itemType = (p.accountType || "").trim().toLowerCase();
+        if (itemType !== target) return false;
+      }
       return true;
     });
-  }, [performanceRecords, filterFrom, filterTo, filterAccountId, filterRiderId]);
+  }, [performanceRecords, filterFrom, filterTo, filterAccountId, filterRiderId, filterAccountType]);
+
+  // Distinct account types discovered in loaded records
+  const discoveredAccountTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of performanceRecords) {
+      if (p.accountType && p.accountType.trim()) {
+        set.add(p.accountType.trim());
+      }
+    }
+    return Array.from(set);
+  }, [performanceRecords]);
+
+  // Count records by account type for quick filter badges
+  const accountTypeCounts = useMemo(() => {
+    let freelancer = 0;
+    let fullTime = 0;
+    for (const p of performanceRecords) {
+      const t = (p.accountType || "").trim().toLowerCase();
+      if (t.includes("free")) freelancer++;
+      else if (t.includes("full")) fullTime++;
+    }
+    return {
+      all: performanceRecords.length,
+      freelancer,
+      fullTime,
+    };
+  }, [performanceRecords]);
 
   // Lookup maps
   const baseAccountMap = useMemo(() => {
@@ -278,6 +331,7 @@ export default function ChefzPerformancePage() {
             accountKey: string;
             accountCode: string;
             accountId: string;
+            accountType: string | null;
             daysMap: Map<
               string,
               {
@@ -345,9 +399,12 @@ export default function ChefzPerformancePage() {
           accountKey: accKey,
           accountCode: code || (p.accountId ? p.accountId.slice(0, 8) : "حساب"),
           accountId: p.accountId,
+          accountType: p.accountType || null,
           daysMap: new Map(),
         };
         group.accountsMap.set(accKey, accEntry);
+      } else if (!accEntry.accountType && p.accountType) {
+        accEntry.accountType = p.accountType;
       }
 
       const dStr = p.reportDate;
@@ -500,6 +557,7 @@ export default function ChefzPerformancePage() {
         accountId: string;
         accountCode: string;
         accountExternalId: string;
+        accountType: string | null;
         ridersMap: Map<
           string,
           {
@@ -555,6 +613,7 @@ export default function ChefzPerformancePage() {
           accountId: p.accountId,
           accountCode: code || (p.accountId ? p.accountId.slice(0, 8) : "حساب غير محدد"),
           accountExternalId: p.externalAccountId || acc?.externalAccountId || "",
+          accountType: p.accountType || null,
           ridersMap: new Map(),
           daysMap: new Map(),
         };
@@ -563,6 +622,9 @@ export default function ChefzPerformancePage() {
         if (!group.accountCode && code) group.accountCode = code;
         if (!group.accountExternalId && (p.externalAccountId || acc?.externalAccountId)) {
           group.accountExternalId = p.externalAccountId || acc?.externalAccountId || "";
+        }
+        if (!group.accountType && p.accountType) {
+          group.accountType = p.accountType;
         }
       }
 
@@ -691,6 +753,7 @@ export default function ChefzPerformancePage() {
         accountId: g.accountId,
         accountCode: g.accountCode,
         accountExternalId: g.accountExternalId,
+        accountType: g.accountType,
         riders: ridersList,
         daysData: g.daysMap,
         totalAccepted,
@@ -867,6 +930,17 @@ export default function ChefzPerformancePage() {
             { header: "كود الحساب", accessor: (a) => a.accountCode, width: 20 },
             { header: "المعرف الخارجي", accessor: (a) => a.accountExternalId || "—", isText: true, width: 18 },
             {
+              header: "نوع الحساب",
+              accessor: (a) =>
+                a.accountType === "Freelancer"
+                  ? "فريلانسر"
+                  : a.accountType === "FullTime"
+                  ? "دوام كامل"
+                  : a.accountType || "—",
+              isText: true,
+              width: 14,
+            },
+            {
               header: "المناديب المشغلين",
               accessor: (a) =>
                 a.riders
@@ -909,6 +983,16 @@ export default function ChefzPerformancePage() {
             header: "المعرف الخارجي",
             accessor: (p) =>
               p.externalAccountId || baseAccountMap.get(p.accountId)?.externalAccountId || "—",
+            isText: true,
+          },
+          {
+            header: "نوع الحساب",
+            accessor: (p) =>
+              p.accountType === "Freelancer"
+                ? "فريلانسر"
+                : p.accountType === "FullTime"
+                ? "دوام كامل"
+                : p.accountType || "—",
             isText: true,
           },
           {
@@ -1052,125 +1136,419 @@ export default function ChefzPerformancePage() {
           {/* Sub Header & Actions */}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold text-[var(--foreground)]">
-                سجلات الأداء اليومي المستوردة
-              </h2>
-              <p className="mt-0.5 text-xs text-[var(--muted)]">
-                استعراض مصفوفة الأداء اليومي بالأيام {entityView === "riders" ? "لكل مندوب وحساباته" : "لكل حساب والمناديب المشغلين له"} من {filterFrom} إلى {filterTo}، وتحميل كافة البيانات دون اقتطاع.
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black text-[var(--foreground)] tracking-tight">
+                  سجلات واستيراد الأداء اليومي
+                </h2>
+                <Badge tone="blue">مصفوفة الأيام والتصنيفات</Badge>
+              </div>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                استعراض مصفوفة الأداء اليومي بالأيام للمناديب والحسابات مع مقارنة معدلات القبول والطلبات والتصدير المباشر.
               </p>
             </div>
 
+            {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Entity View Toggle: Riders vs Accounts */}
-              <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-1 text-xs shadow-xs">
-                <button
-                  type="button"
-                  onClick={() => setEntityView("riders")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
-                    entityView === "riders"
-                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                  title="عرض مصفوفة الأداء للمناديب مع تفاصيل حساباتهم"
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  <span>عرض المناديب</span>
-                  <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.2 text-[10px] font-bold text-[var(--brand)]">
-                    {matrixRiderRows.length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEntityView("accounts")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
-                    entityView === "accounts"
-                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                  title="عرض مصفوفة الأداء للحسابات مع تفاصيل المناديب المشغلين"
-                >
-                  <CreditCard className="h-3.5 w-3.5" />
-                  <span>عرض الحسابات</span>
-                  <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.2 text-[10px] font-bold text-[var(--brand)]">
-                    {matrixAccountRows.length}
-                  </span>
-                </button>
-              </div>
-
-              {/* View Mode Toggle */}
-              <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-1 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("matrix")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
-                    viewMode === "matrix"
-                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                  title="عرض مصفوفة الأيام"
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  مصفوفة الأيام
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("flat")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-bold transition-all ${
-                    viewMode === "flat"
-                      ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                  title="عرض السجلات الفردية المستوردة"
-                >
-                  <List className="h-3.5 w-3.5" />
-                  قائمة السجلات
-                </button>
-              </div>
-
-              {/* Report settings button */}
               <Button
                 variant="secondary"
-                onClick={() => setIsSettingsModalOpen(true)}
-                className="gap-2 text-xs font-semibold"
-              >
-                <SlidersHorizontal className="h-4 w-4 text-[var(--brand)]" />
-                إعدادات التقارير
-              </Button>
-
-              <Button
-                variant="secondary"
+                size="sm"
                 onClick={loadDailyPerformance}
                 disabled={dailyLoading}
-                className="gap-2 text-xs font-semibold"
+                className="gap-1.5 text-xs font-semibold"
+                title="تحديث البيانات"
               >
-                <RefreshCw className={`h-4 w-4 ${dailyLoading ? "animate-spin" : ""}`} />
-                تحديث
+                <RefreshCw className={`h-3.5 w-3.5 ${dailyLoading ? "animate-spin" : ""}`} />
+                <span>تحديث</span>
               </Button>
 
-              {/* Extract to Excel button */}
               <Button
                 variant="secondary"
+                size="sm"
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="gap-1.5 text-xs font-semibold"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
+                <span>إعدادات التقارير</span>
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleExportDailyExcel}
                 disabled={dailyLoading || filteredPerformanceRecords.length === 0}
-                className="gap-2 text-xs font-semibold"
+                className="gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
               >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-                استخراج إكسل {viewMode === "matrix" ? "(المصفوفة)" : "(السجلات)"}
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>تصدير إكسل</span>
               </Button>
 
               {can("chefz.performance.import") && (
                 <Button
+                  size="sm"
                   onClick={() => {
                     setIsUploadOpen(true);
                     setSelectedFile(null);
                     setUploadResult(null);
                     setUploadError(null);
                   }}
-                  className="gap-2 bg-[var(--brand)] text-white hover:opacity-90 text-xs font-semibold"
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs shadow-sm font-bold"
                 >
-                  <Upload className="h-4 w-4" />
-                  رفع تقرير الأداء
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>رفع تقرير الأداء</span>
                 </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Unified Control Center Card (Account Type, View Modes, & Filters) */}
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] shadow-sm divide-y divide-[var(--border)] overflow-hidden">
+            {/* Tier 1: Account Type Tabs & View Switchers */}
+            <div className="p-3.5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between bg-[var(--card-bg)]">
+              {/* Account Type Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-[var(--muted)]">نوع الحساب:</span>
+                <div className="inline-flex rounded-xl bg-[var(--subtle-bg)] p-1 border border-[var(--border)] text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setFilterAccountType("ALL")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition-all ${
+                      filterAccountType === "ALL"
+                        ? "bg-[var(--card-bg)] text-[var(--foreground)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    <span>الكل</span>
+                    <span className="rounded-full bg-gray-500/15 px-1.5 py-0.5 text-[10px] font-mono">
+                      {performanceRecords.length.toLocaleString()}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterAccountType("Freelancer")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition-all ${
+                      filterAccountType === "Freelancer"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "text-[var(--muted)] hover:text-blue-600"
+                    }`}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        filterAccountType === "Freelancer" ? "bg-white" : "bg-blue-500"
+                      }`}
+                    />
+                    <span>فريلانسر</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-mono ${
+                        filterAccountType === "Freelancer"
+                          ? "bg-white/20 text-white"
+                          : "bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300"
+                      }`}
+                    >
+                      {accountTypeCounts.freelancer.toLocaleString()}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterAccountType("FullTime")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition-all ${
+                      filterAccountType === "FullTime"
+                        ? "bg-orange-600 text-white shadow-xs"
+                        : "text-[var(--muted)] hover:text-orange-600"
+                    }`}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        filterAccountType === "FullTime" ? "bg-white" : "bg-orange-500"
+                      }`}
+                    />
+                    <span>دوام كامل</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-mono ${
+                        filterAccountType === "FullTime"
+                          ? "bg-white/20 text-white"
+                          : "bg-orange-100 text-orange-800 dark:bg-orange-900/60 dark:text-orange-300"
+                      }`}
+                    >
+                      {accountTypeCounts.fullTime.toLocaleString()}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* View Switchers */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Entity Switch: Riders vs Accounts */}
+                <div className="inline-flex rounded-xl bg-[var(--subtle-bg)] p-1 border border-[var(--border)] text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setEntityView("riders")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1 font-bold transition-all ${
+                      entityView === "riders"
+                        ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    <span>عرض المناديب</span>
+                    <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.2 text-[10px] font-bold text-[var(--brand)] font-mono">
+                      {matrixRiderRows.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEntityView("accounts")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1 font-bold transition-all ${
+                      entityView === "accounts"
+                        ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    <span>عرض الحسابات</span>
+                    <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.2 text-[10px] font-bold text-[var(--brand)] font-mono">
+                      {matrixAccountRows.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* View Mode Switch: Matrix vs Flat */}
+                <div className="inline-flex rounded-xl bg-[var(--subtle-bg)] p-1 border border-[var(--border)] text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("matrix")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1 font-bold transition-all ${
+                      viewMode === "matrix"
+                        ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <span>المصفوفة</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("flat")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1 font-bold transition-all ${
+                      viewMode === "flat"
+                        ? "bg-[var(--card-bg)] text-[var(--brand)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    <List className="h-3.5 w-3.5" />
+                    <span>قائمة السجلات</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tier 2: Search & Filter Inputs (Balanced 4-Column Grid) */}
+            <div className="p-4 bg-[var(--subtle-bg)]/30">
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4 items-end">
+                {/* 1. Date Range: From & To */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[var(--muted)] block">
+                    الفترة الزمنية <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="date"
+                      value={filterFrom}
+                      onChange={(e) => setFilterFrom(e.target.value)}
+                      max={filterTo || todayStr}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-bg)] py-2 px-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--brand)] font-mono"
+                      title="من تاريخ"
+                    />
+                    <input
+                      type="date"
+                      value={filterTo}
+                      onChange={(e) => setFilterTo(e.target.value)}
+                      min={filterFrom}
+                      max={todayStr}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-bg)] py-2 px-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--brand)] font-mono"
+                      title="إلى تاريخ"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Account Filter */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[var(--muted)] block">الحساب</label>
+                  <SearchableSelect
+                    value={filterAccountId}
+                    onChange={setFilterAccountId}
+                    options={[
+                      { value: "", label: "جميع حسابات شيفز" },
+                      ...baseAccounts.map((a) => ({
+                        value: a.id,
+                        label: `${a.code} ${a.externalAccountId ? `(${a.externalAccountId})` : ""}`,
+                        keywords: `${a.code} ${a.externalAccountId || ""}`,
+                      })),
+                    ]}
+                    placeholder="جميع الحسابات..."
+                  />
+                </div>
+
+                {/* 3. Rider Filter */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[var(--muted)] block">المندوب الفعلي</label>
+                  <SearchableSelect
+                    value={filterRiderId}
+                    onChange={setFilterRiderId}
+                    options={[
+                      { value: "", label: "جميع المناديب" },
+                      ...riders.map((r) => ({
+                        value: r.id,
+                        label: `${r.fullNameAr} (${r.iqamaNo || "بدون إقامة"})`,
+                        keywords: `${r.fullNameAr} ${r.iqamaNo || ""}`,
+                      })),
+                    ]}
+                    placeholder="جميع المناديب..."
+                  />
+                </div>
+
+                {/* 4. Quick Search & Reset Button */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-[var(--muted)] block">بحث سريع</label>
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        onClick={resetFilters}
+                        className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        title="إعادة ضبط كافة الفلاتر"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>مسح الفلاتر</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={
+                        entityView === "riders"
+                          ? "اسم المندوب، الهوية، الكود..."
+                          : "كود الحساب، الخارجي، المندوب..."
+                      }
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-bg)] py-2 pr-9 pl-8 text-xs text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
+                    />
+                    <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)]" />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="absolute left-2.5 top-2.5 text-[var(--muted)] hover:text-[var(--foreground)] cursor-pointer"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tier 3: Summary Bar & Metrics */}
+            <div className="p-3 px-4 flex flex-wrap items-center justify-between gap-3 text-xs bg-[var(--card-bg)]">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[var(--muted)] flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  السجلات المحملة:{" "}
+                  <strong className="text-[var(--foreground)] font-mono font-bold">
+                    {filteredPerformanceRecords.length.toLocaleString()}
+                  </strong>
+                  <span className="text-[var(--muted)] font-mono">({filterFrom} ← {filterTo})</span>
+                </span>
+
+                {hasActiveFilters && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    <span>تصفية مخصصة نشطة</span>
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="hover:text-red-500 ml-0.5 cursor-pointer"
+                      title="إلغاء التصفية"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
+              </div>
+
+              {viewMode === "matrix" && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-1 rounded-lg bg-[var(--subtle-bg)] p-1 border border-[var(--border)]">
+                    <span className="text-[10px] font-semibold text-[var(--muted)] px-1">المعيار بالأعمدة:</span>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("accepted")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                        matrixMetric === "accepted"
+                          ? "bg-[var(--brand)] text-white shadow-xs"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      الطلبات المقبولة
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("valid")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                        matrixMetric === "valid"
+                          ? "bg-[var(--brand)] text-white shadow-xs"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      إجمالي الطلبات
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("rate")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                        matrixMetric === "rate"
+                          ? "bg-[var(--brand)] text-white shadow-xs"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      نسبة القبول %
+                    </button>
+                  </div>
+
+                  <div className="h-4 w-px bg-[var(--border)]" />
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (entityView === "riders") {
+                          setExpandedMatrixRiders(new Set(matrixRiderRows.map((r) => r.riderKey)));
+                        } else {
+                          setExpandedMatrixAccounts(new Set(matrixAccountRows.map((a) => a.accountKey)));
+                        }
+                      }}
+                      className="text-[var(--brand)] hover:underline font-bold cursor-pointer"
+                    >
+                      توسيع الكل
+                    </button>
+                    <span className="text-[var(--muted)]">•</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (entityView === "riders") {
+                          setExpandedMatrixRiders(new Set());
+                        } else {
+                          setExpandedMatrixAccounts(new Set());
+                        }
+                      }}
+                      className="text-[var(--muted)] hover:text-[var(--foreground)] cursor-pointer"
+                    >
+                      طي الكل
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -1218,190 +1596,6 @@ export default function ChefzPerformancePage() {
               <div className="mt-0.5 text-[10px] text-[var(--muted)]" dir="ltr">
                 {filterFrom} → {filterTo}
               </div>
-            </div>
-          </div>
-
-          {/* Filter Toolbar */}
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {/* From Date */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
-                  من تاريخ <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={filterFrom}
-                  onChange={(e) => setFilterFrom(e.target.value)}
-                  max={filterTo || todayStr}
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] font-mono"
-                />
-              </div>
-
-              {/* To Date */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
-                  إلى تاريخ <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={filterTo}
-                  onChange={(e) => setFilterTo(e.target.value)}
-                  min={filterFrom}
-                  max={todayStr}
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] font-mono"
-                />
-              </div>
-
-              {/* Account Filter */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">الحساب</label>
-                <SearchableSelect
-                  value={filterAccountId}
-                  onChange={setFilterAccountId}
-                  options={[
-                    { value: "", label: "جميع حسابات شيفز" },
-                    ...baseAccounts.map((a) => ({
-                      value: a.id,
-                      label: `${a.code} ${a.externalAccountId ? `(${a.externalAccountId})` : ""}`,
-                      keywords: `${a.code} ${a.externalAccountId || ""}`,
-                    })),
-                  ]}
-                  placeholder="اختر الحساب..."
-                />
-              </div>
-
-              {/* Rider Filter */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">المندوب الفعلي</label>
-                <SearchableSelect
-                  value={filterRiderId}
-                  onChange={setFilterRiderId}
-                  options={[
-                    { value: "", label: "جميع المناديب" },
-                    ...riders.map((r) => ({
-                      value: r.id,
-                      label: `${r.fullNameAr} (${r.iqamaNo || "بدون إقامة"})`,
-                      keywords: `${r.fullNameAr} ${r.iqamaNo || ""}`,
-                    })),
-                  ]}
-                  placeholder="اختر المندوب..."
-                />
-              </div>
-
-              {/* Search Query */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">بحث سريع</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={
-                      entityView === "riders"
-                        ? "اسم المندوب، الهوية، كود الحساب..."
-                        : "كود الحساب، كود خارجي، اسم المندوب، الهوية..."
-                    }
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pr-9 pl-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
-                  />
-                  <Search className="absolute right-3 top-2.5 h-4 w-4 text-[var(--muted)]" />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--muted)] border-t border-[var(--border)] pt-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <span>
-                  سجلات الأداء المحملة:{" "}
-                  <strong className="text-[var(--foreground)]">{filteredPerformanceRecords.length}</strong> سجل
-                  (تم جلب كافة الصفحات من {filterFrom} إلى {filterTo})
-                </span>
-
-                {viewMode === "matrix" && (
-                  <div className="flex items-center gap-1.5 bg-[var(--subtle-bg)] px-2.5 py-1 rounded-lg border border-[var(--border)]">
-                    <span className="font-semibold text-[var(--muted)]">المعيار بالأعمدة:</span>
-                    <button
-                      type="button"
-                      onClick={() => setMatrixMetric("accepted")}
-                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                        matrixMetric === "accepted"
-                          ? "bg-[var(--brand)] text-white"
-                          : "text-[var(--foreground)] hover:bg-[var(--card-bg)]"
-                      }`}
-                    >
-                      الطلبات المقبولة
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMatrixMetric("valid")}
-                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                        matrixMetric === "valid"
-                          ? "bg-[var(--brand)] text-white"
-                          : "text-[var(--foreground)] hover:bg-[var(--card-bg)]"
-                      }`}
-                    >
-                      إجمالي الطلبات (Orders)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMatrixMetric("rate")}
-                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                        matrixMetric === "rate"
-                          ? "bg-[var(--brand)] text-white"
-                          : "text-[var(--foreground)] hover:bg-[var(--card-bg)]"
-                      }`}
-                    >
-                      نسبة القبول %
-                    </button>
-                  </div>
-                )}
-
-                {viewMode === "matrix" && (
-                  <div className="flex items-center gap-1.5 bg-[var(--subtle-bg)] px-2.5 py-1 rounded-lg border border-[var(--border)]">
-                    <button
-                      type="button"
-                      onClick={expandAllMatrixRows}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--brand)] hover:opacity-80"
-                      title={entityView === "riders" ? "توسيع كافة المناديب لعرض حساباتهم" : "توسيع كافة الحسابات لعرض مناديبهم"}
-                    >
-                      <ChevronDown className="h-3 w-3" />
-                      توسيع الكل
-                    </button>
-                    <span className="text-[var(--border)]">|</span>
-                    <button
-                      type="button"
-                      onClick={collapseAllMatrixRows}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--foreground)]"
-                      title="طي كافة الصفوف الفرعية"
-                    >
-                      <ChevronUp className="h-3 w-3" />
-                      طي الكل
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {(filterAccountId ||
-                filterRiderId ||
-                searchQuery ||
-                filterFrom !== defaultFromStr ||
-                filterTo !== todayStr) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFilterAccountId("");
-                    setFilterRiderId("");
-                    setSearchQuery("");
-                    setFilterFrom(defaultFromStr);
-                    setFilterTo(todayStr);
-                  }}
-                  className="text-[var(--brand)] hover:underline font-semibold"
-                >
-                  إعادة تعيين الفلاتر
-                </button>
-              )}
             </div>
           </div>
 
@@ -1651,8 +1845,26 @@ export default function ChefzPerformancePage() {
                                   <td className="px-3 py-1.5 text-center font-mono text-[10px] text-[var(--muted)]" dir="ltr">
                                     —
                                   </td>
-                                  <td className="px-3 py-1.5 text-center text-[10px] text-[var(--muted)]">
-                                    حساب تشغيلي
+                                  <td className="px-3 py-1.5 text-center text-[10px]">
+                                    {acc.accountType ? (
+                                      <Badge
+                                        tone={
+                                          acc.accountType.toLowerCase().includes("free")
+                                            ? "blue"
+                                            : acc.accountType.toLowerCase().includes("full")
+                                            ? "orange"
+                                            : "gray"
+                                        }
+                                      >
+                                        {acc.accountType === "Freelancer"
+                                          ? "فريلانسر"
+                                          : acc.accountType === "FullTime"
+                                          ? "دوام كامل"
+                                          : acc.accountType}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-[var(--muted)]">حساب تشغيلي</span>
+                                    )}
                                   </td>
                                   <td className="px-3 py-1.5 text-center font-bold font-mono text-xs text-[var(--brand)] bg-[var(--brand)]/10">
                                     {acc.totalAccepted.toLocaleString()}
@@ -1739,7 +1951,7 @@ export default function ChefzPerformancePage() {
                                   ) : (
                                     <span className="w-5" />
                                   )}
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <CreditCard className="h-3.5 w-3.5 text-[var(--brand)] shrink-0" />
                                     {acc.accountId ? (
                                       <Link
@@ -1753,6 +1965,23 @@ export default function ChefzPerformancePage() {
                                       <span className="font-mono text-xs font-bold text-[var(--foreground)] truncate max-w-[160px]">
                                         {acc.accountCode}
                                       </span>
+                                    )}
+                                    {acc.accountType && (
+                                      <Badge
+                                        tone={
+                                          acc.accountType.toLowerCase().includes("free")
+                                            ? "blue"
+                                            : acc.accountType.toLowerCase().includes("full")
+                                            ? "orange"
+                                            : "gray"
+                                        }
+                                      >
+                                        {acc.accountType === "Freelancer"
+                                          ? "فريلانسر"
+                                          : acc.accountType === "FullTime"
+                                          ? "دوام كامل"
+                                          : acc.accountType}
+                                      </Badge>
                                     )}
                                   </div>
                                 </div>
@@ -2025,6 +2254,7 @@ export default function ChefzPerformancePage() {
                     <tr>
                       <th className="px-4 py-3.5">تاريخ التقرير</th>
                       <th className="px-4 py-3.5">الحساب</th>
+                      <th className="px-4 py-3.5">نوع الحساب</th>
                       <th className="px-4 py-3.5">المندوب الفعلي التاريخي</th>
                       <th className="px-4 py-3.5">رقم الإقامة</th>
                       <th className="px-4 py-3.5">رقم الهوية بالتقرير</th>
@@ -2038,14 +2268,14 @@ export default function ChefzPerformancePage() {
                   <tbody className="divide-y divide-[var(--border)]">
                     {dailyLoading ? (
                       <tr>
-                        <td colSpan={10} className="py-12 text-center text-sm text-[var(--muted)]">
+                        <td colSpan={11} className="py-12 text-center text-sm text-[var(--muted)]">
                           <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
                           جارٍ تحميل سجلات الأداء اليومي...
                         </td>
                       </tr>
                     ) : filteredPerformanceRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="py-12 text-center text-sm text-[var(--muted)]">
+                        <td colSpan={11} className="py-12 text-center text-sm text-[var(--muted)]">
                           لا توجد بيانات أداء مستوردة في نطاق التواريخ المحدد.
                         </td>
                       </tr>
@@ -2073,6 +2303,27 @@ export default function ChefzPerformancePage() {
                                 <div className="text-xs text-[var(--muted)] font-mono" dir="ltr">
                                   {p.externalAccountId || acc?.externalAccountId}
                                 </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {p.accountType ? (
+                                <Badge
+                                  tone={
+                                    p.accountType.toLowerCase().includes("free")
+                                      ? "blue"
+                                      : p.accountType.toLowerCase().includes("full")
+                                      ? "orange"
+                                      : "gray"
+                                  }
+                                >
+                                  {p.accountType === "Freelancer"
+                                    ? "فريلانسر"
+                                    : p.accountType === "FullTime"
+                                    ? "دوام كامل"
+                                    : p.accountType}
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-[var(--muted)]">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3">

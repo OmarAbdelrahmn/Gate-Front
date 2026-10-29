@@ -87,9 +87,14 @@ import {
   Activity,
   RotateCcw,
 } from "lucide-react";
-import { DayUsageFields } from "@/components/shared/DayUsageFields";
+import { MonthlyUsageBadge } from "@/components/shared/MonthlyUsageBadge";
+import {
+  AssignmentContextSection,
+  type AssignmentContextSectionRef,
+} from "@/components/shared/AssignmentContextSection";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
 import type { DayUsage } from "@/lib/jahez/types";
+import type { PreviousDayUsageInput } from "@/lib/platforms/day-usage-types";
 
 function riyadhDateTimeInput(value: string): string {
   return new Date(new Date(value).getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
@@ -146,6 +151,12 @@ export default function JahezAccountsPage() {
   const [handoverSubmitting, setHandoverSubmitting] = useState(false);
   const [handoverRiderHistory, setHandoverRiderHistory] = useState<AssignmentForCapacity[]>([]);
   const [handoverCheckingHistory, setHandoverCheckingHistory] = useState(false);
+
+  // Assignment Context state
+  const jahezHandoverContextRef = useRef<AssignmentContextSectionRef>(null);
+  const [jahezContextValid, setJahezContextValid] = useState(true);
+  const [jahezPreviousDayUsages, setJahezPreviousDayUsages] = useState<PreviousDayUsageInput[] | null | undefined>(undefined);
+  const [jahezContextRequiresUsage, setJahezContextRequiresUsage] = useState(false);
 
   useEffect(() => {
     if (!selectedRiderId || !isHandoverOpen) {
@@ -557,6 +568,15 @@ export default function JahezAccountsPage() {
       toast.warning("تنبيه", "يرجى إدخال مرجع الدفع / رقم الإيصال عند تسجيل قبض رسوم أولية");
       return;
     }
+    if (jahezContextRequiresUsage && !jahezContextValid) {
+      toast.warning(
+        isEn ? "Usage figures required" : "بيانات مطلوبة",
+        isEn
+          ? "Please enter OrdersCount for prior riders before handover. A confirmed 0 is valid."
+          : "يرجى إدخال عدد الطلبات (OrdersCount) للمندوب السابق قبل تأكيد التسليم. الصفر (0) مدخل صحيح ومؤكد."
+      );
+      return;
+    }
     setHandoverSubmitting(true);
     try {
       const effectiveAtUtc = new Date(handoverEffectiveAt).toISOString();
@@ -567,10 +587,16 @@ export default function JahezAccountsPage() {
         reason: handoverReason.trim() || "تسليم جديد",
         initialFeePayment: Number(handoverInitialFee) || 0,
         paymentReference: handoverPaymentRef.trim() || undefined,
+        ...(jahezPreviousDayUsages && jahezPreviousDayUsages.length > 0
+          ? { previousDayUsages: jahezPreviousDayUsages }
+          : {}),
       });
       setIsHandoverOpen(false);
       loadData();
     } catch (err: unknown) {
+      if ((err as { status?: number })?.status === 409) {
+        jahezHandoverContextRef.current?.reloadContext();
+      }
       toast.error("خطأ في التسليم", err instanceof Error ? err.message : "فشل تسليم الحساب");
     } finally {
       setHandoverSubmitting(false);
@@ -1252,7 +1278,7 @@ export default function JahezAccountsPage() {
 
       {/* ----------------- Statistics Banner ----------------- */}
       {statistics && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
           <div
             onClick={clearFilters}
             className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
@@ -1626,6 +1652,16 @@ export default function JahezAccountsPage() {
                             {acc.isAssigned ? "مسند حالياً" : "غير مسند"}
                           </span>
 
+                          {acc.monthlyUsageStatus && (
+                            <div className="mt-1">
+                              <MonthlyUsageBadge
+                                monthlyUsageStatus={acc.monthlyUsageStatus}
+                                usageMonth={acc.usageMonth}
+                                isEn={isEn}
+                              />
+                            </div>
+                          )}
+
                           {hasConsistencyIssue && (
                             <span
                               className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
@@ -1892,6 +1928,23 @@ export default function JahezAccountsPage() {
             />
           </div>
 
+          {/* Assignment Context & Prior Day Contributions */}
+          <AssignmentContextSection
+            ref={jahezHandoverContextRef}
+            accountId={handoverAccount?.accountId}
+            businessDate={
+              handoverEffectiveAt ? handoverEffectiveAt.split("T")[0] : getRiyadhTodayDate()
+            }
+            riderProfileId={selectedRiderId}
+            platform="jahez"
+            isEn={isEn}
+            onChange={(payload) => {
+              setJahezContextValid(payload.isValid);
+              setJahezPreviousDayUsages(payload.previousDayUsages);
+              setJahezContextRequiresUsage(payload.requiresPreviousUsage);
+            }}
+          />
+
           <div className="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
             <Button
               variant="secondary"
@@ -1906,7 +1959,8 @@ export default function JahezAccountsPage() {
                 handoverSubmitting ||
                 !selectedRiderId ||
                 !isHandoverCapacityAllowed ||
-                handoverCheckingHistory
+                handoverCheckingHistory ||
+                (jahezContextRequiresUsage && !jahezContextValid)
               }
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2"
             >
@@ -2448,16 +2502,6 @@ export default function JahezAccountsPage() {
             )}
           </div>
 
-          {/* 6. بيانات إنتاجية اليوم عند السحب */}
-          {(opMode === OperationMode.Withdraw || opMode === OperationMode.SettleAndWithdraw) && (
-            <DayUsageFields
-              value={opDayUsage}
-              onChange={setOpDayUsage}
-              platform="jahez"
-              riderName={opAccount?.actualRider?.nameAr || opAccount?.owner?.nameAr}
-              effectiveDate={opThroughDate}
-            />
-          )}
 
           {savedOperation?.dayUsageJson && (
             <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-2.5 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200">
@@ -2710,6 +2754,16 @@ export default function JahezAccountsPage() {
                         </span>{" "}
                         ({accountDetails.account.isAssigned ? "مسند" : "متاح"})
                       </div>
+                      {accountDetails.account.monthlyUsageStatus && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <span>الاستخدام الشهري:</span>
+                          <MonthlyUsageBadge
+                            monthlyUsageStatus={accountDetails.account.monthlyUsageStatus}
+                            usageMonth={accountDetails.account.usageMonth}
+                            isEn={isEn}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/40">
