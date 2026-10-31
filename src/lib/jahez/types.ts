@@ -502,7 +502,12 @@ export interface RiderDebtRepaymentResponse {
 
 export interface RiderPartialDebtRepaymentRequest {
   amount: number;
-  expectedAmount?: number;
+  expectedAmount: number;
+  expectedAmounts?: {
+    dashboardDebt: number;
+    commission: number;
+    total: number;
+  };
   paidAmount?: number;
   fund?: Fund;
   reference: string;

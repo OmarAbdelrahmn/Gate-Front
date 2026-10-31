@@ -3,7 +3,7 @@
 
 import { authFetch, authDownload, type CustomRequestInit } from "../auth/api";
 import { readAuth } from "../auth/token-store";
-import { Fund } from "./constants";
+import { Fund, Purpose } from "./constants";
 import type {
   Account,
   AccountDetails,
@@ -905,13 +905,20 @@ export async function repayJahezTransferredDebt(
   const headers = new Headers(init?.headers);
   headers.set("Idempotency-Key", key);
 
+  const payload = {
+    fund: Number(data.fund ?? Fund.Cashbox),
+    reference: data.reference.trim(),
+    reason: data.reason.trim(),
+    purpose: data.purpose ?? Purpose.TransferredDebtRepayment,
+  };
+
   return authFetch<TransferredDebt>(
     `${ROOT}/transferred-debts/${encodeURIComponent(debtId)}/repayment`,
     {
       ...init,
       method: "POST",
       headers,
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
       notifySuccess: init?.notifySuccess ?? "تم سداد كامل المستحق بنجاح",
     },
   );
@@ -1031,13 +1038,20 @@ export async function repayJahezRiderTransferredDebts(
   const headers = new Headers(init?.headers);
   headers.set("Idempotency-Key", key);
 
+  const payload = {
+    expectedAmount: Number(data.expectedAmount),
+    fund: Number(data.fund ?? Fund.Cashbox),
+    reference: data.reference.trim(),
+    reason: data.reason.trim(),
+  };
+
   return authFetch<RiderDebtRepaymentResponse>(
     `${ROOT}/riders/${encodeURIComponent(riderId)}/transferred-debts/repayment`,
     {
       ...init,
       method: "POST",
       headers,
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
       notifySuccess: init?.notifySuccess ?? "تم سداد جميع المديونيات المرحلة بقيمة المستحق بنجاح",
     },
   );
@@ -1057,14 +1071,21 @@ export async function repayJahezRiderPartialTransferredDebt(
   const headers = new Headers(init?.headers);
   headers.set("Idempotency-Key", key);
 
-  const payload = {
-    amount: data.amount,
-    expectedAmount: data.amount,
-    paidAmount: data.amount,
-    fund: data.fund ?? Fund.Cashbox,
-    reference: data.reference,
-    reason: data.reason,
+  const payload: Record<string, unknown> = {
+    amount: Number(data.amount),
+    expectedAmount: Number(data.expectedAmount),
+    fund: Number(data.fund ?? Fund.Cashbox),
+    reference: data.reference.trim(),
+    reason: data.reason.trim(),
   };
+
+  if (data.expectedAmounts) {
+    payload.expectedAmounts = {
+      dashboardDebt: Number(data.expectedAmounts.dashboardDebt),
+      commission: Number(data.expectedAmounts.commission),
+      total: Number(data.expectedAmounts.total),
+    };
+  }
 
   return authFetch<RiderPartialDebtRepaymentResponse>(
     `${ROOT}/riders/${encodeURIComponent(riderId)}/transferred-debts/partial-repayment`,

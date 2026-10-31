@@ -187,6 +187,7 @@ export default function JahezCashboxPage() {
   const [isBulkRepayOpen, setIsBulkRepayOpen] = useState(false);
   const [bulkRepayRider, setBulkRepayRider] = useState<RiderTransferredDebtSummary | null>(null);
   const [bulkRepayExpectedAmount, setBulkRepayExpectedAmount] = useState<number>(0);
+  const [bulkRepayFund, setBulkRepayFund] = useState<Fund>(Fund.Cashbox);
   const [bulkRepayRef, setBulkRepayRef] = useState("");
   const [bulkRepayReason, setBulkRepayReason] = useState("تحصيل كامل المديونيات المرحلة على المندوب");
   const [bulkRepayKey, setBulkRepayKey] = useState<string>("");
@@ -196,6 +197,7 @@ export default function JahezCashboxPage() {
   // Single Debt Repay Modal State (from drawer or history)
   const [isSingleRepayOpen, setIsSingleRepayOpen] = useState(false);
   const [singleRepayDebt, setSingleRepayDebt] = useState<TransferredDebt | null>(null);
+  const [singleRepayFund, setSingleRepayFund] = useState<Fund>(Fund.Cashbox);
   const [singleRepayRef, setSingleRepayRef] = useState("");
   const [singleRepayReason, setSingleRepayReason] = useState("سداد كامل المستحق المرحل");
   const [singleRepayKey, setSingleRepayKey] = useState<string>("");
@@ -805,6 +807,7 @@ export default function JahezCashboxPage() {
   const openBulkRepayModal = async (summary: RiderTransferredDebtSummary) => {
     setBulkRepayRider(summary);
     setBulkRepayExpectedAmount(summary.outstandingAmount);
+    setBulkRepayFund(Fund.Cashbox);
     setBulkRepayRef(`RCPT-${getRiyadhTodayDate().replace(/-/g, "")}-${Date.now().toString().slice(-4)}`);
     setBulkRepayReason("تحصيل كامل المديونيات المرحلة على المندوب");
     setBulkRepayKey(generateIdempotencyKey("bulk-debt-repay"));
@@ -838,7 +841,7 @@ export default function JahezCashboxPage() {
         bulkRepayRider.riderProfileId,
         {
           expectedAmount: bulkRepayExpectedAmount,
-          fund: Fund.Cashbox, // Fixed to 1 Cashbox
+          fund: bulkRepayFund,
           reference: bulkRepayRef.trim(),
           reason: bulkRepayReason.trim(),
         },
@@ -850,6 +853,7 @@ export default function JahezCashboxPage() {
       );
       setIsBulkRepayOpen(false);
       setIsRiderDrawerOpen(false);
+      setBulkRepayKey(generateIdempotencyKey("bulk-debt-repay"));
       loadRiderDebts(riderDebtsPage);
       loadHistoryDebts(historyDebtsPage);
       loadAllData(page);
@@ -892,6 +896,7 @@ export default function JahezCashboxPage() {
         loadRiderDebts(riderDebtsPage);
         setBulkRepayKey(generateIdempotencyKey("bulk-repay-retry"));
       } else {
+        setBulkRepayKey(generateIdempotencyKey("bulk-debt-repay"));
         toast.error("فشل السداد", msg);
       }
     } finally {
@@ -901,6 +906,7 @@ export default function JahezCashboxPage() {
 
   const openSingleDebtRepayModal = (debt: TransferredDebt) => {
     setSingleRepayDebt(debt);
+    setSingleRepayFund(Fund.Cashbox);
     setSingleRepayRef(`RCPT-${getRiyadhTodayDate().replace(/-/g, "")}-${Date.now().toString().slice(-4)}`);
     setSingleRepayReason("سداد كامل المستحق المرحل");
     setSingleRepayKey(generateIdempotencyKey("single-debt-repay"));
@@ -918,15 +924,16 @@ export default function JahezCashboxPage() {
       await repayJahezTransferredDebt(
         singleRepayDebt.id,
         {
-          fund: Fund.Cashbox,
+          fund: singleRepayFund,
           reference: singleRepayRef.trim(),
-          reason: singleRepayReason.trim() || "سداد كامل المستحق المرحل",
+          reason: singleRepayReason.trim() || (singleRepayFund === Fund.PetroApp ? "سداد المديونية عبر بترواب" : "سداد كامل المستحق المرحل"),
           purpose: Purpose.TransferredDebtRepayment,
         },
         singleRepayKey,
       );
       toast.success("تم السداد", `تم سداد الالتزام بقيمة ${singleRepayDebt.amount.toFixed(2)} ر.س بنجاح`);
       setIsSingleRepayOpen(false);
+      setSingleRepayKey(generateIdempotencyKey("single-debt-repay"));
       if (selectedRiderSummary) {
         const fresh = await getJahezRiderTransferredDebts(selectedRiderSummary.riderProfileId, 1, 50);
         setRiderDetailDebts(fresh?.items || []);
@@ -935,7 +942,16 @@ export default function JahezCashboxPage() {
       loadHistoryDebts(historyDebtsPage);
       loadAllData(page);
     } catch (err: unknown) {
-      toast.error("فشل السداد", err instanceof Error ? err.message : "تعذر سداد المستحق");
+      setSingleRepayKey(generateIdempotencyKey("single-debt-repay"));
+      const msg = err instanceof Error ? err.message : "تعذر سداد المستحق";
+      if (msg.includes("409") || msg.includes("تعارض") || msg.includes("تغير")) {
+        toast.error("تعارض في البيانات (409)", "تغيرت حالة المديونية أو سددت مسبقاً، يرجى مراجعة البيانات المحدثة.");
+        loadHistoryDebts(historyDebtsPage);
+        loadRiderDebts(riderDebtsPage);
+        loadAllData(page);
+      } else {
+        toast.error("فشل السداد", msg);
+      }
     } finally {
       setSingleRepaySubmitting(false);
     }
@@ -983,17 +999,27 @@ export default function JahezCashboxPage() {
       return;
     }
 
+    const amounts = partialRepayRider.amounts;
+    const dashboardDebt = amounts ? (amounts.dashboardDebt ?? (amounts as any).DashboardDebt ?? 0) : 0;
+    const commission = amounts ? (amounts.commission ?? (amounts as any).Commission ?? 0) : 0;
+    const total = amounts ? (amounts.total ?? (amounts as any).Total ?? partialRepayRider.outstandingAmount) : partialRepayRider.outstandingAmount;
+    const expectedAmount = partialRepayRider.outstandingAmount ?? total;
+
     setPartialRepaySubmitting(true);
     try {
       const res = await repayJahezRiderPartialTransferredDebt(
         partialRepayRider.riderProfileId,
         {
           amount: numAmount,
-          expectedAmount: numAmount,
-          paidAmount: numAmount,
+          expectedAmount: Number(expectedAmount),
+          expectedAmounts: {
+            dashboardDebt: Number(dashboardDebt),
+            commission: Number(commission),
+            total: Number(total),
+          },
           fund: partialRepayFund,
           reference: partialRepayRef.trim(),
-          reason: partialRepayReason.trim(),
+          reason: partialRepayReason.trim() || (partialRepayFund === Fund.PetroApp ? "سداد جزئي عبر بترواب" : "سداد جزئي لمديونية المندوب المرحلة"),
         },
         partialRepayKey,
       );
@@ -1006,6 +1032,7 @@ export default function JahezCashboxPage() {
         }`,
       );
       setIsPartialRepayOpen(false);
+      setPartialRepayKey(generateIdempotencyKey("partial-debt-repay"));
       if (isRiderDrawerOpen && selectedRiderSummary?.riderProfileId === partialRepayRider.riderProfileId) {
         const [freshSummary, freshDebts] = await Promise.all([
           getJahezRiderTransferredDebtsSummary(partialRepayRider.riderProfileId).catch(() => null),
@@ -1018,7 +1045,24 @@ export default function JahezCashboxPage() {
       loadHistoryDebts(historyDebtsPage);
       loadAllData(page);
     } catch (err: unknown) {
-      toast.error("فشل السداد الجزئي", err instanceof Error ? err.message : "تعذر تسجيل السداد الجزئي");
+      setPartialRepayKey(generateIdempotencyKey("partial-debt-repay"));
+      const msg = err instanceof Error ? err.message : "تعذر تسجيل السداد الجزئي";
+      if (msg.includes("409") || msg.includes("تعارض") || msg.includes("تغير")) {
+        toast.error(
+          "تعارض في البيانات (409)",
+          "تغير إجمالي المديونية أو سددت مسبقاً؛ يرجى مراجعة الأرقام المحدثة قبل التأكيد بمفتاح جديد.",
+        );
+        try {
+          const freshSummary = await getJahezRiderTransferredDebtsSummary(partialRepayRider.riderProfileId);
+          if (freshSummary) {
+            setPartialRepayRider(freshSummary);
+          }
+        } catch {
+          // ignore
+        }
+      } else {
+        toast.error("فشل السداد الجزئي", msg);
+      }
     } finally {
       setPartialRepaySubmitting(false);
     }
@@ -2732,7 +2776,7 @@ export default function JahezCashboxPage() {
                   </div>
                 )}
                 <div className="mt-2 text-[10px] text-emerald-800 dark:text-emerald-300">
-                  تنبيه: يُسدد كامل المبلغ الفعلي نقداً بصندوق الخزنة (جهة ثابتة: 1). لا يمكن التجزئة أو الخصم.
+                  تنبيه: يُسدد كامل المبلغ الفعلي وفق طريقة التحصيل المحددة (الخزنة أو بترواب). لا يمكن التجزئة أو الخصم.
                 </div>
               </div>
 
@@ -2749,13 +2793,16 @@ export default function JahezCashboxPage() {
 
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  الجهة المالية المستلمة
+                  طريقة التحصيل *
                 </label>
-                <Input
-                  value="صندوق الخزنة (نقدياً - سياسة ثابتة)"
-                  disabled
-                  className="bg-gray-100 dark:bg-gray-800 cursor-not-allowed font-semibold"
-                />
+                <select
+                  value={bulkRepayFund}
+                  onChange={(e) => setBulkRepayFund(Number(e.target.value) as Fund)}
+                  className="w-full rounded-xl border border-gray-300 bg-white p-2.5 text-xs text-gray-900 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 font-semibold"
+                >
+                  <option value={Fund.Cashbox}>الخزنة (نقدياً)</option>
+                  <option value={Fund.PetroApp}>بترواب (محفظة بترواب)</option>
+                </select>
               </div>
 
               <div>
@@ -2846,13 +2893,16 @@ export default function JahezCashboxPage() {
 
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  الجهة المالية المستلمة
+                  طريقة التحصيل *
                 </label>
-                <Input
-                  value="صندوق الخزنة (نقدياً)"
-                  disabled
-                  className="bg-gray-100 dark:bg-gray-800 cursor-not-allowed font-semibold"
-                />
+                <select
+                  value={singleRepayFund}
+                  onChange={(e) => setSingleRepayFund(Number(e.target.value) as Fund)}
+                  className="w-full rounded-xl border border-gray-300 bg-white p-2.5 text-xs text-gray-900 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 font-semibold"
+                >
+                  <option value={Fund.Cashbox}>الخزنة (نقدياً)</option>
+                  <option value={Fund.PetroApp}>بترواب (محفظة بترواب)</option>
+                </select>
               </div>
 
               <div>
@@ -2956,15 +3006,15 @@ export default function JahezCashboxPage() {
 
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  الجهة المالية المستلمة
+                  طريقة التحصيل *
                 </label>
                 <select
                   value={partialRepayFund}
                   onChange={(e) => setPartialRepayFund(Number(e.target.value) as Fund)}
-                  className="w-full rounded-xl border border-gray-300 bg-white p-2.5 text-xs text-gray-900 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                  className="w-full rounded-xl border border-gray-300 bg-white p-2.5 text-xs text-gray-900 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 font-semibold"
                 >
-                  <option value={Fund.Cashbox}>صندوق الخزنة (نقدياً)</option>
-                  <option value={Fund.Bank}>حساب البنك (تحويل)</option>
+                  <option value={Fund.Cashbox}>الخزنة (نقدياً)</option>
+                  <option value={Fund.PetroApp}>بترواب (محفظة بترواب)</option>
                 </select>
               </div>
 
