@@ -286,18 +286,79 @@ export async function getVehicleDailyDistanceReport(
 export async function getAllVehiclesDailyDistanceReport(params: {
   fromDate: string;
   toDate: string;
+  search?: string;
   page?: number;
   pageSize?: number;
 }): Promise<AllVehiclesDailyDistanceReportResponse> {
   const query = new URLSearchParams();
   query.set("fromDate", params.fromDate);
   query.set("toDate", params.toDate);
+  if (params.search?.trim()) query.set("search", params.search.trim());
   if (params.page != null) query.set("page", params.page.toString());
   if (params.pageSize != null) query.set("pageSize", params.pageSize.toString());
 
   return await authFetch<AllVehiclesDailyDistanceReportResponse>(
     `/api/vehicle-daily-distances/reports/vehicles?${query.toString()}`
   );
+}
+
+/**
+ * Fetch detailed daily distance report for ALL vehicles across all pages.
+ */
+export async function fetchEntireFleetDailyDistanceReport(params: {
+  fromDate: string;
+  toDate: string;
+  search?: string;
+}): Promise<AllVehiclesDailyDistanceReportResponse> {
+  const pageSize = 100;
+  const first = await getAllVehiclesDailyDistanceReport({
+    fromDate: params.fromDate,
+    toDate: params.toDate,
+    search: params.search,
+    page: 1,
+    pageSize,
+  });
+
+  const totalCount = first.totalCount || first.items.length;
+  if (totalCount <= pageSize) {
+    return first;
+  }
+
+  // Fetch remaining pages in parallel
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const remainingPromises: Promise<AllVehiclesDailyDistanceReportResponse>[] = [];
+  for (let p = 2; p <= totalPages; p++) {
+    remainingPromises.push(
+      getAllVehiclesDailyDistanceReport({
+        fromDate: params.fromDate,
+        toDate: params.toDate,
+        search: params.search,
+        page: p,
+        pageSize,
+      })
+    );
+  }
+
+  const remainingResults = await Promise.all(remainingPromises);
+  const allItems = [...first.items];
+  const seenIds = new Set(first.items.map((it) => it.vehicle.vehicleId));
+
+  for (const pageRes of remainingResults) {
+    for (const it of pageRes.items || []) {
+      if (!seenIds.has(it.vehicle.vehicleId)) {
+        seenIds.add(it.vehicle.vehicleId);
+        allItems.push(it);
+      }
+    }
+  }
+
+  return {
+    ...first,
+    page: 1,
+    pageSize: allItems.length,
+    totalCount: allItems.length,
+    items: allItems,
+  };
 }
 
 /**

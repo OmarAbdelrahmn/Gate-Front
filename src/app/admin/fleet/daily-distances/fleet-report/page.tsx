@@ -38,6 +38,7 @@ import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
 import {
   getAllVehiclesDailyDistanceReport,
+  fetchEntireFleetDailyDistanceReport,
   getAppliedSourceInfo,
   getDailyDistanceErrorMessage,
   type AllVehiclesDailyDistanceReportResponse,
@@ -131,47 +132,42 @@ function FleetDailyDistanceReportContent() {
     return true;
   }, []);
 
-  // Fetch Report Data from API
-  const fetchReport = useCallback(
-    async (targetPage = page, targetPageSize = pageSize) => {
-      if (!validateDateRange(fromDate, toDate)) return;
+  // Fetch Report Data from API across all vehicles in the fleet
+  const fetchReport = useCallback(async () => {
+    if (!validateDateRange(fromDate, toDate)) return;
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const res = await getAllVehiclesDailyDistanceReport({
-          fromDate,
-          toDate,
-          page: targetPage,
-          pageSize: targetPageSize,
-        });
-        setReportData(res);
-      } catch (err: any) {
-        console.error("Fetch fleet daily distances report error:", err);
-        const errorCode = err?.details?.errorCode || err?.code || err?.errorCode;
-        const detailMsg =
-          err?.details?.detail || err?.details?.message || err?.message || "تعذر تحميل تقرير مسافات الأسطول";
-        const errInfo = getDailyDistanceErrorMessage(errorCode, detailMsg);
-        setError(`${errInfo.title}: ${errInfo.description}`);
-        toast.error(errInfo.title, errInfo.description);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [fromDate, toDate, page, pageSize, validateDateRange]
-  );
+    try {
+      const res = await fetchEntireFleetDailyDistanceReport({
+        fromDate,
+        toDate,
+      });
+      setReportData(res);
+    } catch (err: any) {
+      console.error("Fetch fleet daily distances report error:", err);
+      const errorCode = err?.details?.errorCode || err?.code || err?.errorCode;
+      const detailMsg =
+        err?.details?.detail || err?.details?.message || err?.message || "تعذر تحميل تقرير مسافات الأسطول";
+      const errInfo = getDailyDistanceErrorMessage(errorCode, detailMsg);
+      setError(`${errInfo.title}: ${errInfo.description}`);
+      toast.error(errInfo.title, errInfo.description);
+    } finally {
+      setLoading(false);
+    }
+  }, [fromDate, toDate, validateDateRange]);
 
-  // Load report on mount or when page/pageSize change
+  // Load report on mount or when fromDate/toDate change
   useEffect(() => {
-    fetchReport(page, pageSize);
-  }, [page, pageSize, fetchReport]);
+    fetchReport();
+  }, [fromDate, toDate, fetchReport]);
 
   // Handle Search submit
   const handleApplyFilter = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setPage(1);
-    fetchReport(1, pageSize);
+    fetchReport();
   };
 
   // Quick Range Setters
@@ -191,10 +187,9 @@ function FleetDailyDistanceReportContent() {
 
   // Expand / Collapse all on current page
   const toggleAllExpanded = (expand: boolean) => {
-    if (!reportData?.items) return;
     const newState: Record<string, boolean> = {};
     if (expand) {
-      reportData.items.forEach((item) => {
+      displayedItems.forEach((item) => {
         newState[item.vehicle.vehicleId] = true;
       });
     }
@@ -211,7 +206,7 @@ function FleetDailyDistanceReportContent() {
     return Array.from(set).sort();
   }, [reportData]);
 
-  // Client filtered items (by search text, city, vehicle type)
+  // Client filtered items (by search text, city, vehicle type) across ALL fleet vehicles
   const filteredItems = useMemo(() => {
     if (!reportData?.items) return [];
     return reportData.items.filter((item) => {
@@ -231,7 +226,20 @@ function FleetDailyDistanceReportContent() {
     });
   }, [reportData, search, cityFilter, typeFilter]);
 
-  // Aggregate KPIs for the currently loaded vehicles
+  // Reset to first page whenever search or filter criteria change
+  useEffect(() => {
+    setPage(1);
+  }, [search, cityFilter, typeFilter, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+
+  // Items sliced for the active page
+  const displayedItems = useMemo(() => {
+    const startIndex = (page - 1) * pageSize;
+    return filteredItems.slice(startIndex, startIndex + pageSize);
+  }, [filteredItems, page, pageSize]);
+
+  // Aggregate KPIs for all matching vehicles in the fleet
   const currentBatchSummary = useMemo(() => {
     if (!filteredItems.length) {
       return {
@@ -337,8 +345,6 @@ function FleetDailyDistanceReportContent() {
       setExporting(false);
     }
   };
-
-  const totalPages = reportData ? Math.ceil(reportData.totalCount / pageSize) : 1;
 
   return (
     <div className="space-y-6 pb-12">
@@ -722,7 +728,7 @@ function FleetDailyDistanceReportContent() {
           ) : viewMode === "cards" ? (
             /* Mode 1: Detailed Expandable Cards */
             <div className="space-y-4">
-              {filteredItems.map((item) => {
+              {displayedItems.map((item) => {
                 const v = item.vehicle;
                 const isExpanded = Boolean(expandedVehicleIds[v.vehicleId]);
 
@@ -993,7 +999,7 @@ function FleetDailyDistanceReportContent() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[11px]">
-                    {filteredItems.map((item, idx) => {
+                    {displayedItems.map((item, idx) => {
                       const v = item.vehicle;
                       return (
                         <tr
@@ -1090,22 +1096,27 @@ function FleetDailyDistanceReportContent() {
           )}
 
           {/* Pagination Controls */}
-          {reportData && reportData.totalCount > 0 && (
+          {filteredItems.length > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs">
               <div className="text-slate-500 font-medium">
                 عرض{" "}
                 <strong className="text-slate-900 dark:text-white">
-                  {Math.min((page - 1) * pageSize + 1, reportData.totalCount)}
+                  {Math.min((page - 1) * pageSize + 1, filteredItems.length)}
                 </strong>{" "}
                 إلى{" "}
                 <strong className="text-slate-900 dark:text-white">
-                  {Math.min(page * pageSize, reportData.totalCount)}
+                  {Math.min(page * pageSize, filteredItems.length)}
                 </strong>{" "}
                 من أصل{" "}
                 <strong className="text-slate-900 dark:text-white">
-                  {reportData.totalCount.toLocaleString()}
+                  {filteredItems.length.toLocaleString()}
                 </strong>{" "}
-                مركبة مسجلة
+                مركبة مطابقة
+                {reportData && filteredItems.length !== reportData.items.length && (
+                  <span className="text-[11px] text-slate-400 mr-1.5">
+                    (من إجمالي {reportData.items.length.toLocaleString()} مركبة بالأسطول)
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -1123,7 +1134,7 @@ function FleetDailyDistanceReportContent() {
                     <option value="10">10</option>
                     <option value="20">20</option>
                     <option value="50">50</option>
-                    <option value="100">100</option>
+                    <option value="100">100 (الكل)</option>
                   </select>
                 </div>
 
