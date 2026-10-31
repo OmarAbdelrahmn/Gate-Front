@@ -482,6 +482,8 @@ export interface RiderTransferredDebtSummary {
   unpaidDebtCount: number;
   outstandingAmount: number;
   amounts: TransferAmounts | null;
+  totalCommission?: number | null;
+  TotalCommission?: number | null;
 }
 
 export interface RiderDebtRepaymentRequest {
@@ -516,8 +518,12 @@ export interface RiderPartialDebtRepaymentResponse {
 
 export interface RiderDebtCommissionUpdate {
   commission: number;
-  newCommission?: number;
-  amount?: number;
+  expectedCommission: number;
+  expectedAmounts: {
+    dashboardDebt: number;
+    commission: number;
+    total: number;
+  };
   reason: string;
 }
 

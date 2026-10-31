@@ -15,6 +15,7 @@ import {
   formatCurrency,
   formatDateTime,
 } from "@/lib/maintenance/constants";
+import { useMaintenanceLookups } from "@/lib/maintenance/lookups";
 
 interface MaterialHistoryModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export function MaterialHistoryModal({
   vehicleAssetNumber,
   riderProfileId,
 }: MaterialHistoryModalProps) {
+  const { resolveRiderName, resolveVehicleLabel } = useMaintenanceLookups();
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<MaterialUsage[]>([]);
 
@@ -58,20 +60,22 @@ export function MaterialHistoryModal({
   }, [isOpen, vehicleId, riderProfileId]);
 
   const title = vehicleId
-    ? `سجل استهلاك القطع والمواد للمركبة: ${vehicleAssetNumber || ""}`
-    : `سجل استهلاك المواد والعهد للمندوب`;
+    ? `سجل استهلاك القطع والمواد للمركبة: ${resolveVehicleLabel(vehicleId, vehicleAssetNumber)}`
+    : `سجل استهلاك المواد والعهد للمندوب: ${resolveRiderName(riderProfileId)}`;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="max-w-4xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="max-w-5xl">
       <div className="space-y-4 text-xs">
         <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
           <table className="w-full text-right">
             <thead className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 font-bold">
               <tr>
-                <th className="p-3">تاريخ الصرف</th>
+                <th className="p-3">تاريخ الخدمة الفعلي</th>
+                <th className="p-3">تاريخ الترحيل المخزني</th>
                 <th className="p-3">الصنف / المادة</th>
                 <th className="p-3">نوع الاستخدام</th>
                 <th className="p-3 text-center">الكمية</th>
+                <th className="p-3">السائق المنسوب إليه</th>
                 <th className="p-3 text-center">الحركة</th>
                 <th className="p-3 text-left">التكلفة الإجمالية</th>
                 <th className="p-3">تفاصيل التكلفة والتوريد</th>
@@ -80,13 +84,13 @@ export function MaterialHistoryModal({
             <tbody className="divide-y divide-[var(--border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                  <td colSpan={9} className="p-8 text-center text-slate-400">
                     جارٍ استرجاع سجل الاستهلاك والمواد...
                   </td>
                 </tr>
               ) : history.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                  <td colSpan={9} className="p-8 text-center text-slate-400">
                     لا توجد حركات استهلاك مسجلة مسبقاً.
                   </td>
                 </tr>
@@ -100,7 +104,10 @@ export function MaterialHistoryModal({
                         isReversal ? "bg-red-50/30 dark:bg-red-950/20 text-red-800 dark:text-red-300" : ""
                       }`}
                     >
-                      <td className="p-3 font-mono text-slate-600 dark:text-slate-400">
+                      <td className="p-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                        {formatDateTime(usage.effectiveServiceAtUtc || usage.usedAtUtc)}
+                      </td>
+                      <td className="p-3 font-mono text-slate-500 dark:text-slate-400">
                         {formatDateTime(usage.usedAtUtc)}
                       </td>
                       <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
@@ -112,6 +119,9 @@ export function MaterialHistoryModal({
                       </td>
                       <td className="p-3 text-center font-mono font-bold">
                         {usage.quantity} {unitOfMeasureLabels[usage.unitOfMeasure] || ""}
+                      </td>
+                      <td className="p-3 text-slate-700 dark:text-slate-300">
+                        {resolveRiderName(usage.riderProfileId)}
                       </td>
                       <td className="p-3 text-center">
                         {isReversal ? (

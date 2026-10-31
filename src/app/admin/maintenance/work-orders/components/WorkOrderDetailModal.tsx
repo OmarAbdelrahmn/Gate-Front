@@ -43,6 +43,8 @@ import {
 } from "@/lib/maintenance/constants";
 import { CompleteOilChangeModal } from "./CompleteOilChangeModal";
 import { MaterialHistoryModal } from "./MaterialHistoryModal";
+import { VehicleOilChangesModal } from "./VehicleOilChangesModal";
+import { useMaintenanceLookups } from "@/lib/maintenance/lookups";
 import {
   Play,
   CheckCircle,
@@ -84,6 +86,7 @@ export function WorkOrderDetailModal({
   vehiclesByAssetMap,
 }: WorkOrderDetailModalProps) {
   const { can } = useAuth();
+  const { resolveRiderName } = useMaintenanceLookups();
   const canRead = can("maintenance.work_orders.read");
   const canUpdate = can("maintenance.work_orders.update");
   const canCancel = can("maintenance.work_orders.delete");
@@ -139,6 +142,7 @@ export function WorkOrderDetailModal({
 
   // Oil Change Modal
   const [oilModalOpen, setOilModalOpen] = useState(false);
+  const [vehicleOilChangesModalOpen, setVehicleOilChangesModalOpen] = useState(false);
 
   // History Modal
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -840,6 +844,16 @@ export function WorkOrderDetailModal({
             </div>
 
             <div className="flex items-center gap-2">
+              {order.vehicleId && isOilChangeOrder && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setVehicleOilChangesModalOpen(true)}
+                  className="h-8 text-xs px-2.5 text-amber-800 border-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 font-bold"
+                >
+                  <Droplets size={13} />
+                  إدارة وتعديل غيار الزيت
+                </Button>
+              )}
               {order.vehicleId && (
                 <Button
                   variant="secondary"
@@ -870,6 +884,8 @@ export function WorkOrderDetailModal({
                   <th className="p-2.5">الصنف</th>
                   <th className="p-2.5">نوع الاستخدام</th>
                   <th className="p-2.5 text-center">الكمية</th>
+                  <th className="p-2.5">تاريخ الخدمة والترحيل</th>
+                  <th className="p-2.5">السائق المنسوب إليه</th>
                   <th className="p-2.5 text-left font-mono">التكلفة الإجمالية</th>
                   <th className="p-2.5">تفاصيل التكلفة والتوريد</th>
                   <th className="p-2.5 text-center">الحالة / الإجراء</th>
@@ -878,7 +894,7 @@ export function WorkOrderDetailModal({
               <tbody className="divide-y divide-[var(--border)]">
                 {materials.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-slate-400">
+                    <td colSpan={8} className="p-6 text-center text-slate-400">
                       لم يتم صرف أي قطع غيار أو مواد على هذا الأمر حتى الآن.
                     </td>
                   </tr>
@@ -903,6 +919,19 @@ export function WorkOrderDetailModal({
                         </td>
                         <td className="p-2.5 text-center font-mono font-bold">
                           {mat.quantity} {unitOfMeasureLabels[mat.unitOfMeasure] || ""}
+                        </td>
+                        <td className="p-2.5 font-mono text-[11px]">
+                          <div className="font-bold text-slate-800 dark:text-slate-200">
+                            {formatDateTime(mat.effectiveServiceAtUtc || mat.usedAtUtc)}
+                          </div>
+                          {mat.effectiveServiceAtUtc && mat.effectiveServiceAtUtc !== mat.usedAtUtc && (
+                            <div className="text-[10px] text-slate-400">
+                              ترحيل: {formatDateTime(mat.usedAtUtc)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-slate-700 dark:text-slate-300">
+                          {resolveRiderName(mat.riderProfileId)}
                         </td>
                         <td className="p-2.5 text-left font-mono font-bold">
                           {formatCurrency(mat.totalCost)}
@@ -1094,6 +1123,21 @@ export function WorkOrderDetailModal({
           vehicleAssetNumber={order.vehicleAssetNumber}
           riderProfileId={order.attributedRiderProfileId}
         />
+
+        {/* Vehicle Oil Changes Management Modal */}
+        {order.vehicleId && vehicleOilChangesModalOpen && (
+          <VehicleOilChangesModal
+            isOpen={vehicleOilChangesModalOpen}
+            vehicleId={order.vehicleId}
+            vehiclePlate={plateDisplay || serialDisplay}
+            vehicleType={workOrderVehicleType}
+            onClose={() => setVehicleOilChangesModalOpen(false)}
+            onChanged={() => {
+              loadOrderDetails();
+              onUpdated();
+            }}
+          />
+        )}
       </div>
     </Modal>
   );

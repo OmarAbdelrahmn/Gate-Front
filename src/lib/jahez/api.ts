@@ -1085,22 +1085,37 @@ export async function repayJahezRiderPartialTransferredDebt(
 export async function updateJahezRiderTransferredDebtCommission(
   riderId: string,
   data: RiderDebtCommissionUpdate,
+  idempotencyKey?: string | CustomRequestInit,
   init?: CustomRequestInit,
 ): Promise<unknown> {
+  const actualInit = typeof idempotencyKey === "object" ? idempotencyKey : init;
+  const actualKey =
+    typeof idempotencyKey === "string" && idempotencyKey.trim()
+      ? idempotencyKey.trim()
+      : generateIdempotencyKey("edit-commission");
+
+  const headers = new Headers(actualInit?.headers);
+  headers.set("Idempotency-Key", actualKey);
+
   const payload = {
-    commission: data.commission,
-    newCommission: data.commission,
-    amount: data.commission,
-    reason: data.reason,
+    commission: Number(data.commission),
+    expectedCommission: data.expectedCommission,
+    expectedAmounts: {
+      dashboardDebt: data.expectedAmounts.dashboardDebt,
+      commission: data.expectedAmounts.commission,
+      total: data.expectedAmounts.total,
+    },
+    reason: data.reason.trim(),
   };
 
   return authFetch(
     `${ROOT}/riders/${encodeURIComponent(riderId)}/transferred-debts/commission`,
     {
-      ...init,
+      ...actualInit,
       method: "PUT",
+      headers,
       body: JSON.stringify(payload),
-      notifySuccess: init?.notifySuccess ?? "تم تحديث العمولة بنجاح",
+      notifySuccess: actualInit?.notifySuccess ?? "تم تحديث العمولة بنجاح",
     },
   );
 }
@@ -1435,7 +1450,8 @@ export function jahezClient(init?: CustomRequestInit) {
     updateTransferredDebtCommission: (
       riderId: string,
       data: RiderDebtCommissionUpdate,
-    ) => updateJahezRiderTransferredDebtCommission(riderId, data, init),
+      key?: string,
+    ) => updateJahezRiderTransferredDebtCommission(riderId, data, key, init),
     previewFeeRefund: (data: FeeRefundPreviewRequest) =>
       previewJahezFeeRefund(data, init),
     executeFeeRefund: (data: FeeRefundExecutionRequest, key?: string) =>

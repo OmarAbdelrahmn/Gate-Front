@@ -33,6 +33,7 @@ import {
   formatCurrency,
   formatDateTime,
 } from "@/lib/maintenance/constants";
+import { useMaintenanceLookups } from "@/lib/maintenance/lookups";
 
 interface OilBarrelMissingHistoryModalProps {
   isOpen: boolean;
@@ -51,6 +52,8 @@ export function OilBarrelMissingHistoryModal({
   itemName,
   locationName,
 }: OilBarrelMissingHistoryModalProps) {
+  const { resolveUserName: lookupUserName, resolveLocationName: lookupLocationName } =
+    useMaintenanceLookups();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [data, setData] = useState<OilBarrelMissingHistoryResponse | null>(null);
@@ -125,11 +128,13 @@ export function OilBarrelMissingHistoryModal({
     if (loc) return `${loc.nameAr} (${loc.code})`;
     if (locationId === "019d77f0-0000-7000-8000-000000000003") return "مستودع جدة (JED-WH)";
     if (locationId === "019d77f0-0000-7000-8000-000000000004") return "مستودع الرياض (RUH-WH)";
-    return locationName || locationId;
+    return locationName || lookupLocationName(locationId);
   };
 
   const resolveUserName = (userId: string) => {
-    return usersMap[userId] || userId;
+    const fromMap = usersMap[userId];
+    if (fromMap && fromMap !== userId) return fromMap;
+    return lookupUserName(userId);
   };
 
   const handleExportExcel = async () => {
@@ -217,10 +222,10 @@ export function OilBarrelMissingHistoryModal({
             width: 35,
           },
           {
-            header: "معرف حركة المخزون",
-            accessor: (row) => row.stockMovementId,
+            header: "حالة القيد المخزني",
+            accessor: (row) => (row.stockMovementId ? "قيد حركة مخزنية معتمد" : "موثق"),
             isText: true,
-            width: 25,
+            width: 22,
           },
         ],
       });
@@ -403,8 +408,8 @@ export function OilBarrelMissingHistoryModal({
                           <div className="font-medium text-slate-800 dark:text-slate-200">
                             {resolveUserName(entry.recordedByUserId)}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            حركة #{entry.stockMovementId.slice(0, 8)}
+                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                            قيد حركة مخزنية معتمد
                           </div>
                         </td>
                         <td className="p-3 text-slate-700 dark:text-slate-300 max-w-xs break-words">

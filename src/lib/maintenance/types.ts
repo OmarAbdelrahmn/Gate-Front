@@ -503,6 +503,7 @@ export interface OilBarrelLossEntry {
   recordedAtUtc: string;
   stockMovementId?: string | null;
   stockMovementLineId?: string | null;
+  correctionRevisionId?: string | null;
 }
 
 export interface OilBarrelUsageResponse {
@@ -835,6 +836,9 @@ export interface MaterialUsage {
   riderProfileId: string | null;
   attributionStatus: number | null;
   usedAtUtc: string;
+  effectiveServiceAtUtc?: string | null;
+  oilBarrelId?: string | null;
+  barrelNumber?: string | null;
   reversalOfUsageId: string | null;
   costAllocations: MaterialCostAllocation[];
 }
@@ -974,9 +978,11 @@ export interface CompleteOilChangeResult {
   id: string;
   maintenanceWorkOrderId: string | null;
   performedAtUtc: string;
+  effectiveServiceAtUtc?: string | null;
   odometerAtChange: number;
   vehicleType: number;
   oilQuantityLiters: number;
+  configuredOilQuantityLiters?: number | null;
   oilCost: number;
   oilFilterChanged: boolean;
   oilFilterCost: number;
@@ -985,11 +991,122 @@ export interface CompleteOilChangeResult {
   totalCost: number;
   vehicleId: string;
   riderProfileId: string | null;
+  inventoryLocationId?: string | null;
+  oilInventoryItemId?: string | null;
+  oilFilterInventoryItemId?: string | null;
+  notes?: string | null;
+  rowVersion?: string;
+  isCancelled?: boolean;
+  revisionNumber?: number;
 }
 
 export interface CorrectOilChangeVehicleRequest {
   vehicleId: string;
   reason: string;
+  rowVersion?: string | null;
+}
+
+export interface OilChangeDetailsResponse {
+  operation: CompleteOilChangeResult & {
+    rowVersion: string;
+    isCancelled: boolean;
+    revisionNumber: number;
+    notes?: string | null;
+    oilInventoryItemId?: string | null;
+    oilFilterInventoryItemId?: string | null;
+    configuredOilQuantityLiters?: number | null;
+  };
+  workOrderRowVersion: string | null;
+  inventoryLocationId: string | null;
+  materials: MaterialUsage[];
+  cancelledAtUtc: string | null;
+  cancelledByUserId: string | null;
+  cancellationReason: string | null;
+}
+
+export interface OilChangeCorrectionPreviewRequest {
+  performedAtUtc: string;
+  odometerAtChange: number;
+  inventoryLocationId: string;
+  oilInventoryItemId: string;
+  configuredOilQuantityLiters: number | null;
+  oilFilterChanged: boolean;
+  oilFilterInventoryItemId: string | null;
+  nextOilBarrelId: string | null;
+  laborCost: number;
+  otherCost: number;
+  notes: string | null;
+  reason: string;
+  rowVersion: string;
+  workOrderRowVersion: string | null;
+  expectedEffectsHash: string | null;
+  mileageBaselineKm: number | null;
+}
+
+export interface OilChangeCancellationPreviewRequest {
+  reason: string;
+  rowVersion: string;
+  workOrderRowVersion: string | null;
+  expectedEffectsHash: string | null;
+  mileageBaselineKm: number | null;
+}
+
+export interface OilChangeBarrelEffect {
+  barrelId: string;
+  barrelNumber?: string | null;
+  issuedLiters: number;
+  reversedLiters: number;
+}
+
+export interface OilChangeWorkflowEffects {
+  cancelled: boolean;
+  materialsReplaced: boolean;
+  oilQuantityLiters: number;
+  oilCost: number;
+  filterCost: number;
+  laborCost: number;
+  otherCost: number;
+  totalCost: number;
+  riderProfileId: string | null;
+  vehicleMileageKm: number | null;
+  barrels: OilChangeBarrelEffect[];
+  workOrderStatus: number | null;
+  returnedAsWasteLiters: number;
+}
+
+export interface OilChangeWorkflowResponse {
+  operationId: string;
+  revisionId: string | null;
+  preview: boolean;
+  rowVersion: string;
+  workOrderRowVersion: string | null;
+  postedAtUtc: string;
+  effectsHash: string;
+  effects: OilChangeWorkflowEffects;
+}
+
+export interface OilChangeRevisionItem {
+  id: string;
+  revisionNumber: number;
+  action: "Edit" | "EditDate" | "Cancel" | string;
+  reason: string;
+  actor?: string | null;
+  actorUserId?: string | null;
+  actorName?: string | null;
+  createdByUserId?: string | null;
+  postedAtUtc?: string | null;
+  postingTime?: string | null;
+  occurredAtUtc?: string | null;
+  beforeJson?: string | null;
+  afterJson?: string | null;
+  effectsJson?: string | null;
+}
+
+export interface OilChangeRevisionsResponse {
+  items: OilChangeRevisionItem[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
 }
 
 // ==========================================

@@ -43,6 +43,11 @@ import type {
   CompleteOilChangeRequest,
   CompleteOilChangeResult,
   CorrectOilChangeVehicleRequest,
+  OilChangeDetailsResponse,
+  OilChangeCorrectionPreviewRequest,
+  OilChangeCancellationPreviewRequest,
+  OilChangeWorkflowResponse,
+  OilChangeRevisionsResponse,
   DirectOilChangeRequest,
   DirectOilInventoryLocation,
   DirectOilBarrel,
@@ -660,6 +665,85 @@ export async function correctOilChangeVehicle(
       method: "PUT",
       body: JSON.stringify(payload),
       notifySuccess: "تم تصحيح المركبة وتحديث السجلات المرتبطة بنجاح",
+    },
+  );
+}
+
+export async function getOilChangeDetails(id: string): Promise<OilChangeDetailsResponse> {
+  return authFetch<OilChangeDetailsResponse>(
+    `/api/maintenance/oil-changes/${encodeURIComponent(id)}`,
+  );
+}
+
+export async function getOilChangeRevisions(
+  id: string,
+  page = 1,
+  pageSize = 50,
+): Promise<OilChangeRevisionsResponse> {
+  const safePageSize = Math.min(Math.max(1, pageSize), 100);
+  const query = new URLSearchParams({
+    page: String(Math.max(1, page)),
+    pageSize: String(safePageSize),
+  });
+  return authFetch<OilChangeRevisionsResponse>(
+    `/api/maintenance/oil-changes/${encodeURIComponent(id)}/revisions?${query.toString()}`,
+  );
+}
+
+export async function previewOilChangeCorrection(
+  id: string,
+  payload: OilChangeCorrectionPreviewRequest,
+): Promise<OilChangeWorkflowResponse> {
+  return authFetch<OilChangeWorkflowResponse>(
+    `/api/maintenance/oil-changes/${encodeURIComponent(id)}/corrections/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function commitOilChangeCorrection(
+  id: string,
+  payload: OilChangeCorrectionPreviewRequest,
+  idempotencyKey: string,
+): Promise<OilChangeWorkflowResponse> {
+  return authFetch<OilChangeWorkflowResponse>(
+    `/api/maintenance/oil-changes/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+      notifySuccess: "تم اعتماد تعديل غيار الزيت وتحديث السجلات بنجاح",
+    },
+  );
+}
+
+export async function previewOilChangeCancellation(
+  id: string,
+  payload: OilChangeCancellationPreviewRequest,
+): Promise<OilChangeWorkflowResponse> {
+  return authFetch<OilChangeWorkflowResponse>(
+    `/api/maintenance/oil-changes/${encodeURIComponent(id)}/cancellation/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function commitOilChangeCancellation(
+  id: string,
+  payload: OilChangeCancellationPreviewRequest,
+  idempotencyKey: string,
+): Promise<OilChangeWorkflowResponse> {
+  return authFetch<OilChangeWorkflowResponse>(
+    `/api/maintenance/oil-changes/${encodeURIComponent(id)}/cancel`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+      notifySuccess: "تم إلغاء عملية غيار الزيت وعكس التكاليف والمخزون بنجاح",
     },
   );
 }

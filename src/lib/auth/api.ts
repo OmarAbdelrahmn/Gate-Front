@@ -326,6 +326,18 @@ export function getFriendlyErrorMessage(
         return "نوع المركبة المحدد للبرميل غير صالح. يتطلب اختيار نوع مفرد، أو تحديد البرميل كمشترك (Both).";
       case "maintenance.oil_barrel_vehicle_type_locked":
         return "لا يمكن تغيير نوع المركبة؛ نطاق البرميل المفتوح مقفل نهائياً.";
+      case "maintenance.oil_change_preview_changed":
+        return "تغيرت نتائج المعاينة بسبب تحديث المخزون أو التكاليف أو التاريخ. يرجى مراجعة المعاينة المحدثة قبل الاعتماد.";
+      case "maintenance.oil_change_cancelled":
+        return "عملية غيار الزيت هذه ملغاة بالفعل ولا يمكن تعديلها.";
+      case "maintenance.oil_change_idempotency_conflict":
+        return "تعارض في مفتاح عدم التكرار (Idempotency Key)؛ تم إرسال محتوى مختلف بنفس المفتاح.";
+      case "maintenance.oil_change_barrel_restore_conflict":
+        return "تعارض في استعادة كمية البرميل للمخزون؛ يلزم تسوية ومطابقة المخزون أولاً قبل إعادة المحاولة.";
+      case "maintenance.oil_change_mileage_basis_required":
+        return "لا تتوفر قراءة عداد أساسية موثوقة لإعادة احتساب المسافات؛ يرجى إدخال قراءة الأساس المعتمدة (Mileage Baseline) أو تصحيح قراءات العداد أولاً.";
+      case "maintenance.oil_change_mileage_conflict":
+        return "تعارض في تسلسل قراءات العداد المسجلة يمنع تنفيذ هذا التعديل.";
       case "maintenance.invalid_request":
         return rawMessage || "طلب صيانة غير صالح. يرجى مراجعة الحقول والمدخلات.";
       case "system.concurrency_conflict":

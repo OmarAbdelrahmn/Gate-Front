@@ -14,6 +14,7 @@ import {
   Search,
   FileSpreadsheet,
   ArrowLeftRight,
+  History,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -30,6 +31,7 @@ import {
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getVehiclePlate, useVehiclePlates } from "@/lib/fleet/vehicle-plate-cache";
 import { CorrectOilChangeVehicleModal } from "./CorrectOilChangeVehicleModal";
+import { VehicleOilChangesModal } from "./VehicleOilChangesModal";
 
 interface OilRemindersViewProps {
   onStartOilChange: (vehicleId: string) => void;
@@ -40,6 +42,11 @@ const OIL_REMINDERS_FILTERS_SESSION_KEY = "oil_reminders_filters_session";
 export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
   const { can } = useAuth();
   const canManage = can("maintenance.oil.complete") && can("inventory.stock.move");
+  const canViewOrManageHistory =
+    canManage ||
+    can("maintenance.oil.read") ||
+    (can("maintenance.oil.edit") && can("inventory.stock.move") && can("inventory.cost_layers.read")) ||
+    (can("maintenance.oil.cancel") && can("inventory.stock.adjust") && can("inventory.cost_layers.read"));
 
   // Subscribe to vehicle plate cache for automatic plate resolution
   useVehiclePlates();
@@ -51,6 +58,11 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [isCorrectVehicleModalOpen, setIsCorrectVehicleModalOpen] = useState(false);
+  const [historyVehicle, setHistoryVehicle] = useState<{
+    vehicleId: string;
+    plate: string;
+    vehicleType: number;
+  } | null>(null);
 
   const isRestoredRef = useRef(false);
 
@@ -422,7 +434,9 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
                     />
                   </div>
                 </th>
-                {canManage && <th className="p-3 text-center">الإجراء</th>}
+                {(canManage || canViewOrManageHistory) && (
+                  <th className="p-3 text-center">الإجراءات والسجل</th>
+                )}
               </tr>
             </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -502,22 +516,43 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
                         {statusCfg?.label || "غير محدد"}
                       </span>
                     </td>
-                    {canManage && (
+                    {(canManage || canViewOrManageHistory) && (
                       <td className="p-3 text-center">
-                        <Button
-                          variant="primary"
-                          onClick={() => onStartOilChange(r.vehicleId)}
-                          className={`h-8 px-2.5 text-xs ${
-                            r.status === 3
-                              ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
-                              : r.status === 2
-                                ? "bg-amber-600 hover:bg-amber-700 text-white"
-                                : ""
-                          }`}
-                        >
-                          <Droplets size={13} />
-                          تغيير الزيت
-                        </Button>
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                          {canManage && (
+                            <Button
+                              variant="primary"
+                              onClick={() => onStartOilChange(r.vehicleId)}
+                              className={`h-8 px-2.5 text-xs ${
+                                r.status === 3
+                                  ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
+                                  : r.status === 2
+                                    ? "bg-amber-600 hover:bg-amber-700 text-white"
+                                    : ""
+                              }`}
+                            >
+                              <Droplets size={13} />
+                              تغيير الزيت
+                            </Button>
+                          )}
+                          {canViewOrManageHistory && r.vehicleId && (
+                            <Button
+                              variant="secondary"
+                              onClick={() =>
+                                setHistoryVehicle({
+                                  vehicleId: r.vehicleId,
+                                  plate: getPlate(r),
+                                  vehicleType: r.vehicleType,
+                                })
+                              }
+                              className="h-8 px-2.5 text-xs gap-1 font-bold"
+                              title="عرض سجل غيار الزيت وتعديل أو إلغاء أو تصحيح العمليات السابقة"
+                            >
+                              <History size={13} />
+                              <span>السجل والتعديل</span>
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -536,6 +571,19 @@ export function OilRemindersView({ onStartOilChange }: OilRemindersViewProps) {
           loadReminders();
         }}
       />
+
+      {historyVehicle && (
+        <VehicleOilChangesModal
+          isOpen={Boolean(historyVehicle)}
+          vehicleId={historyVehicle.vehicleId}
+          vehiclePlate={historyVehicle.plate}
+          vehicleType={historyVehicle.vehicleType}
+          onClose={() => setHistoryVehicle(null)}
+          onChanged={() => {
+            loadReminders();
+          }}
+        />
+      )}
     </div>
   );
 }

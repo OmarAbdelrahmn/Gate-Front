@@ -216,6 +216,7 @@ export default function JahezCashboxPage() {
   const [commissionRider, setCommissionRider] = useState<RiderTransferredDebtSummary | null>(null);
   const [newCommissionValue, setNewCommissionValue] = useState<number | "">("");
   const [editCommissionReason, setEditCommissionReason] = useState("تعديل عمولة المديونية المرحلة");
+  const [editCommissionKey, setEditCommissionKey] = useState<string>("");
   const [editCommissionSubmitting, setEditCommissionSubmitting] = useState(false);
 
   // Pagination & Filtering
@@ -1024,16 +1025,30 @@ export default function JahezCashboxPage() {
   };
 
   // Commission Edit Handlers (PUT /riders/{riderId}/transferred-debts/commission)
-  const openEditCommissionModal = (summary: RiderTransferredDebtSummary) => {
+  const openEditCommissionModal = async (summary: RiderTransferredDebtSummary) => {
     setCommissionRider(summary);
-    setNewCommissionValue(summary.amounts?.commission ?? 0);
+    const initialComm = summary.totalCommission ?? summary.amounts?.commission;
+    setNewCommissionValue(initialComm != null ? initialComm : "");
     setEditCommissionReason("تعديل عمولة المديونية المرحلة للمندوب");
+    setEditCommissionKey(generateIdempotencyKey("edit-commission"));
     setIsEditCommissionOpen(true);
+    try {
+      const freshSummary = await getJahezRiderTransferredDebtsSummary(summary.riderProfileId);
+      if (freshSummary) {
+        setCommissionRider(freshSummary);
+        const freshComm = freshSummary.totalCommission ?? freshSummary.amounts?.commission;
+        if (freshComm != null) {
+          setNewCommissionValue(freshComm);
+        }
+      }
+    } catch {
+      // Fallback to existing summary if fresh reload fails
+    }
   };
 
   const submitEditCommission = async () => {
     if (!commissionRider) return;
-    if (newCommissionValue === "" || Number(newCommissionValue) < 0) {
+    if (newCommissionValue === "" || isNaN(Number(newCommissionValue)) || Number(newCommissionValue) < 0) {
       toast.warning("تنبيه", "يرجى إدخال قيمة صحيحة للعمولة (0 أو أكثر)");
       return;
     }
@@ -1042,17 +1057,53 @@ export default function JahezCashboxPage() {
       return;
     }
 
+    // إذا كانت totalCommission أو amounts تساوي null، امنع الحفظ ولا تستبدلها بأصفار
+    const totalCommission = commissionRider.totalCommission ?? (commissionRider as any).TotalCommission;
+    const amounts = commissionRider.amounts;
+
+    if (totalCommission == null || amounts == null) {
+      toast.error(
+        "تعذر حفظ التعديل",
+        "لا يمكن تعديل العمولة لأن بيانات العمولة الحالية (totalCommission) أو مبالغ المديونية (amounts) غير متوفرة (null)",
+      );
+      return;
+    }
+
+    const dashboardDebt = amounts.dashboardDebt ?? (amounts as any).DashboardDebt;
+    const amountsCommission = amounts.commission ?? (amounts as any).Commission;
+    const total = amounts.total ?? (amounts as any).Total;
+
+    if (dashboardDebt == null || amountsCommission == null || total == null) {
+      toast.error(
+        "تعذر حفظ التعديل",
+        "لا يمكن تعديل العمولة لأن أحد حقول تفاصيل المبالغ (amounts) غير متوفر (null)",
+      );
+      return;
+    }
+
+    const payload: RiderDebtCommissionUpdate = {
+      commission: Number(newCommissionValue),
+      expectedCommission: totalCommission,
+      expectedAmounts: {
+        dashboardDebt,
+        commission: amountsCommission,
+        total,
+      },
+      reason: editCommissionReason.trim(),
+    };
+
+    const idempotencyKey = editCommissionKey || generateIdempotencyKey("edit-commission");
+
     setEditCommissionSubmitting(true);
     try {
       await updateJahezRiderTransferredDebtCommission(
         commissionRider.riderProfileId,
-        {
-          commission: Number(newCommissionValue),
-          reason: editCommissionReason.trim(),
-        },
+        payload,
+        idempotencyKey,
       );
       toast.success("تم التعديل بنجاح", "تم تحديث عمولة المديونية المرحلة للمندوب بنجاح");
       setIsEditCommissionOpen(false);
+      setEditCommissionKey(generateIdempotencyKey("edit-commission"));
       if (isRiderDrawerOpen && selectedRiderSummary?.riderProfileId === commissionRider.riderProfileId) {
         const [freshSummary, freshDebts] = await Promise.all([
           getJahezRiderTransferredDebtsSummary(commissionRider.riderProfileId).catch(() => null),
@@ -1065,6 +1116,7 @@ export default function JahezCashboxPage() {
       loadHistoryDebts(historyDebtsPage);
       loadAllData(page);
     } catch (err: unknown) {
+      setEditCommissionKey(generateIdempotencyKey("edit-commission"));
       toast.error("فشل تعديل العمولة", err instanceof Error ? err.message : "تعذر تعديل العمولة المرحلة");
     } finally {
       setEditCommissionSubmitting(false);
@@ -2994,23 +3046,31 @@ export default function JahezCashboxPage() {
                   <div>
                     <span className="text-[10px] text-gray-500 block">مديونية الداشبورد</span>
                     <span className="font-mono font-bold text-gray-900 dark:text-gray-100">
-                      {Number(commissionRider.amounts?.dashboardDebt ?? 0).toFixed(2)} ر.س
+                      {commissionRider.amounts?.dashboardDebt != null ? Number(commissionRider.amounts.dashboardDebt).toFixed(2) : "-"} ر.س
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-gray-500 block">العمولة الحالية</span>
                     <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                      {Number(commissionRider.amounts?.commission ?? 0).toFixed(2)} ر.س
+                      {(commissionRider.totalCommission ?? (commissionRider as any).TotalCommission ?? commissionRider.amounts?.commission) != null
+                        ? Number(commissionRider.totalCommission ?? (commissionRider as any).TotalCommission ?? commissionRider.amounts?.commission).toFixed(2)
+                        : "-"} ر.س
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-gray-500 block">إجمالي المستحق</span>
                     <span className="font-mono font-black text-rose-700 dark:text-rose-400">
-                      {Number(commissionRider.outstandingAmount).toFixed(2)} ر.س
+                      {commissionRider.outstandingAmount != null ? Number(commissionRider.outstandingAmount).toFixed(2) : "-"} ر.س
                     </span>
                   </div>
                 </div>
               </div>
+
+              {((commissionRider.totalCommission ?? (commissionRider as any).TotalCommission) == null || commissionRider.amounts == null) && (
+                <div className="rounded-lg bg-rose-50 p-2.5 text-rose-800 border border-rose-200 text-xs dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-200 font-medium">
+                  ⚠️ لا يمكن حفظ التعديل لأن بيانات العمولة الحالية (totalCommission) أو تفاصيل المبالغ (amounts) غير متوفرة (null).
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -3025,12 +3085,12 @@ export default function JahezCashboxPage() {
                   placeholder="أدخل قيمة العمولة الجديدة"
                   className="font-mono text-sm font-bold"
                 />
-                {newCommissionValue !== "" && (
+                {newCommissionValue !== "" && commissionRider.amounts?.dashboardDebt != null && (
                   <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 font-mono">
                     <span>إجمالي المستحق المتوقع بعد التعديل:</span>
                     <span className="font-bold text-emerald-700 dark:text-emerald-400">
                       {(
-                        Number(commissionRider.amounts?.dashboardDebt ?? 0) +
+                        Number(commissionRider.amounts.dashboardDebt) +
                         Number(newCommissionValue)
                       ).toFixed(2)} ر.س
                     </span>
@@ -3063,7 +3123,9 @@ export default function JahezCashboxPage() {
                     editCommissionSubmitting ||
                     newCommissionValue === "" ||
                     Number(newCommissionValue) < 0 ||
-                    !editCommissionReason.trim()
+                    !editCommissionReason.trim() ||
+                    (commissionRider.totalCommission ?? (commissionRider as any).TotalCommission) == null ||
+                    commissionRider.amounts == null
                   }
                   className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
                 >

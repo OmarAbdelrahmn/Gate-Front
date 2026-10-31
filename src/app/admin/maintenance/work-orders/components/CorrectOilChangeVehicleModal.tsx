@@ -141,8 +141,12 @@ export function CorrectOilChangeVehicleModal({
         if (cancelled) return;
 
         if (changes.length > 0) {
-          setAvailableOilChanges(changes);
-          setTargetOilChangeId(changes[0].id);
+          const activeFirst = [
+            ...changes.filter((c) => !c.isCancelled),
+            ...changes.filter((c) => c.isCancelled),
+          ];
+          setAvailableOilChanges(activeFirst);
+          setTargetOilChangeId(activeFirst[0].id);
           return;
         }
 
@@ -293,9 +297,11 @@ export function CorrectOilChangeVehicleModal({
 
     setSubmitting(true);
     try {
+      const selectedOp = availableOilChanges.find((oc) => oc.id === cleanId);
       const result = await correctOilChangeVehicle(cleanId, {
         vehicleId: replacementVehicleId,
         reason: cleanReason,
+        ...(selectedOp?.rowVersion ? { rowVersion: selectedOp.rowVersion } : {}),
       });
 
       toast.success(
@@ -341,13 +347,6 @@ export function CorrectOilChangeVehicleModal({
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               المركبة الحالية (التي تم تغيير الزيت لها بالخطأ) <span className="text-rose-500">*</span>
             </label>
-            <button
-              type="button"
-              onClick={() => setShowManualIdInput(!showManualIdInput)}
-              className="text-[11px] font-bold text-[#1167c9] hover:underline"
-            >
-              {showManualIdInput ? "إخفاء معرّف العملية اليدوي" : "أو إدخال معرّف العملية يدوياً"}
-            </button>
           </div>
 
           <SearchableSelect
@@ -407,8 +406,8 @@ export function CorrectOilChangeVehicleModal({
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-xs font-bold"
                   >
                     {availableOilChanges.map((oc) => (
-                      <option key={oc.id} value={oc.id}>
-                        {oc.performedAtUtc ? new Date(oc.performedAtUtc).toLocaleDateString("ar-SA") : "عملية"} • عداد: {oc.odometerAtChange?.toLocaleString() ?? 0} كم • كمية: {oc.oilQuantityLiters}L • ({oc.id.slice(0, 8)}...)
+                      <option key={oc.id} value={oc.id} disabled={Boolean(oc.isCancelled)}>
+                        {oc.performedAtUtc ? new Date(oc.performedAtUtc).toLocaleDateString("ar-SA") : "عملية غيار زيت"} • عداد: {oc.odometerAtChange?.toLocaleString() ?? 0} كم • كمية: {oc.oilQuantityLiters} لتر • التكلفة: {Number(oc.totalCost ?? 0).toFixed(2)} ر.س {oc.isCancelled ? "(ملغاة)" : ""}
                       </option>
                     ))}
                   </select>
@@ -419,57 +418,30 @@ export function CorrectOilChangeVehicleModal({
                     <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
                     <div>
                       <span className="font-bold block">عملية غيار الزيت المحددة جاهزة للتصحيح</span>
-                      <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400">
-                        المعرف: {targetOilChangeId}
-                      </span>
+                      {availableOilChanges[0] && (
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                          تاريخ الخدمة:{" "}
+                          {availableOilChanges[0].performedAtUtc
+                            ? new Date(availableOilChanges[0].performedAtUtc).toLocaleDateString("ar-SA")
+                            : "مسجلة"}{" "}
+                          • العداد: {Number(availableOilChanges[0].odometerAtChange ?? 0).toLocaleString()} كم • الكمية:{" "}
+                          {availableOilChanges[0].oilQuantityLiters} لتر
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleCopyId}
-                    className="p-1 rounded text-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-[11px] font-bold flex items-center gap-1"
-                    title="نسخ المعرف"
-                  >
-                    {copiedId ? <Check size={12} /> : <Copy size={12} />}
-                    <span>{copiedId ? "تم النسخ" : "نسخ"}</span>
-                  </button>
                 </div>
               ) : (
                 <div className="p-2.5 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                    <span>لم يتم استرجاع معرّف العملية تلقائياً، يمكنك كتابته يدوياً أدناه.</span>
+                    <span>لا توجد عمليات غيار زيت مسجلة لهذه المركبة حالياً.</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowManualIdInput(true)}
-                    className="font-bold underline text-[11px]"
-                  >
-                    إدخال المعرف
-                  </button>
                 </div>
               )}
             </div>
           )}
         </div>
-
-        {/* Manual Oil Change ID Input (Optional / Expandable or when prefilled without vehicle) */}
-        {(showManualIdInput || (!sourceVehicleId && targetOilChangeId)) && (
-          <div className="p-3 rounded-xl border border-[var(--border)] bg-slate-50/60 dark:bg-slate-900/40 space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-              معرّف عملية غيار الزيت (Oil Change ID) <span className="text-rose-500">*</span>
-            </label>
-            <Input
-              value={targetOilChangeId}
-              onChange={(e) => setTargetOilChangeId(e.target.value)}
-              placeholder="مثال: 3fa85f64-5717-4562-b3fc-2c963f66afa6"
-              className="font-mono text-xs"
-            />
-            <span className="text-[10px] text-slate-400 block">
-              معرّف العملية المطلوب تصحيحها كما هو مسجل في قاعدة البيانات أو سجل التدقيق.
-            </span>
-          </div>
-        )}
 
         {/* 2. Replacement Vehicle (Filtered to Same Vehicle Type) */}
         <div>

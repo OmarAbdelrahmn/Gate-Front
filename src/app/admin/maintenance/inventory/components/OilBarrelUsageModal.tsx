@@ -25,6 +25,8 @@ import { toast } from "@/components/ui/Toast";
 import { exportMultiSheetExcel, type ExcelSheetDefinition } from "@/lib/export-excel";
 import { getOilBarrelUsage } from "@/lib/maintenance/api";
 import { CorrectOilChangeVehicleModal } from "@/app/admin/maintenance/work-orders/components/CorrectOilChangeVehicleModal";
+import { VehicleOilChangesModal } from "@/app/admin/maintenance/work-orders/components/VehicleOilChangesModal";
+import { useMaintenanceLookups } from "@/lib/maintenance/lookups";
 import type {
   OilBarrel,
   OilBarrelUsageResponse,
@@ -53,6 +55,11 @@ export function OilBarrelUsageModal({
   itemName,
   locationName,
 }: OilBarrelUsageModalProps) {
+  const {
+    resolveUserName,
+    resolveLocationName,
+    resolveWorkOrderLabel,
+  } = useMaintenanceLookups();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [data, setData] = useState<OilBarrelUsageResponse | null>(null);
@@ -63,6 +70,11 @@ export function OilBarrelUsageModal({
   const [lossPageSize, setLossPageSize] = useState(50);
   const [exporting, setExporting] = useState(false);
   const [isCorrectVehicleModalOpen, setIsCorrectVehicleModalOpen] = useState(false);
+  const [selectedVehicleForOps, setSelectedVehicleForOps] = useState<{
+    vehicleId: string;
+    plate: string;
+    vehicleType?: number | null;
+  } | null>(null);
 
   const handleExportExcel = async () => {
     if (!barrel || !data) return;
@@ -148,7 +160,7 @@ export function OilBarrelUsageModal({
           },
           {
             header: "رقم الأصل / المرجع",
-            accessor: (row) => row.assetNumber || (row.externalWorkOrderId ? `أمر عمل #${row.externalWorkOrderId}` : "—"),
+            accessor: (row) => row.assetNumber || (row.externalWorkOrderId ? resolveWorkOrderLabel(row.externalWorkOrderId) : "—"),
             isText: true,
             width: 18,
           },
@@ -249,6 +261,30 @@ export function OilBarrelUsageModal({
             width: 28,
           },
           {
+            header: "المستودع المسؤول",
+            accessor: (row) =>
+              row.responsibleInventoryLocationId
+                ? resolveLocationName(row.responsibleInventoryLocationId)
+                : locationName || "—",
+            width: 22,
+          },
+          {
+            header: "المسجل بواسطة",
+            accessor: (row) =>
+              row.recordedByUserId ? resolveUserName(row.recordedByUserId) : "مستخدم النظام",
+            width: 22,
+          },
+          {
+            header: "مصدر القيد",
+            accessor: (row) =>
+              row.correctionRevisionId
+                ? "هالك مرتجع من تعديل/إلغاء غيار زيت (برميل مغلق)"
+                : row.missingReason
+                  ? "شطب مستودع"
+                  : "فاقد تشغيل عادي",
+            width: 30,
+          },
+          {
             header: "تاريخ الحدوث",
             accessor: (row) => (row.occurredAtUtc ? formatDateTime(row.occurredAtUtc) : "—"),
             width: 22,
@@ -257,12 +293,6 @@ export function OilBarrelUsageModal({
             header: "تاريخ التسجيل",
             accessor: (row) => (row.recordedAtUtc ? formatDateTime(row.recordedAtUtc) : "—"),
             width: 22,
-          },
-          {
-            header: "معرف حركة المخزون",
-            accessor: (row) => row.stockMovementId || "—",
-            isText: true,
-            width: 24,
           },
         ],
       };
@@ -649,6 +679,7 @@ export function OilBarrelUsageModal({
                       <th className="p-3 text-center">المرتجع</th>
                       <th className="p-3 text-center">عدد العمليات</th>
                       <th className="p-3 text-left">آخر استخدام</th>
+                      <th className="p-3 text-center">إدارة عمليات المركبة</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
@@ -680,8 +711,8 @@ export function OilBarrelUsageModal({
                                   </span>
                                 </div>
                                 {row.externalWorkOrderId && (
-                                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                    أمر عمل #{row.externalWorkOrderId}
+                                  <div className="text-[10px] text-slate-400 mt-0.5">
+                                    {resolveWorkOrderLabel(row.externalWorkOrderId)}
                                   </div>
                                 )}
                               </div>
@@ -748,6 +779,33 @@ export function OilBarrelUsageModal({
                           <td className="p-3 text-left font-mono text-[11px] text-slate-500">
                             {row.lastUsedAtUtc ? formatDateTime(row.lastUsedAtUtc) : "-"}
                           </td>
+
+                          {/* Vehicle Operations Action */}
+                          <td className="p-3 text-center">
+                            {row.vehicleId ? (
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() =>
+                                  setSelectedVehicleForOps({
+                                    vehicleId: row.vehicleId!,
+                                    plate:
+                                      row.plateNumberAr ||
+                                      row.plateNumberEn ||
+                                      row.assetNumber ||
+                                      "مركبة الشركة",
+                                    vehicleType: row.vehicleType,
+                                  })
+                                }
+                                className="h-7 px-2.5 text-[11px] font-bold"
+                                title="استعراض عمليات غيار الزيت الفردية لهذه المركبة لتعديلها أو إلغائها أو تصحيح المركبة"
+                              >
+                                عمليات المركبة ({row.issueCount})
+                              </Button>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">—</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -769,6 +827,7 @@ export function OilBarrelUsageModal({
                       <th className="p-3">نوع الفاقد / السبب</th>
                       <th className="p-3 text-center">الكمية باللتر</th>
                       <th className="p-3 text-center">التكلفة التقديرية</th>
+                      <th className="p-3">المستودع والمسجل</th>
                       <th className="p-3">البيان / سبب التسجيل</th>
                       <th className="p-3 text-center">تاريخ الحدوث</th>
                       <th className="p-3 text-left">تاريخ التسجيل</th>
@@ -782,7 +841,14 @@ export function OilBarrelUsageModal({
                       >
                         {/* Missing Reason Badge */}
                         <td className="p-3">
-                          {getLossReasonBadge(entry.missingReason)}
+                          <div className="space-y-1">
+                            {getLossReasonBadge(entry.missingReason)}
+                            {entry.correctionRevisionId && (
+                              <span className="block w-fit px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800">
+                                هالك مرتجع من برميل مغلق (تعديل/إلغاء غيار زيت)
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Quantity */}
@@ -795,6 +861,21 @@ export function OilBarrelUsageModal({
                         <td className="p-3 text-center font-mono text-slate-700 dark:text-slate-300">
                           {entry.costAmount.toFixed(2)}
                           <span className="text-[10px] text-slate-400 mr-1">ر.س</span>
+                        </td>
+
+                        {/* Warehouse & User */}
+                        <td className="p-3">
+                          <div className="font-bold text-slate-800 dark:text-slate-200">
+                            {entry.responsibleInventoryLocationId
+                              ? resolveLocationName(entry.responsibleInventoryLocationId)
+                              : locationName || "المستودع الرئيسي"}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            بواسطة:{" "}
+                            {entry.recordedByUserId
+                              ? resolveUserName(entry.recordedByUserId)
+                              : "مستخدم النظام"}
+                          </div>
                         </td>
 
                         {/* Reason / Notes */}
@@ -933,6 +1014,19 @@ export function OilBarrelUsageModal({
           loadUsage(page, pageSize, lossPage, lossPageSize);
         }}
       />
+
+      {selectedVehicleForOps && (
+        <VehicleOilChangesModal
+          isOpen={Boolean(selectedVehicleForOps)}
+          vehicleId={selectedVehicleForOps.vehicleId}
+          vehiclePlate={selectedVehicleForOps.plate}
+          vehicleType={selectedVehicleForOps.vehicleType}
+          onClose={() => setSelectedVehicleForOps(null)}
+          onChanged={() => {
+            loadUsage(page, pageSize, lossPage, lossPageSize);
+          }}
+        />
+      )}
     </Modal>
   );
 }
