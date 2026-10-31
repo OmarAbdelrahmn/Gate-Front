@@ -81,6 +81,7 @@ export const INITIAL_PHYSICAL_CUSTODY_ITEMS: {
   { id: "camera", nameAr: "كاميرا EZVIZ", nameEn: "EZVIZ Security Camera", unitPrice: 350, defaultSelected: false, defaultQty: 1, defaultCondition: "جديدة بالكرتون" },
   { id: "helmet", nameAr: "خوذة سلامة", nameEn: "Safety Helmet", unitPrice: 200, defaultSelected: false, defaultQty: 1, defaultCondition: "مطابقة للمواصفات" },
   { id: "bike_box", nameAr: "صندوق دراجة نارية", nameEn: "Motorcycle Box", unitPrice: 100, defaultSelected: false, defaultQty: 1, defaultCondition: "سليم" },
+  { id: "bike_box_voucher", nameAr: "صندوق دباب باوتشر", nameEn: "Motorcycle Box Voucher", unitPrice: 1000, defaultSelected: false, defaultQty: 1, defaultCondition: "سليم وجاهز" },
   { id: "delivery_bag", nameAr: "حقيبة توصيل حرارية معتمدة", nameEn: "Thermal Delivery Bag", unitPrice: 150, defaultSelected: true, defaultQty: 1, defaultCondition: "جديدة معتمدة" },
   { id: "tshirt", nameAr: "تيشيرت زي رسمي", nameEn: "Uniform T-Shirt", unitPrice: 75, defaultSelected: true, defaultQty: 2, defaultCondition: "جديد" },
   { id: "pants", nameAr: "بنطلون زي رسمي", nameEn: "Uniform Pants", unitPrice: 70, defaultSelected: true, defaultQty: 2, defaultCondition: "جديد" },

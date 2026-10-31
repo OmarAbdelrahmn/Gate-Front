@@ -137,6 +137,7 @@ export const INITIAL_CUSTODY_ITEMS: { id: string; nameAr: string; nameEn: string
   { id: "car", nameAr: "سيارة", nameEn: "Company Car", unitPrice: "تُحدد", defaultSelected: true, defaultQty: 1, defaultCondition: "سليمة ومفحوصة" },
   { id: "helmet", nameAr: "خوذة", nameEn: "Safety Helmet", unitPrice: 200, defaultSelected: false, defaultQty: 1, defaultCondition: "مطابقة للمواصفات" },
   { id: "bike_box", nameAr: "صندوق دراجة نارية", nameEn: "Motorcycle Box", unitPrice: 100, defaultSelected: false, defaultQty: 1, defaultCondition: "سليم" },
+  { id: "bike_box_voucher", nameAr: "صندوق دباب باوتشر", nameEn: "Motorcycle Box Voucher", unitPrice: 1000, defaultSelected: false, defaultQty: 1, defaultCondition: "سليم وجاهز" },
   { id: "delivery_bag", nameAr: "حقيبة توصيل", nameEn: "Thermal Delivery Bag", unitPrice: 150, defaultSelected: true, defaultQty: 1, defaultCondition: "جديدة معتمدة" },
   { id: "tshirt", nameAr: "تيشيرت", nameEn: "Uniform T-Shirt", unitPrice: 75, defaultSelected: true, defaultQty: 2, defaultCondition: "جديد" },
   { id: "pants", nameAr: "بنطلون", nameEn: "Uniform Pants", unitPrice: 70, defaultSelected: true, defaultQty: 2, defaultCondition: "جديد" },
