@@ -57,6 +57,8 @@ import type {
   JahezProfitReportParams,
   JahezRiderPerformanceParams,
   JahezRiderPerformanceResponse,
+  JahezSettlementReminder,
+  JahezSettlementRemindersResponse,
 } from "./types";
 
 export * from "./constants";
@@ -1441,10 +1443,96 @@ export async function getAllJahezRiderPerformance(
 }
 
 /**
+ * Fetch Jahez settlement reminders.
+ * Returns sessions more than 10 Riyadh calendar days after the last executed settlement (or handover start).
+ * GET /api/jahez/v2/settlement-reminders?page=1&pageSize=50
+ */
+export async function getJahezSettlementReminders(
+  page = 1,
+  pageSize = 50,
+  init?: CustomRequestInit,
+): Promise<JahezSettlementRemindersResponse> {
+  const query = new URLSearchParams();
+  if (page !== undefined) query.set("page", String(page));
+  if (pageSize !== undefined) query.set("pageSize", String(Math.min(Math.max(pageSize, 1), 100)));
+  const qs = query.toString();
+  return authFetch<JahezSettlementRemindersResponse>(
+    `${ROOT}/settlement-reminders${qs ? `?${qs}` : ""}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+}
+
+/**
+ * Fetch all Jahez settlement reminders across all pages.
+ * Iteratively retrieves every page from the backend until all overdue reminder records are loaded.
+ */
+export async function getAllJahezSettlementReminders(
+  init?: CustomRequestInit,
+): Promise<JahezSettlementRemindersResponse> {
+  const pageSize = 100;
+  let page = 1;
+  const allItems: JahezSettlementReminder[] = [];
+  const seenKeys = new Set<string>();
+
+  while (true) {
+    const res = await getJahezSettlementReminders(page, pageSize, init);
+    const rawItems: JahezSettlementReminder[] = Array.isArray(res)
+      ? (res as unknown as JahezSettlementReminder[])
+      : res?.items || (res as any)?.Items || [];
+
+    if (!rawItems || rawItems.length === 0) {
+      break;
+    }
+
+    for (const item of rawItems) {
+      const key =
+        item.handoverId ||
+        item.HandoverId ||
+        item.riderProfileId ||
+        item.RiderProfileId ||
+        `${item.riderName || item.RiderName}-${item.reminderAnchorAtUtc || item.ReminderAnchorAtUtc}`;
+
+      if (key && seenKeys.has(key)) {
+        continue;
+      }
+      if (key) seenKeys.add(key);
+      allItems.push(item);
+    }
+
+    // Check if totalCount is provided and satisfied
+    const totalCount = res?.totalCount ?? (res as any)?.TotalCount;
+    if (typeof totalCount === "number" && allItems.length >= totalCount) {
+      break;
+    }
+
+    // Detect actual page size returned by backend (e.g. if backend limits to 50 instead of 100)
+    const actualPageSize = res?.pageSize || (res as any)?.PageSize || pageSize;
+    if (rawItems.length < actualPageSize) {
+      break;
+    }
+
+    page++;
+    if (page > 100) break; // Safety ceiling
+  }
+
+  return {
+    items: allItems,
+    page: 1,
+    pageSize: allItems.length,
+    totalCount: allItems.length,
+  };
+}
+
+/**
  * Jahez V2 client helper matching backend integration handoff contract.
  * Usage: jahezClient(...).profitReport({ fromDate, toDate })
  *        jahezClient(...).riderPerformance({ startDate, endDate, riderId, accountId, page, pageSize })
  *        jahezClient(...).allRiderPerformance({ startDate, endDate, riderId, accountId })
+ *        jahezClient(...).settlementReminders(1, 50)
+ *        jahezClient(...).allSettlementReminders()
  */
 export function jahezClient(init?: CustomRequestInit) {
   return {
@@ -1453,6 +1541,9 @@ export function jahezClient(init?: CustomRequestInit) {
       getJahezRiderPerformance(params, init),
     allRiderPerformance: (params: JahezRiderPerformanceParams) =>
       getAllJahezRiderPerformance(params, init),
+    settlementReminders: (page = 1, pageSize = 50) =>
+      getJahezSettlementReminders(page, pageSize, init),
+    allSettlementReminders: () => getAllJahezSettlementReminders(init),
     updateNet: (
       operationId: string,
       data: OperationNetUpdate,
@@ -1481,4 +1572,5 @@ export function jahezClient(init?: CustomRequestInit) {
       getJahezHandoverFeeRefunds(handoverId, init),
   };
 }
+
 

@@ -29,6 +29,7 @@ import {
   BadgeDollarSign,
   BarChart3,
   CalendarCheck,
+  CalendarClock,
   FileSpreadsheet,
   Droplets,
   GitBranch,
@@ -276,6 +277,13 @@ export const navigation: NavItem[] = [
           "jahez.money.receive",
           "jahez.money.disburse",
         ],
+      },
+      {
+        label: "تذكيرات التصفية",
+        labelKey: "nav.jahezSettlementReminders",
+        href: "/admin/jahez/settlement-reminders",
+        icon: CalendarClock,
+        permissionsAny: ["jahez.read"],
       },
       {
         label: "أداء الطلبات",

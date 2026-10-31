@@ -2,6 +2,8 @@ import {
   getJahezProfitReport,
   getJahezRiderPerformance,
   getAllJahezRiderPerformance,
+  getJahezSettlementReminders,
+  getAllJahezSettlementReminders,
   jahezClient,
   updateJahezOperationNet,
   updateOperationNet,
@@ -29,6 +31,8 @@ import type {
   JahezRiderPerformanceItem,
   JahezRiderPerformanceResponse,
   JahezRiderPerformanceParams,
+  JahezSettlementReminder,
+  JahezSettlementRemindersResponse,
 } from "./types";
 import type { CustomRequestInit } from "../auth/api";
 
@@ -36,6 +40,8 @@ export {
   getJahezProfitReport,
   getJahezRiderPerformance,
   getAllJahezRiderPerformance,
+  getJahezSettlementReminders,
+  getAllJahezSettlementReminders,
   jahezClient,
   updateJahezOperationNet,
   updateOperationNet,
@@ -63,6 +69,8 @@ export type {
   JahezRiderPerformanceItem,
   JahezRiderPerformanceResponse,
   JahezRiderPerformanceParams,
+  JahezSettlementReminder,
+  JahezSettlementRemindersResponse,
   CustomRequestInit,
 };
 

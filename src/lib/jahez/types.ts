@@ -908,3 +908,30 @@ export interface JahezRiderPerformanceParams {
   pageSize?: number;
 }
 
+export interface JahezSettlementReminder {
+  handoverId: string;
+  accountId: string;
+  externalAccountId?: string | null;
+  riderProfileId: string;
+  riderName: string;
+  reminderAnchorAtUtc: string;
+  daysSinceSettlement: number;
+  administrativeDebt?: number;
+  HandoverId?: string;
+  AccountId?: string;
+  ExternalAccountId?: string | null;
+  RiderProfileId?: string;
+  RiderName?: string;
+  ReminderAnchorAtUtc?: string;
+  DaysSinceSettlement?: number;
+  AdministrativeDebt?: number;
+}
+
+export interface JahezSettlementRemindersResponse {
+  items: JahezSettlementReminder[];
+  page: number;
+  pageSize: number;
+  totalCount?: number;
+}
+
+
