@@ -583,6 +583,53 @@ export async function getJahezMoneyMovements(
   });
 }
 
+/**
+ * Fetch all Jahez money movements across all pages.
+ */
+export async function getAllJahezMoneyMovements(
+  params?: MoneyMovementsFilterParams,
+  init?: CustomRequestInit,
+): Promise<MoneyMovementsResponse> {
+  const pageSize = 100;
+  let page = 1;
+  const allItems: MoneyMovement[] = [];
+  const seenIds = new Set<string>();
+
+  while (true) {
+    const res = await getJahezMoneyMovements(page, pageSize, params, init);
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    for (const item of items) {
+      if (item.id) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          allItems.push(item);
+        }
+      } else {
+        allItems.push(item);
+      }
+    }
+
+    if (typeof (res as any)?.totalCount === "number" && allItems.length >= (res as any).totalCount) {
+      break;
+    }
+
+    if (items.length < pageSize) {
+      break;
+    }
+
+    page++;
+    if (page > 100) break;
+  }
+
+  return {
+    items: allItems,
+    page: 1,
+    pageSize: allItems.length,
+  };
+}
+
 export async function recordJahezFeeReceipt(
   data: FeeReceipt,
   idempotencyKey?: string,
@@ -677,6 +724,50 @@ export async function getJahezCashboxHandovers(
   );
 }
 
+export async function getAllJahezCashboxHandovers(
+  init?: CustomRequestInit,
+): Promise<Page<CashboxHandover>> {
+  const pageSize = 100;
+  let page = 1;
+  const allItems: CashboxHandover[] = [];
+  const seenIds = new Set<string>();
+
+  while (true) {
+    const res = await getJahezCashboxHandovers(page, pageSize, init);
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    for (const item of items) {
+      if (item.id) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          allItems.push(item);
+        }
+      } else {
+        allItems.push(item);
+      }
+    }
+
+    if (typeof res?.totalCount === "number" && allItems.length >= res.totalCount) {
+      break;
+    }
+
+    if (items.length < pageSize) {
+      break;
+    }
+
+    page++;
+    if (page > 50) break;
+  }
+
+  return {
+    items: allItems,
+    page: 1,
+    pageSize: allItems.length,
+    totalCount: allItems.length,
+  };
+}
+
 export async function getJahezCashboxHandover(
   id: string,
   init?: CustomRequestInit,
@@ -760,6 +851,50 @@ export async function getJahezTransferredDebts(
   });
 }
 
+export async function getAllJahezTransferredDebts(
+  init?: CustomRequestInit,
+): Promise<Page<TransferredDebt>> {
+  const pageSize = 100;
+  let page = 1;
+  const allItems: TransferredDebt[] = [];
+  const seenIds = new Set<string>();
+
+  while (true) {
+    const res = await getJahezTransferredDebts(page, pageSize, init);
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    for (const item of items) {
+      if (item.id) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          allItems.push(item);
+        }
+      } else {
+        allItems.push(item);
+      }
+    }
+
+    if (typeof res?.totalCount === "number" && allItems.length >= res.totalCount) {
+      break;
+    }
+
+    if (items.length < pageSize) {
+      break;
+    }
+
+    page++;
+    if (page > 50) break;
+  }
+
+  return {
+    items: allItems,
+    page: 1,
+    pageSize: allItems.length,
+    totalCount: allItems.length,
+  };
+}
+
 export async function repayJahezTransferredDebt(
   debtId: string,
   data: MoneyRecord,
@@ -799,6 +934,46 @@ export async function getJahezRidersWithTransferredDebts(
       method: "GET",
     },
   );
+}
+
+export async function getAllJahezRidersWithTransferredDebts(
+  init?: CustomRequestInit,
+): Promise<Page<RiderTransferredDebtSummary>> {
+  const pageSize = 100;
+  let page = 1;
+  const allItems: RiderTransferredDebtSummary[] = [];
+  const seenIds = new Set<string>();
+
+  while (true) {
+    const res = await getJahezRidersWithTransferredDebts(page, pageSize, init);
+    const items = res?.items || [];
+    if (items.length === 0) break;
+
+    for (const item of items) {
+      if (!seenIds.has(item.riderProfileId)) {
+        seenIds.add(item.riderProfileId);
+        allItems.push(item);
+      }
+    }
+
+    if (typeof res?.totalCount === "number" && allItems.length >= res.totalCount) {
+      break;
+    }
+
+    if (items.length < pageSize) {
+      break;
+    }
+
+    page++;
+    if (page > 50) break;
+  }
+
+  return {
+    items: allItems,
+    page: 1,
+    pageSize: allItems.length,
+    totalCount: allItems.length,
+  };
 }
 
 /**

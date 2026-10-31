@@ -124,6 +124,8 @@ export type Rider = {
   preferredCityAr?: string | null;
   riderStartDate?: string | null;
   riderEndDate?: string | null;
+  phoneNumber?: string | null;
+  primaryPhone?: string | null;
 };
 export type WorkHistory = {
   id: string;

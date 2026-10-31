@@ -8,9 +8,12 @@ import { translate } from "@/lib/i18n";
 import {
   getJahezFunds,
   getJahezMoneyMovements,
+  getAllJahezMoneyMovements,
   getJahezTransferredDebts,
+  getAllJahezTransferredDebts,
   repayJahezTransferredDebt,
   getJahezRidersWithTransferredDebts,
+  getAllJahezRidersWithTransferredDebts,
   getJahezRiderTransferredDebtsSummary,
   getJahezRiderTransferredDebts,
   repayJahezRiderTransferredDebts,
@@ -20,8 +23,10 @@ import {
   recordJahezFeeReceipt,
   getJahezHandoverFeeRefunds,
   getJahezAccounts,
+  getAllJahezAccounts,
   getRiyadhTodayDate,
   getJahezCashboxHandovers,
+  getAllJahezCashboxHandovers,
   submitJahezCashboxHandover,
   confirmJahezCashboxHandover,
   cancelJahezCashboxHandover,
@@ -216,6 +221,8 @@ export default function JahezCashboxPage() {
   // Pagination & Filtering
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [movementsPageSize, setMovementsPageSize] = useState<number | "all">("all");
   const [fundFilter, setFundFilter] = useState<number | "">("");
   const [directionFilter, setDirectionFilter] = useState<number | "">("");
   const [search, setSearch] = useState("");
@@ -466,18 +473,18 @@ export default function JahezCashboxPage() {
       const [fundsRes, movRes, debtsRes, accRes, ridersRes, sponsorsRes, handoversRes, riderDebtsRes] =
         await Promise.allSettled([
           getJahezFunds(),
-          getJahezMoneyMovements(targetPage, pageSize, {
+          getAllJahezMoneyMovements({
             fromDate: fDate || undefined,
             toDate: tDate || undefined,
             sponsorId: spFilter || undefined,
             sponsorNameAr: spFilter || undefined,
           }),
-          getJahezTransferredDebts(targetPage, pageSize),
-          getJahezAccounts(1, 100),
+          getAllJahezTransferredDebts(),
+          getAllJahezAccounts(100),
           listRiders(),
           listSponsors(),
-          getJahezCashboxHandovers(1, 50),
-          getJahezRidersWithTransferredDebts(1, riderDebtsPageSize),
+          getAllJahezCashboxHandovers(),
+          getAllJahezRidersWithTransferredDebts(),
         ]);
 
       if (fundsRes.status === "fulfilled") {
@@ -576,6 +583,17 @@ export default function JahezCashboxPage() {
       m.ownerRider?.mobile?.includes(q)
     );
   });
+
+  const displayedMovements = useMemo(() => {
+    if (movementsPageSize === "all") return filteredMovements;
+    const start = (movementsPage - 1) * movementsPageSize;
+    return filteredMovements.slice(start, start + movementsPageSize);
+  }, [filteredMovements, movementsPage, movementsPageSize]);
+
+  const totalMovementsPages = useMemo(() => {
+    if (movementsPageSize === "all") return 1;
+    return Math.max(1, Math.ceil(filteredMovements.length / movementsPageSize));
+  }, [filteredMovements.length, movementsPageSize]);
 
   const filteredDebts = debts.filter((d) => {
     if (!search.trim()) return true;
@@ -728,9 +746,9 @@ export default function JahezCashboxPage() {
   const loadRiderDebts = async (targetPage = riderDebtsPage) => {
     setRiderDebtsLoading(true);
     try {
-      const res = await getJahezRidersWithTransferredDebts(targetPage, riderDebtsPageSize);
+      const res = await getAllJahezRidersWithTransferredDebts();
       setRiderDebtSummaries(res?.items || []);
-      setRiderDebtsPage(targetPage);
+      setRiderDebtsPage(1);
     } catch {
       toast.error("خطأ", "فشل جلب قائمة مديونيات المناديب المرحلة");
     } finally {
@@ -741,9 +759,9 @@ export default function JahezCashboxPage() {
   const loadHistoryDebts = async (targetPage = historyDebtsPage) => {
     setHistoryDebtsLoading(true);
     try {
-      const res = await getJahezTransferredDebts(targetPage, pageSize);
+      const res = await getAllJahezTransferredDebts();
       setDebts(res?.items || []);
-      setHistoryDebtsPage(targetPage);
+      setHistoryDebtsPage(1);
     } catch {
       toast.error("خطأ", "فشل جلب سجل المستحقات المرحلة التاريخي");
     } finally {
@@ -1582,7 +1600,7 @@ export default function JahezCashboxPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredMovements.map((m) => {
+                    displayedMovements.map((m) => {
                       const isLockedByHandover = Boolean(m.cashboxHandoverId || m.isHandedToAccountant);
                       const fallbackRider = riderMap.get(m.riderProfileId);
                       const sponsorName = getMovementSponsorName(m);
@@ -1809,6 +1827,66 @@ export default function JahezCashboxPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination & Count Footer for Movements */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 text-xs text-gray-500">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-700 dark:text-gray-300">
+                  عرض {displayedMovements.length} من أصل {filteredMovements.length} حركة مسجلة
+                </span>
+                {filteredMovements.length !== movements.length && (
+                  <span className="text-[11px] text-gray-400">
+                    (مصفاة من إجمالي {movements.length} حركة)
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-500">عرض بالسجل:</span>
+                  <select
+                    value={movementsPageSize}
+                    onChange={(e) => {
+                      const val = e.target.value === "all" ? "all" : Number(e.target.value);
+                      setMovementsPageSize(val);
+                      setMovementsPage(1);
+                    }}
+                    className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1 text-xs font-semibold text-gray-700 dark:text-gray-200"
+                  >
+                    <option value="all">الكل (عرض جميع السجلات بالصفحة الأولى)</option>
+                    <option value={50}>50 حركة</option>
+                    <option value={100}>100 حركة</option>
+                    <option value={250}>250 حركة</option>
+                  </select>
+                </div>
+
+                {movementsPageSize !== "all" && totalMovementsPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setMovementsPage((p) => Math.max(1, p - 1))}
+                      disabled={movementsPage <= 1}
+                      className="h-7 text-xs"
+                    >
+                      السابق
+                    </Button>
+                    <span className="font-mono font-bold px-1.5 text-gray-700 dark:text-gray-300">
+                      صفحة {movementsPage} من {totalMovementsPages}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setMovementsPage((p) => Math.min(totalMovementsPages, p + 1))}
+                      disabled={movementsPage >= totalMovementsPages}
+                      className="h-7 text-xs"
+                    >
+                      التالي
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

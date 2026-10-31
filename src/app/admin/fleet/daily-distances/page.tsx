@@ -16,10 +16,12 @@ import {
   Gauge,
   History,
   Info,
+  Layers,
   MapPin,
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   Upload,
   UserCheck,
   UserX,
@@ -37,6 +39,8 @@ import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toast";
 import {
   getVehicleDailyDistances,
+  getVehicleDailyDistance,
+  getVehicleDailyDistanceReport,
   saveManualOdometer,
   importGpsFile,
   getGpsImportLogs,
@@ -45,6 +49,7 @@ import {
   getGpsRowErrorMessage,
   type VehicleDailyDistanceItem,
   type VehicleDailyDistancesResponse,
+  type VehicleDailyReportDay,
   type SaveManualOdometerRequest,
   type GpsImportResponse,
   type GpsImportLogItem,
@@ -69,6 +74,13 @@ function getRiyadhDateStr(daysOffset = 0): string {
   const riyadhOffsetMs = 3 * 60 * 60 * 1000;
   const targetDate = new Date(now.getTime() + riyadhOffsetMs + daysOffset * 24 * 60 * 60 * 1000);
   return targetDate.toISOString().slice(0, 10);
+}
+
+function getDateOffsetStr(baseDateStr: string, daysOffset: number): string {
+  const d = new Date(baseDateStr + "T00:00:00Z");
+  if (isNaN(d.getTime())) return baseDateStr;
+  d.setUTCDate(d.getUTCDate() + daysOffset);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function VehicleDailyDistancesPage() {
@@ -192,6 +204,12 @@ export default function VehicleDailyDistancesPage() {
   const [manualBaseline, setManualBaseline] = useState<string>("");
   const [manualNotes, setManualNotes] = useState<string>("");
   const [requireBaselineInput, setRequireBaselineInput] = useState<boolean>(false);
+  const [concurrencyConflictNotice, setConcurrencyConflictNotice] = useState<string | null>(null);
+  const [apiErrorMessage, setApiErrorMessage] = useState<string | null>(null);
+  const [vehicleHistory, setVehicleHistory] = useState<VehicleDailyReportDay[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  const [applicableBaseline, setApplicableBaseline] = useState<{ date: string; value: number } | null>(null);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState<boolean>(true);
 
   // GPS Import Modal State
   const [isGpsImportOpen, setIsGpsImportOpen] = useState<boolean>(false);
@@ -366,68 +384,254 @@ export default function VehicleDailyDistancesPage() {
     fetchDailyDistances(searchQuery);
   };
 
+  // Load vehicle's daily distance history and sync freshest record
+  const loadVehicleHistoryAndSyncRecord = async (item: VehicleDailyDistanceItem) => {
+    setHistoryLoading(true);
+    setVehicleHistory([]);
+    setApplicableBaseline(null);
+
+    const targetDate = item.workDate;
+    const fromDate = getDateOffsetStr(targetDate, -30);
+    const toDate = getDateOffsetStr(targetDate, 7);
+
+    try {
+      const [reportRes, freshItemRes] = await Promise.allSettled([
+        getVehicleDailyDistanceReport(item.vehicleId, { fromDate, toDate }),
+        getVehicleDailyDistance(item.vehicleId, item.workDate, item.assetNumber),
+      ]);
+
+      let freshItem: VehicleDailyDistanceItem | null = null;
+      if (freshItemRes.status === "fulfilled" && freshItemRes.value) {
+        const itemVal = freshItemRes.value;
+        freshItem = itemVal;
+        setSelectedItemForManual((prev) => {
+          if (!prev || prev.vehicleId !== item.vehicleId) return prev;
+          return {
+            ...prev,
+            ...itemVal,
+            rowVersion: itemVal.rowVersion ?? prev.rowVersion,
+          };
+        });
+      }
+
+      if (reportRes.status === "fulfilled" && reportRes.value?.days) {
+        const days = reportRes.value.days;
+        setVehicleHistory(days);
+
+        // Find applicable baseline: latest recorded day before targetDate
+        const priorDays = days
+          .filter(
+            (d) =>
+              d.workDate < targetDate &&
+              (d.hasRecord || d.effectiveOdometerAfterKm != null || d.manualOdometerReading != null)
+          )
+          .sort((a, b) => a.workDate.localeCompare(b.workDate));
+
+        const latestPrior = priorDays.length > 0 ? priorDays[priorDays.length - 1] : null;
+
+        if (latestPrior) {
+          const baseVal = latestPrior.effectiveOdometerAfterKm ?? latestPrior.manualOdometerReading;
+          if (baseVal != null) {
+            setApplicableBaseline({
+              date: latestPrior.workDate,
+              value: baseVal,
+            });
+          }
+        } else {
+          // If no prior daily distance record exists, fallback to baseline in item if any
+          const baselineFromItem =
+            freshItem?.manualBaselineOdometerReading ?? item.manualBaselineOdometerReading;
+          if (baselineFromItem != null) {
+            setApplicableBaseline({
+              date: "الأساس الأولي المسجل",
+              value: baselineFromItem,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Could not load vehicle daily distance history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // Earliest recorded day after target workDate (to show subsequent constraint)
+  const nextRecordedDay = useMemo(() => {
+    if (!selectedItemForManual || !vehicleHistory.length) return null;
+    const targetDate = selectedItemForManual.workDate;
+    const subsequentDays = vehicleHistory
+      .filter(
+        (d) =>
+          d.workDate > targetDate &&
+          (d.hasRecord || d.effectiveOdometerAfterKm != null || d.manualOdometerReading != null)
+      )
+      .sort((a, b) => a.workDate.localeCompare(b.workDate));
+
+    if (subsequentDays.length === 0) return null;
+    const firstSubsequent = subsequentDays[0];
+    const reading = firstSubsequent.manualOdometerReading ?? firstSubsequent.effectiveOdometerAfterKm;
+    if (reading == null) return null;
+    return {
+      date: firstSubsequent.workDate,
+      value: reading,
+    };
+  }, [selectedItemForManual, vehicleHistory]);
+
   // Open Manual Modal
   const handleOpenManualModal = (item: VehicleDailyDistanceItem) => {
     setSelectedItemForManual(item);
-    
-    const currentRefOdometer = item.manualOdometerReading ?? item.currentOdometer;
-    setManualOdometer(item.manualOdometerReading != null ? item.manualOdometerReading.toString() : (currentRefOdometer != null ? currentRefOdometer.toString() : ""));
+    setConcurrencyConflictNotice(null);
+    setApiErrorMessage(null);
 
-    let initialBaseline = "";
-    if (item.manualBaselineOdometerReading != null) {
-      initialBaseline = item.manualBaselineOdometerReading.toString();
-    } else if (currentRefOdometer != null && currentRefOdometer > 0) {
-      if (item.gpsDistanceKm != null && item.gpsDistanceKm > 0) {
-        // GPS data present: subtract GPS distance from current vehicle odometer
-        const calcBaseline = currentRefOdometer - item.gpsDistanceKm;
-        const normalized = calcBaseline > 0 ? calcBaseline : 0;
-        initialBaseline = Number.isInteger(normalized) ? normalized.toString() : normalized.toFixed(2);
-      } else {
-        // No GPS data: default directly to current vehicle odometer
-        initialBaseline = currentRefOdometer.toString();
+    const isCorrection = item.manualOdometerReading != null;
+    setManualOdometer(
+      item.manualOdometerReading != null ? item.manualOdometerReading.toString() : ""
+    );
+
+    if (isCorrection) {
+      setRequireBaselineInput(false);
+      setManualBaseline(
+        item.manualBaselineOdometerReading != null ? item.manualBaselineOdometerReading.toString() : ""
+      );
+    } else {
+      const currentRefOdometer = item.currentOdometer;
+      let initialBaseline = "";
+      if (item.manualBaselineOdometerReading != null) {
+        initialBaseline = item.manualBaselineOdometerReading.toString();
+      } else if (currentRefOdometer != null && currentRefOdometer > 0) {
+        if (item.gpsDistanceKm != null && item.gpsDistanceKm > 0) {
+          const calcBaseline = currentRefOdometer - item.gpsDistanceKm;
+          const normalized = calcBaseline > 0 ? calcBaseline : 0;
+          initialBaseline = Number.isInteger(normalized) ? normalized.toString() : normalized.toFixed(2);
+        } else {
+          initialBaseline = currentRefOdometer.toString();
+        }
       }
+      setManualBaseline(initialBaseline);
+      setRequireBaselineInput(item.manualBaselineOdometerReading == null);
     }
 
-    setManualBaseline(initialBaseline);
     setManualNotes(item.manualNotes || "");
-    setRequireBaselineInput(item.manualBaselineOdometerReading == null);
+
+    // Load vehicle history and sync freshest record & baseline
+    loadVehicleHistoryAndSyncRecord(item);
   };
 
   // Submit Manual Odometer
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItemForManual) return;
+    setApiErrorMessage(null);
 
     const odoVal = parseFloat(manualOdometer);
     if (isNaN(odoVal) || odoVal < 0) {
-      toast.error("بيانات غير صالحة", "رجاء إدخال قراءة العداد الإجمالية بشكل صحيح.");
+      toast.error(
+        locale === "en" ? "Invalid Data" : "بيانات غير صالحة",
+        locale === "en"
+          ? "Please enter a valid total odometer reading."
+          : "رجاء إدخال قراءة العداد الإجمالية بشكل صحيح."
+      );
       return;
     }
 
-    const baselineVal = manualBaseline.trim() ? parseFloat(manualBaseline) : null;
-    if (requireBaselineInput && (baselineVal === null || isNaN(baselineVal) || baselineVal < 0)) {
-      toast.error("قراءة الأساس مطلوبة", "يجب إدخال قراءة العداد السابقة (الأساس) لتحديد بداية الاحتساب.");
-      return;
+    const isCorrection = selectedItemForManual.manualOdometerReading != null;
+    const isLowerThanBaseline = applicableBaseline != null && odoVal < applicableBaseline.value;
+
+    let baselineVal: number | null = null;
+    if (isCorrection || isLowerThanBaseline) {
+      // Per requirements: when correcting an existing odometer reading or entering a reading below previous baseline,
+      // send null baselineOdometerReading.
+      // Do not use the existing reading or vehicle's current odometer as the minimum allowed value.
+      // The backend validates against the applicable baseline and recalculates later daily mileage.
+      baselineVal = null;
+    } else if (applicableBaseline != null) {
+      // If the vehicle has an earlier daily-distance record, the backend ignores client baseline
+      // and calculates it from existing history.
+      baselineVal = null;
+    } else {
+      baselineVal = manualBaseline.trim() ? parseFloat(manualBaseline) : null;
+      if (requireBaselineInput && (baselineVal === null || isNaN(baselineVal) || baselineVal < 0)) {
+        toast.error(
+          locale === "en" ? "Baseline Reading Required" : "قراءة الأساس مطلوبة",
+          locale === "en"
+            ? "Please enter previous odometer reading (baseline) to calculate distance."
+            : "يجب إدخال قراءة العداد السابقة (الأساس) لتحديد بداية الاحتساب."
+        );
+        return;
+      }
+      if (baselineVal !== null && odoVal < baselineVal) {
+        toast.error(
+          locale === "en" ? "Reading Error" : "خطأ في القراءة",
+          locale === "en"
+            ? "Current odometer reading cannot be less than baseline reading."
+            : "قراءة العداد الحالية لا يمكن أن تكون أقل من قراءة الأساس."
+        );
+        return;
+      }
     }
 
-    if (baselineVal !== null && odoVal < baselineVal) {
-      toast.error("خطأ في القراءة", "قراءة العداد الحالية لا يمكن أن تكون أقل من قراءة الأساس.");
-      return;
-    }
+    // Determine if a row already exists for target workDate
+    const targetDayInHistory = vehicleHistory.find(
+      (d) => d.workDate === selectedItemForManual.workDate
+    );
+    const hasExistingRow = Boolean(
+      (selectedItemForManual.rowVersion && selectedItemForManual.rowVersion.trim()) ||
+      (selectedItemForManual.id && selectedItemForManual.id.trim()) ||
+      selectedItemForManual.manualOdometerReading != null ||
+      selectedItemForManual.gpsDistanceKm != null ||
+      (targetDayInHistory && targetDayInHistory.hasRecord)
+    );
+
+    // Requirement: Send existing record's rowVersion if row exists, null only when no existing row.
+    const rowVersionToSend =
+      hasExistingRow && selectedItemForManual.rowVersion && selectedItemForManual.rowVersion.trim()
+        ? selectedItemForManual.rowVersion.trim()
+        : null;
+
+    const notesToSend = manualNotes.trim()
+      ? manualNotes.trim()
+      : isLowerThanBaseline
+      ? "Corrected vehicle odometer"
+      : null;
 
     startTransition(async () => {
       try {
         const payload: SaveManualOdometerRequest = {
           odometerReading: odoVal,
           baselineOdometerReading: baselineVal,
-          notes: manualNotes.trim() || null,
-          rowVersion: selectedItemForManual.rowVersion,
+          notes: notesToSend,
+          rowVersion: rowVersionToSend,
         };
 
-        const updatedItem = await saveManualOdometer(selectedItemForManual.vehicleId, selectedItemForManual.workDate, payload);
-        toast.success("تم التحديث بنجاح", "تم تسجيل قراءة العداد اليدوية واحتساب المسافة المعتمدة.");
-        
-        // Immediately replace the row with PUT response
+        const updatedItem = await saveManualOdometer(
+          selectedItemForManual.vehicleId,
+          selectedItemForManual.workDate,
+          payload
+        );
+
+        const isOdoCorrection = Boolean(updatedItem?.isOdometerCorrection || isLowerThanBaseline);
+
+        toast.success(
+          isOdoCorrection
+            ? (locale === "en" ? "Odometer Corrected Successfully" : "تم تصحيح عداد المركبة بنجاح")
+            : isCorrection
+            ? (locale === "en" ? "Correction Saved" : "تم حفظ التصحيح بنجاح")
+            : (locale === "en" ? "Saved Successfully" : "تم الحفظ بنجاح"),
+          isOdoCorrection
+            ? (locale === "en"
+                ? "Vehicle odometer has been updated. Manual distance is 0 km, and subsequent daily records were recalculated."
+                : "تم تصحيح عداد المركبة وتحديث العداد التشغيلي. المسافة اليدوية لليوم 0 كم وتمت إعادة احتساب الأيام اللاحقة.")
+            : isCorrection
+            ? (locale === "en"
+                ? "Manual odometer reading was corrected and daily records and vehicle mileage were refreshed."
+                : "تم تصحيح قراءة العداد اليدوية واحتساب المسافة وتحديث المسافة الإجمالية للمركبة.")
+            : (locale === "en"
+                ? "Manual odometer reading recorded successfully."
+                : "تم تسجيل قراءة العداد اليدوية واحتساب المسافة المعتمدة.")
+        );
+
+        // Immediately update row with PUT response
         setData((prev) => {
           if (!prev) return prev;
           return {
@@ -437,24 +641,86 @@ export default function VehicleDailyDistancesPage() {
         });
 
         setSelectedItemForManual(null);
-        // Refresh summary KPIs and subsequent days
+        setConcurrencyConflictNotice(null);
+        setApiErrorMessage(null);
+
+        // Refresh daily record, subsequent days, KPIs, and vehicle mileage
         fetchDailyDistances();
       } catch (err: any) {
         console.error("Save manual odometer error:", err);
-        const errInfo = getDailyDistanceErrorMessage(err?.errorCode, err?.message);
-        if (err?.errorCode === "fleet.daily_distance.manual_baseline_required" || (err?.status === 400 && err?.message?.includes("baseline"))) {
-          setRequireBaselineInput(true);
-          toast.error("مطلوب قراءة الأساس", "يرجى تحديد قراءة العداد السابقة (الأساس) لهذه المركبة.");
-        } else if (err?.errorCode === "fleet.daily_distance.invalid_manual_odometer") {
-          const baselineVal = selectedItemForManual.manualBaselineOdometerReading ?? selectedItemForManual.currentOdometer;
+        const errorCode = err?.details?.errorCode || err?.code || err?.errorCode;
+
+        // Requirement 3: Extract exact API detail message when it rejects the reading
+        const detailMsg =
+          (typeof err?.details?.detail === "string" && err.details.detail.trim()) ||
+          (typeof err?.details?.message === "string" && err.details.message.trim()) ||
+          (err?.details?.errors && typeof err.details.errors === "object"
+            ? Object.entries(err.details.errors)
+                .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+                .join(" | ")
+            : null) ||
+          (typeof err?.message === "string" && err.message.trim()) ||
+          (locale === "en"
+            ? "The correction may be below the applicable baseline or make a later reading invalid."
+            : "قد تكون القراءة المصححة أقل من قراءة الأساس المعتمدة أو تجعل قراءة لاحقة غير صالحة.");
+
+        setApiErrorMessage(detailMsg);
+
+        if (errorCode === "fleet.daily_distance.invalid_manual_odometer") {
           toast.error(
-            "قراءة غير صالحة",
-            `قراءة العداد الإجمالية أقل من العداد الفعلي السابق للمركبة (قراءة الأساس: ${baselineVal.toLocaleString()} كم) أو تكسر تسلسل القراءات. يرجى إدخال قراءة صحيحة أو إجراء تصحيح إداري.`
+            locale === "en" ? "Invalid Odometer Reading" : "قراءة عداد غير صالحة",
+            detailMsg
           );
-        } else if (err?.status === 409 || err?.errorCode === "fleet.concurrency_conflict") {
-          toast.error("تعارض في التحديث", "تم تعديل السجل بواسطة مستخدم آخر. تم إعادة تحميل البيانات.");
+        } else if (err?.status === 409 || errorCode === "fleet.concurrency_conflict") {
+          toast.error(
+            locale === "en" ? "Concurrency Conflict" : "تعارض في التحديث",
+            locale === "en"
+              ? "The record was modified by another user. Reloading record for your review..."
+              : "تم تعديل السجل بواسطة مستخدم آخر. تم إعادة تحميل السجل لمراجعته قبل المحاولة مجدداً."
+          );
+
+          try {
+            const freshItem = await getVehicleDailyDistance(
+              selectedItemForManual.vehicleId,
+              selectedItemForManual.workDate,
+              selectedItemForManual.assetNumber
+            );
+            if (freshItem) {
+              setSelectedItemForManual(freshItem);
+              setManualOdometer(
+                freshItem.manualOdometerReading != null
+                  ? freshItem.manualOdometerReading.toString()
+                  : ""
+              );
+              setManualNotes(freshItem.manualNotes || "");
+              if (freshItem.manualOdometerReading == null) {
+                setRequireBaselineInput(freshItem.manualBaselineOdometerReading == null);
+              } else {
+                setRequireBaselineInput(false);
+              }
+              setConcurrencyConflictNotice(
+                locale === "en"
+                  ? "The record has been updated with the latest data from the server. Please review before retrying."
+                  : "تم تحديث بيانات السجل بأحدث القيم من الخادم بالتزامن. يرجى مراجعة البيانات وتعديل القراءة إن لزم الأمر قبل إعادة المحاولة."
+              );
+            }
+            loadVehicleHistoryAndSyncRecord(selectedItemForManual);
+          } catch (reloadErr) {
+            console.warn("Could not reload record directly:", reloadErr);
+          }
+
           fetchDailyDistances();
+        } else if (
+          errorCode === "fleet.daily_distance.manual_baseline_required" ||
+          (err?.status === 400 && err?.message?.includes("baseline"))
+        ) {
+          setRequireBaselineInput(true);
+          toast.error(
+            locale === "en" ? "Baseline Required" : "مطلوب قراءة الأساس",
+            detailMsg
+          );
         } else {
+          const errInfo = getDailyDistanceErrorMessage(errorCode, detailMsg);
           toast.error(errInfo.title, errInfo.description);
         }
       }
@@ -969,6 +1235,16 @@ export default function VehicleDailyDistancesPage() {
 
           {(can("fleet.daily_distances.read") || can("fleet.vehicles.read") || can("fleet.assignments.read")) && (
             <>
+              <Link href="/admin/fleet/daily-distances/fleet-report">
+                <Button
+                  variant="secondary"
+                  className="gap-2 text-xs font-bold hover:text-emerald-700 dark:hover:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300"
+                >
+                  <Layers className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  تقرير مسافات الأسطول (جميع المركبات)
+                </Button>
+              </Link>
+
               <Link href="/admin/fleet/daily-distances/vehicle-report">
                 <Button
                   variant="secondary"
@@ -1464,9 +1740,17 @@ export default function VehicleDailyDistancesPage() {
                       {/* Manual Odometer Reading */}
                       <td className="px-3 py-3 text-center font-mono whitespace-nowrap">
                         {item.manualOdometerReading != null ? (
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {item.manualOdometerReading.toLocaleString()}
-                          </span>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              {item.manualOdometerReading.toLocaleString()}
+                            </span>
+                            {item.isOdometerCorrection && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                <Sparkles className="h-2.5 w-2.5" />
+                                تصحيح عداد
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
@@ -1486,9 +1770,16 @@ export default function VehicleDailyDistancesPage() {
                       {/* Manual Calculated Distance */}
                       <td className="px-3 py-3 text-center font-mono whitespace-nowrap">
                         {item.manualDistanceKm != null ? (
-                          <span className="font-bold text-amber-700 dark:text-amber-400">
-                            {item.manualDistanceKm.toFixed(2)} كم
-                          </span>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="font-bold text-amber-700 dark:text-amber-400">
+                              {item.manualDistanceKm.toFixed(2)} كم
+                            </span>
+                            {item.isOdometerCorrection && (
+                              <span className="text-[9px] text-purple-600 dark:text-purple-400 font-bold">
+                                (تصحيح عداد)
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
@@ -1614,22 +1905,311 @@ export default function VehicleDailyDistancesPage() {
       {/* Modal: Enter/Edit Manual Odometer Reading */}
       <Modal
         isOpen={Boolean(selectedItemForManual)}
-        onClose={() => setSelectedItemForManual(null)}
-        title="إدخال / تعديل قراءة العداد اليدوية"
+        onClose={() => {
+          setSelectedItemForManual(null);
+          setConcurrencyConflictNotice(null);
+        }}
+        title={
+          selectedItemForManual?.manualOdometerReading != null
+            ? "تصحيح قراءة العداد اليدوية"
+            : "إدخال قراءة العداد اليدوية"
+        }
       >
         {selectedItemForManual && (
           <form onSubmit={handleManualSubmit} className="space-y-4 pt-2 text-xs">
-            <Card className="p-3 bg-blue-50 dark:bg-blue-950/40 border-blue-200 text-xs space-y-1 text-slate-800 dark:text-slate-200">
+            {/* Top Identity Card */}
+            <Card className="p-3 bg-blue-50 dark:bg-blue-950/40 border-blue-200 text-xs space-y-1.5 text-slate-800 dark:text-slate-200">
               <div className="flex items-center justify-between font-bold">
-                <span>رقم الأصل: <span className="font-mono text-[#1167c9]">{selectedItemForManual.assetNumber}</span></span>
-                <span>اللوحة: <strong>{selectedItemForManual.plateNumberAr || selectedItemForManual.plateNumberEn || "—"}</strong></span>
+                <span>
+                  رقم الأصل:{" "}
+                  <span className="font-mono text-[#1167c9]">{selectedItemForManual.assetNumber}</span>
+                </span>
+                <span>
+                  اللوحة:{" "}
+                  <strong>
+                    {selectedItemForManual.plateNumberAr || selectedItemForManual.plateNumberEn || "—"}
+                  </strong>
+                </span>
               </div>
-              <div className="text-[11px] text-slate-500 font-mono">
-                تاريخ العمل: {selectedItemForManual.workDate} | العداد التشغيلي الحالي: {selectedItemForManual.currentOdometer.toLocaleString()} كم
+              <div className="text-[11px] text-slate-500 font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span>تاريخ العمل: <strong>{selectedItemForManual.workDate}</strong></span>
+                <span>
+                  العداد التشغيلي الحالي:{" "}
+                  <strong>{selectedItemForManual.currentOdometer.toLocaleString()} كم</strong>
+                </span>
+                {selectedItemForManual.manualOdometerReading != null && (
+                  <span className="text-amber-700 dark:text-amber-400 font-bold">
+                    القراءة المسجلة: {selectedItemForManual.manualOdometerReading.toLocaleString()} كم
+                  </span>
+                )}
+              </div>
+
+              {/* Row Existence & RowVersion Status (Requirement 2) */}
+              {(() => {
+                const targetDayInHist = vehicleHistory.find(
+                  (d) => d.workDate === selectedItemForManual.workDate
+                );
+                const rowExists = Boolean(
+                  (selectedItemForManual.rowVersion && selectedItemForManual.rowVersion.trim()) ||
+                  (selectedItemForManual.id && selectedItemForManual.id.trim()) ||
+                  selectedItemForManual.manualOdometerReading != null ||
+                  selectedItemForManual.gpsDistanceKm != null ||
+                  (targetDayInHist && targetDayInHist.hasRecord)
+                );
+                return (
+                  <div className="flex items-center gap-2 pt-1 border-t border-blue-200/60 dark:border-blue-900/40 text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-400">حالة السجل بالخادم:</span>
+                    {rowExists ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        <CheckCircle2 className="h-3 w-3" />
+                        سجل موجود مسبقاً (سيتم إرسال rowVersion للتحديث والتوافق)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                        <Info className="h-3 w-3" />
+                        سجل جديد (لا يوجد صف سابق - سيتم إرسال rowVersion: null)
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="text-[11px] text-blue-800 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-900/30 p-2.5 rounded-lg border border-blue-200 dark:border-blue-800 leading-relaxed space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-[#1167c9] dark:text-blue-400" />
+                  <span>إمكانية تخفيض وتصحيح قراءة العداد (Odometer Correction):</span>
+                </div>
+                <p>
+                  يمكنك إدخال قراءة أقل من قراءة اليوم السابق (مثال: إدخال 20 ليوم 30 أكتوبر بعد 100 في 29 أكتوبر). سيقبلها النظام كتصحيح لعداد المركبة وتحديث للعداد التشغيلي، وستكون المسافة اليدوية لليوم 0 كم مع بقاء سجل اليوم السابق في التاريخ وإعادة احتساب الأيام اللاحقة.
+                </p>
               </div>
             </Card>
 
-            {requireBaselineInput && (
+            {/* API Error Message Alert Card (Requirement 3) */}
+            {apiErrorMessage && (
+              <Card className="p-3.5 bg-red-50 dark:bg-red-950/50 border-2 border-red-300 dark:border-red-800 text-xs text-red-900 dark:text-red-200 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-bold text-red-700 dark:text-red-400 text-sm">
+                    <AlertCircle className="h-4.5 w-4.5 shrink-0" />
+                    <span>تفاصيل رفض القراءة من النظام (API Rejection Detail):</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setApiErrorMessage(null)}
+                    className="text-red-600 hover:text-red-800 dark:text-red-400 p-0.5 rounded"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="p-2.5 bg-white/80 dark:bg-black/40 rounded-lg border border-red-200 dark:border-red-900/60 text-xs font-semibold leading-relaxed text-red-800 dark:text-red-200">
+                  {apiErrorMessage}
+                </div>
+                <div className="text-[11px] text-red-700 dark:text-red-300 flex items-start gap-1.5">
+                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    السماح بإدخال رقم أقل في النموذج لا يتجاوز شروط التحقق من المسافات في الخادم. يجب أن تكون القراءة أعلى من قراءة الأساس المعتمدة بالنظام ولا تؤدي لجعل قراءات الأيام اللاحقة سالبة أو غير صالحة.
+                  </span>
+                </div>
+              </Card>
+            )}
+
+            {/* Concurrency Conflict Banner (When record reloaded) */}
+            {concurrencyConflictNotice && (
+              <Card className="p-3 bg-amber-50 dark:bg-amber-950/40 border-amber-300 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                <div className="flex items-center justify-between">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    تعارض في التحديث بالتزامن
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setConcurrencyConflictNotice(null)}
+                    className="text-amber-700 hover:text-amber-900 dark:text-amber-400"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  {concurrencyConflictNotice}
+                </p>
+              </Card>
+            )}
+
+            {/* Vehicle Daily Distance History & Baseline Context Panel (Requirement 1) */}
+            <Card className="p-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  <History className="h-4 w-4 text-[#1167c9]" />
+                  <span>سجل المسافات وقراءات العداد السابقة واللاحقة للمركبة:</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                  className="text-[11px] text-[#1167c9] dark:text-blue-400 font-bold hover:underline"
+                >
+                  {isHistoryExpanded ? "إخفاء التفاصيل" : "عرض التفاصيل"}
+                </button>
+              </div>
+
+              {historyLoading ? (
+                <div className="p-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+                  <RefreshCw className="h-4 w-4 animate-spin text-[#1167c9]" />
+                  <span>جارِ فحص تاريخ مسافات المركبة وحساب قراءة الأساس من الخادم...</span>
+                </div>
+              ) : (
+                <>
+                  {/* 3 KPI Summary Badges */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* Applicable Baseline */}
+                    <div className="p-2.5 bg-emerald-50/80 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800/80">
+                      <div className="text-[10px] text-emerald-800 dark:text-emerald-300 font-bold">
+                        قراءة الأساس المعتمدة بالنظام
+                      </div>
+                      <div className="text-sm font-black font-mono text-emerald-700 dark:text-emerald-400 mt-0.5">
+                        {applicableBaseline != null
+                          ? `${applicableBaseline.value.toLocaleString()} كم`
+                          : "غير محددة (يلزم إدخال أساس)"}
+                      </div>
+                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 truncate">
+                        {applicableBaseline != null
+                          ? `محسوبة من تاريخ: ${applicableBaseline.date}`
+                          : "لا يوجد سجل مسافات سابق"}
+                      </div>
+                    </div>
+
+                    {/* Target Day */}
+                    <div className="p-2.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800/80">
+                      <div className="text-[10px] text-blue-800 dark:text-blue-300 font-bold">
+                        قراءة اليوم المستهدف ({selectedItemForManual.workDate})
+                      </div>
+                      <div className="text-sm font-black font-mono text-[#1167c9] dark:text-blue-400 mt-0.5">
+                        {selectedItemForManual.manualOdometerReading != null
+                          ? `${selectedItemForManual.manualOdometerReading.toLocaleString()} كم`
+                          : "غير مسجل حالياً"}
+                      </div>
+                      <div className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5 truncate">
+                        {selectedItemForManual.appliedDistanceKm != null
+                          ? `المسافة الحالية: ${selectedItemForManual.appliedDistanceKm.toFixed(2)} كم`
+                          : "لا توجد مسافة معتمدة"}
+                      </div>
+                    </div>
+
+                    {/* Next Recorded Day Constraint */}
+                    <div className="p-2.5 bg-purple-50/80 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800/80">
+                      <div className="text-[10px] text-purple-800 dark:text-purple-300 font-bold">
+                        أقرب قراءة لاحقة مسجلة
+                      </div>
+                      <div className="text-sm font-black font-mono text-purple-700 dark:text-purple-400 mt-0.5">
+                        {nextRecordedDay != null
+                          ? `${nextRecordedDay.value.toLocaleString()} كم`
+                          : "لا توجد قراءات لاحقة"}
+                      </div>
+                      <div className="text-[10px] text-purple-600 dark:text-purple-400 mt-0.5 truncate">
+                        {nextRecordedDay != null
+                          ? `يوم ${nextRecordedDay.date} (الحد الأقصى المسموح)`
+                          : "لا يوجد قيد من أيام لاحقة"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Collapsible History Table */}
+                  {isHistoryExpanded && vehicleHistory.length > 0 && (
+                    <div className="overflow-x-auto max-h-48 border border-slate-200 dark:border-slate-800 rounded-lg">
+                      <table className="w-full text-[11px] text-right border-collapse">
+                        <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 sticky top-0 font-bold">
+                          <tr>
+                            <th className="px-2.5 py-1.5">التاريخ</th>
+                            <th className="px-2.5 py-1.5 text-center">الأساس</th>
+                            <th className="px-2.5 py-1.5 text-center">قراءة العداد</th>
+                            <th className="px-2.5 py-1.5 text-center">المسافة كم</th>
+                            <th className="px-2.5 py-1.5 text-center">المصدر</th>
+                            <th className="px-2.5 py-1.5 text-center">العداد بعد اليوم</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800 font-mono">
+                          {vehicleHistory
+                            .filter(
+                              (d) =>
+                                d.hasRecord ||
+                                d.effectiveOdometerAfterKm != null ||
+                                d.workDate === selectedItemForManual.workDate
+                            )
+                            .map((day) => {
+                              const isTarget = day.workDate === selectedItemForManual.workDate;
+                              const isBaselineDay =
+                                applicableBaseline && day.workDate === applicableBaseline.date;
+                              const isNextDay =
+                                nextRecordedDay && day.workDate === nextRecordedDay.date;
+
+                              return (
+                                <tr
+                                  key={day.workDate}
+                                  className={
+                                    isTarget
+                                      ? "bg-blue-100/70 dark:bg-blue-900/40 font-bold"
+                                      : isBaselineDay
+                                      ? "bg-emerald-50 dark:bg-emerald-950/20"
+                                      : isNextDay
+                                      ? "bg-purple-50 dark:bg-purple-950/20"
+                                      : "hover:bg-slate-100/50 dark:hover:bg-slate-800/30"
+                                  }
+                                >
+                                  <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                    <div className="flex items-center gap-1">
+                                      <span>{day.workDate}</span>
+                                      {isTarget && (
+                                        <Badge tone="blue" className="text-[9px] px-1 py-0">
+                                          اليوم المستهدف
+                                        </Badge>
+                                      )}
+                                      {isBaselineDay && (
+                                        <Badge tone="green" className="text-[9px] px-1 py-0">
+                                          أساس اليوم
+                                        </Badge>
+                                      )}
+                                      {isNextDay && (
+                                        <Badge tone="purple" className="text-[9px] px-1 py-0">
+                                          قراءة لاحقة
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-2.5 py-1.5 text-center">
+                                    {day.manualBaselineOdometerReading != null
+                                      ? day.manualBaselineOdometerReading.toLocaleString()
+                                      : "—"}
+                                  </td>
+                                  <td className="px-2.5 py-1.5 text-center font-bold">
+                                    {day.manualOdometerReading != null
+                                      ? day.manualOdometerReading.toLocaleString()
+                                      : "—"}
+                                  </td>
+                                  <td className="px-2.5 py-1.5 text-center text-[#1167c9] dark:text-blue-400 font-bold">
+                                    {day.appliedDistanceKm != null
+                                      ? day.appliedDistanceKm.toFixed(2)
+                                      : "0.00"}
+                                  </td>
+                                  <td className="px-2.5 py-1.5 text-center text-[10px]">
+                                    {day.appliedSource === 2 ? "GPS" : day.appliedSource === 1 ? "يدوي" : "—"}
+                                  </td>
+                                  <td className="px-2.5 py-1.5 text-center">
+                                    {day.effectiveOdometerAfterKm != null
+                                      ? day.effectiveOdometerAfterKm.toLocaleString()
+                                      : "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </Card>
+
+            {/* Baseline Required Notice (For new entry or backend error) */}
+            {requireBaselineInput && !applicableBaseline && (
               <Card className="p-3 bg-amber-50 dark:bg-amber-950/40 border-amber-300 text-xs text-amber-900 dark:text-amber-200 space-y-1">
                 <p className="font-bold flex items-center gap-1.5">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -1641,88 +2221,186 @@ export default function VehicleDailyDistancesPage() {
               </Card>
             )}
 
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-300">
-                قراءة العداد الإجمالية الحالية (Odometer) <span className="text-red-500">*</span>
+            {/* Odometer Input */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                {selectedItemForManual.manualOdometerReading != null
+                  ? "قراءة العداد الإجمالية المصححة (Odometer Reading)"
+                  : "قراءة العداد الإجمالية الحالية (Odometer Reading)"}{" "}
+                <span className="text-red-500">*</span>
               </label>
               <Input
                 type="number"
-                step="1"
+                step="any"
                 min="0"
                 value={manualOdometer}
                 onChange={(e) => setManualOdometer(e.target.value)}
-                placeholder="أدخل قراءة العداد الإجمالية للمركبة (مثال: 10164)..."
+                placeholder="أدخل قراءة العداد الإجمالية للمركبة (مثال: 100)..."
                 className="font-mono text-sm"
                 required
               />
-              <span className="text-[11px] text-slate-500 mt-1 block">
-                ملاحظة: هذه هي القراءة الكلية المكتوبة على عداد المركبة وليست مسافة اليوم فقط.
+              <span className="text-[11px] text-slate-500 block">
+                {selectedItemForManual.manualOdometerReading != null
+                  ? "ملاحظة: يمكنك إدخال أي قيمة صحيحة حتى لو كانت أقل من القراءة المسجلة سابقاً لتصحيح الخطأ."
+                  : "ملاحظة: هذه هي القراءة الكلية المكتوبة على عداد المركبة وليست مسافة اليوم فقط."}
               </span>
+
+              {/* Real-time Constraint Warnings & Explanations */}
+              {(() => {
+                if (!manualOdometer || isNaN(parseFloat(manualOdometer))) return null;
+                const odo = parseFloat(manualOdometer);
+
+                // If reading is lower than applicable baseline: explain that it acts as odometer correction!
+                if (applicableBaseline && odo < applicableBaseline.value) {
+                  return (
+                    <div className="p-3 bg-purple-50/90 dark:bg-purple-950/40 rounded-xl border-2 border-purple-300 dark:border-purple-800 text-purple-950 dark:text-purple-200 text-xs space-y-1.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 font-bold text-purple-900 dark:text-purple-300">
+                        <Sparkles className="h-4 w-4 shrink-0 text-purple-600 dark:text-purple-400" />
+                        <span>تصحيح عداد المركبة (Odometer Correction)</span>
+                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-purple-200/80 dark:bg-purple-900 text-purple-900 dark:text-purple-200">
+                          أقل من قراءة الأساس ({applicableBaseline.value.toLocaleString()} كم)
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-purple-800 dark:text-purple-300">
+                        القراءة المدخلة ({odo.toLocaleString()} كم) أقل من قراءة اليوم السابق ({applicableBaseline.date}: {applicableBaseline.value.toLocaleString()} كم).
+                        سيقبل النظام هذه القراءة <strong>كتصحيح لعداد المركبة</strong> ويحدث العداد التشغيلي للمركبة.
+                      </p>
+                      <ul className="text-[10px] text-purple-700 dark:text-purple-300 space-y-1 list-disc list-inside pt-0.5 font-medium">
+                        <li>سيبقى سجل اليوم السابق ({applicableBaseline.date}) محفوظاً في التاريخ كما هو.</li>
+                        <li>المسافة اليدوية المحسوبة لهذا اليوم ستكون <strong>0 كم</strong> (لأنه لا يمكن استنتاج المسافة من قراءة مخفضة).</li>
+                        {selectedItemForManual.gpsDistanceKm != null && selectedItemForManual.gpsDistanceKm > 0 ? (
+                          <li className="text-emerald-700 dark:text-emerald-400 font-bold">
+                            مسافة الـ GPS متوفرة ({selectedItemForManual.gpsDistanceKm.toFixed(2)} كم) وستظل معتمدة للمسافة اليومية.
+                          </li>
+                        ) : (
+                          <li>ستظل مسافة اليوم معتمدة على GPS إن وُجدت لاحقاً أو تبقى 0 كم.</li>
+                        )}
+                        <li>
+                          {nextRecordedDay != null
+                            ? `سيتم إعادة احتساب سجلات الأيام اللاحقة (بدءاً من ${nextRecordedDay.date}) بناءً على القراءة المصححة.`
+                            : "لا توجد سجلات لأيام لاحقة، وسيكون عداد المركبة الحالي هو هذه القراءة المصححة."}
+                        </li>
+                      </ul>
+                    </div>
+                  );
+                }
+
+                // If reading is greater than next recorded day:
+                if (nextRecordedDay && odo > nextRecordedDay.value) {
+                  return (
+                    <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-[11px] font-bold flex items-start gap-1.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                      <span>
+                        تنبيه: القراءة المدخلة ({odo.toLocaleString()} كم) أعلى من قراءة اليوم اللاحق ({nextRecordedDay.date}: {nextRecordedDay.value.toLocaleString()} كم). قد يتسبب ذلك في جعل تسلسل الأيام اللاحقة غير صالح وسيرفضها الخادم.
+                      </span>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
             </div>
 
-            {(requireBaselineInput || selectedItemForManual.manualBaselineOdometerReading != null || selectedItemForManual.currentOdometer != null) && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    قراءة العداد السابقة (الأساس / Baseline) {requireBaselineInput && <span className="text-red-500">*</span>}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {selectedItemForManual.currentOdometer != null && selectedItemForManual.gpsDistanceKm != null && selectedItemForManual.gpsDistanceKm > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const base = (selectedItemForManual.manualOdometerReading ?? selectedItemForManual.currentOdometer) - selectedItemForManual.gpsDistanceKm!;
-                          const val = base > 0 ? base : 0;
-                          setManualBaseline(Number.isInteger(val) ? val.toString() : val.toFixed(2));
-                        }}
-                        className="text-[11px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold"
-                      >
-                        خصم مسافة GPS ({( (selectedItemForManual.manualOdometerReading ?? selectedItemForManual.currentOdometer) - selectedItemForManual.gpsDistanceKm ).toFixed(2)} كم)
-                      </button>
-                    )}
-                    {selectedItemForManual.currentOdometer != null && (
-                      <button
-                        type="button"
-                        onClick={() => setManualBaseline(selectedItemForManual.currentOdometer.toString())}
-                        className="text-[11px] text-[#1167c9] dark:text-blue-400 hover:underline font-bold"
-                      >
-                        العداد الحالي ({selectedItemForManual.currentOdometer.toLocaleString()} كم)
-                      </button>
-                    )}
+            {/* Baseline Field Handling: only shown when no baseline exists in system */}
+            {(selectedItemForManual.manualOdometerReading == null || requireBaselineInput) && !applicableBaseline && (
+              (requireBaselineInput || selectedItemForManual.manualBaselineOdometerReading != null || selectedItemForManual.currentOdometer != null) && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      قراءة العداد السابقة (الأساس / Baseline) {requireBaselineInput && <span className="text-red-500">*</span>}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {selectedItemForManual.currentOdometer != null && selectedItemForManual.gpsDistanceKm != null && selectedItemForManual.gpsDistanceKm > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const base = (selectedItemForManual.manualOdometerReading ?? selectedItemForManual.currentOdometer) - selectedItemForManual.gpsDistanceKm!;
+                            const val = base > 0 ? base : 0;
+                            setManualBaseline(Number.isInteger(val) ? val.toString() : val.toFixed(2));
+                          }}
+                          className="text-[11px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold"
+                        >
+                          خصم مسافة GPS ({( (selectedItemForManual.manualOdometerReading ?? selectedItemForManual.currentOdometer) - selectedItemForManual.gpsDistanceKm ).toFixed(2)} كم)
+                        </button>
+                      )}
+                      {selectedItemForManual.currentOdometer != null && (
+                        <button
+                          type="button"
+                          onClick={() => setManualBaseline(selectedItemForManual.currentOdometer.toString())}
+                          className="text-[11px] text-[#1167c9] dark:text-blue-400 hover:underline font-bold"
+                        >
+                          العداد الحالي ({selectedItemForManual.currentOdometer.toLocaleString()} كم)
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  <Input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={manualBaseline}
+                    onChange={(e) => setManualBaseline(e.target.value)}
+                    placeholder="أدخل قراءة الأساس السابقة..."
+                    className="font-mono text-sm"
+                    required={requireBaselineInput}
+                  />
                 </div>
-                <Input
-                  type="number"
-                  step="1"
-                  min="0"
-                  value={manualBaseline}
-                  onChange={(e) => setManualBaseline(e.target.value)}
-                  placeholder="أدخل قراءة الأساس السابقة..."
-                  className="font-mono text-sm"
-                  required={requireBaselineInput}
-                />
-              </div>
+              )
             )}
 
-            {/* Calculated Preview */}
-            {manualOdometer && manualBaseline && !isNaN(parseFloat(manualOdometer)) && !isNaN(parseFloat(manualBaseline)) && (
-              <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl border text-xs flex items-center justify-between font-bold">
-                <span>المسافة اليدوية المحسوبة لليوم:</span>
-                <span className="font-mono text-base text-[#1167c9]">
-                  {(parseFloat(manualOdometer) - parseFloat(manualBaseline)).toFixed(2)} كم
-                </span>
-              </div>
-            )}
+            {/* Calculated Distance Preview */}
+            {(() => {
+              if (!manualOdometer || isNaN(parseFloat(manualOdometer))) return null;
+              const odo = parseFloat(manualOdometer);
+              const effectiveBase =
+                applicableBaseline?.value ??
+                (manualBaseline && !isNaN(parseFloat(manualBaseline)) ? parseFloat(manualBaseline) : null);
+
+              if (effectiveBase != null) {
+                const diff = odo - effectiveBase;
+                if (diff >= 0) {
+                  return (
+                    <div className="p-3 bg-blue-50/60 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800 text-xs flex items-center justify-between font-bold">
+                      <span>المسافة اليدوية المحسوبة:</span>
+                      <span className="font-mono text-base text-[#1167c9] dark:text-blue-400">
+                        {diff.toFixed(2)} كم
+                      </span>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div className="p-3 bg-purple-50/80 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800 text-xs flex items-center justify-between font-bold">
+                      <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-300">
+                        <Sparkles className="h-4 w-4 text-purple-600" />
+                        <span>المسافة اليدوية لليوم (تصحيح عداد):</span>
+                      </div>
+                      <span className="font-mono text-base text-purple-700 dark:text-purple-400">
+                        0.00 كم
+                      </span>
+                    </div>
+                  );
+                }
+              }
+              return null;
+            })()}
 
             <div>
               <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-300">
-                ملاحظات تشغيلية (اختياري)
+                {selectedItemForManual.manualOdometerReading != null || (applicableBaseline && parseFloat(manualOdometer) < applicableBaseline.value)
+                  ? "سبب التصحيح / ملاحظات تشغيلية"
+                  : "ملاحظات تشغيلية (اختياري)"}
               </label>
               <Input
                 type="text"
                 value={manualNotes}
                 onChange={(e) => setManualNotes(e.target.value)}
-                placeholder="أدخل أي ملاحظات حول قراءة العداد..."
+                placeholder={
+                  applicableBaseline && parseFloat(manualOdometer) < applicableBaseline.value
+                    ? "مثال: تصحيح قراءة عداد المركبة (Corrected vehicle odometer)..."
+                    : selectedItemForManual.manualOdometerReading != null
+                    ? "مثال: تصحيح قراءة خاطئة (Corrected incorrect reading)..."
+                    : "أدخل أي ملاحظات حول قراءة العداد..."
+                }
                 className="text-xs"
               />
             </div>
@@ -1731,18 +2409,28 @@ export default function VehicleDailyDistancesPage() {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => setSelectedItemForManual(null)}
+                onClick={() => {
+                  setSelectedItemForManual(null);
+                  setConcurrencyConflictNotice(null);
+                  setApiErrorMessage(null);
+                }}
                 disabled={isPending}
               >
                 {t("common.cancel")}
               </Button>
               <Button
                 type="submit"
-                disabled={isPending || !manualOdometer.trim()}
+                disabled={isPending || historyLoading || !manualOdometer.trim()}
                 className="gap-2 bg-[#1167c9] hover:bg-blue-700 text-white font-bold"
               >
-                {isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Edit3 className="h-4 w-4" />}
-                حفظ قراءة العداد
+                {isPending || historyLoading ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Edit3 className="h-4 w-4" />
+                )}
+                {selectedItemForManual.manualOdometerReading != null
+                  ? "حفظ تصحيح العداد"
+                  : "حفظ قراءة العداد"}
               </Button>
             </div>
           </form>

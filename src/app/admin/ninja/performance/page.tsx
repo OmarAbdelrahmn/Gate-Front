@@ -58,11 +58,15 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Download,
   Users,
   Wallet,
   Receipt,
   Building2,
+  LayoutGrid,
+  List,
+  CreditCard,
 } from "lucide-react";
 
 type PerformanceTab = "summary" | "riders" | "daily" | "records";
@@ -132,6 +136,21 @@ export default function NinjaPerformancePage() {
   const [recordsSearch, setRecordsSearch] = useState("");
   const [recordsPageSize, setRecordsPageSize] = useState<number | "all">("all");
   const [recordsPage, setRecordsPage] = useState(1);
+
+  // Matrix View States for Raw Records Tab
+  const [viewMode, setViewMode] = useState<"matrix" | "flat">("matrix");
+  const [entityView, setEntityView] = useState<"riders" | "captains">("riders");
+  const [matrixMetric, setMatrixMetric] = useState<"orders" | "hours">("orders");
+  const [expandedMatrixRiders, setExpandedMatrixRiders] = useState<Set<string>>(new Set());
+
+  const toggleMatrixRiderExpand = (riderKey: string) => {
+    setExpandedMatrixRiders((prev) => {
+      const next = new Set(prev);
+      if (next.has(riderKey)) next.delete(riderKey);
+      else next.add(riderKey);
+      return next;
+    });
+  };
 
   // Upload Modal State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -407,9 +426,259 @@ export default function NinjaPerformancePage() {
       const capId = (r.captainId || "").toLowerCase();
       const rider = riders.find((rd) => rd.id === r.riderProfileId);
       const riderName = (rider?.fullNameAr || rider?.fullNameEn || "").toLowerCase();
-      return capId.includes(q) || riderName.includes(q);
+      const iqama = (rider?.iqamaNo || "").toLowerCase();
+      return capId.includes(q) || riderName.includes(q) || iqama.includes(q);
     });
   }, [records, recordsSearch, riders]);
+
+  // Lookup map for riders
+  const riderMap = useMemo(() => {
+    const map = new Map<string, Rider>();
+    for (const r of riders) map.set(r.id, r);
+    return map;
+  }, [riders]);
+
+  // Days list between filterFrom and filterTo (Inclusive)
+  const daysList = useMemo(() => {
+    if (!filterFrom || !filterTo) return [];
+    const [startY, startM, startD] = filterFrom.split("-").map(Number);
+    const [endY, endM, endD] = filterTo.split("-").map(Number);
+    if (!startY || !startM || !startD || !endY || !endM || !endD) return [];
+
+    const start = new Date(Date.UTC(startY, startM - 1, startD));
+    const end = new Date(Date.UTC(endY, endM - 1, endD));
+    if (start > end) return [];
+
+    const days: {
+      dateStr: string;
+      dayNumber: number;
+      dayNameAr: string;
+      dayFormatted: string;
+    }[] = [];
+
+    const AR_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+    const curr = new Date(start);
+    let count = 0;
+    while (curr <= end && count <= 90) {
+      const y = curr.getUTCFullYear();
+      const m = String(curr.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(curr.getUTCDate()).padStart(2, "0");
+      const dateStr = `${y}-${m}-${d}`;
+      const dayNumber = curr.getUTCDate();
+      const dayIndex = curr.getUTCDay();
+      const dayNameAr = AR_DAYS[dayIndex] || "";
+      days.push({
+        dateStr,
+        dayNumber,
+        dayNameAr,
+        dayFormatted: `${d}/${m}`,
+      });
+      curr.setUTCDate(curr.getUTCDate() + 1);
+      count++;
+    }
+    return days;
+  }, [filterFrom, filterTo]);
+
+  // Group into matrix by Rider
+  const matrixRiderRows = useMemo(() => {
+    if (filteredRecords.length === 0) return [];
+
+    const groupMap = new Map<
+      string,
+      {
+        riderKey: string;
+        riderId: string;
+        riderName: string;
+        iqamaNo: string;
+        phone: string;
+        totalOrders: number;
+        totalHours: number;
+        activeDates: Set<string>;
+        daysMap: Map<string, { orders: number; hours: number }>;
+        captainsMap: Map<
+          string,
+          {
+            captainId: string;
+            totalOrders: number;
+            totalHours: number;
+            daysMap: Map<string, { orders: number; hours: number }>;
+          }
+        >;
+      }
+    >();
+
+    for (const r of filteredRecords) {
+      const riderId = r.riderProfileId || "";
+      const rider = riderId ? riderMap.get(riderId) : undefined;
+      const key = riderId || "unassigned";
+      const name =
+        rider?.fullNameAr ||
+        rider?.fullNameEn ||
+        (riderId ? "مندوب غير محدد" : "غير منسوب لمندوب (شاغر)");
+      const iqama = rider?.iqamaNo || "—";
+      const phone = rider?.phoneNumber || rider?.primaryPhone || "—";
+
+      let group = groupMap.get(key);
+      if (!group) {
+        group = {
+          riderKey: key,
+          riderId,
+          riderName: name,
+          iqamaNo: iqama,
+          phone,
+          totalOrders: 0,
+          totalHours: 0,
+          activeDates: new Set(),
+          daysMap: new Map(),
+          captainsMap: new Map(),
+        };
+        groupMap.set(key, group);
+      }
+
+      const orders = Number(r.totalOrders) || 0;
+      const hours = Number(r.totalWorkingHours) || 0;
+      group.totalOrders += orders;
+      group.totalHours += hours;
+
+      if (orders > 0 || hours > 0) {
+        group.activeDates.add(r.reportDate);
+      }
+
+      const dayEntry = group.daysMap.get(r.reportDate) || { orders: 0, hours: 0 };
+      dayEntry.orders += orders;
+      dayEntry.hours += hours;
+      group.daysMap.set(r.reportDate, dayEntry);
+
+      const capId = r.captainId || "—";
+      let cap = group.captainsMap.get(capId);
+      if (!cap) {
+        cap = {
+          captainId: capId,
+          totalOrders: 0,
+          totalHours: 0,
+          daysMap: new Map(),
+        };
+        group.captainsMap.set(capId, cap);
+      }
+      cap.totalOrders += orders;
+      cap.totalHours += hours;
+      const capDayEntry = cap.daysMap.get(r.reportDate) || { orders: 0, hours: 0 };
+      capDayEntry.orders += orders;
+      capDayEntry.hours += hours;
+      cap.daysMap.set(r.reportDate, capDayEntry);
+    }
+
+    return Array.from(groupMap.values())
+      .map((g) => {
+        const activeDays = g.activeDates.size;
+        const avgOrdersPerDay =
+          activeDays > 0 ? Number((g.totalOrders / activeDays).toFixed(1)) : 0;
+        const productivity =
+          g.totalHours > 0 ? Number((g.totalOrders / g.totalHours).toFixed(2)) : 0;
+        return {
+          ...g,
+          activeDays,
+          avgOrdersPerDay,
+          productivity,
+          captains: Array.from(g.captainsMap.values()),
+        };
+      })
+      .sort((a, b) => b.totalOrders - a.totalOrders);
+  }, [filteredRecords, riderMap]);
+
+  // Group into matrix by Captain ID
+  const matrixCaptainRows = useMemo(() => {
+    if (filteredRecords.length === 0) return [];
+
+    const groupMap = new Map<
+      string,
+      {
+        captainId: string;
+        riderName: string;
+        iqamaNo: string;
+        totalOrders: number;
+        totalHours: number;
+        activeDates: Set<string>;
+        daysMap: Map<string, { orders: number; hours: number }>;
+      }
+    >();
+
+    for (const r of filteredRecords) {
+      const capId = r.captainId || "—";
+      const rider = r.riderProfileId ? riderMap.get(r.riderProfileId) : undefined;
+      const riderName = rider?.fullNameAr || rider?.fullNameEn || "غير منسوب";
+      const iqama = rider?.iqamaNo || "—";
+
+      let group = groupMap.get(capId);
+      if (!group) {
+        group = {
+          captainId: capId,
+          riderName,
+          iqamaNo: iqama,
+          totalOrders: 0,
+          totalHours: 0,
+          activeDates: new Set(),
+          daysMap: new Map(),
+        };
+        groupMap.set(capId, group);
+      }
+
+      const orders = Number(r.totalOrders) || 0;
+      const hours = Number(r.totalWorkingHours) || 0;
+      group.totalOrders += orders;
+      group.totalHours += hours;
+
+      if (orders > 0 || hours > 0) {
+        group.activeDates.add(r.reportDate);
+      }
+
+      const dayEntry = group.daysMap.get(r.reportDate) || { orders: 0, hours: 0 };
+      dayEntry.orders += orders;
+      dayEntry.hours += hours;
+      group.daysMap.set(r.reportDate, dayEntry);
+    }
+
+    return Array.from(groupMap.values())
+      .map((g) => {
+        const activeDays = g.activeDates.size;
+        const avgOrdersPerDay =
+          activeDays > 0 ? Number((g.totalOrders / activeDays).toFixed(1)) : 0;
+        const productivity =
+          g.totalHours > 0 ? Number((g.totalOrders / g.totalHours).toFixed(2)) : 0;
+        return {
+          ...g,
+          activeDays,
+          avgOrdersPerDay,
+          productivity,
+        };
+      })
+      .sort((a, b) => b.totalOrders - a.totalOrders);
+  }, [filteredRecords, riderMap]);
+
+  // Totals for Matrix
+  const matrixTotals = useMemo(() => {
+    let totalOrders = 0;
+    let totalHours = 0;
+    const dayTotals = new Map<string, { orders: number; hours: number }>();
+
+    for (const r of filteredRecords) {
+      const orders = Number(r.totalOrders) || 0;
+      const hours = Number(r.totalWorkingHours) || 0;
+      totalOrders += orders;
+      totalHours += hours;
+
+      const day = dayTotals.get(r.reportDate) || { orders: 0, hours: 0 };
+      day.orders += orders;
+      day.hours += hours;
+      dayTotals.set(r.reportDate, day);
+    }
+
+    return {
+      totalOrders,
+      totalHours,
+      dayTotals,
+    };
+  }, [filteredRecords]);
 
   const totalRecordPages = useMemo(() => {
     if (recordsPageSize === "all" || recordsPageSize <= 0) return 1;
@@ -441,6 +710,57 @@ export default function NinjaPerformancePage() {
         { header: "ساعات العمل", accessor: (r) => Number(Number(r.totalWorkingHours).toFixed(2)) },
       ],
     });
+  };
+
+  const exportMatrix = () => {
+    if (entityView === "riders") {
+      exportToExcel({
+        filename: `ninja-matrix-riders-${filterFrom}-to-${filterTo}`,
+        sheetName: "مصفوفة المناديب نينجا",
+        data: matrixRiderRows,
+        columns: [
+          { header: "اسم المندوب", accessor: (r) => r.riderName },
+          { header: "رقم الهوية", accessor: (r) => r.iqamaNo, isText: true },
+          { header: "رقم الهاتف", accessor: (r) => r.phone, isText: true },
+          { header: "عدد الكباتن", accessor: (r) => r.captains.length },
+          { header: "إجمالي الطلبات", accessor: (r) => r.totalOrders },
+          { header: "إجمالي الساعات", accessor: (r) => Number(r.totalHours.toFixed(2)) },
+          { header: "أيام النشاط", accessor: (r) => r.activeDays },
+          { header: "متوسط الطلبات/يوم", accessor: (r) => r.avgOrdersPerDay },
+          { header: "الإنتاجية (طلب/ساعة)", accessor: (r) => r.productivity },
+          ...daysList.map((d) => ({
+            header: `${d.dayNameAr} ${d.dayFormatted}`,
+            accessor: (r: (typeof matrixRiderRows)[0]) =>
+              matrixMetric === "orders"
+                ? (r.daysMap.get(d.dateStr)?.orders ?? 0)
+                : Number((r.daysMap.get(d.dateStr)?.hours ?? 0).toFixed(2)),
+          })),
+        ],
+      });
+    } else {
+      exportToExcel({
+        filename: `ninja-matrix-captains-${filterFrom}-to-${filterTo}`,
+        sheetName: "مصفوفة الكباتن نينجا",
+        data: matrixCaptainRows,
+        columns: [
+          { header: "كابتن ID", accessor: (c) => c.captainId, isText: true },
+          { header: "المندوب المنسوب", accessor: (c) => c.riderName },
+          { header: "رقم الهوية", accessor: (c) => c.iqamaNo, isText: true },
+          { header: "إجمالي الطلبات", accessor: (c) => c.totalOrders },
+          { header: "إجمالي الساعات", accessor: (c) => Number(c.totalHours.toFixed(2)) },
+          { header: "أيام النشاط", accessor: (c) => c.activeDays },
+          { header: "متوسط الطلبات/يوم", accessor: (c) => c.avgOrdersPerDay },
+          { header: "الإنتاجية (طلب/ساعة)", accessor: (c) => c.productivity },
+          ...daysList.map((d) => ({
+            header: `${d.dayNameAr} ${d.dayFormatted}`,
+            accessor: (c: (typeof matrixCaptainRows)[0]) =>
+              matrixMetric === "orders"
+                ? (c.daysMap.get(d.dateStr)?.orders ?? 0)
+                : Number((c.daysMap.get(d.dateStr)?.hours ?? 0).toFixed(2)),
+          })),
+        ],
+      });
+    }
   };
 
   if (!canRead) {
@@ -1081,23 +1401,32 @@ export default function NinjaPerformancePage() {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* TAB 4: Raw Daily Records                                       */}
+      {/* TAB 4: Raw Daily Records (Matrix & Flat Views)                 */}
       {/* ------------------------------------------------------------- */}
       {activeTab === "records" && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden space-y-4 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-[var(--foreground)]">سجلات الأداء اليومية الخام</span>
+          {/* Top Controls Bar */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-[var(--border)] pb-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-sm text-[var(--foreground)]">
+                سجلات الأداء اليومية الخام
+              </span>
               <Badge tone="purple" className="text-xs">
-                {filteredRecords.length} سجل
+                {filteredRecords.length} سجل ({daysList.length} يوم)
               </Badge>
+              {viewMode === "matrix" && (
+                <span className="text-[11px] text-[var(--muted)]">
+                  (مصفوفة الأداء الدوري بالأيام: {entityView === "riders" ? `${matrixRiderRows.length} مندوب` : `${matrixCaptainRows.length} كابتن`})
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[220px]">
+              {/* Search */}
+              <div className="relative min-w-[200px]">
                 <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)] rtl:right-3 ltr:left-3" />
                 <Input
-                  placeholder="بحث بكابتن ID أو اسم المندوب..."
+                  placeholder="بحث بكابتن ID أو اسم المندوب أو الهوية..."
                   value={recordsSearch}
                   onChange={(e) => {
                     setRecordsSearch(e.target.value);
@@ -1107,110 +1436,584 @@ export default function NinjaPerformancePage() {
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--muted)]">
-                <span>عرض:</span>
-                <select
-                  value={recordsPageSize}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setRecordsPageSize(val === "all" ? "all" : Number(val));
-                    setRecordsPage(1);
-                  }}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs font-bold text-[var(--foreground)]"
+              {/* View Mode Toggle: Matrix vs Flat */}
+              <div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("matrix")}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${
+                    viewMode === "matrix"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                  title="عرض مصفوفة الأداء بالأيام"
                 >
-                  <option value="all">عرض الكل ({filteredRecords.length})</option>
-                  <option value="50">50</option>
-                  <option value="100">100</option>
-                  <option value="250">250</option>
-                </select>
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span>المصفوفة</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("flat")}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${
+                    viewMode === "flat"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                  title="عرض قائمة السجلات الخام"
+                >
+                  <List className="h-3.5 w-3.5" />
+                  <span>السجلات</span>
+                </button>
               </div>
 
-              <Button variant="secondary" size="sm" onClick={exportRecords} className="gap-2 text-xs">
-                <Download className="h-3.5 w-3.5 text-emerald-600" />
-                تصدير السجلات (Excel)
-              </Button>
+              {/* Matrix Mode Controls */}
+              {viewMode === "matrix" && (
+                <>
+                  {/* Entity Toggle: Riders vs Captains */}
+                  <div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setEntityView("riders")}
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                        entityView === "riders"
+                          ? "bg-[var(--card)] font-bold text-[var(--foreground)] shadow-xs"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>المناديب</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEntityView("captains")}
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                        entityView === "captains"
+                          ? "bg-[var(--card)] font-bold text-[var(--foreground)] shadow-xs"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      <CreditCard className="h-3.5 w-3.5" />
+                      <span>كابتن ID</span>
+                    </button>
+                  </div>
+
+                  {/* Metric Toggle: Orders vs Hours */}
+                  <div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("orders")}
+                      className={`px-2 py-1 text-xs font-semibold rounded-md transition-colors ${
+                        matrixMetric === "orders"
+                          ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 font-bold"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      الطلبات
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixMetric("hours")}
+                      className={`px-2 py-1 text-xs font-semibold rounded-md transition-colors ${
+                        matrixMetric === "hours"
+                          ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-bold"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      الساعات
+                    </button>
+                  </div>
+
+                  <Button variant="secondary" size="sm" onClick={exportMatrix} className="gap-2 text-xs font-bold">
+                    <Download className="h-3.5 w-3.5 text-emerald-600" />
+                    تصدير المصفوفة (Excel)
+                  </Button>
+                </>
+              )}
+
+              {/* Flat Mode Controls */}
+              {viewMode === "flat" && (
+                <>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--muted)]">
+                    <span>عرض:</span>
+                    <select
+                      value={recordsPageSize}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRecordsPageSize(val === "all" ? "all" : Number(val));
+                        setRecordsPage(1);
+                      }}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs font-bold text-[var(--foreground)]"
+                    >
+                      <option value="all">عرض الكل ({filteredRecords.length})</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                      <option value="250">250</option>
+                    </select>
+                  </div>
+
+                  <Button variant="secondary" size="sm" onClick={exportRecords} className="gap-2 text-xs font-bold">
+                    <Download className="h-3.5 w-3.5 text-emerald-600" />
+                    تصدير السجلات (Excel)
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-right border-collapse">
-              <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
-                <tr>
-                  <th className="px-4 py-3 font-bold">التاريخ</th>
-                  <th className="px-4 py-3 font-bold">كابتن ID</th>
-                  <th className="px-4 py-3 font-bold">المندوب الفعلي المنسوب</th>
-                  <th className="px-4 py-3 font-bold text-center">إجمالي الطلبات</th>
-                  <th className="px-4 py-3 font-bold text-center">ساعات العمل</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {recordsLoading ? (
+          {/* VIEW 1: MATRIX WITH DYNAMIC DAYS COLUMNS */}
+          {viewMode === "matrix" && (
+            <div className="overflow-x-auto border border-[var(--border)] rounded-xl">
+              <table className="w-full text-xs text-right border-collapse">
+                <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)] sticky top-0 z-10 font-bold">
                   <tr>
-                    <td colSpan={5} className="py-12 text-center">
-                      <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
-                      <p className="text-xs text-[var(--muted)]">جارٍ جلب السجلات الخام...</p>
-                    </td>
+                    {entityView === "riders" && (
+                      <th className="px-2 py-3 text-center w-8">#</th>
+                    )}
+                    <th className="px-4 py-3 whitespace-nowrap min-w-[160px]">
+                      {entityView === "riders" ? "اسم المندوب" : "كابتن ID"}
+                    </th>
+                    <th className="px-3 py-3 text-center whitespace-nowrap min-w-[110px]">
+                      {entityView === "riders" ? "رقم الهوية" : "المندوب المنسوب"}
+                    </th>
+                    {entityView === "riders" && (
+                      <th className="px-2.5 py-3 text-center whitespace-nowrap">الكباتن</th>
+                    )}
+                    <th className="px-3 py-3 text-center whitespace-nowrap font-black text-purple-700 dark:text-purple-300 bg-purple-50/50 dark:bg-purple-950/20">
+                      إجمالي الطلبات
+                    </th>
+                    <th className="px-3 py-3 text-center whitespace-nowrap">ساعات العمل</th>
+                    <th className="px-3 py-3 text-center whitespace-nowrap">أيام النشاط</th>
+                    <th className="px-3 py-3 text-center whitespace-nowrap">
+                      {matrixMetric === "orders" ? "معدل طلب/يوم" : "إنتاجية (طلب/ساعة)"}
+                    </th>
+
+                    {/* Dynamic Days Columns */}
+                    {daysList.map((d) => (
+                      <th
+                        key={d.dateStr}
+                        className="px-2 py-2 text-center border-r border-[var(--border)]/60 min-w-[54px] bg-slate-50/80 dark:bg-slate-900/60"
+                        title={`${d.dayNameAr} - ${d.dateStr}`}
+                      >
+                        <div className="text-[10px] font-medium text-[var(--muted)] leading-tight">{d.dayNameAr}</div>
+                        <div className="font-mono font-bold text-xs text-[var(--foreground)]">{d.dayFormatted}</div>
+                      </th>
+                    ))}
                   </tr>
-                ) : filteredRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-12 text-center text-[var(--muted)]">
-                      لا توجد سجلات أداء مطابقة.
-                    </td>
-                  </tr>
-                ) : (
-                  pagedRecords.map((r) => {
-                    const rider = riders.find((rd) => rd.id === r.riderProfileId);
-                    return (
-                      <tr key={r.id} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
-                        <td className="px-4 py-3 font-mono font-bold" dir="ltr">
-                          {r.reportDate}
+                </thead>
+
+                <tbody className="divide-y divide-[var(--border)]">
+                  {recordsLoading ? (
+                    <tr>
+                      <td colSpan={8 + daysList.length} className="py-16 text-center">
+                        <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
+                        <p className="text-xs text-[var(--muted)]">جارٍ تجهيز مصفوفة الأداء الدوري...</p>
+                      </td>
+                    </tr>
+                  ) : (entityView === "riders" ? matrixRiderRows.length === 0 : matrixCaptainRows.length === 0) ? (
+                    <tr>
+                      <td colSpan={8 + daysList.length} className="py-16 text-center text-[var(--muted)]">
+                        لا توجد سجلات أداء مطابقة للفترة المحددة.
+                      </td>
+                    </tr>
+                  ) : entityView === "riders" ? (
+                    // 1. RIDERS MATRIX VIEW
+                    matrixRiderRows.map((r) => {
+                      const isExpanded = expandedMatrixRiders.has(r.riderKey);
+                      const hasMultipleCaptains = r.captains.length > 1;
+
+                      return (
+                        <React.Fragment key={r.riderKey}>
+                          <tr className="hover:bg-[var(--subtle-bg)]/50 transition-colors font-medium">
+                            {/* Expand toggle */}
+                            <td className="px-2 py-2.5 text-center">
+                              {r.captains.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMatrixRiderExpand(r.riderKey)}
+                                  className="h-6 w-6 inline-flex items-center justify-center rounded text-[var(--muted)] hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                                  title="عرض تفاصيل حسابات كابتن ID"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronLeft className="h-4 w-4 rtl:rotate-0 ltr:rotate-180" />
+                                  )}
+                                </button>
+                              )}
+                            </td>
+
+                            {/* Rider Name */}
+                            <td className="px-4 py-2.5 whitespace-nowrap">
+                              <div className="font-bold text-[var(--foreground)] flex items-center gap-1.5">
+                                <User className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                                <span>{r.riderName}</span>
+                              </div>
+                              {r.phone && r.phone !== "—" && (
+                                <div className="text-[10px] text-[var(--muted)] font-mono">{r.phone}</div>
+                              )}
+                            </td>
+
+                            {/* Iqama / National ID */}
+                            <td className="px-3 py-2.5 text-center font-mono text-[11px] whitespace-nowrap text-[var(--muted)]" dir="ltr">
+                              {r.iqamaNo}
+                            </td>
+
+                            {/* Captain Accounts Count */}
+                            <td className="px-2.5 py-2.5 text-center whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  hasMultipleCaptains
+                                    ? "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                    : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                }`}
+                                title={r.captains.map((c) => c.captainId).join(", ")}
+                              >
+                                <CreditCard className="h-3 w-3" />
+                                {r.captains.length}
+                              </span>
+                            </td>
+
+                            {/* Total Orders */}
+                            <td className="px-3 py-2.5 text-center font-mono font-black text-sm text-purple-700 dark:text-purple-300 bg-purple-50/40 dark:bg-purple-950/20 whitespace-nowrap">
+                              {r.totalOrders}
+                            </td>
+
+                            {/* Working Hours */}
+                            <td className="px-3 py-2.5 text-center font-mono font-bold whitespace-nowrap">
+                              {Number(r.totalHours.toFixed(2))}
+                            </td>
+
+                            {/* Active Days */}
+                            <td className="px-3 py-2.5 text-center font-mono font-semibold whitespace-nowrap">
+                              <span className="text-emerald-700 dark:text-emerald-400 font-bold">{r.activeDays}</span>
+                              <span className="text-[var(--muted)] text-[10px]"> / {daysList.length}</span>
+                            </td>
+
+                            {/* Metric Rate */}
+                            <td className="px-3 py-2.5 text-center font-mono text-xs whitespace-nowrap">
+                              {matrixMetric === "orders" ? (
+                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                  {r.avgOrdersPerDay}
+                                </span>
+                              ) : (
+                                <span className="font-bold text-blue-700 dark:text-blue-400">
+                                  {r.productivity}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Dynamic Days Columns */}
+                            {daysList.map((d) => {
+                              const cell = r.daysMap.get(d.dateStr);
+                              const orders = cell?.orders ?? 0;
+                              const hours = cell?.hours ?? 0;
+                              const hasActivity = orders > 0 || hours > 0;
+
+                              return (
+                                <td
+                                  key={d.dateStr}
+                                  className={`px-1.5 py-2 text-center border-r border-[var(--border)]/50 ${
+                                    hasActivity ? "bg-purple-50/20 dark:bg-purple-950/10" : ""
+                                  }`}
+                                  title={`التاريخ: ${d.dateStr} (${d.dayNameAr})\nالمندوب: ${r.riderName}\nالطلبات: ${orders}\nساعات العمل: ${hours} س`}
+                                >
+                                  {matrixMetric === "orders" ? (
+                                    orders > 0 ? (
+                                      <span className="font-mono font-bold text-xs text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-900/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800/60 inline-block min-w-[28px]">
+                                        {orders}
+                                      </span>
+                                    ) : (
+                                      <span className="font-mono text-xs text-gray-300 dark:text-gray-600">0</span>
+                                    )
+                                  ) : hours > 0 ? (
+                                    <span className="font-mono font-bold text-xs text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-900/40 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800/60 inline-block min-w-[28px]">
+                                      {hours.toFixed(1)}
+                                    </span>
+                                  ) : (
+                                    <span className="font-mono text-xs text-gray-300 dark:text-gray-600">0</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Expanded sub-rows for each captain account under this rider */}
+                          {isExpanded &&
+                            r.captains.map((cap) => (
+                              <tr
+                                key={`${r.riderKey}-${cap.captainId}`}
+                                className="bg-purple-50/30 dark:bg-purple-950/20 text-xs border-t border-dashed border-[var(--border)]"
+                              >
+                                <td className="px-2 py-1.5 text-center font-mono text-[var(--muted)]">↳</td>
+                                <td className="px-4 py-1.5 ps-8 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <CreditCard className="h-3 w-3 text-purple-600 shrink-0" />
+                                    <span className="font-mono font-bold text-purple-800 dark:text-purple-300">
+                                      {cap.captainId}
+                                    </span>
+                                    <span className="text-[10px] text-[var(--muted)]">(كابتن ID)</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-1.5 text-center font-mono text-[10px] text-[var(--muted)]">—</td>
+                                <td className="px-2.5 py-1.5 text-center font-mono text-[10px] text-[var(--muted)]">1</td>
+                                <td className="px-3 py-1.5 text-center font-mono font-bold text-purple-700 dark:text-purple-300">
+                                  {cap.totalOrders}
+                                </td>
+                                <td className="px-3 py-1.5 text-center font-mono text-[var(--muted)]">
+                                  {Number(cap.totalHours.toFixed(2))}
+                                </td>
+                                <td className="px-3 py-1.5 text-center font-mono text-[var(--muted)]">—</td>
+                                <td className="px-3 py-1.5 text-center font-mono text-[var(--muted)]">—</td>
+
+                                {/* Days Columns for this Captain */}
+                                {daysList.map((d) => {
+                                  const cell = cap.daysMap.get(d.dateStr);
+                                  const orders = cell?.orders ?? 0;
+                                  const hours = cell?.hours ?? 0;
+                                  return (
+                                    <td
+                                      key={`${cap.captainId}-${d.dateStr}`}
+                                      className="px-1.5 py-1.5 text-center border-r border-[var(--border)]/40 font-mono text-[11px]"
+                                    >
+                                      {matrixMetric === "orders" ? (
+                                        orders > 0 ? (
+                                          <span className="font-bold text-purple-700 dark:text-purple-300">
+                                            {orders}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-300 dark:text-gray-600">0</span>
+                                        )
+                                      ) : hours > 0 ? (
+                                        <span className="font-bold text-blue-700 dark:text-blue-300">
+                                          {hours.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-300 dark:text-gray-600">0</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                        </React.Fragment>
+                      );
+                    })
+                  ) : (
+                    // 2. CAPTAINS MATRIX VIEW
+                    matrixCaptainRows.map((c) => (
+                      <tr key={c.captainId} className="hover:bg-[var(--subtle-bg)]/50 transition-colors font-medium">
+                        <td className="px-4 py-2.5 font-mono font-black text-sm text-[var(--foreground)] whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <CreditCard className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                            <span>{c.captainId}</span>
+                          </div>
                         </td>
-                        <td className="px-4 py-3 font-mono font-black text-[var(--foreground)]" dir="ltr">
-                          {r.captainId}
+
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <span className="font-bold text-[var(--foreground)]">{c.riderName}</span>
+                          {c.iqamaNo && c.iqamaNo !== "—" && (
+                            <div className="text-[10px] text-[var(--muted)] font-mono">{c.iqamaNo}</div>
+                          )}
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="font-bold text-[var(--foreground)]">
-                            {rider?.fullNameAr || rider?.fullNameEn || "المندوب المنسوب"}
-                          </span>
+
+                        <td className="px-3 py-2.5 text-center font-mono font-black text-sm text-purple-700 dark:text-purple-300 bg-purple-50/40 dark:bg-purple-950/20 whitespace-nowrap">
+                          {c.totalOrders}
                         </td>
-                        <td className="px-4 py-3 text-center font-black text-purple-700 dark:text-purple-300">
-                          {r.totalOrders}
+
+                        <td className="px-3 py-2.5 text-center font-mono font-bold whitespace-nowrap">
+                          {Number(c.totalHours.toFixed(2))}
                         </td>
-                        <td className="px-4 py-3 text-center font-bold">
-                          {Number(Number(r.totalWorkingHours).toFixed(2))}
+
+                        <td className="px-3 py-2.5 text-center font-mono font-semibold whitespace-nowrap">
+                          <span className="text-emerald-700 dark:text-emerald-400 font-bold">{c.activeDays}</span>
+                          <span className="text-[var(--muted)] text-[10px]"> / {daysList.length}</span>
+                        </td>
+
+                        <td className="px-3 py-2.5 text-center font-mono text-xs whitespace-nowrap">
+                          {matrixMetric === "orders" ? (
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              {c.avgOrdersPerDay}
+                            </span>
+                          ) : (
+                            <span className="font-bold text-blue-700 dark:text-blue-400">
+                              {c.productivity}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Days Columns */}
+                        {daysList.map((d) => {
+                          const cell = c.daysMap.get(d.dateStr);
+                          const orders = cell?.orders ?? 0;
+                          const hours = cell?.hours ?? 0;
+                          const hasActivity = orders > 0 || hours > 0;
+
+                          return (
+                            <td
+                              key={d.dateStr}
+                              className={`px-1.5 py-2 text-center border-r border-[var(--border)]/50 ${
+                                hasActivity ? "bg-purple-50/20 dark:bg-purple-950/10" : ""
+                              }`}
+                              title={`التاريخ: ${d.dateStr} (${d.dayNameAr})\nكابتن: ${c.captainId}\nالمندوب: ${c.riderName}\nالطلبات: ${orders}\nساعات العمل: ${hours} س`}
+                            >
+                              {matrixMetric === "orders" ? (
+                                orders > 0 ? (
+                                  <span className="font-mono font-bold text-xs text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-900/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800/60 inline-block min-w-[28px]">
+                                    {orders}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-xs text-gray-300 dark:text-gray-600">0</span>
+                                )
+                              ) : hours > 0 ? (
+                                <span className="font-mono font-bold text-xs text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-900/40 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800/60 inline-block min-w-[28px]">
+                                  {hours.toFixed(1)}
+                                </span>
+                              ) : (
+                                <span className="font-mono text-xs text-gray-300 dark:text-gray-600">0</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+
+                {/* Footer: Grand Totals Row */}
+                {filteredRecords.length > 0 && (
+                  <tfoot className="bg-[var(--subtle-bg)]/80 border-t-2 border-[var(--border)] font-bold text-xs">
+                    <tr>
+                      {entityView === "riders" && <td className="px-2 py-3 text-center">∑</td>}
+                      <td className="px-4 py-3 font-bold text-[var(--foreground)]">
+                        الإجمالي العام للفترة
+                      </td>
+                      <td className="px-3 py-3 text-center text-[var(--muted)]">—</td>
+                      {entityView === "riders" && (
+                        <td className="px-2.5 py-3 text-center text-[var(--muted)]">—</td>
+                      )}
+                      <td className="px-3 py-3 text-center font-mono font-black text-sm text-purple-700 dark:text-purple-300 bg-purple-100/60 dark:bg-purple-950/40">
+                        {matrixTotals.totalOrders.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-3 text-center font-mono font-bold">
+                        {Number(matrixTotals.totalHours.toFixed(2))}
+                      </td>
+                      <td className="px-3 py-3 text-center text-[var(--muted)]">—</td>
+                      <td className="px-3 py-3 text-center text-[var(--muted)]">—</td>
+
+                      {/* Day Totals */}
+                      {daysList.map((d) => {
+                        const dayData = matrixTotals.dayTotals.get(d.dateStr);
+                        const dayOrders = dayData?.orders ?? 0;
+                        const dayHours = dayData?.hours ?? 0;
+
+                        return (
+                          <td
+                            key={`total-${d.dateStr}`}
+                            className="px-1.5 py-2 text-center font-mono border-r border-[var(--border)]/60 bg-purple-50/40 dark:bg-purple-950/20"
+                          >
+                            {matrixMetric === "orders" ? (
+                              <span className="font-bold text-purple-700 dark:text-purple-300">
+                                {dayOrders}
+                              </span>
+                            ) : (
+                              <span className="font-bold text-blue-700 dark:text-blue-300">
+                                {dayHours.toFixed(1)}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+
+          {/* VIEW 2: FLAT RECORDS LIST */}
+          {viewMode === "flat" && (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-right border-collapse">
+                  <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
+                    <tr>
+                      <th className="px-4 py-3 font-bold">التاريخ</th>
+                      <th className="px-4 py-3 font-bold">كابتن ID</th>
+                      <th className="px-4 py-3 font-bold">المندوب الفعلي المنسوب</th>
+                      <th className="px-4 py-3 font-bold text-center">إجمالي الطلبات</th>
+                      <th className="px-4 py-3 font-bold text-center">ساعات العمل</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {recordsLoading ? (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center">
+                          <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
+                          <p className="text-xs text-[var(--muted)]">جارٍ جلب السجلات الخام...</p>
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    ) : filteredRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-[var(--muted)]">
+                          لا توجد سجلات أداء مطابقة.
+                        </td>
+                      </tr>
+                    ) : (
+                      pagedRecords.map((r) => {
+                        const rider = riders.find((rd) => rd.id === r.riderProfileId);
+                        return (
+                          <tr key={r.id} className="hover:bg-[var(--subtle-bg)]/40 transition-colors">
+                            <td className="px-4 py-3 font-mono font-bold" dir="ltr">
+                              {r.reportDate}
+                            </td>
+                            <td className="px-4 py-3 font-mono font-black text-[var(--foreground)]" dir="ltr">
+                              {r.captainId}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-bold text-[var(--foreground)]">
+                                {rider?.fullNameAr || rider?.fullNameEn || "المندوب المنسوب"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center font-black text-purple-700 dark:text-purple-300">
+                              {r.totalOrders}
+                            </td>
+                            <td className="px-4 py-3 text-center font-bold">
+                              {Number(Number(r.totalWorkingHours).toFixed(2))}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-          {recordsPageSize !== "all" && totalRecordPages > 1 && (
-            <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
-              <div className="text-[var(--muted)]">
-                صفحة {recordsPage} من {totalRecordPages} (إجمالي {filteredRecords.length} سجل)
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={recordsPage <= 1 || recordsLoading}
-                  onClick={() => setRecordsPage((p) => Math.max(1, p - 1))}
-                >
-                  السابق
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={recordsPage >= totalRecordPages || recordsLoading}
-                  onClick={() => setRecordsPage((p) => p + 1)}
-                >
-                  التالي
-                </Button>
-              </div>
-            </div>
+              {recordsPageSize !== "all" && totalRecordPages > 1 && (
+                <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 bg-[var(--subtle-bg)]/40 text-xs">
+                  <div className="text-[var(--muted)]">
+                    صفحة {recordsPage} من {totalRecordPages} (إجمالي {filteredRecords.length} سجل)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={recordsPage <= 1 || recordsLoading}
+                      onClick={() => setRecordsPage((p) => Math.max(1, p - 1))}
+                    >
+                      السابق
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={recordsPage >= totalRecordPages || recordsLoading}
+                      onClick={() => setRecordsPage((p) => p + 1)}
+                    >
+                      التالي
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

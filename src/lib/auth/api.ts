@@ -239,6 +239,8 @@ export function getFriendlyErrorMessage(
         return "سجل منصة كيتا غير متاح في الكتالوج حالياً.";
       case "fleet.concurrency_conflict":
         return rawMessage || "تم تعديل السجل بواسطة مستخدم آخر. يرجى إعادة تحميل البيانات والمحاولة مجدداً.";
+      case "fleet.daily_distance.invalid_manual_odometer":
+        return rawMessage || "قد تكون القراءة المصححة أقل من قراءة الأساس المعتمدة أو تجعل قراءة لاحقة غير صالحة.";
       case "fleet.return_condition_report_required":
         return "تقرير حالة المركبة مطلوب عندما تكون حالة المركبة غير جيدة.";
       case "fleet.return_condition_report_not_allowed":
@@ -359,6 +361,12 @@ export function getFriendlyErrorMessage(
         return rawMessage || "توجد لقطة تقييم مجمّدة لهذه الفترة؛ يلزم تمرير معرف اللقطة المراجَعة (reviewedSnapshotId) وسبب التعديل.";
       case "ninja.revision_conflict":
         return rawMessage || "تعارض في رقم المراجعة (expectedRevisionId)؛ تم تحديث السجل بواسطة مستخدم آخر.";
+      case "fleet.daily_distance.invalid_manual_odometer":
+        return rawMessage || "قراءة العداد غير صالحة: قد تكون القراءة أقل من الأساس المعتمد أو تجعل قراءة لاحقة غير صالحة.";
+      case "fleet.daily_distance.manual_baseline_required":
+        return rawMessage || "قراءة الأساس مطلوبة لبدء الاحتساب.";
+      case "fleet.concurrency_conflict":
+        return rawMessage || "تم تعديل السجل بواسطة مستخدم آخر. يرجى التحديث والمحاولة مجدداً.";
     }
   }
 

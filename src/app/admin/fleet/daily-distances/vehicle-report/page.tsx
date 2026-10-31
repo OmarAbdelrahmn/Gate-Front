@@ -22,6 +22,8 @@ import {
   MapPin,
   ChevronRight,
   ArrowRight,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { Button } from "@/components/ui/Button";
@@ -394,6 +396,13 @@ function VehicleDailyDistanceReportContent() {
             <Button variant="secondary" className="gap-2 text-xs font-bold">
               <ArrowRight className="h-4 w-4" />
               العودة للمسافات اليومية
+            </Button>
+          </Link>
+
+          <Link href="/admin/fleet/daily-distances/fleet-report">
+            <Button variant="secondary" className="gap-2 text-xs font-bold text-emerald-700 hover:text-emerald-800">
+              <Layers className="h-4 w-4 text-emerald-600" />
+              تقرير مسافات الأسطول الشامل
             </Button>
           </Link>
 
@@ -917,9 +926,17 @@ function VehicleDailyDistanceReportContent() {
                           {/* Manual Odometer */}
                           <td className="p-3 whitespace-nowrap font-mono">
                             {day.manualOdometerReading != null ? (
-                              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                {day.manualOdometerReading.toLocaleString()} كم
-                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                  {day.manualOdometerReading.toLocaleString()} كم
+                                </span>
+                                {day.isOdometerCorrection && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200 dark:border-purple-800 w-fit">
+                                    <Sparkles className="h-2.5 w-2.5" />
+                                    تصحيح عداد
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}
@@ -928,9 +945,16 @@ function VehicleDailyDistanceReportContent() {
                           {/* Manual Distance */}
                           <td className="p-3 whitespace-nowrap font-mono">
                             {day.manualDistanceKm != null ? (
-                              <span className="font-bold text-amber-700 dark:text-amber-300">
-                                {day.manualDistanceKm.toLocaleString()} كم
-                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-bold text-amber-700 dark:text-amber-300">
+                                  {day.manualDistanceKm.toLocaleString()} كم
+                                </span>
+                                {day.isOdometerCorrection && (
+                                  <span className="text-[9px] text-purple-600 dark:text-purple-400 font-bold">
+                                    (تصحيح عداد)
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}

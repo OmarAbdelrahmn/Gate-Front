@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ArrowRight,
   Gauge,
+  Layers,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { Button } from "@/components/ui/Button";
@@ -351,6 +352,13 @@ function MissingDailyRecordsReportContent() {
             <Button variant="secondary" className="gap-2 text-xs font-bold">
               <ArrowRight className="h-4 w-4" />
               العودة للمسافات اليومية
+            </Button>
+          </Link>
+
+          <Link href="/admin/fleet/daily-distances/fleet-report">
+            <Button variant="secondary" className="gap-2 text-xs font-bold text-emerald-700 hover:text-emerald-800">
+              <Layers className="h-4 w-4 text-emerald-600" />
+              تقرير مسافات الأسطول الشامل
             </Button>
           </Link>
 

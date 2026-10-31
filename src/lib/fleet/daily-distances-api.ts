@@ -32,6 +32,7 @@ export type VehicleDailyDistanceItem = {
   manualEnteredAtUtc: string | null;
   manualEnteredByUserId?: string | null;
   manualNotes: string | null;
+  isOdometerCorrection?: boolean | null;
   rowVersion: string | null;
 };
 
@@ -84,6 +85,7 @@ export type GpsImportLogItem = {
 export type VehicleReportIdentity = {
   vehicleId: string;
   assetNumber: string;
+  serialNumber?: string | null;
   plateNumberAr?: string | null;
   plateNumberEn?: string | null;
   vehicleType: number;
@@ -111,6 +113,7 @@ export type VehicleDailyReportDay = {
   manualEnteredAtUtc: string | null;
   manualEnteredByUserId: string | null;
   manualNotes: string | null;
+  isOdometerCorrection?: boolean | null;
 };
 
 export type VehicleDailyDistanceReportResponse = {
@@ -127,6 +130,15 @@ export type VehicleDailyDistanceReportResponse = {
   manualTotalKm: number;
   appliedTotalKm: number;
   days: VehicleDailyReportDay[];
+};
+
+export type AllVehiclesDailyDistanceReportResponse = {
+  fromDate: string;
+  toDate: string;
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  items: VehicleDailyDistanceReportResponse[];
 };
 
 export type MissingDailyRecordVehicleItem = {
@@ -170,6 +182,44 @@ export async function getVehicleDailyDistances(params: {
 }
 
 /**
+ * Fetch a single daily distance record for a vehicle on a specific date
+ */
+export async function getVehicleDailyDistance(
+  vehicleId: string,
+  workDate: string,
+  assetNumber?: string
+): Promise<VehicleDailyDistanceItem> {
+  try {
+    return await authFetch<VehicleDailyDistanceItem>(
+      `/api/vehicle-daily-distances/${encodeURIComponent(vehicleId)}/${encodeURIComponent(workDate)}`,
+      { suppressErrorToast: true }
+    );
+  } catch {
+    // Fallback: search the list endpoint by assetNumber/vehicleId
+    const res = await getVehicleDailyDistances({
+      workDate,
+      search: assetNumber || vehicleId,
+      page: 1,
+      pageSize: 50,
+    });
+    const found = res.items.find((it) => it.vehicleId === vehicleId);
+    if (found) return found;
+
+    // Fallback without search
+    const all = await getVehicleDailyDistances({
+      workDate,
+      page: 1,
+      pageSize: 300,
+    });
+    const item = all.items.find((it) => it.vehicleId === vehicleId);
+    if (!item) {
+      throw new Error("Vehicle daily record not found");
+    }
+    return item;
+  }
+}
+
+/**
  * Enter or update manual odometer reading for a vehicle on a specific date
  */
 export async function saveManualOdometer(
@@ -181,6 +231,7 @@ export async function saveManualOdometer(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+    suppressErrorToast: true,
   });
 }
 
@@ -225,6 +276,27 @@ export async function getVehicleDailyDistanceReport(
 
   return await authFetch<VehicleDailyDistanceReportResponse>(
     `/api/vehicle-daily-distances/reports/vehicles/${encodeURIComponent(vehicleId)}?${query.toString()}`
+  );
+}
+
+/**
+ * Fetch detailed daily distance report for all vehicles across a date range
+ * GET /api/vehicle-daily-distances/reports/vehicles?fromDate=...&toDate=...&page=...&pageSize=...
+ */
+export async function getAllVehiclesDailyDistanceReport(params: {
+  fromDate: string;
+  toDate: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AllVehiclesDailyDistanceReportResponse> {
+  const query = new URLSearchParams();
+  query.set("fromDate", params.fromDate);
+  query.set("toDate", params.toDate);
+  if (params.page != null) query.set("page", params.page.toString());
+  if (params.pageSize != null) query.set("pageSize", params.pageSize.toString());
+
+  return await authFetch<AllVehiclesDailyDistanceReportResponse>(
+    `/api/vehicle-daily-distances/reports/vehicles?${query.toString()}`
   );
 }
 
@@ -327,7 +399,8 @@ export function getDailyDistanceErrorMessage(errorCode?: string, defaultMessage?
       return {
         title: "قراءة عداد غير صالحة",
         description:
-          "القراءة اليدوية المدخلة أقل من العداد الفعلي التشغيلي الناتج عن الأيام السابقة أو تكسر تسلسل القراءات. يرجى إدخال قراءة صحيحة أو إجراء تصحيح إداري.",
+          defaultMessage ||
+          "قد تكون القراءة المصححة أقل من قراءة الأساس المعتمدة أو تجعل قراءة لاحقة غير صالحة.",
       };
     case "fleet.daily_distance.manual_baseline_required":
       return {
@@ -337,7 +410,9 @@ export function getDailyDistanceErrorMessage(errorCode?: string, defaultMessage?
     case "fleet.concurrency_conflict":
       return {
         title: "تعارض في التحديث",
-        description: "تم تعديل السجل بواسطة مستخدم آخر أثناء التعديل؛ تم تحديث البيانات تلقائياً، يرجى المحاولة مجدداً.",
+        description:
+          defaultMessage ||
+          "تم تعديل السجل بواسطة مستخدم آخر. تم إعادة تحميل السجل لمراجعته قبل المحاولة مجدداً.",
       };
     case "fleet.daily_distance.invalid_report_period":
       return {
