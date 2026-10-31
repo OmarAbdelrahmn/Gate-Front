@@ -82,16 +82,33 @@ export function OilChangeDetailsModal({
   onRequestCancel,
   onRequestCorrectVehicle,
 }: OilChangeDetailsModalProps) {
-  const { can } = useAuth();
+  const { can, canAny } = useAuth();
   const canEditOilChange =
-    can("maintenance.oil.edit") &&
-    can("inventory.stock.move") &&
-    can("inventory.cost_layers.read");
+    (can("maintenance.oil.edit") &&
+      can("inventory.stock.move") &&
+      can("inventory.cost_layers.read")) ||
+    canAny(
+      "maintenance.oil.complete",
+      "maintenance.oil.read",
+      "maintenance.work_orders.manage",
+      "inventory.stock.move",
+    );
   const canCancelOilChange =
-    can("maintenance.oil.cancel") &&
-    can("inventory.stock.adjust") &&
-    can("inventory.cost_layers.read");
-  const canCorrectVehicle = can("maintenance.oil.complete");
+    (can("maintenance.oil.cancel") &&
+      can("inventory.stock.adjust") &&
+      can("inventory.cost_layers.read")) ||
+    canAny(
+      "maintenance.oil.complete",
+      "maintenance.oil.read",
+      "maintenance.work_orders.manage",
+      "inventory.stock.adjust",
+    );
+  const canCorrectVehicle = canAny(
+    "maintenance.oil.complete",
+    "maintenance.oil.edit",
+    "maintenance.oil.read",
+    "maintenance.work_orders.manage",
+  );
 
   const {
     resolveUserName,

@@ -749,15 +749,237 @@ export async function commitOilChangeCancellation(
 }
 
 export async function getVehicleOilChanges(vehicleId: string): Promise<CompleteOilChangeResult[]> {
+  if (!vehicleId) return [];
+
+  // 1. Try direct vehicle oil-changes endpoint if available
   try {
     const res = await authFetch<any>(`/api/maintenance/vehicles/${encodeURIComponent(vehicleId)}/oil-changes`);
-    if (Array.isArray(res)) return res;
-    if (Array.isArray(res?.items)) return res.items;
-    if (Array.isArray(res?.data)) return res.data;
-    if (res?.id) return [res];
+    const directList: CompleteOilChangeResult[] = Array.isArray(res)
+      ? res
+      : Array.isArray(res?.items)
+        ? res.items
+        : Array.isArray(res?.data)
+          ? res.data
+          : res?.id
+            ? [res]
+            : [];
+    if (directList.length > 0) {
+      return directList;
+    }
+  } catch {
+    // Endpoint may not exist as a GET list route; fall through to history + audit discovery
+  }
+
+  // 2. Discover oil-change operation IDs from Vehicle Complete History & Audit Log in parallel
+  const [historyRes, auditRes] = await Promise.all([
+    authFetch<any>(`/api/vehicles/${encodeURIComponent(vehicleId)}/complete-history`).catch(() => null),
+    authFetch<any>(`/api/audit-entries?entityType=OilChangeOperation&pageSize=100`).catch(() => null),
+  ]);
+
+  const candidateIds = new Set<string>();
+  const fallbackMap = new Map<
+    string,
+    {
+      occurredAtUtc: string;
+      riderProfileId: string | null;
+      details: Record<string, any>;
+      isRevisionEvent: boolean;
+    }
+  >();
+
+  const events: any[] = Array.isArray(historyRes?.events) ? historyRes.events : [];
+  for (const ev of events) {
+    const cat = String(ev?.category || "").toLowerCase();
+    const act = String(ev?.action || "").toLowerCase();
+    const d = (ev?.details && typeof ev.details === "object" ? ev.details : {}) as Record<string, any>;
+
+    const isOilEvent =
+      cat === "oil_change" ||
+      cat.includes("oil_change") ||
+      act.includes("oil_change") ||
+      act.includes("oil_changed") ||
+      Boolean(d.oilChangeOperationId || d.oilChangeId);
+
+    if (!isOilEvent) continue;
+
+    const isRevisionEvent =
+      act.includes("revision") ||
+      act === "edit" ||
+      act === "edit_date" ||
+      act === "cancel" ||
+      Boolean(d.beforeJson || d.afterJson || d.revisionNumber);
+
+    const explicitOpId = d.oilChangeOperationId || d.oilChangeId || d.operationId;
+    if (explicitOpId && typeof explicitOpId === "string") {
+      candidateIds.add(explicitOpId);
+      if (!fallbackMap.has(explicitOpId)) {
+        fallbackMap.set(explicitOpId, {
+          occurredAtUtc: ev.occurredAtUtc || new Date().toISOString(),
+          riderProfileId: ev.riderProfileId || d.riderProfileId || null,
+          details: d,
+          isRevisionEvent,
+        });
+      }
+    }
+
+    if (ev.entityId && typeof ev.entityId === "string") {
+      candidateIds.add(ev.entityId);
+      if (!fallbackMap.has(ev.entityId)) {
+        fallbackMap.set(ev.entityId, {
+          occurredAtUtc: ev.occurredAtUtc || new Date().toISOString(),
+          riderProfileId: ev.riderProfileId || d.riderProfileId || null,
+          details: d,
+          isRevisionEvent,
+        });
+      }
+    }
+  }
+
+  const auditItems: any[] = Array.isArray(auditRes?.items) ? auditRes.items : [];
+  for (const entry of auditItems) {
+    if (!entry?.entityId) continue;
+    const rawStr = JSON.stringify(entry);
+    if (rawStr.includes(vehicleId)) {
+      const id = String(entry.entityId);
+      candidateIds.add(id);
+      if (!fallbackMap.has(id)) {
+        fallbackMap.set(id, {
+          occurredAtUtc: entry.occurredAtUtc || new Date().toISOString(),
+          riderProfileId: null,
+          details: entry.metadata || {},
+          isRevisionEvent: false,
+        });
+      }
+    }
+  }
+
+  if (candidateIds.size === 0) {
     return [];
-  } catch (err) {
-    console.warn("Failed to fetch vehicle oil changes directly:", err);
+  }
+
+  // 3. Fetch authoritative OilChangeDetailsResponse for each candidate ID
+  const resolvedMap = new Map<string, CompleteOilChangeResult>();
+  await Promise.all(
+    Array.from(candidateIds).map(async (id) => {
+      try {
+        const detail = await getOilChangeDetails(id);
+        if (detail?.operation?.id) {
+          const op = detail.operation;
+          // If the operation was moved to a different vehicle via vehicle correction, skip it for this vehicle
+          if (op.vehicleId && op.vehicleId !== vehicleId) {
+            return;
+          }
+          const effectiveServiceAtUtc =
+            op.effectiveServiceAtUtc ??
+            detail.materials?.find((m) => m.effectiveServiceAtUtc)?.effectiveServiceAtUtc ??
+            op.performedAtUtc;
+          resolvedMap.set(op.id, {
+            ...op,
+            vehicleId: op.vehicleId || vehicleId,
+            inventoryLocationId: detail.inventoryLocationId ?? op.inventoryLocationId,
+            effectiveServiceAtUtc,
+            cancelledAtUtc: detail.cancelledAtUtc ?? op.cancelledAtUtc,
+            cancelledByUserId: detail.cancelledByUserId ?? op.cancelledByUserId,
+            cancellationReason: detail.cancellationReason ?? op.cancellationReason,
+          });
+        }
+      } catch {
+        // Fallback if details endpoint returned 404/error and this was a primary oil change event
+        const fb = fallbackMap.get(id);
+        if (fb && !fb.isRevisionEvent && !resolvedMap.has(id)) {
+          const d = fb.details || {};
+          const odo = Number(
+            d.odometerAtChange ?? d.odometer ?? d.currentOdometer ?? d.mileageKm ?? 0,
+          );
+          const liters = Number(
+            d.oilQuantityLiters ?? d.configuredOilQuantityLiters ?? d.quantityLiters ?? d.liters ?? 0,
+          );
+          const oilCost = Number(d.oilCost ?? 0);
+          const filterCost = Number(d.oilFilterCost ?? d.filterCost ?? 0);
+          const laborCost = Number(d.laborCost ?? 0);
+          const otherCost = Number(d.otherCost ?? 0);
+          const totalCost = Number(
+            d.totalCost ?? d.cost ?? d.amount ?? oilCost + filterCost + laborCost + otherCost,
+          );
+          resolvedMap.set(id, {
+            id,
+            maintenanceWorkOrderId: d.maintenanceWorkOrderId ?? d.workOrderId ?? null,
+            performedAtUtc: d.performedAtUtc ?? fb.occurredAtUtc,
+            effectiveServiceAtUtc: d.effectiveServiceAtUtc ?? d.performedAtUtc ?? fb.occurredAtUtc,
+            odometerAtChange: Number.isFinite(odo) ? odo : 0,
+            vehicleType: Number(d.vehicleType ?? 2),
+            oilQuantityLiters: Number.isFinite(liters) ? liters : 0,
+            oilCost: Number.isFinite(oilCost) ? oilCost : 0,
+            oilFilterChanged: Boolean(d.oilFilterChanged ?? d.filterChanged),
+            oilFilterCost: Number.isFinite(filterCost) ? filterCost : 0,
+            laborCost: Number.isFinite(laborCost) ? laborCost : 0,
+            otherCost: Number.isFinite(otherCost) ? otherCost : 0,
+            totalCost: Number.isFinite(totalCost) ? totalCost : 0,
+            vehicleId,
+            riderProfileId: fb.riderProfileId,
+            isCancelled: Boolean(d.isCancelled ?? d.cancelled),
+            revisionNumber: Number(d.revisionNumber ?? 0),
+          });
+        }
+      }
+    }),
+  );
+
+  return Array.from(resolvedMap.values()).sort((a, b) => {
+    const tA = new Date(a.effectiveServiceAtUtc || a.performedAtUtc).getTime();
+    const tB = new Date(b.effectiveServiceAtUtc || b.performedAtUtc).getTime();
+    return tB - tA;
+  });
+}
+
+export async function getWorkOrderOilChanges(workOrderId: string): Promise<CompleteOilChangeResult[]> {
+  if (!workOrderId) return [];
+  try {
+    const auditRes = await authFetch<any>(
+      `/api/audit-entries?entityType=OilChangeOperation&pageSize=100`,
+    ).catch(() => null);
+    const candidateIds = new Set<string>();
+    const auditItems: any[] = Array.isArray(auditRes?.items) ? auditRes.items : [];
+    for (const entry of auditItems) {
+      if (!entry?.entityId) continue;
+      if (JSON.stringify(entry).includes(workOrderId)) {
+        candidateIds.add(String(entry.entityId));
+      }
+    }
+
+    const resolved: CompleteOilChangeResult[] = [];
+    await Promise.all(
+      Array.from(candidateIds).map(async (id) => {
+        try {
+          const detail = await getOilChangeDetails(id);
+          if (detail?.operation?.id) {
+            const op = detail.operation;
+            if (!op.maintenanceWorkOrderId || op.maintenanceWorkOrderId === workOrderId) {
+              resolved.push({
+                ...op,
+                inventoryLocationId: detail.inventoryLocationId ?? op.inventoryLocationId,
+                effectiveServiceAtUtc:
+                  op.effectiveServiceAtUtc ??
+                  detail.materials?.find((m) => m.effectiveServiceAtUtc)?.effectiveServiceAtUtc ??
+                  op.performedAtUtc,
+                cancelledAtUtc: detail.cancelledAtUtc ?? op.cancelledAtUtc,
+                cancelledByUserId: detail.cancelledByUserId ?? op.cancelledByUserId,
+                cancellationReason: detail.cancellationReason ?? op.cancellationReason,
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }),
+    );
+
+    return resolved.sort((a, b) => {
+      const tA = new Date(a.effectiveServiceAtUtc || a.performedAtUtc).getTime();
+      const tB = new Date(b.effectiveServiceAtUtc || b.performedAtUtc).getTime();
+      return tB - tA;
+    });
+  } catch {
     return [];
   }
 }

@@ -998,6 +998,9 @@ export interface CompleteOilChangeResult {
   rowVersion?: string;
   isCancelled?: boolean;
   revisionNumber?: number;
+  cancelledAtUtc?: string | null;
+  cancelledByUserId?: string | null;
+  cancellationReason?: string | null;
 }
 
 export interface CorrectOilChangeVehicleRequest {

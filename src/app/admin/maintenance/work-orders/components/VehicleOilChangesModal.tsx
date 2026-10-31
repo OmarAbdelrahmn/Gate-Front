@@ -19,7 +19,10 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getVehicleOilChanges } from "@/lib/maintenance/api";
+import {
+  getVehicleOilChanges,
+  getWorkOrderOilChanges,
+} from "@/lib/maintenance/api";
 import type { CompleteOilChangeResult } from "@/lib/maintenance/types";
 import {
   formatCurrency,
@@ -34,9 +37,11 @@ import { CorrectOilChangeVehicleModal } from "./CorrectOilChangeVehicleModal";
 
 export interface VehicleOilChangesModalProps {
   isOpen: boolean;
-  vehicleId: string;
+  vehicleId?: string | null;
+  workOrderId?: string | null;
   vehiclePlate?: string | null;
   vehicleType?: number | null;
+  initialActionHint?: "edit" | "cancel" | "correct_vehicle" | "details" | null;
   onClose: () => void;
   onChanged?: () => void;
 }
@@ -44,21 +49,40 @@ export interface VehicleOilChangesModalProps {
 export function VehicleOilChangesModal({
   isOpen,
   vehicleId,
+  workOrderId,
   vehiclePlate,
   vehicleType,
+  initialActionHint,
   onClose,
   onChanged,
 }: VehicleOilChangesModalProps) {
-  const { can } = useAuth();
+  const { can, canAny } = useAuth();
   const canEditOilChange =
-    can("maintenance.oil.edit") &&
-    can("inventory.stock.move") &&
-    can("inventory.cost_layers.read");
+    (can("maintenance.oil.edit") &&
+      can("inventory.stock.move") &&
+      can("inventory.cost_layers.read")) ||
+    canAny(
+      "maintenance.oil.complete",
+      "maintenance.oil.read",
+      "maintenance.work_orders.manage",
+      "inventory.stock.move",
+    );
   const canCancelOilChange =
-    can("maintenance.oil.cancel") &&
-    can("inventory.stock.adjust") &&
-    can("inventory.cost_layers.read");
-  const canCorrectVehicle = can("maintenance.oil.complete");
+    (can("maintenance.oil.cancel") &&
+      can("inventory.stock.adjust") &&
+      can("inventory.cost_layers.read")) ||
+    canAny(
+      "maintenance.oil.complete",
+      "maintenance.oil.read",
+      "maintenance.work_orders.manage",
+      "inventory.stock.adjust",
+    );
+  const canCorrectVehicle = canAny(
+    "maintenance.oil.complete",
+    "maintenance.oil.edit",
+    "maintenance.oil.read",
+    "maintenance.work_orders.manage",
+  );
 
   const { resolveRiderName, resolveVehicleLabel, resolveWorkOrderLabel } =
     useMaintenanceLookups();
@@ -80,11 +104,18 @@ export function VehicleOilChangesModal({
   } | null>(null);
 
   const loadOperations = async () => {
-    if (!vehicleId) return;
+    if (!vehicleId && !workOrderId) return;
     setLoading(true);
     try {
-      const list = await getVehicleOilChanges(vehicleId);
-      setOperations(list || []);
+      const [vehOps, woOps] = await Promise.all([
+        vehicleId ? getVehicleOilChanges(vehicleId) : Promise.resolve([]),
+        workOrderId ? getWorkOrderOilChanges(workOrderId) : Promise.resolve([]),
+      ]);
+      const mergedMap = new Map<string, CompleteOilChangeResult>();
+      for (const op of [...(vehOps || []), ...(woOps || [])]) {
+        if (op?.id) mergedMap.set(op.id, op);
+      }
+      setOperations(Array.from(mergedMap.values()));
     } catch (err: any) {
       toast.error(
         "تعذر تحميل سجل غيار الزيت",
@@ -96,14 +127,17 @@ export function VehicleOilChangesModal({
   };
 
   useEffect(() => {
-    if (!isOpen || !vehicleId) return;
+    if (!isOpen || (!vehicleId && !workOrderId)) return;
     void loadOperations();
-  }, [isOpen, vehicleId]);
+  }, [isOpen, vehicleId, workOrderId]);
 
   if (!isOpen) return null;
 
   const displayVehicle =
-    vehiclePlate || resolveVehicleLabel(vehicleId) || "مركبة الشركة";
+    vehiclePlate ||
+    (vehicleId ? resolveVehicleLabel(vehicleId) : null) ||
+    (workOrderId ? resolveWorkOrderLabel(workOrderId) : null) ||
+    "مركبة الشركة";
 
   const activeOperations = operations.filter((op) => !op.isCancelled);
   const activeTotalCost = activeOperations.reduce(
@@ -185,6 +219,22 @@ export function VehicleOilChangesModal({
               </Button>
             </div>
           </div>
+
+          {initialActionHint && operations.length > 1 && (
+            <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/30 p-3 text-xs text-blue-800 dark:text-blue-200 flex items-center gap-2 font-medium">
+              <FileText size={15} className="shrink-0 text-blue-600 dark:text-blue-400" />
+              <span>
+                {initialActionHint === "edit" &&
+                  "تحتوي هذه المركبة على عدة عمليات غيار زيت. يرجى اختيار العملية المراد تعديلها بالضغط على زر (تعديل غيار الزيت) أمامها."}
+                {initialActionHint === "cancel" &&
+                  "تحتوي هذه المركبة على عدة عمليات غيار زيت. يرجى اختيار العملية المراد إلغاؤها بالضغط على زر (إلغاء غيار الزيت) أمامها."}
+                {initialActionHint === "correct_vehicle" &&
+                  "تحتوي هذه المركبة على عدة عمليات غيار زيت. يرجى اختيار العملية المراد تصحيح مركبتها بالضغط على زر (تصحيح المركبة) أمامها."}
+                {initialActionHint === "details" &&
+                  "استعرض عمليات غيار الزيت المسجلة لهذه المركبة واختر العملية لعرض تفاصيلها وسجل مراجعاتها."}
+              </span>
+            </div>
+          )}
 
           {/* Operations Table */}
           {loading ? (
@@ -301,30 +351,17 @@ export function VehicleOilChangesModal({
                         </td>
 
                         <td className="px-3.5 py-3">
-                          <div className="flex flex-wrap items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDetailsInitialTab("details");
-                                setDetailsOpId(op.id);
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 transition-colors"
-                              title="عرض التفاصيل وسجل المراجعات"
-                            >
-                              <Eye size={13} />
-                              <span>التفاصيل والسجل</span>
-                            </button>
-
+                          <div className="flex items-center justify-center gap-1.5">
                             {canEditOilChange && (
                               <button
                                 type="button"
                                 disabled={isCancelled}
                                 onClick={() => setEditOpId(op.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+                                aria-label="تعديل غيار الزيت"
                                 title="تعديل غيار الزيت"
+                                className="inline-flex size-8 items-center justify-center rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
                               >
-                                <Edit3 size={13} />
-                                <span>تعديل غيار الزيت</span>
+                                <Edit3 size={14} />
                               </button>
                             )}
 
@@ -333,33 +370,46 @@ export function VehicleOilChangesModal({
                                 type="button"
                                 disabled={isCancelled}
                                 onClick={() => setCancelOpId(op.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 dark:border-rose-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+                                aria-label="إلغاء غيار الزيت"
                                 title="إلغاء غيار الزيت"
+                                className="inline-flex size-8 items-center justify-center rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 dark:border-rose-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
                               >
-                                <Ban size={13} />
-                                <span>إلغاء غيار الزيت</span>
+                                <Ban size={14} />
                               </button>
                             )}
 
-                            {canCorrectVehicle && (
+                            {canCorrectVehicle && (op.vehicleId || vehicleId) && (
                               <button
                                 type="button"
                                 disabled={isCancelled}
                                 onClick={() =>
                                   setCorrectVehicleOp({
                                     oilChangeId: op.id,
-                                    vehicleId: op.vehicleId || vehicleId,
+                                    vehicleId: op.vehicleId || vehicleId || "",
                                     vehicleType:
                                       op.vehicleType || vehicleType || 2,
                                   })
                                 }
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+                                aria-label="تصحيح المركبة"
                                 title="تصحيح المركبة"
+                                className="inline-flex size-8 items-center justify-center rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
                               >
-                                <ArrowLeftRight size={13} />
-                                <span>تصحيح المركبة</span>
+                                <ArrowLeftRight size={14} />
                               </button>
                             )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDetailsInitialTab("details");
+                                setDetailsOpId(op.id);
+                              }}
+                              aria-label="التفاصيل وسجل المراجعات"
+                              title="التفاصيل وسجل المراجعات"
+                              className="inline-flex size-8 items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700 transition-colors"
+                            >
+                              <Eye size={14} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -398,7 +448,7 @@ export function VehicleOilChangesModal({
             setDetailsOpId(null);
             setCorrectVehicleOp({
               oilChangeId: id,
-              vehicleId: vId || vehicleId,
+              vehicleId: vId || vehicleId || "",
               vehicleType: vType || vehicleType || 2,
             });
           }}

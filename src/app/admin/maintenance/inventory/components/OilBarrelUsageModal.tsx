@@ -18,14 +18,27 @@ import {
   RotateCcw,
   FileSpreadsheet,
   ArrowLeftRight,
+  Edit3,
+  Ban,
+  Eye,
+  History,
+  Loader2,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { exportMultiSheetExcel, type ExcelSheetDefinition } from "@/lib/export-excel";
-import { getOilBarrelUsage } from "@/lib/maintenance/api";
+import {
+  getOilBarrelUsage,
+  getVehicleOilChanges,
+  getWorkOrderOilChanges,
+} from "@/lib/maintenance/api";
 import { CorrectOilChangeVehicleModal } from "@/app/admin/maintenance/work-orders/components/CorrectOilChangeVehicleModal";
 import { VehicleOilChangesModal } from "@/app/admin/maintenance/work-orders/components/VehicleOilChangesModal";
+import { EditOilChangeModal } from "@/app/admin/maintenance/work-orders/components/EditOilChangeModal";
+import { CancelOilChangeModal } from "@/app/admin/maintenance/work-orders/components/CancelOilChangeModal";
+import { OilChangeDetailsModal } from "@/app/admin/maintenance/work-orders/components/OilChangeDetailsModal";
 import { useMaintenanceLookups } from "@/lib/maintenance/lookups";
 import type {
   OilBarrel,
@@ -55,6 +68,34 @@ export function OilBarrelUsageModal({
   itemName,
   locationName,
 }: OilBarrelUsageModalProps) {
+  const { can, canAny } = useAuth();
+  const canEditOilChange =
+    (can("maintenance.oil.edit") &&
+      can("inventory.stock.move") &&
+      can("inventory.cost_layers.read")) ||
+    canAny(
+      "maintenance.oil.complete",
+      "maintenance.oil.read",
+      "maintenance.work_orders.manage",
+      "inventory.stock.move",
+    );
+  const canCancelOilChange =
+    (can("maintenance.oil.cancel") &&
+      can("inventory.stock.adjust") &&
+      can("inventory.cost_layers.read")) ||
+    canAny(
+      "maintenance.oil.complete",
+      "maintenance.oil.read",
+      "maintenance.work_orders.manage",
+      "inventory.stock.adjust",
+    );
+  const canCorrectVehicle = canAny(
+    "maintenance.oil.complete",
+    "maintenance.oil.edit",
+    "maintenance.oil.read",
+    "maintenance.work_orders.manage",
+  );
+
   const {
     resolveUserName,
     resolveLocationName,
@@ -70,11 +111,140 @@ export function OilBarrelUsageModal({
   const [lossPageSize, setLossPageSize] = useState(50);
   const [exporting, setExporting] = useState(false);
   const [isCorrectVehicleModalOpen, setIsCorrectVehicleModalOpen] = useState(false);
-  const [selectedVehicleForOps, setSelectedVehicleForOps] = useState<{
-    vehicleId: string;
-    plate: string;
+  const [correctVehiclePreset, setCorrectVehiclePreset] = useState<{
+    oilChangeId?: string | null;
+    vehicleId?: string | null;
+    plate?: string | null;
     vehicleType?: number | null;
   } | null>(null);
+  const [selectedVehicleForOps, setSelectedVehicleForOps] = useState<{
+    vehicleId?: string | null;
+    workOrderId?: string | null;
+    plate: string;
+    vehicleType?: number | null;
+    initialActionHint?: "edit" | "cancel" | "correct_vehicle" | "details" | null;
+  } | null>(null);
+  const [directEditOp, setDirectEditOp] = useState<{
+    oilChangeId: string;
+    vehicleLabel: string;
+  } | null>(null);
+  const [directCancelOp, setDirectCancelOp] = useState<{
+    oilChangeId: string;
+    vehicleLabel: string;
+  } | null>(null);
+  const [directDetailsOp, setDirectDetailsOp] = useState<{
+    oilChangeId: string;
+    vehicleLabel: string;
+    initialTab?: "details" | "revisions";
+  } | null>(null);
+  const [resolvingRowAction, setResolvingRowAction] = useState<string | null>(null);
+
+  const getRowLabel = (row: OilBarrelUsageVehicleRow): string => {
+    return (
+      row.plateNumberAr ||
+      row.plateNumberEn ||
+      (row.assetNumber ? `أصل #${row.assetNumber}` : null) ||
+      row.externalPlateOrReference ||
+      (row.externalWorkOrderId ? resolveWorkOrderLabel(row.externalWorkOrderId) : null) ||
+      "مركبة الشركة"
+    );
+  };
+
+  const handleRowAction = async (
+    row: OilBarrelUsageVehicleRow,
+    action: "edit" | "cancel" | "correct_vehicle" | "details" | "list",
+  ) => {
+    const label = getRowLabel(row);
+    const rowId = row.vehicleId || row.externalWorkOrderId;
+    if (!rowId) return;
+
+    if (action === "list") {
+      setSelectedVehicleForOps({
+        vehicleId: row.vehicleId,
+        workOrderId: row.externalWorkOrderId,
+        plate: label,
+        vehicleType: row.vehicleType,
+        initialActionHint: "details",
+      });
+      return;
+    }
+
+    if (action === "correct_vehicle") {
+      setCorrectVehiclePreset({
+        vehicleId: row.vehicleId,
+        plate: label,
+        vehicleType: row.vehicleType ?? barrel?.allowedVehicleType ?? 2,
+      });
+      setIsCorrectVehicleModalOpen(true);
+      return;
+    }
+
+    const actionKey = `${rowId}-${action}`;
+    setResolvingRowAction(actionKey);
+    try {
+      const [vehOps, woOps] = await Promise.all([
+        row.vehicleId ? getVehicleOilChanges(row.vehicleId) : Promise.resolve([]),
+        row.externalWorkOrderId
+          ? getWorkOrderOilChanges(row.externalWorkOrderId)
+          : Promise.resolve([]),
+      ]);
+      const mergedMap = new Map<string, any>();
+      for (const op of [...(vehOps || []), ...(woOps || [])]) {
+        if (op?.id) mergedMap.set(op.id, op);
+      }
+      const ops = Array.from(mergedMap.values());
+      const activeOps = ops.filter((op) => !op.isCancelled);
+
+      // If there is exactly 1 active operation (and row has 1 issue), open the target modal directly!
+      if (activeOps.length === 1 && row.issueCount <= 1) {
+        const targetId = activeOps[0].id;
+        if (action === "edit") {
+          setDirectEditOp({ oilChangeId: targetId, vehicleLabel: label });
+          return;
+        }
+        if (action === "cancel") {
+          setDirectCancelOp({ oilChangeId: targetId, vehicleLabel: label });
+          return;
+        }
+        if (action === "details") {
+          setDirectDetailsOp({
+            oilChangeId: targetId,
+            vehicleLabel: label,
+            initialTab: "details",
+          });
+          return;
+        }
+      }
+
+      if (action === "details" && ops.length === 1 && row.issueCount <= 1) {
+        setDirectDetailsOp({
+          oilChangeId: ops[0].id,
+          vehicleLabel: label,
+          initialTab: "details",
+        });
+        return;
+      }
+
+      // Multiple operations or need disambiguation -> open VehicleOilChangesModal with action hint
+      setSelectedVehicleForOps({
+        vehicleId: row.vehicleId,
+        workOrderId: row.externalWorkOrderId,
+        plate: label,
+        vehicleType: row.vehicleType,
+        initialActionHint: action,
+      });
+    } catch {
+      setSelectedVehicleForOps({
+        vehicleId: row.vehicleId,
+        workOrderId: row.externalWorkOrderId,
+        plate: label,
+        vehicleType: row.vehicleType,
+        initialActionHint: action,
+      });
+    } finally {
+      setResolvingRowAction(null);
+    }
+  };
 
   const handleExportExcel = async () => {
     if (!barrel || !data) return;
@@ -432,8 +602,8 @@ export function OilBarrelUsageModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`سجل استهلاك البرميل / Barrel Usage — ${barrel.barrelNumber}`}
-      maxWidth="max-w-4xl"
+      title={`سجل استهلاك البرميل وإدارة العمليات — ${barrel.barrelNumber}`}
+      maxWidth="max-w-6xl"
     >
       <div className="space-y-4 text-right" dir="rtl">
         {/* Barrel Header & Meta */}
@@ -486,7 +656,7 @@ export function OilBarrelUsageModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
               onClick={handleExportExcel}
@@ -496,16 +666,6 @@ export function OilBarrelUsageModal({
             >
               <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
               تصدير Excel (شيتين)
-            </Button>
-
-            <Button
-              variant="secondary"
-              onClick={() => setIsCorrectVehicleModalOpen(true)}
-              className="h-9 text-xs gap-1.5 font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-amber-300 dark:border-amber-800"
-              title="تصحيح اختيار مركبة خاطئة على عملية غيار زيت"
-            >
-              <ArrowLeftRight size={13} />
-              تصحيح مركبة
             </Button>
 
             <Button
@@ -679,13 +839,17 @@ export function OilBarrelUsageModal({
                       <th className="p-3 text-center">المرتجع</th>
                       <th className="p-3 text-center">عدد العمليات</th>
                       <th className="p-3 text-left">آخر استخدام</th>
-                      <th className="p-3 text-center">إدارة عمليات المركبة</th>
+                      <th className="p-3 text-center">العمليات والإجراءات (تعديل / إلغاء / تصحيح)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
                     {data.vehicles.map((row, idx) => {
                       const isExternal = row.vehicleId === null && Boolean(row.externalWorkOrderId || row.externalPlateOrReference);
                       const isLegacyUnidentified = row.vehicleId === null && !row.externalWorkOrderId && !row.externalPlateOrReference;
+                      const rowId = row.vehicleId || row.externalWorkOrderId;
+                      const isResolvingEdit = resolvingRowAction === `${rowId}-edit`;
+                      const isResolvingCancel = resolvingRowAction === `${rowId}-cancel`;
+                      const isResolvingDetails = resolvingRowAction === `${rowId}-details`;
 
                       return (
                         <tr
@@ -718,14 +882,19 @@ export function OilBarrelUsageModal({
                               </div>
                             ) : (
                               <div>
-                                <div className="font-mono font-bold text-slate-900 dark:text-white">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRowAction(row, "list")}
+                                  className="font-mono font-bold text-slate-900 dark:text-white hover:text-[#1167c9] dark:hover:text-blue-400 hover:underline text-right"
+                                  title="استعراض كافة عمليات غيار الزيت لهذه المركبة"
+                                >
                                   {row.plateNumberAr || row.plateNumberEn || "-"}
                                   {row.plateNumberAr && row.plateNumberEn && (
                                     <span className="text-[11px] text-slate-400 mr-1.5">
                                       ({row.plateNumberEn})
                                     </span>
                                   )}
-                                </div>
+                                </button>
                                 {row.assetNumber && (
                                   <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                                     أصل #{row.assetNumber}
@@ -780,28 +949,72 @@ export function OilBarrelUsageModal({
                             {row.lastUsedAtUtc ? formatDateTime(row.lastUsedAtUtc) : "-"}
                           </td>
 
-                          {/* Vehicle Operations Action */}
+                          {/* Vehicle Operations Action Buttons (Icon Only) */}
                           <td className="p-3 text-center">
-                            {row.vehicleId ? (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={() =>
-                                  setSelectedVehicleForOps({
-                                    vehicleId: row.vehicleId!,
-                                    plate:
-                                      row.plateNumberAr ||
-                                      row.plateNumberEn ||
-                                      row.assetNumber ||
-                                      "مركبة الشركة",
-                                    vehicleType: row.vehicleType,
-                                  })
-                                }
-                                className="h-7 px-2.5 text-[11px] font-bold"
-                                title="استعراض عمليات غيار الزيت الفردية لهذه المركبة لتعديلها أو إلغائها أو تصحيح المركبة"
-                              >
-                                عمليات المركبة ({row.issueCount})
-                              </Button>
+                            {rowId ? (
+                              <div className="flex items-center justify-center gap-1.5">
+                                {canEditOilChange && (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(resolvingRowAction)}
+                                    onClick={() => void handleRowAction(row, "edit")}
+                                    aria-label="تعديل غيار الزيت"
+                                    title="تعديل غيار الزيت"
+                                    className="inline-flex size-8 items-center justify-center rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800 disabled:opacity-50 transition-colors"
+                                  >
+                                    {isResolvingEdit ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Edit3 size={14} />
+                                    )}
+                                  </button>
+                                )}
+
+                                {canCancelOilChange && (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(resolvingRowAction)}
+                                    onClick={() => void handleRowAction(row, "cancel")}
+                                    aria-label="إلغاء غيار الزيت"
+                                    title="إلغاء غيار الزيت"
+                                    className="inline-flex size-8 items-center justify-center rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 dark:border-rose-800 disabled:opacity-50 transition-colors"
+                                  >
+                                    {isResolvingCancel ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Ban size={14} />
+                                    )}
+                                  </button>
+                                )}
+
+                                {canCorrectVehicle && row.vehicleId && (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(resolvingRowAction)}
+                                    onClick={() => void handleRowAction(row, "correct_vehicle")}
+                                    aria-label="تصحيح المركبة"
+                                    title="تصحيح المركبة"
+                                    className="inline-flex size-8 items-center justify-center rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800 disabled:opacity-50 transition-colors"
+                                  >
+                                    <ArrowLeftRight size={14} />
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  disabled={Boolean(resolvingRowAction)}
+                                  onClick={() => void handleRowAction(row, "details")}
+                                  aria-label="التفاصيل وسجل المراجعات"
+                                  title="التفاصيل وسجل المراجعات"
+                                  className="inline-flex size-8 items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700 disabled:opacity-50 transition-colors"
+                                >
+                                  {isResolvingDetails ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                  ) : (
+                                    <Eye size={14} />
+                                  )}
+                                </button>
+                              </div>
                             ) : (
                               <span className="text-[10px] text-slate-400">—</span>
                             )}
@@ -1008,19 +1221,88 @@ export function OilBarrelUsageModal({
 
       <CorrectOilChangeVehicleModal
         isOpen={isCorrectVehicleModalOpen}
-        onClose={() => setIsCorrectVehicleModalOpen(false)}
-        currentVehicleType={currentBarrel.allowedVehicleType}
+        onClose={() => {
+          setIsCorrectVehicleModalOpen(false);
+          setCorrectVehiclePreset(null);
+        }}
+        oilChangeId={correctVehiclePreset?.oilChangeId}
+        currentVehicleId={correctVehiclePreset?.vehicleId}
+        currentVehiclePlate={correctVehiclePreset?.plate}
+        currentVehicleType={
+          correctVehiclePreset?.vehicleType ?? currentBarrel.allowedVehicleType
+        }
         onSuccess={() => {
+          setIsCorrectVehicleModalOpen(false);
+          setCorrectVehiclePreset(null);
           loadUsage(page, pageSize, lossPage, lossPageSize);
         }}
       />
+
+      {directEditOp && (
+        <EditOilChangeModal
+          isOpen={Boolean(directEditOp)}
+          oilChangeId={directEditOp.oilChangeId}
+          vehicleLabel={directEditOp.vehicleLabel}
+          onClose={() => setDirectEditOp(null)}
+          onSuccess={() => {
+            setDirectEditOp(null);
+            loadUsage(page, pageSize, lossPage, lossPageSize);
+          }}
+        />
+      )}
+
+      {directCancelOp && (
+        <CancelOilChangeModal
+          isOpen={Boolean(directCancelOp)}
+          oilChangeId={directCancelOp.oilChangeId}
+          vehicleLabel={directCancelOp.vehicleLabel}
+          onClose={() => setDirectCancelOp(null)}
+          onSuccess={() => {
+            setDirectCancelOp(null);
+            loadUsage(page, pageSize, lossPage, lossPageSize);
+          }}
+        />
+      )}
+
+      {directDetailsOp && (
+        <OilChangeDetailsModal
+          isOpen={Boolean(directDetailsOp)}
+          oilChangeId={directDetailsOp.oilChangeId}
+          vehicleLabel={directDetailsOp.vehicleLabel}
+          initialTab={directDetailsOp.initialTab}
+          onClose={() => setDirectDetailsOp(null)}
+          onRequestEdit={(id) => {
+            const label = directDetailsOp.vehicleLabel;
+            setDirectDetailsOp(null);
+            setDirectEditOp({ oilChangeId: id, vehicleLabel: label });
+          }}
+          onRequestCancel={(id) => {
+            const label = directDetailsOp.vehicleLabel;
+            setDirectDetailsOp(null);
+            setDirectCancelOp({ oilChangeId: id, vehicleLabel: label });
+          }}
+          onRequestCorrectVehicle={(id, vId, vType) => {
+            const label = directDetailsOp.vehicleLabel;
+            setDirectDetailsOp(null);
+            setCorrectVehiclePreset({
+              oilChangeId: id,
+              vehicleId: vId,
+              plate: label,
+              vehicleType: vType ?? currentBarrel.allowedVehicleType ?? 2,
+            });
+            setIsCorrectVehicleModalOpen(true);
+          }}
+        />
+      )}
 
       {selectedVehicleForOps && (
         <VehicleOilChangesModal
           isOpen={Boolean(selectedVehicleForOps)}
           vehicleId={selectedVehicleForOps.vehicleId}
+          workOrderId={selectedVehicleForOps.workOrderId}
           vehiclePlate={selectedVehicleForOps.plate}
           vehicleType={selectedVehicleForOps.vehicleType}
+          initialActionHint={selectedVehicleForOps.initialActionHint}
           onClose={() => setSelectedVehicleForOps(null)}
           onChanged={() => {
             loadUsage(page, pageSize, lossPage, lossPageSize);

@@ -89,8 +89,10 @@ export function EditOilChangeModal({
   onClose,
   onSuccess,
 }: EditOilChangeModalProps) {
-  const { can } = useAuth();
-  const canEditDate = can("maintenance.oil.date_edit");
+  const { can, canAny } = useAuth();
+  const canEditDate =
+    can("maintenance.oil.date_edit") ||
+    canAny("maintenance.oil.complete", "maintenance.work_orders.manage");
   const {
     resolveRiderName,
     resolveLocationName,
