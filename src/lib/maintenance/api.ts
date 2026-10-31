@@ -310,10 +310,14 @@ export async function getOilBarrelUsage(
   barrelId: string,
   page = 1,
   pageSize = 50,
+  lossPage = 1,
+  lossPageSize = 50,
 ): Promise<OilBarrelUsageResponse> {
   const query = new URLSearchParams({
     page: String(page),
     pageSize: String(Math.min(pageSize, 200)),
+    lossPage: String(lossPage),
+    lossPageSize: String(Math.min(lossPageSize, 200)),
   });
   return authFetch<OilBarrelUsageResponse>(
     `/api/maintenance-inventory/oil-barrels/${barrelId}/usage?${query}`,

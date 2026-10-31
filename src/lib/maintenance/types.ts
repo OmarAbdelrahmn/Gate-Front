@@ -491,6 +491,20 @@ export interface OilBarrelUsageVehicleRow {
   externalPlateOrReference?: string | null;
 }
 
+export interface OilBarrelLossEntry {
+  id: string;
+  occurredAtUtc: string;
+  quantityLiters: number;
+  costAmount: number;
+  reason: string;
+  missingReason: number | null; // 1 = missing, 2 = wasted, 3 = theft, null = ordinary loss
+  responsibleInventoryLocationId?: string | null;
+  recordedByUserId?: string | null;
+  recordedAtUtc: string;
+  stockMovementId?: string | null;
+  stockMovementLineId?: string | null;
+}
+
 export interface OilBarrelUsageResponse {
   barrel: OilBarrel;
   totalIssuedLiters: number;
@@ -500,6 +514,10 @@ export interface OilBarrelUsageResponse {
   page: number;
   pageSize: number;
   totalCount: number;
+  lossEntries?: OilBarrelLossEntry[];
+  lossPage?: number;
+  lossPageSize?: number;
+  lossTotalCount?: number;
 }
 
 export interface OpenBarrelResponse {

@@ -132,10 +132,53 @@ export default function JahezAccountsPage() {
   // Filtering (All accounts handled on one page)
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [monthlyUsageFilter, setMonthlyUsageFilter] = useState<string>("ALL");
   const [assignedFilter, setAssignedFilter] = useState<string>("ALL");
   const [cityFilter, setCityFilter] = useState<string>("ALL");
   const [sponsorFilter, setSponsorFilter] = useState<string>("ALL");
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>("ALL");
+
+  const JAHEZ_ACCOUNTS_FILTERS_SESSION_KEY = "jahez_accounts_filters_session";
+  const isFiltersRestoredRef = useRef(false);
+
+  // Restore filters on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(JAHEZ_ACCOUNTS_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string") setSearch(parsed.search);
+        if (typeof parsed.statusFilter === "string") setStatusFilter(parsed.statusFilter);
+        if (typeof parsed.monthlyUsageFilter === "string") setMonthlyUsageFilter(parsed.monthlyUsageFilter);
+        if (typeof parsed.assignedFilter === "string") setAssignedFilter(parsed.assignedFilter);
+        if (typeof parsed.cityFilter === "string") setCityFilter(parsed.cityFilter);
+        if (typeof parsed.sponsorFilter === "string") setSponsorFilter(parsed.sponsorFilter);
+        if (typeof parsed.vehicleTypeFilter === "string") setVehicleTypeFilter(parsed.vehicleTypeFilter);
+      }
+    } catch {
+    } finally {
+      isFiltersRestoredRef.current = true;
+    }
+  }, []);
+
+  // Save filters on change
+  useEffect(() => {
+    if (!isFiltersRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        JAHEZ_ACCOUNTS_FILTERS_SESSION_KEY,
+        JSON.stringify({
+          search,
+          statusFilter,
+          monthlyUsageFilter,
+          assignedFilter,
+          cityFilter,
+          sponsorFilter,
+          vehicleTypeFilter,
+        })
+      );
+    } catch {}
+  }, [search, statusFilter, monthlyUsageFilter, assignedFilter, cityFilter, sponsorFilter, vehicleTypeFilter]);
 
   // -----------------------------------------------------------------
   // Modals States
@@ -453,7 +496,16 @@ export default function JahezAccountsPage() {
   // Client search & filter over ALL loaded accounts
   const filteredAccounts = useMemo(() => {
     return accounts.filter((acc) => {
-      if (statusFilter !== "ALL" && acc.status !== statusFilter) return false;
+      if (statusFilter !== "ALL") {
+        if (statusFilter === "MONTHLY_USED") {
+          if (acc.monthlyUsageStatus !== "Used") return false;
+        } else if (statusFilter === "MONTHLY_UNUSED") {
+          if (acc.monthlyUsageStatus !== "Unused") return false;
+        } else if (acc.status !== statusFilter) {
+          return false;
+        }
+      }
+      if (monthlyUsageFilter !== "ALL" && acc.monthlyUsageStatus !== monthlyUsageFilter) return false;
       if (assignedFilter === "ASSIGNED" && !acc.isAssigned) return false;
       if (assignedFilter === "UNASSIGNED") {
         if (acc.isAssigned) return false;
@@ -520,11 +572,12 @@ export default function JahezAccountsPage() {
         statusMatch
       );
     });
-  }, [accounts, search, statusFilter, assignedFilter, cityFilter, sponsorFilter, vehicleTypeFilter]);
+  }, [accounts, search, statusFilter, monthlyUsageFilter, assignedFilter, cityFilter, sponsorFilter, vehicleTypeFilter]);
 
   const hasActiveFilters =
     Boolean(search.trim()) ||
     statusFilter !== "ALL" ||
+    monthlyUsageFilter !== "ALL" ||
     assignedFilter !== "ALL" ||
     cityFilter !== "ALL" ||
     sponsorFilter !== "ALL" ||
@@ -533,10 +586,14 @@ export default function JahezAccountsPage() {
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("ALL");
+    setMonthlyUsageFilter("ALL");
     setAssignedFilter("ALL");
     setCityFilter("ALL");
     setSponsorFilter("ALL");
     setVehicleTypeFilter("ALL");
+    try {
+      sessionStorage.removeItem(JAHEZ_ACCOUNTS_FILTERS_SESSION_KEY);
+    } catch {}
   };
 
   // -----------------------------------------------------------------
@@ -1278,7 +1335,7 @@ export default function JahezAccountsPage() {
 
       {/* ----------------- Statistics Banner ----------------- */}
       {statistics && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9">
           <div
             onClick={clearFilters}
             className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
@@ -1395,6 +1452,51 @@ export default function JahezAccountsPage() {
             </div>
           </div>
 
+          {/* Monthly Usage Cards */}
+          <div
+            onClick={() => {
+              setMonthlyUsageFilter((prev) => (prev === "Used" ? "ALL" : "Used"));
+            }}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              monthlyUsageFilter === "Used"
+                ? "border-emerald-500 bg-emerald-100/50 dark:border-emerald-600 dark:bg-emerald-950/40"
+                : "border-emerald-200/80 bg-emerald-50/40 hover:border-emerald-400 dark:border-emerald-950 dark:bg-emerald-950/20"
+            }`}
+            title="فلترة الحسابات المستخدمة للشهر الحالي (انقر للفلترة)"
+          >
+            <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              مستخدم هذا الشهر
+            </div>
+            <div className="mt-1 text-2xl font-black text-emerald-800 dark:text-emerald-200">
+              {accounts.filter((a) => a.monthlyUsageStatus === "Used").length}
+            </div>
+            <div className="mt-0.5 text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+              Used (مرتبط بعهدة)
+            </div>
+          </div>
+
+          <div
+            onClick={() => {
+              setMonthlyUsageFilter((prev) => (prev === "Unused" ? "ALL" : "Unused"));
+            }}
+            className={`cursor-pointer rounded-2xl border p-3 shadow-xs transition-all ${
+              monthlyUsageFilter === "Unused"
+                ? "border-slate-500 bg-slate-100/50 dark:border-slate-600 dark:bg-slate-950/40"
+                : "border-slate-200/80 bg-slate-50/40 hover:border-slate-400 dark:border-slate-800 dark:bg-slate-900/40"
+            }`}
+            title="فلترة الحسابات غير المستخدمة للشهر الحالي (انقر للفلترة)"
+          >
+            <div className="text-xs font-medium text-slate-700 dark:text-slate-400">
+              غير مستخدم هذا الشهر
+            </div>
+            <div className="mt-1 text-2xl font-black text-slate-800 dark:text-slate-200">
+              {accounts.filter((a) => a.monthlyUsageStatus === "Unused").length}
+            </div>
+            <div className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+              Unused (بدون عهدة)
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-purple-200/80 bg-purple-50/40 p-3 shadow-xs dark:border-purple-950 dark:bg-purple-950/20">
             <div className="text-xs font-medium text-purple-700 dark:text-purple-400">
               طلبات الأمس
@@ -1459,6 +1561,18 @@ export default function JahezAccountsPage() {
             <option value="Suspended">بلوك (Block)</option>
             <option value="Retired">إيقاف إداري (Retired)</option>
             <option value="Archived">خارج الكفالة (Archived)</option>
+            <option value="MONTHLY_USED">مستخدم هذا الشهر (Used)</option>
+            <option value="MONTHLY_UNUSED">غير مستخدم هذا الشهر (Unused)</option>
+          </select>
+
+          <select
+            value={monthlyUsageFilter}
+            onChange={(e) => setMonthlyUsageFilter(e.target.value)}
+            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+          >
+            <option value="ALL">جميع حالات الاستخدام الشهري</option>
+            <option value="Used">مستخدم هذا الشهر (Used)</option>
+            <option value="Unused">غير مستخدم هذا الشهر (Unused)</option>
           </select>
 
           <select

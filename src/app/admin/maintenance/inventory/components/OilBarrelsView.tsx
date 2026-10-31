@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   FileText,
   Building2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -519,69 +520,103 @@ export function OilBarrelsView({
     return opts;
   }, [locations, oilLocations]);
 
+  const hasActiveFilters = Boolean(
+    selectedLocationId ||
+    selectedItemId ||
+    statusFilter !== "all" ||
+    vehicleTypeFilter !== "all"
+  );
+
+  const resetFilters = () => {
+    setSelectedLocationId("");
+    setSelectedItemId("");
+    setStatusFilter("all");
+    setVehicleTypeFilter("all");
+  };
+
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-64">
-            <SearchableSelect
-              value={selectedLocationId}
-              onChange={(val) => setSelectedLocationId(val)}
-              options={locationOptions}
-              placeholder="المستودع / الموقع..."
-            />
-          </div>
-          <div className="w-64">
-            <SearchableSelect
-              value={selectedItemId}
-              onChange={(val) => setSelectedItemId(val)}
-              options={[
-                { value: "", label: "جميع أصناف الزيوت" },
-                ...oilItems.map((i) => ({
-                  value: i.id,
-                  label: `${i.nameAr} (${i.sku})`,
-                })),
-              ]}
-              placeholder="صنف الزيت..."
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
-          >
-            <option value="all">جميع الحالات</option>
-            <option value="Open">المفتوحة حالياً (Open)</option>
-            <option value="Sealed">المختومة (Sealed)</option>
-            <option value="Depleted">المستهلكة (Depleted)</option>
-            <option value="Returned">المرتجعة (Returned)</option>
-          </select>
-          <select
-            value={vehicleTypeFilter}
-            onChange={(e) => setVehicleTypeFilter(e.target.value)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs font-bold focus:outline-hidden"
-          >
-            <option value="all">جميع أنواع المركبات</option>
-            <option value="2">سيارات (Cars - 2)</option>
-            <option value="1">دراجات نارية (Motorcycles - 1)</option>
-            <option value="both">مشتركة فقط (سيارات ودراجات)</option>
-          </select>
-        </div>
+      {/* Filters Toolbar */}
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1 max-w-5xl">
+            <div className="w-64 min-w-[200px]">
+              <SearchableSelect
+                value={selectedLocationId}
+                onChange={(val) => setSelectedLocationId(val)}
+                options={locationOptions}
+                placeholder="المستودع / الموقع..."
+              />
+            </div>
+            <div className="w-64 min-w-[200px]">
+              <SearchableSelect
+                value={selectedItemId}
+                onChange={(val) => setSelectedItemId(val)}
+                options={[
+                  { value: "", label: "جميع أصناف الزيوت" },
+                  ...oilItems.map((i) => ({
+                    value: i.id,
+                    label: `${i.nameAr} (${i.sku})`,
+                  })),
+                ]}
+                placeholder="صنف الزيت..."
+              />
+            </div>
+            <div className="w-[160px] shrink-0">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--foreground)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1167c9]"
+              >
+                <option value="all">جميع الحالات</option>
+                <option value="Open">المفتوحة حالياً (Open)</option>
+                <option value="Sealed">المختومة (Sealed)</option>
+                <option value="Depleted">المستهلكة (Depleted)</option>
+                <option value="Returned">المرتجعة (Returned)</option>
+              </select>
+            </div>
+            <div className="w-[170px] shrink-0">
+              <select
+                value={vehicleTypeFilter}
+                onChange={(e) => setVehicleTypeFilter(e.target.value)}
+                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--foreground)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1167c9]"
+              >
+                <option value="all">جميع أنواع المركبات</option>
+                <option value="2">سيارات (Cars - 2)</option>
+                <option value="1">دراجات نارية (Bikes - 1)</option>
+                <option value="both">مشتركة فقط (سيارات ودراجات)</option>
+              </select>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={handleExportExcel}
-            className="h-10 text-xs inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold"
-          >
-            <FileSpreadsheet size={14} />
-            تصدير إكسل
-          </Button>
-          <Button variant="secondary" onClick={loadBarrels} loading={loading} className="h-10 text-xs">
-            <RefreshCw size={14} />
-            تحديث البراميل
-          </Button>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="h-11 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-950/60 rounded-xl border border-rose-200 dark:border-rose-900 transition-colors shrink-0"
+              >
+                إعادة ضبط
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-[var(--muted)] shrink-0 px-2">
+              <Package size={17} className="text-amber-600" />
+              {barrels.length} برميل
+            </span>
+            <Button
+              variant="secondary"
+              onClick={handleExportExcel}
+              className="h-11 text-xs inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-bold rounded-xl"
+            >
+              <FileSpreadsheet size={15} />
+              تصدير إكسل
+            </Button>
+            <Button variant="secondary" onClick={loadBarrels} loading={loading} className="h-11 text-xs rounded-xl">
+              <RefreshCw size={14} />
+              تحديث البراميل
+            </Button>
+          </div>
         </div>
       </div>
 

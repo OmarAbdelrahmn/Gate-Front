@@ -97,6 +97,7 @@ import {
   Save,
   X,
   Activity,
+  CircleDashed,
 } from "lucide-react";
 import { MonthlyUsageBadge } from "@/components/shared/MonthlyUsageBadge";
 import {
@@ -196,6 +197,7 @@ export default function ChefzAccountsPage() {
   const [filterCityId, setFilterCityId] = useState("");
   const [filterSponsorId, setFilterSponsorId] = useState("");
   const [filterLifecycleStatus, setFilterLifecycleStatus] = useState<string>("all"); // "all" | "Available" | "Assigned" | "Suspended" | "Retired" | "Archived"
+  const [filterMonthlyUsage, setFilterMonthlyUsage] = useState<string>("all"); // "all" | "Used" | "Unused"
 
   // Table Header Column Filters
   const [colFilterReminders, setColFilterReminders] = useState<string[]>([]);
@@ -206,6 +208,80 @@ export default function ChefzAccountsPage() {
   const [colFilterSetup, setColFilterSetup] = useState<string[]>([]);
   const [colFilterPassword, setColFilterPassword] = useState<string[]>([]);
   const [colFilterStatus, setColFilterStatus] = useState<string[]>([]);
+
+  const CHEFZ_ACCOUNTS_FILTERS_SESSION_KEY = "chefz_accounts_filters_session";
+  const isFiltersRestoredRef = useRef(false);
+
+  // Restore filters on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CHEFZ_ACCOUNTS_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string") setSearch(parsed.search);
+        if (typeof parsed.filterSetupStatus === "string") setFilterSetupStatus(parsed.filterSetupStatus);
+        if (typeof parsed.filterType === "string") setFilterType(parsed.filterType);
+        if (typeof parsed.filterCityId === "string") setFilterCityId(parsed.filterCityId);
+        if (typeof parsed.filterSponsorId === "string") setFilterSponsorId(parsed.filterSponsorId);
+        if (typeof parsed.filterLifecycleStatus === "string") setFilterLifecycleStatus(parsed.filterLifecycleStatus);
+        if (typeof parsed.filterMonthlyUsage === "string") setFilterMonthlyUsage(parsed.filterMonthlyUsage);
+        if (Array.isArray(parsed.colFilterReminders)) setColFilterReminders(parsed.colFilterReminders);
+        if (Array.isArray(parsed.colFilterAssignments)) setColFilterAssignments(parsed.colFilterAssignments);
+        if (Array.isArray(parsed.colFilterCityIds)) setColFilterCityIds(parsed.colFilterCityIds);
+        if (Array.isArray(parsed.colFilterSponsorIds)) setColFilterSponsorIds(parsed.colFilterSponsorIds);
+        if (Array.isArray(parsed.colFilterTypes)) setColFilterTypes(parsed.colFilterTypes);
+        if (Array.isArray(parsed.colFilterSetup)) setColFilterSetup(parsed.colFilterSetup);
+        if (Array.isArray(parsed.colFilterPassword)) setColFilterPassword(parsed.colFilterPassword);
+        if (Array.isArray(parsed.colFilterStatus)) setColFilterStatus(parsed.colFilterStatus);
+      }
+    } catch {
+    } finally {
+      isFiltersRestoredRef.current = true;
+    }
+  }, []);
+
+  // Save filters on change
+  useEffect(() => {
+    if (!isFiltersRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        CHEFZ_ACCOUNTS_FILTERS_SESSION_KEY,
+        JSON.stringify({
+          search,
+          filterSetupStatus,
+          filterType,
+          filterCityId,
+          filterSponsorId,
+          filterLifecycleStatus,
+          filterMonthlyUsage,
+          colFilterReminders,
+          colFilterAssignments,
+          colFilterCityIds,
+          colFilterSponsorIds,
+          colFilterTypes,
+          colFilterSetup,
+          colFilterPassword,
+          colFilterStatus,
+        })
+      );
+    } catch {}
+  }, [
+    search,
+    filterSetupStatus,
+    filterType,
+    filterCityId,
+    filterSponsorId,
+    filterLifecycleStatus,
+    filterMonthlyUsage,
+    colFilterReminders,
+    colFilterAssignments,
+    colFilterCityIds,
+    colFilterSponsorIds,
+    colFilterTypes,
+    colFilterSetup,
+    colFilterPassword,
+    colFilterStatus,
+  ]);
 
   // Modals
   // 1. Chefz Setup / Configuration Modal
@@ -391,6 +467,7 @@ export default function ChefzAccountsPage() {
       // 4b. Lifecycle Status filter (Toolbar & Column)
       const currentLifecycleStatus = chefz?.status || base.status;
       if (filterLifecycleStatus !== "all" && currentLifecycleStatus !== filterLifecycleStatus) return false;
+      if (filterMonthlyUsage !== "all" && base.monthlyUsageStatus !== filterMonthlyUsage) return false;
       if (colFilterStatus.length > 0) {
         const monthlyValues = colFilterStatus.filter(
           (v) => v === "MONTHLY_USED" || v === "MONTHLY_UNUSED"
@@ -497,6 +574,7 @@ export default function ChefzAccountsPage() {
     filterCityId,
     filterSponsorId,
     filterLifecycleStatus,
+    filterMonthlyUsage,
     colFilterReminders,
     colFilterAssignments,
     colFilterCityIds,
@@ -930,6 +1008,7 @@ export default function ChefzAccountsPage() {
     filterCityId ||
     filterSponsorId ||
     filterLifecycleStatus !== "all" ||
+    filterMonthlyUsage !== "all" ||
     colFilterReminders.length > 0 ||
     colFilterAssignments.length > 0 ||
     colFilterCityIds.length > 0 ||
@@ -947,6 +1026,7 @@ export default function ChefzAccountsPage() {
     setFilterCityId("");
     setFilterSponsorId("");
     setFilterLifecycleStatus("all");
+    setFilterMonthlyUsage("all");
     setColFilterReminders([]);
     setColFilterAssignments([]);
     setColFilterCityIds([]);
@@ -955,6 +1035,9 @@ export default function ChefzAccountsPage() {
     setColFilterSetup([]);
     setColFilterPassword([]);
     setColFilterStatus([]);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(CHEFZ_ACCOUNTS_FILTERS_SESSION_KEY);
+    }
   };
 
   const resetColumnFilters = () => {
@@ -2057,7 +2140,7 @@ export default function ChefzAccountsPage() {
 
       {/* Filter Toolbar */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="relative">
             <Search className="absolute right-3 top-2.5 h-4 w-4 text-[var(--muted)]" />
             <input
@@ -2067,6 +2150,18 @@ export default function ChefzAccountsPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pr-9 pl-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]"
             />
+          </div>
+
+          <div>
+            <select
+              value={filterMonthlyUsage}
+              onChange={(e) => setFilterMonthlyUsage(e.target.value as "all" | "Used" | "Unused")}
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)]"
+            >
+              <option value="all">جميع حالات الاستخدام</option>
+              <option value="Used">مستخدم هذا الشهر (Used)</option>
+              <option value="Unused">غير مستخدم هذا الشهر (Unused)</option>
+            </select>
           </div>
 
           <div>
@@ -2139,16 +2234,18 @@ export default function ChefzAccountsPage() {
           )}
         </div>
 
-        {/* Active Column Filter Badges */}
+        {/* Active Column / Applied Filter Badges */}
         {(colFilterReminders.length > 0 ||
           colFilterAssignments.length > 0 ||
           colFilterCityIds.length > 0 ||
           colFilterSponsorIds.length > 0 ||
           colFilterTypes.length > 0 ||
           colFilterSetup.length > 0 ||
-          colFilterPassword.length > 0) && (
+          colFilterPassword.length > 0 ||
+          colFilterStatus.length > 0 ||
+          filterMonthlyUsage !== "all") && (
           <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-[var(--border)] text-xs">
-            <span className="font-bold text-[var(--muted)]">فلاتر الأعمدة المطبقة:</span>
+            <span className="font-bold text-[var(--muted)]">فلاتر مطبقة:</span>
 
             {/* Reminders / Alert Chips */}
             {colFilterReminders.map((val) => {
@@ -2284,6 +2381,40 @@ export default function ChefzAccountsPage() {
                   <button
                     type="button"
                     onClick={() => setColFilterPassword((prev) => prev.filter((x) => x !== passVal))}
+                    className="hover:text-red-500 rounded-full"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+
+            {/* Monthly Usage Chip */}
+            {filterMonthlyUsage !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span>{filterMonthlyUsage === "Used" ? "مستخدم هذا الشهر" : "غير مستخدم هذا الشهر"}</span>
+                <button
+                  type="button"
+                  onClick={() => setFilterMonthlyUsage("all")}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            )}
+
+            {/* Status / Column Status Chips */}
+            {colFilterStatus.map((val) => {
+              const opt = statusFilterOptions.find((o) => o.value === val);
+              return (
+                <span
+                  key={val}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                >
+                  <span>{opt?.label || val}</span>
+                  <button
+                    type="button"
+                    onClick={() => setColFilterStatus((prev) => prev.filter((x) => x !== val))}
                     className="hover:text-red-500 rounded-full"
                   >
                     <X size={11} />

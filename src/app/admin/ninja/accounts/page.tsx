@@ -171,6 +171,79 @@ export default function NinjaAccountsPage() {
   const [colFilterPasswordCooldown, setColFilterPasswordCooldown] = useState<string[]>([]);
   const [colFilterSheet, setColFilterSheet] = useState<string[]>([]);
 
+  const NINJA_ACCOUNTS_FILTERS_SESSION_KEY = "ninja_accounts_filters_session";
+  const isFiltersRestoredRef = useRef(false);
+
+  // Restore filters from sessionStorage
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(NINJA_ACCOUNTS_FILTERS_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.search === "string") setSearch(parsed.search);
+        if (typeof parsed.filterStatus === "string") setFilterStatus(parsed.filterStatus);
+        if (typeof parsed.filterCooldown === "string") setFilterCooldown(parsed.filterCooldown);
+        if (typeof parsed.filterCityId === "string") setFilterCityId(parsed.filterCityId);
+        if (typeof parsed.filterSponsorId === "string") setFilterSponsorId(parsed.filterSponsorId);
+        if (Array.isArray(parsed.colFilterCaptain)) setColFilterCaptain(parsed.colFilterCaptain);
+        if (Array.isArray(parsed.colFilterStatus)) setColFilterStatus(parsed.colFilterStatus);
+        if (Array.isArray(parsed.colFilterOwners)) setColFilterOwners(parsed.colFilterOwners);
+        if (Array.isArray(parsed.colFilterCitySponsor)) setColFilterCitySponsor(parsed.colFilterCitySponsor);
+        if (Array.isArray(parsed.colFilterRiders)) setColFilterRiders(parsed.colFilterRiders);
+        if (Array.isArray(parsed.colFilterRiderType)) setColFilterRiderType(parsed.colFilterRiderType);
+        if (Array.isArray(parsed.colFilterPaymentModel)) setColFilterPaymentModel(parsed.colFilterPaymentModel);
+        if (Array.isArray(parsed.colFilterPhone)) setColFilterPhone(parsed.colFilterPhone);
+        if (Array.isArray(parsed.colFilterPasswordCooldown)) setColFilterPasswordCooldown(parsed.colFilterPasswordCooldown);
+        if (Array.isArray(parsed.colFilterSheet)) setColFilterSheet(parsed.colFilterSheet);
+      }
+    } catch {} finally {
+      isFiltersRestoredRef.current = true;
+    }
+  }, []);
+
+  // Save filters on change
+  useEffect(() => {
+    if (!isFiltersRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        NINJA_ACCOUNTS_FILTERS_SESSION_KEY,
+        JSON.stringify({
+          search,
+          filterStatus,
+          filterCooldown,
+          filterCityId,
+          filterSponsorId,
+          colFilterCaptain,
+          colFilterStatus,
+          colFilterOwners,
+          colFilterCitySponsor,
+          colFilterRiders,
+          colFilterRiderType,
+          colFilterPaymentModel,
+          colFilterPhone,
+          colFilterPasswordCooldown,
+          colFilterSheet,
+        })
+      );
+    } catch {}
+  }, [
+    search,
+    filterStatus,
+    filterCooldown,
+    filterCityId,
+    filterSponsorId,
+    colFilterCaptain,
+    colFilterStatus,
+    colFilterOwners,
+    colFilterCitySponsor,
+    colFilterRiders,
+    colFilterRiderType,
+    colFilterPaymentModel,
+    colFilterPhone,
+    colFilterPasswordCooldown,
+    colFilterSheet,
+  ]);
+
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
 
   // -------------------------------------------------------------
@@ -1256,6 +1329,9 @@ export default function NinjaAccountsPage() {
     setColFilterPasswordCooldown([]);
     setColFilterSheet([]);
     setCurrentPage(1);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(NINJA_ACCOUNTS_FILTERS_SESSION_KEY);
+    }
   };
 
   // Reset page when filters change
