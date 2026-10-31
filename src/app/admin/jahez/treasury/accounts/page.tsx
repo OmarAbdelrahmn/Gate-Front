@@ -157,9 +157,9 @@ export default function TreasuryAccountsPage() {
     function matchesFilter(node: AccountTreeNode): boolean {
       const matchesSearch =
         !q ||
-        node.nameAr.toLowerCase().includes(q) ||
-        node.nameEn.toLowerCase().includes(q) ||
-        node.code.toLowerCase().includes(q);
+        (node.nameAr ? node.nameAr.toLowerCase().includes(q) : false) ||
+        (node.nameEn ? node.nameEn.toLowerCase().includes(q) : false) ||
+        (node.code ? node.code.toLowerCase().includes(q) : false);
 
       const matchesLocation = !locationFilter || String(node.location) === locationFilter;
       const matchesPurpose = !purposeFilter || String(node.purpose) === purposeFilter;

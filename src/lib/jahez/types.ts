@@ -689,11 +689,11 @@ export interface EarningsStatement extends EarningsRequest {
 }
 
 export interface AdministrativeDebt {
-  handoverId: Id;
+  handoverId?: Id | null;
   accountId: Id;
-  externalAccountId: string;
-  riderProfileId: Id;
-  riderNameAr: string;
+  externalAccountId?: string | null;
+  riderProfileId?: Id | null;
+  riderNameAr?: string | null;
   platformDebt: number;
 }
 

@@ -566,12 +566,12 @@ export default function JahezCashboxPage() {
     const spName = getMovementSponsorName(m).toLowerCase();
     const platformAcc = m.platformAccountId != null ? String(m.platformAccountId).toLowerCase() : "";
     return (
-      m.id.toLowerCase().includes(q) ||
+      (m.id ? m.id.toLowerCase().includes(q) : false) ||
       (platformAcc ? platformAcc.includes(q) : false) ||
       (m.paymentReference ? m.paymentReference.toLowerCase().includes(q) : false) ||
       (m.reference ? m.reference.toLowerCase().includes(q) : false) ||
-      m.reason.toLowerCase().includes(q) ||
-      m.handoverId.toLowerCase().includes(q) ||
+      (m.reason ? m.reason.toLowerCase().includes(q) : false) ||
+      (m.handoverId ? m.handoverId.toLowerCase().includes(q) : false) ||
       spName.includes(q) ||
       m.userRider?.nameAr?.toLowerCase().includes(q) ||
       m.userRider?.nameEn?.toLowerCase().includes(q) ||

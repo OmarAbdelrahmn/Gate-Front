@@ -225,9 +225,11 @@ export default function JahezStatisticsAndReportsPage() {
       const q = search.trim().toLowerCase();
       if (q) {
         const matchesSearch =
-          d.externalAccountId?.toLowerCase().includes(q) ||
-          d.riderNameAr?.toLowerCase().includes(q) ||
-          d.handoverId.toLowerCase().includes(q);
+          Boolean(d.externalAccountId && String(d.externalAccountId).toLowerCase().includes(q)) ||
+          Boolean(d.riderNameAr && String(d.riderNameAr).toLowerCase().includes(q)) ||
+          Boolean(d.riderProfileId && String(d.riderProfileId).toLowerCase().includes(q)) ||
+          Boolean(d.handoverId && String(d.handoverId).toLowerCase().includes(q)) ||
+          Boolean(d.accountId && String(d.accountId).toLowerCase().includes(q));
         if (!matchesSearch) return false;
       }
 
