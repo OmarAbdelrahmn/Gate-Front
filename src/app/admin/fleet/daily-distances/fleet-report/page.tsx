@@ -419,7 +419,7 @@ function FleetDailyDistanceReportContent() {
           </Button>
 
           <Button
-            onClick={() => fetchReport(page, pageSize)}
+            onClick={() => fetchReport()}
             disabled={loading}
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm"
           >
@@ -698,7 +698,7 @@ function FleetDailyDistanceReportContent() {
             <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
             <span>{error}</span>
           </div>
-          <Button variant="secondary" onClick={() => fetchReport(page, pageSize)} className="text-xs h-7">
+          <Button variant="secondary" onClick={() => fetchReport()} className="text-xs h-7">
             إعادة المحاولة
           </Button>
         </Card>
