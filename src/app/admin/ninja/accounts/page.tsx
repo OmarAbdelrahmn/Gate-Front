@@ -2614,7 +2614,7 @@ export default function NinjaAccountsPage() {
               placeholder="بحث برقم الكابتن، كود الحساب، اسم المالك، المندوب، الهوية، الهاتف، المدينة أو الكفيل..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pr-10 pl-10 rtl:pr-10 rtl:pl-10 ltr:pl-10 ltr:pr-10 text-xs h-10 rounded-xl"
+              className="pr-10 pl-10 rtl:pr-10 rtl:pl-10 ltr:pl-10 ltr:pr-10 text-xs h-10 rounded-xl font-bold text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 focus:border-purple-500"
             />
             {search && (
               <button
@@ -2641,120 +2641,145 @@ export default function NinjaAccountsPage() {
           )}
         </div>
 
-        {/* 6 Responsive Grid Filter Selects with Colorful Labels */}
+        {/* 6 Responsive Grid Filter Cards with Colorful Badges & High-Contrast Controls */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1">
           {/* 1. Status Filter */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-[11px] font-black text-purple-700 dark:text-purple-300">
-              <span className="h-2 w-2 rounded-full bg-purple-500 shrink-0"></span>
-              <span>حالة الحساب</span>
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-purple-100 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 text-[11px] font-black text-purple-900 dark:text-purple-200 shadow-2xs">
+              <span className="flex items-center gap-1.5 truncate">
+                <Activity className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                <span>حالة الحساب</span>
+              </span>
+              {filterStatus !== "all" && (
+                <span className="h-2 w-2 rounded-full bg-purple-600 dark:bg-purple-400 shrink-0 animate-pulse" title="مطبق" />
+              )}
+            </div>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               aria-label="تصفية حسب حالة الحساب"
-              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+              className={`w-full rounded-xl border-2 px-2.5 py-2 text-xs font-black truncate cursor-pointer transition-all shadow-xs ${
                 filterStatus !== "all"
-                  ? "border-purple-500 bg-purple-50/70 text-purple-900 dark:bg-purple-950/50 dark:text-purple-200 ring-2 ring-purple-500/20"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-purple-400"
+                  ? "border-purple-500 bg-purple-50 text-purple-950 dark:bg-purple-950/60 dark:text-purple-100 ring-2 ring-purple-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-purple-400"
               }`}
             >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع حالات الحساب</option>
-              <option value="Used" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مستخدم هذا الشهر (Used)</option>
-              <option value="Unused" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">غير مستخدم هذا الشهر (Unused)</option>
-              <option value="Available" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">متاح (Available)</option>
-              <option value="Assigned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">معين (Assigned)</option>
-              <option value="Suspended" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">موقوف (Suspended)</option>
-              <option value="Retired" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مستبعد (Retired)</option>
-              <option value="Archived" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مؤرشف (Archived)</option>
+              <option value="all">جميع حالات الحساب</option>
+              <option value="Used">مستخدم هذا الشهر (Used)</option>
+              <option value="Unused">غير مستخدم هذا الشهر (Unused)</option>
+              <option value="Available">متاح (Available)</option>
+              <option value="Assigned">معين (Assigned)</option>
+              <option value="Suspended">موقوف (Suspended)</option>
+              <option value="Retired">مستبعد (Retired)</option>
+              <option value="Archived">مؤرشف (Archived)</option>
             </select>
           </div>
 
           {/* 2. Validity Filter */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-[11px] font-black text-emerald-700 dark:text-emerald-300">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0"></span>
-              <span>صلاحية التشغيل</span>
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-[11px] font-black text-emerald-900 dark:text-emerald-200 shadow-2xs">
+              <span className="flex items-center gap-1.5 truncate">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>صلاحية التشغيل</span>
+              </span>
+              {filterValidity !== "all" && (
+                <span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-400 shrink-0 animate-pulse" title="مطبق" />
+              )}
+            </div>
             <select
               value={filterValidity}
               onChange={(e) => setFilterValidity(e.target.value as any)}
               aria-label="تصفية حسب صلاحية التشغيل"
-              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+              className={`w-full rounded-xl border-2 px-2.5 py-2 text-xs font-black truncate cursor-pointer transition-all shadow-xs ${
                 filterValidity !== "all"
-                  ? "border-emerald-500 bg-emerald-50/70 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200 ring-2 ring-emerald-500/20"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-emerald-400"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/60 dark:text-emerald-100 ring-2 ring-emerald-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-emerald-400"
               }`}
             >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">صلاحية التشغيل: الكل</option>
-              <option value="valid" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">صالح للتشغيل (Valid)</option>
-              <option value="invalid" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">غير صالح للتشغيل (Invalid)</option>
+              <option value="all">صلاحية التشغيل: الكل</option>
+              <option value="valid">صالح للتشغيل (Valid)</option>
+              <option value="invalid">غير صالح للتشغيل (Invalid)</option>
             </select>
           </div>
 
           {/* 3. Assignment Filter */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-[11px] font-black text-sky-700 dark:text-sky-300">
-              <span className="h-2 w-2 rounded-full bg-sky-500 shrink-0"></span>
-              <span>حالة الإسناد</span>
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-sky-100 dark:bg-sky-950/80 border border-sky-200 dark:border-sky-800 text-[11px] font-black text-sky-900 dark:text-sky-200 shadow-2xs">
+              <span className="flex items-center gap-1.5 truncate">
+                <UserCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                <span>حالة الإسناد</span>
+              </span>
+              {filterAssignment !== "all" && (
+                <span className="h-2 w-2 rounded-full bg-sky-600 dark:bg-sky-400 shrink-0 animate-pulse" title="مطبق" />
+              )}
+            </div>
             <select
               value={filterAssignment}
               onChange={(e) => setFilterAssignment(e.target.value as any)}
               aria-label="تصفية حسب حالة الإسناد"
-              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+              className={`w-full rounded-xl border-2 px-2.5 py-2 text-xs font-black truncate cursor-pointer transition-all shadow-xs ${
                 filterAssignment !== "all"
-                  ? "border-sky-500 bg-sky-50/70 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200 ring-2 ring-sky-500/20"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-sky-400"
+                  ? "border-sky-500 bg-sky-50 text-sky-950 dark:bg-sky-950/60 dark:text-sky-100 ring-2 ring-sky-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-sky-400"
               }`}
             >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">حالة الإسناد: الكل</option>
-              <option value="assigned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مسند لمندوب (Assigned)</option>
-              <option value="unassigned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">غير مسند / شاغر (Unassigned)</option>
+              <option value="all">حالة الإسناد: الكل</option>
+              <option value="assigned">مسند لمندوب (Assigned)</option>
+              <option value="unassigned">غير مسند / شاغر (Unassigned)</option>
             </select>
           </div>
 
           {/* 4. Cooldown Filter */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
-              <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0"></span>
-              <span>فترة الانتظار (72h)</span>
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 text-[11px] font-black text-amber-900 dark:text-amber-200 shadow-2xs">
+              <span className="flex items-center gap-1.5 truncate">
+                <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>فترة الانتظار (72h)</span>
+              </span>
+              {filterCooldown !== "all" && (
+                <span className="h-2 w-2 rounded-full bg-amber-600 dark:bg-amber-400 shrink-0 animate-pulse" title="مطبق" />
+              )}
+            </div>
             <select
               value={filterCooldown}
               onChange={(e) => setFilterCooldown(e.target.value as any)}
               aria-label="تصفية حسب فترة الانتظار"
-              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+              className={`w-full rounded-xl border-2 px-2.5 py-2 text-xs font-black truncate cursor-pointer transition-all shadow-xs ${
                 filterCooldown !== "all"
-                  ? "border-amber-500 bg-amber-50/70 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200 ring-2 ring-amber-500/20"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-amber-400"
+                  ? "border-amber-500 bg-amber-50 text-amber-950 dark:bg-amber-950/60 dark:text-amber-100 ring-2 ring-amber-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-amber-400"
               }`}
             >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع فترات الانتظار</option>
-              <option value="active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">فترة انتظار نشطة (72h)</option>
-              <option value="ready" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">متاحة للتغيير</option>
+              <option value="all">جميع فترات الانتظار</option>
+              <option value="active">فترة انتظار نشطة (72h)</option>
+              <option value="ready">متاحة للتغيير</option>
             </select>
           </div>
 
           {/* 5. City Filter */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-[11px] font-black text-teal-700 dark:text-teal-300">
-              <span className="h-2 w-2 rounded-full bg-teal-500 shrink-0"></span>
-              <span>المدينة</span>
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-teal-100 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 text-[11px] font-black text-teal-900 dark:text-teal-200 shadow-2xs">
+              <span className="flex items-center gap-1.5 truncate">
+                <MapPin className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span>المدينة</span>
+              </span>
+              {Boolean(filterCityId) && (
+                <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-400 shrink-0 animate-pulse" title="مطبق" />
+              )}
+            </div>
             <select
               value={filterCityId}
               onChange={(e) => setFilterCityId(e.target.value)}
               aria-label="تصفية حسب المدينة"
-              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+              className={`w-full rounded-xl border-2 px-2.5 py-2 text-xs font-black truncate cursor-pointer transition-all shadow-xs ${
                 filterCityId
-                  ? "border-teal-500 bg-teal-50/70 text-teal-900 dark:bg-teal-950/50 dark:text-teal-200 ring-2 ring-teal-500/20"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-teal-400"
+                  ? "border-teal-500 bg-teal-50 text-teal-950 dark:bg-teal-950/60 dark:text-teal-100 ring-2 ring-teal-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-teal-400"
               }`}
             >
-              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع المدن</option>
+              <option value="">جميع المدن</option>
               {cities.map((c) => (
-                <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">
+                <option key={c.id} value={c.id}>
                   {c.globalCityAr}
                 </option>
               ))}
@@ -2762,24 +2787,29 @@ export default function NinjaAccountsPage() {
           </div>
 
           {/* 6. Sponsor Filter */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-[11px] font-black text-indigo-700 dark:text-indigo-300">
-              <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0"></span>
-              <span>الكفيل / السجل</span>
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-[11px] font-black text-indigo-900 dark:text-indigo-200 shadow-2xs">
+              <span className="flex items-center gap-1.5 truncate">
+                <Building2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span>الكفيل / السجل</span>
+              </span>
+              {Boolean(filterSponsorId) && (
+                <span className="h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400 shrink-0 animate-pulse" title="مطبق" />
+              )}
+            </div>
             <select
               value={filterSponsorId}
               onChange={(e) => setFilterSponsorId(e.target.value)}
               aria-label="تصفية حسب الكفيل"
-              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+              className={`w-full rounded-xl border-2 px-2.5 py-2 text-xs font-black truncate cursor-pointer transition-all shadow-xs ${
                 filterSponsorId
-                  ? "border-indigo-500 bg-indigo-50/70 text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200 ring-2 ring-indigo-500/20"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-indigo-400"
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-950 dark:bg-indigo-950/60 dark:text-indigo-100 ring-2 ring-indigo-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-indigo-400"
               }`}
             >
-              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع الكفلاء</option>
+              <option value="">جميع الكفلاء</option>
               {sponsors.map((s) => (
-                <option key={s.id} value={s.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">
+                <option key={s.id} value={s.id}>
                   {s.registryNameAr}
                 </option>
               ))}
@@ -3089,7 +3119,7 @@ export default function NinjaAccountsPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1750px] text-xs text-right border-collapse">
-            <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
+            <thead className="bg-slate-100/95 dark:bg-slate-800/95 text-slate-900 dark:text-slate-100 font-black border-b-2 border-slate-200 dark:border-slate-700">
               <tr>
                 {/* 1. Captain ID */}
                 <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[130px]">
@@ -3671,8 +3701,8 @@ export default function NinjaAccountsPage() {
                         )}
                       </td>
 
-                      {/* Actions (Sticky on the left matching the header) */}
-                      <td className="px-3 py-3 text-center whitespace-nowrap min-w-[210px] w-[210px] sticky left-0 z-10 bg-[var(--card)] group-hover:bg-[var(--subtle-bg)] shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] border-r border-[var(--border)]">
+                      {/* Actions */}
+                      <td className="px-3 py-3 text-center whitespace-nowrap min-w-[200px]">
                         <div className="flex items-center justify-center gap-1.5 flex-nowrap min-w-max">
                           {/* Assignment History */}
                           {canViewHistory && (
