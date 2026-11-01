@@ -207,21 +207,21 @@ export function TableHeaderColumnFilter({
         ref={triggerRef}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`relative inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded-md transition-all select-none cursor-pointer text-xs ${
+        className={`relative inline-flex items-center justify-center gap-1 p-1 rounded-lg transition-all select-none cursor-pointer text-xs ${
           isFiltered
-            ? "bg-blue-50 dark:bg-blue-950/80 text-[#1167c9] dark:text-blue-300 border border-blue-300 dark:border-blue-700 shadow-2xs font-semibold"
-            : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800"
+            ? "bg-purple-600 text-white border border-purple-700 shadow-sm font-bold ring-2 ring-purple-400/30"
+            : "text-slate-600 dark:text-slate-300 bg-slate-100/90 dark:bg-slate-800 hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-950/60 dark:hover:text-purple-300 border border-slate-300 dark:border-slate-700 shadow-2xs"
         }`}
         title={tooltipText}
         aria-label={`تصفية عمود ${label}`}
       >
         <Filter
           className={`h-3.5 w-3.5 transition-colors shrink-0 ${
-            isFiltered ? "text-[#1167c9] dark:text-blue-300 fill-current" : "text-current"
+            isFiltered ? "text-white fill-current" : "text-current"
           }`}
         />
         {isFiltered && (
-          <span className="inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[10px] font-bold rounded-full bg-[#1167c9] text-white dark:bg-blue-500 shadow-xs">
+          <span className="inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[10px] font-bold rounded-full bg-white text-purple-700 shadow-xs">
             {currentSelected.length}
           </span>
         )}
@@ -576,10 +576,10 @@ export function TableHeaderDualFilter({
         ref={triggerRef}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`relative inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded-md transition-all select-none cursor-pointer text-xs ${
+        className={`relative inline-flex items-center justify-center gap-1 p-1 rounded-lg transition-all select-none cursor-pointer text-xs ${
           isFiltered
-            ? "bg-blue-50 dark:bg-blue-950/80 text-[#1167c9] dark:text-blue-300 border border-blue-300 dark:border-blue-700 shadow-2xs font-semibold"
-            : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800"
+            ? "bg-purple-600 text-white border border-purple-700 shadow-sm font-bold ring-2 ring-purple-400/30"
+            : "text-slate-600 dark:text-slate-300 bg-slate-100/90 dark:bg-slate-800 hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-950/60 dark:hover:text-purple-300 border border-slate-300 dark:border-slate-700 shadow-2xs"
         }`}
         title={
           isFiltered
@@ -589,11 +589,11 @@ export function TableHeaderDualFilter({
       >
         <Filter
           className={`h-3.5 w-3.5 transition-colors shrink-0 ${
-            isFiltered ? "text-[#1167c9] dark:text-blue-300 fill-current" : "text-current"
+            isFiltered ? "text-white fill-current" : "text-current"
           }`}
         />
         {isFiltered && (
-          <span className="inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[10px] font-bold rounded-full bg-[#1167c9] text-white dark:bg-blue-500 shadow-xs">
+          <span className="inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[10px] font-bold rounded-full bg-white text-purple-700 shadow-xs">
             {totalFilteredCount}
           </span>
         )}

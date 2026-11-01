@@ -38,7 +38,7 @@ export function DashboardShell({
           <a href="#main-content" className="sr-only focus:not-sr-only">
             تخطي إلى المحتوى
           </a>
-          <div id="main-content" className="mx-auto w-full max-w-[1500px]">
+          <div id="main-content" className="mx-auto w-full max-w-[1720px] 2xl:max-w-[1850px]">
             {children}
           </div>
         </main>

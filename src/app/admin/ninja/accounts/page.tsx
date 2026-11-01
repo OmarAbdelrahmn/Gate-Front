@@ -196,6 +196,8 @@ export default function NinjaAccountsPage() {
         if (typeof parsed.filterCooldown === "string") setFilterCooldown(parsed.filterCooldown);
         if (typeof parsed.filterCityId === "string") setFilterCityId(parsed.filterCityId);
         if (typeof parsed.filterSponsorId === "string") setFilterSponsorId(parsed.filterSponsorId);
+        if (typeof parsed.filterValidity === "string") setFilterValidity(parsed.filterValidity);
+        if (typeof parsed.filterAssignment === "string") setFilterAssignment(parsed.filterAssignment);
         if (Array.isArray(parsed.colFilterCaptain)) setColFilterCaptain(parsed.colFilterCaptain);
         if (Array.isArray(parsed.colFilterStatus)) setColFilterStatus(parsed.colFilterStatus);
         if (Array.isArray(parsed.colFilterOwners)) setColFilterOwners(parsed.colFilterOwners);
@@ -224,6 +226,8 @@ export default function NinjaAccountsPage() {
           filterCooldown,
           filterCityId,
           filterSponsorId,
+          filterValidity,
+          filterAssignment,
           colFilterCaptain,
           colFilterStatus,
           colFilterOwners,
@@ -243,6 +247,8 @@ export default function NinjaAccountsPage() {
     filterCooldown,
     filterCityId,
     filterSponsorId,
+    filterValidity,
+    filterAssignment,
     colFilterCaptain,
     colFilterStatus,
     colFilterOwners,
@@ -402,11 +408,25 @@ export default function NinjaAccountsPage() {
 
   // Lookup maps
   const cityMap = useMemo(() => {
-    return new Map<string, string>(cities.map((c) => [c.id, c.globalCityAr]));
+    const map = new Map<string, string>();
+    for (const c of cities) {
+      if (c.id) {
+        map.set(c.id, c.globalCityAr);
+        map.set(c.id.toLowerCase(), c.globalCityAr);
+      }
+    }
+    return map;
   }, [cities]);
 
   const sponsorMap = useMemo(() => {
-    return new Map<string, string>(sponsors.map((s) => [s.id, s.registryNameAr]));
+    const map = new Map<string, string>();
+    for (const s of sponsors) {
+      if (s.id) {
+        map.set(s.id, s.registryNameAr);
+        map.set(s.id.toLowerCase(), s.registryNameAr);
+      }
+    }
+    return map;
   }, [sponsors]);
 
   const riderMap = useMemo(() => {
@@ -769,16 +789,18 @@ export default function NinjaAccountsPage() {
     const sponsorCounts = new Map<string, number>();
     for (const a of accounts) {
       if (a.operatingCityId) {
-        cityCounts.set(a.operatingCityId, (cityCounts.get(a.operatingCityId) || 0) + 1);
+        const key = a.operatingCityId.toLowerCase();
+        cityCounts.set(key, (cityCounts.get(key) || 0) + 1);
       }
       if (a.sponsorId) {
-        sponsorCounts.set(a.sponsorId, (sponsorCounts.get(a.sponsorId) || 0) + 1);
+        const key = a.sponsorId.toLowerCase();
+        sponsorCounts.set(key, (sponsorCounts.get(key) || 0) + 1);
       }
     }
 
     const list: FilterOption[] = [];
     for (const c of cities) {
-      const count = cityCounts.get(c.id) || 0;
+      const count = cityCounts.get((c.id || "").toLowerCase()) || 0;
       if (count > 0) {
         list.push({
           value: `CITY_${c.id}`,
@@ -788,7 +810,7 @@ export default function NinjaAccountsPage() {
       }
     }
     for (const s of sponsors) {
-      const count = sponsorCounts.get(s.id) || 0;
+      const count = sponsorCounts.get((s.id || "").toLowerCase()) || 0;
       if (count > 0) {
         list.push({
           value: `SPONSOR_${s.id}`,
@@ -808,7 +830,7 @@ export default function NinjaAccountsPage() {
     const riderCounts = new Map<string, { count: number; name: string; iqama?: string }>();
 
     for (const a of accounts) {
-      const isAssigned = Boolean(a.actualRiderProfileId || a.actualRider);
+      const isAssigned = isNinjaAccountAssigned(a);
       if (isAssigned) {
         assignedCount++;
         const name =
@@ -1140,6 +1162,18 @@ export default function NinjaAccountsPage() {
     if (filterStatus !== "all") {
       if (filterStatus === "Used" || filterStatus === "Unused") {
         result = result.filter((a) => a.monthlyUsageStatus === filterStatus);
+      } else if (filterStatus === "Assigned") {
+        result = result.filter(
+          (a) => isNinjaAccountAssigned(a) || (a.status || "").toLowerCase() === "assigned"
+        );
+      } else if (filterStatus === "Available") {
+        result = result.filter(
+          (a) =>
+            !isNinjaAccountAssigned(a) &&
+            (a.status || "").toLowerCase() !== "suspended" &&
+            (a.status || "").toLowerCase() !== "retired" &&
+            (a.status || "").toLowerCase() !== "archived"
+        );
       } else {
         result = result.filter((a) => (a.status || "").toLowerCase() === filterStatus.toLowerCase());
       }
@@ -1154,12 +1188,14 @@ export default function NinjaAccountsPage() {
 
     // Toolbar City
     if (filterCityId) {
-      result = result.filter((a) => a.operatingCityId === filterCityId);
+      const lowerCity = filterCityId.toLowerCase();
+      result = result.filter((a) => (a.operatingCityId || "").toLowerCase() === lowerCity);
     }
 
     // Toolbar Sponsor
     if (filterSponsorId) {
-      result = result.filter((a) => a.sponsorId === filterSponsorId);
+      const lowerSponsor = filterSponsorId.toLowerCase();
+      result = result.filter((a) => (a.sponsorId || "").toLowerCase() === lowerSponsor);
     }
 
     // Toolbar Validity
@@ -1210,8 +1246,11 @@ export default function NinjaAccountsPage() {
         let matchesOperational = true;
         if (operationalValues.length > 0) {
           const s = (a.status || "").toLowerCase();
+          const isAssigned = isNinjaAccountAssigned(a);
           matchesOperational = operationalValues.some((val) => {
             if (val === "HAS_REASON") return Boolean(a.statusReason?.trim());
+            if (val.toLowerCase() === "assigned") return isAssigned || s === "assigned";
+            if (val.toLowerCase() === "available") return !isAssigned && s === "available";
             return s === val.toLowerCase();
           });
         }
@@ -1239,25 +1278,27 @@ export default function NinjaAccountsPage() {
     if (colFilterCitySponsor.length > 0) {
       const selectedCities = colFilterCitySponsor
         .filter((v) => v.startsWith("CITY_"))
-        .map((v) => v.slice(5));
+        .map((v) => v.slice(5).toLowerCase());
       const selectedSponsors = colFilterCitySponsor
         .filter((v) => v.startsWith("SPONSOR_"))
-        .map((v) => v.slice(8));
+        .map((v) => v.slice(8).toLowerCase());
 
       if (selectedCities.length > 0) {
         result = result.filter(
-          (a) => a.operatingCityId && selectedCities.includes(a.operatingCityId)
+          (a) => a.operatingCityId && selectedCities.includes(a.operatingCityId.toLowerCase())
         );
       }
       if (selectedSponsors.length > 0) {
-        result = result.filter((a) => a.sponsorId && selectedSponsors.includes(a.sponsorId));
+        result = result.filter(
+          (a) => a.sponsorId && selectedSponsors.includes(a.sponsorId.toLowerCase())
+        );
       }
     }
 
     // Column Filter: Actual Assigned Rider
     if (colFilterRiders.length > 0) {
       result = result.filter((a) => {
-        const isAssigned = Boolean(a.actualRiderProfileId || a.actualRider);
+        const isAssigned = isNinjaAccountAssigned(a);
         const riderName =
           a.actualRider?.nameAr ||
           a.actualRider?.nameEn ||
@@ -1348,6 +1389,8 @@ export default function NinjaAccountsPage() {
     filterCooldown,
     filterCityId,
     filterSponsorId,
+    filterValidity,
+    filterAssignment,
     colFilterCaptain,
     colFilterStatus,
     colFilterOwners,
@@ -1416,6 +1459,8 @@ export default function NinjaAccountsPage() {
     filterCooldown,
     filterCityId,
     filterSponsorId,
+    filterValidity,
+    filterAssignment,
     colFilterCaptain,
     colFilterStatus,
     colFilterOwners,
@@ -2561,97 +2606,180 @@ export default function NinjaAccountsPage() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm space-y-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
-            <Search className="absolute right-3.5 top-3 h-4 w-4 text-[var(--muted)] rtl:right-3.5 ltr:left-3.5" />
+            <Search className="absolute right-3.5 top-3 h-4 w-4 text-[var(--muted)] rtl:right-3.5 ltr:left-3.5 pointer-events-none" />
             <Input
               placeholder="بحث برقم الكابتن، كود الحساب، اسم المالك، المندوب، الهوية، الهاتف، المدينة أو الكفيل..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pr-10 rtl:pr-10 ltr:pl-10 text-xs"
+              className="pr-10 pl-10 rtl:pr-10 rtl:pl-10 ltr:pl-10 ltr:pr-10 text-xs h-10 rounded-xl"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute left-3 top-3 text-[var(--muted)] hover:text-red-500 rtl:left-3 ltr:right-3"
+                title="مسح نص البحث"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Status Filter */}
+          {hasActiveFilters && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleClearAllFilters}
+              className="h-10 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-200 dark:border-rose-900/50 shrink-0 font-bold"
+            >
+              <X className="h-3.5 w-3.5" />
+              إعادة تعيين الفلاتر
+            </Button>
+          )}
+        </div>
+
+        {/* 6 Responsive Grid Filter Selects with Colorful Labels */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1">
+          {/* 1. Status Filter */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-[11px] font-black text-purple-700 dark:text-purple-300">
+              <span className="h-2 w-2 rounded-full bg-purple-500 shrink-0"></span>
+              <span>حالة الحساب</span>
+            </label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               aria-label="تصفية حسب حالة الحساب"
-              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
+              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+                filterStatus !== "all"
+                  ? "border-purple-500 bg-purple-50/70 text-purple-900 dark:bg-purple-950/50 dark:text-purple-200 ring-2 ring-purple-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-purple-400"
+              }`}
             >
-              <option value="all">جميع حالات الحساب</option>
-              <option value="Used">مستخدم هذا الشهر (Used)</option>
-              <option value="Unused">غير مستخدم هذا الشهر (Unused)</option>
-              <option value="Available">متاح (Available)</option>
-              <option value="Assigned">معين (Assigned)</option>
-              <option value="Suspended">موقوف (Suspended)</option>
-              <option value="Retired">مستبعد (Retired)</option>
-              <option value="Archived">مؤرشف (Archived)</option>
+              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع حالات الحساب</option>
+              <option value="Used" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مستخدم هذا الشهر (Used)</option>
+              <option value="Unused" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">غير مستخدم هذا الشهر (Unused)</option>
+              <option value="Available" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">متاح (Available)</option>
+              <option value="Assigned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">معين (Assigned)</option>
+              <option value="Suspended" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">موقوف (Suspended)</option>
+              <option value="Retired" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مستبعد (Retired)</option>
+              <option value="Archived" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مؤرشف (Archived)</option>
             </select>
+          </div>
 
-            {/* Validity Filter */}
+          {/* 2. Validity Filter */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-[11px] font-black text-emerald-700 dark:text-emerald-300">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0"></span>
+              <span>صلاحية التشغيل</span>
+            </label>
             <select
               value={filterValidity}
               onChange={(e) => setFilterValidity(e.target.value as any)}
               aria-label="تصفية حسب صلاحية التشغيل"
-              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] font-bold"
+              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+                filterValidity !== "all"
+                  ? "border-emerald-500 bg-emerald-50/70 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200 ring-2 ring-emerald-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-emerald-400"
+              }`}
             >
-              <option value="all">صلاحية التشغيل: الكل</option>
-              <option value="valid">صالح للتشغيل (Valid)</option>
-              <option value="invalid">غير صالح للتشغيل (Invalid)</option>
+              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">صلاحية التشغيل: الكل</option>
+              <option value="valid" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">صالح للتشغيل (Valid)</option>
+              <option value="invalid" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">غير صالح للتشغيل (Invalid)</option>
             </select>
+          </div>
 
-            {/* Assignment Filter */}
+          {/* 3. Assignment Filter */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-[11px] font-black text-sky-700 dark:text-sky-300">
+              <span className="h-2 w-2 rounded-full bg-sky-500 shrink-0"></span>
+              <span>حالة الإسناد</span>
+            </label>
             <select
               value={filterAssignment}
               onChange={(e) => setFilterAssignment(e.target.value as any)}
               aria-label="تصفية حسب حالة الإسناد"
-              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] font-bold"
+              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+                filterAssignment !== "all"
+                  ? "border-sky-500 bg-sky-50/70 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200 ring-2 ring-sky-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-sky-400"
+              }`}
             >
-              <option value="all">حالة الإسناد: الكل</option>
-              <option value="assigned">مسند لمندوب (Assigned)</option>
-              <option value="unassigned">غير مسند / شاغر (Unassigned)</option>
+              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">حالة الإسناد: الكل</option>
+              <option value="assigned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">مسند لمندوب (Assigned)</option>
+              <option value="unassigned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">غير مسند / شاغر (Unassigned)</option>
             </select>
+          </div>
 
-            {/* Cooldown Filter */}
+          {/* 4. Cooldown Filter */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
+              <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0"></span>
+              <span>فترة الانتظار (72h)</span>
+            </label>
             <select
               value={filterCooldown}
               onChange={(e) => setFilterCooldown(e.target.value as any)}
               aria-label="تصفية حسب فترة الانتظار"
-              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
+              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+                filterCooldown !== "all"
+                  ? "border-amber-500 bg-amber-50/70 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200 ring-2 ring-amber-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-amber-400"
+              }`}
             >
-              <option value="all">جميع فترات الانتظار</option>
-              <option value="active">فترة انتظار نشطة (72h)</option>
-              <option value="ready">متاحة للتغيير</option>
+              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع فترات الانتظار</option>
+              <option value="active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">فترة انتظار نشطة (72h)</option>
+              <option value="ready" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">متاحة للتغيير</option>
             </select>
+          </div>
 
-            {/* City Filter */}
+          {/* 5. City Filter */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-[11px] font-black text-teal-700 dark:text-teal-300">
+              <span className="h-2 w-2 rounded-full bg-teal-500 shrink-0"></span>
+              <span>المدينة</span>
+            </label>
             <select
               value={filterCityId}
               onChange={(e) => setFilterCityId(e.target.value)}
               aria-label="تصفية حسب المدينة"
-              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
+              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+                filterCityId
+                  ? "border-teal-500 bg-teal-50/70 text-teal-900 dark:bg-teal-950/50 dark:text-teal-200 ring-2 ring-teal-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-teal-400"
+              }`}
             >
-              <option value="">جميع المدن</option>
+              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع المدن</option>
               {cities.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">
                   {c.globalCityAr}
                 </option>
               ))}
             </select>
+          </div>
 
-            {/* Sponsor Filter */}
+          {/* 6. Sponsor Filter */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-[11px] font-black text-indigo-700 dark:text-indigo-300">
+              <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0"></span>
+              <span>الكفيل / السجل</span>
+            </label>
             <select
               value={filterSponsorId}
               onChange={(e) => setFilterSponsorId(e.target.value)}
               aria-label="تصفية حسب الكفيل"
-              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
+              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-bold truncate cursor-pointer transition-colors shadow-xs ${
+                filterSponsorId
+                  ? "border-indigo-500 bg-indigo-50/70 text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200 ring-2 ring-indigo-500/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:border-indigo-400"
+              }`}
             >
-              <option value="">جميع الكفلاء</option>
+              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">جميع الكفلاء</option>
               {sponsors.map((s) => (
-                <option key={s.id} value={s.id}>
+                <option key={s.id} value={s.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium">
                   {s.registryNameAr}
                 </option>
               ))}
@@ -2949,7 +3077,7 @@ export default function NinjaAccountsPage() {
       </div>
 
       {/* Accounts Table */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] shadow-sm overflow-hidden">
         <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-[var(--foreground)]">قائمة حسابات نينجا</span>
@@ -2960,7 +3088,7 @@ export default function NinjaAccountsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1360px] text-xs text-right border-collapse">
+          <table className="w-full min-w-[1750px] text-xs text-right border-collapse">
             <thead className="bg-[var(--subtle-bg)] text-[var(--muted)] border-b border-[var(--border)]">
               <tr>
                 {/* 1. Captain ID */}
@@ -3120,8 +3248,8 @@ export default function NinjaAccountsPage() {
                   </div>
                 </th>
 
-                {/* 8. Actions (Sticky on the left for permanent visibility) */}
-                <th className="px-3 py-3 font-bold text-center whitespace-nowrap min-w-[210px] w-[210px] sticky left-0 z-20 bg-[var(--subtle-bg)] shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] border-r border-[var(--border)]">
+                {/* 8. Actions */}
+                <th className="px-3 py-3 font-bold text-center whitespace-nowrap min-w-[200px]">
                   إجراءات
                 </th>
               </tr>

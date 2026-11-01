@@ -11,7 +11,9 @@
   --brand: #1167c9;
   --orange: #f28b35;
 
+  --card: #ffffff;
   --card-bg: #ffffff;
+  --input-bg: #ffffff;
   --subtle-bg: #f8fafc;
   --subtle-hover: #f1f5f9;
   --table-header-bg: #f8fafc;
@@ -34,7 +36,9 @@ html[data-theme="dark"] {
   --brand: #3b82f6;
   --orange: #f28b35;
 
+  --card: #152238;
   --card-bg: #152238;
+  --input-bg: #152238;
   --subtle-bg: #1c2d4a;
   --subtle-hover: #243757;
   --table-header-bg: #1c2d4a;
