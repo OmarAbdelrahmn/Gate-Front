@@ -407,27 +407,101 @@ export default function NinjaAccountsPage() {
   }, [canRead]);
 
   // Lookup maps
+  // Helper to reliably get city name regardless of API field naming (nameAr vs globalCityAr vs code)
+  const getCityName = (c: any): string => {
+    if (!c) return "";
+    return c.nameAr || c.globalCityAr || c.nameEn || c.globalCityEn || c.code || "";
+  };
+
+  const getSponsorName = (s: any): string => {
+    if (!s) return "";
+    return s.registryNameAr || s.nameAr || s.registryNameEn || s.nameEn || s.employerIdentityNumber || "";
+  };
+
+  // Lookup maps (built from catalog lookups AND actual accounts data)
   const cityMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const c of cities) {
-      if (c.id) {
-        map.set(c.id, c.globalCityAr);
-        map.set(c.id.toLowerCase(), c.globalCityAr);
+      const name = getCityName(c);
+      if (c.id && name) {
+        map.set(c.id, name);
+        map.set(c.id.toLowerCase(), name);
+      }
+    }
+    for (const a of accounts) {
+      if (a.operatingCityId && (a.operatingCityNameAr || (a as any).operatingCityNameEn)) {
+        const name = a.operatingCityNameAr || (a as any).operatingCityNameEn || "";
+        map.set(a.operatingCityId, name);
+        map.set(a.operatingCityId.toLowerCase(), name);
       }
     }
     return map;
-  }, [cities]);
+  }, [cities, accounts]);
 
   const sponsorMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of sponsors) {
-      if (s.id) {
-        map.set(s.id, s.registryNameAr);
-        map.set(s.id.toLowerCase(), s.registryNameAr);
+      const name = getSponsorName(s);
+      if (s.id && name) {
+        map.set(s.id, name);
+        map.set(s.id.toLowerCase(), name);
+      }
+    }
+    for (const a of accounts) {
+      if (a.sponsorId && (a.sponsorNameAr || (a as any).sponsorNameEn)) {
+        const name = a.sponsorNameAr || (a as any).sponsorNameEn || "";
+        map.set(a.sponsorId, name);
+        map.set(a.sponsorId.toLowerCase(), name);
       }
     }
     return map;
-  }, [sponsors]);
+  }, [sponsors, accounts]);
+
+  // Distinct list of all available cities for the toolbar dropdown
+  const availableCities = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of cities) {
+      const name = getCityName(c);
+      if (c.id && name) {
+        map.set(c.id.toLowerCase(), name);
+      }
+    }
+    for (const a of accounts) {
+      if (a.operatingCityId) {
+        const key = a.operatingCityId.toLowerCase();
+        if (!map.has(key)) {
+          const name = a.operatingCityNameAr || (a as any).operatingCityNameEn || a.operatingCityId;
+          map.set(key, name);
+        }
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  }, [cities, accounts]);
+
+  // Distinct list of all available sponsors for the toolbar dropdown
+  const availableSponsors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of sponsors) {
+      const name = getSponsorName(s);
+      if (s.id && name) {
+        map.set(s.id.toLowerCase(), name);
+      }
+    }
+    for (const a of accounts) {
+      if (a.sponsorId) {
+        const key = a.sponsorId.toLowerCase();
+        if (!map.has(key)) {
+          const name = a.sponsorNameAr || (a as any).sponsorNameEn || a.sponsorId;
+          map.set(key, name);
+        }
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  }, [sponsors, accounts]);
 
   const riderMap = useMemo(() => {
     const map = new Map<string, Rider>();
@@ -799,29 +873,29 @@ export default function NinjaAccountsPage() {
     }
 
     const list: FilterOption[] = [];
-    for (const c of cities) {
+    for (const c of availableCities) {
       const count = cityCounts.get((c.id || "").toLowerCase()) || 0;
       if (count > 0) {
         list.push({
           value: `CITY_${c.id}`,
-          label: `مدينة: ${c.globalCityAr}`,
+          label: `مدينة: ${c.name}`,
           count,
         });
       }
     }
-    for (const s of sponsors) {
+    for (const s of availableSponsors) {
       const count = sponsorCounts.get((s.id || "").toLowerCase()) || 0;
       if (count > 0) {
         list.push({
           value: `SPONSOR_${s.id}`,
-          label: `كفيل: ${s.registryNameAr}`,
+          label: `كفيل: ${s.name}`,
           count,
         });
       }
     }
 
     return list.sort((a, b) => (b.count || 0) - (a.count || 0));
-  }, [accounts, cities, sponsors]);
+  }, [accounts, availableCities, availableSponsors]);
 
   // 5. Actual Assigned Rider Filter Options
   const riderFilterOptions: FilterOption[] = useMemo(() => {
@@ -2777,10 +2851,10 @@ export default function NinjaAccountsPage() {
                   : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-teal-400"
               }`}
             >
-              <option value="">جميع المدن</option>
-              {cities.map((c) => (
+              <option value="">جميع المدن ({availableCities.length})</option>
+              {availableCities.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.globalCityAr}
+                  {c.name}
                 </option>
               ))}
             </select>
@@ -2807,10 +2881,10 @@ export default function NinjaAccountsPage() {
                   : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white hover:border-indigo-400"
               }`}
             >
-              <option value="">جميع الكفلاء</option>
-              {sponsors.map((s) => (
+              <option value="">جميع الكفلاء ({availableSponsors.length})</option>
+              {availableSponsors.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.registryNameAr}
+                  {s.name}
                 </option>
               ))}
             </select>
@@ -5067,9 +5141,9 @@ export default function NinjaAccountsPage() {
               مدينة التشغيل <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
-              options={cities.map((c) => ({
+              options={availableCities.map((c) => ({
                 value: c.id,
-                label: c.globalCityAr || c.code,
+                label: c.name,
               }))}
               value={createCityId}
               onChange={setCreateCityId}
@@ -5083,9 +5157,9 @@ export default function NinjaAccountsPage() {
               الكفيل النشط <span className="text-red-500">*</span>
             </label>
             <SearchableSelect
-              options={sponsors.map((s) => ({
+              options={availableSponsors.map((s) => ({
                 value: s.id,
-                label: s.registryNameAr || s.employerIdentityNumber,
+                label: s.name,
               }))}
               value={createSponsorId}
               onChange={setCreateSponsorId}
