@@ -23,11 +23,20 @@ import {
   formatRemainingCooldown,
   getNinjaRiderTypeLabel,
   getNinjaPaymentModelLabel,
+  isNinjaAccountAssigned,
+  getNinjaAssignmentStatusAr,
+  isNinjaAccountValid,
+  getNinjaOperationalValidityAr,
+  getNinjaVehicleOwnershipAr,
+  getNinjaVehicleTypeAr,
+  formatAttendanceReason,
+  getAttendanceFailureExplanation,
   NINJA_RIDER_TYPES,
   NINJA_PAYMENT_MODELS,
   type NinjaRiderType,
   type NinjaPaymentModel,
   type NinjaAccountResponse,
+  type NinjaAccountAttendanceEvaluation,
   type NinjaAccountStatusRequest,
   type NinjaAccountComparisonResponse,
   type NinjaAssignRequest,
@@ -158,6 +167,8 @@ export default function NinjaAccountsPage() {
   const [filterCooldown, setFilterCooldown] = useState<"all" | "active" | "ready">("all");
   const [filterCityId, setFilterCityId] = useState("");
   const [filterSponsorId, setFilterSponsorId] = useState("");
+  const [filterValidity, setFilterValidity] = useState<"all" | "valid" | "invalid">("all");
+  const [filterAssignment, setFilterAssignment] = useState<"all" | "assigned" | "unassigned">("all");
 
   // Column Header Filters
   const [colFilterCaptain, setColFilterCaptain] = useState<string[]>([]);
@@ -325,6 +336,9 @@ export default function NinjaAccountsPage() {
   const [corrError, setCorrError] = useState<string | null>(null);
   const [corrIsConflict, setCorrIsConflict] = useState(false);
   const [corrConflictDetail, setCorrConflictDetail] = useState<string | null>(null);
+
+  // 9. Attendance Evaluation Modal State
+  const [selectedAttendanceAccount, setSelectedAttendanceAccount] = useState<NinjaAccountResponse | null>(null);
 
   // -------------------------------------------------------------
   // Loaders
@@ -550,6 +564,47 @@ export default function NinjaAccountsPage() {
 
     return { label, badgeClass, dotClass, detailText, detailClass, isSuspended };
   };
+
+  // Operational & Assignment Stats for Status Cards
+  const accountStats = useMemo(() => {
+    let valid = 0;
+    let invalid = 0;
+    let assigned = 0;
+    let unassigned = 0;
+    let companyCarCount = 0;
+    let companyMotorcycleCount = 0;
+    let privateCarCount = 0;
+    let privateMotorcycleCount = 0;
+
+    for (const a of accounts) {
+      if (isNinjaAccountValid(a)) valid++;
+      else invalid++;
+
+      if (isNinjaAccountAssigned(a)) {
+        assigned++;
+        const own = getNinjaVehicleOwnershipAr(a);
+        const typ = getNinjaVehicleTypeAr(a);
+        if (own === "مركبة شركة" && typ === "سيارة") companyCarCount++;
+        else if (own === "مركبة شركة" && typ === "دباب") companyMotorcycleCount++;
+        else if (own === "مركبة خاصة" && typ === "سيارة") privateCarCount++;
+        else if (own === "مركبة خاصة" && typ === "دباب") privateMotorcycleCount++;
+      } else {
+        unassigned++;
+      }
+    }
+
+    return {
+      total: accounts.length,
+      valid,
+      invalid,
+      assigned,
+      unassigned,
+      companyCarCount,
+      companyMotorcycleCount,
+      privateCarCount,
+      privateMotorcycleCount,
+    };
+  }, [accounts]);
 
   // -------------------------------------------------------------
   // Filter Options for Column Headers
@@ -1107,6 +1162,20 @@ export default function NinjaAccountsPage() {
       result = result.filter((a) => a.sponsorId === filterSponsorId);
     }
 
+    // Toolbar Validity
+    if (filterValidity === "valid") {
+      result = result.filter((a) => isNinjaAccountValid(a));
+    } else if (filterValidity === "invalid") {
+      result = result.filter((a) => !isNinjaAccountValid(a));
+    }
+
+    // Toolbar Assignment
+    if (filterAssignment === "assigned") {
+      result = result.filter((a) => isNinjaAccountAssigned(a));
+    } else if (filterAssignment === "unassigned") {
+      result = result.filter((a) => !isNinjaAccountAssigned(a));
+    }
+
     // Column Filter: Captain ID & Code
     if (colFilterCaptain.length > 0) {
       result = result.filter((a) => {
@@ -1300,6 +1369,8 @@ export default function NinjaAccountsPage() {
       filterCooldown !== "all" ||
       filterCityId ||
       filterSponsorId ||
+      filterValidity !== "all" ||
+      filterAssignment !== "all" ||
       colFilterCaptain.length > 0 ||
       colFilterStatus.length > 0 ||
       colFilterOwners.length > 0 ||
@@ -1318,6 +1389,8 @@ export default function NinjaAccountsPage() {
     setFilterCooldown("all");
     setFilterCityId("");
     setFilterSponsorId("");
+    setFilterValidity("all");
+    setFilterAssignment("all");
     setColFilterCaptain([]);
     setColFilterStatus([]);
     setColFilterOwners([]);
@@ -2114,6 +2187,37 @@ export default function NinjaAccountsPage() {
       columns: [
         { header: "كابتن ID", accessor: (a) => a.captainId, isText: true },
         { header: "كود الحساب", accessor: (a) => a.code || "—", isText: true },
+        { header: "صلاحية التشغيل", accessor: (a) => getNinjaOperationalValidityAr(a) },
+        {
+          header: "نسبة الحضور",
+          accessor: (a) =>
+            a.attendance?.attendanceRate !== undefined
+              ? `${Math.round(a.attendance.attendanceRate * 100)}%`
+              : "—",
+        },
+        {
+          header: "أيام مؤهلة / مقيمة",
+          accessor: (a) =>
+            a.attendance?.qualifiedDays !== undefined
+              ? `${a.attendance.qualifiedDays} / ${a.attendance.evaluatedDays || "—"}`
+              : "—",
+        },
+        {
+          header: "غياب أيام محمية",
+          accessor: (a) =>
+            a.attendance?.protectedDayAbsences && a.attendance.protectedDayAbsences.length > 0
+              ? a.attendance.protectedDayAbsences.join("، ")
+              : "لا يوجد",
+        },
+        {
+          header: "أسباب عدم الصلاحية",
+          accessor: (a) =>
+            getAttendanceFailureExplanation(a.attendance, isEn) ||
+            a.operationalBlockReason ||
+            a.statusReason ||
+            "—",
+        },
+        { header: "حالة الإسناد", accessor: (a) => getNinjaAssignmentStatusAr(a) },
         { header: "حالة الحساب", accessor: (a) => a.status },
         {
           header: "المالك المسجل",
@@ -2132,6 +2236,14 @@ export default function NinjaAccountsPage() {
           header: "هوية المندوب الفعلي",
           accessor: (a) => a.actualRider?.iqamaNo || "—",
           isText: true,
+        },
+        {
+          header: "ملكية المركبة",
+          accessor: (a) => getNinjaVehicleOwnershipAr(a) || "—",
+        },
+        {
+          header: "نوع المركبة",
+          accessor: (a) => getNinjaVehicleTypeAr(a) || "—",
         },
         {
           header: isEn ? "Rider Type" : "نوع المندوب",
@@ -2271,6 +2383,183 @@ export default function NinjaAccountsPage() {
         </div>
       </div>
 
+      {/* Status KPI Summary Cards */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* 1. Total Accounts */}
+          <div
+            onClick={() => {
+              setFilterValidity("all");
+              setFilterAssignment("all");
+              setFilterStatus("all");
+            }}
+            className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+              filterValidity === "all" && filterAssignment === "all" && filterStatus === "all"
+                ? "border-purple-500 bg-purple-50/50 dark:bg-purple-950/20 shadow-xs"
+                : "border-[var(--border)] bg-[var(--card)] hover:border-purple-300"
+            }`}
+          >
+            <div className="flex items-center justify-between text-[var(--muted)] mb-2">
+              <span className="text-xs font-bold">{isEn ? "Total Accounts" : "إجمالي الحسابات"}</span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
+                <Zap className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black text-[var(--foreground)] font-mono">
+              {accountStats.total}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
+              <span>{isEn ? "All registered" : "كافة الحسابات"}</span>
+              <span className="font-semibold text-purple-600 dark:text-purple-400">100%</span>
+            </div>
+          </div>
+
+          {/* 2. Valid for Operation (صالح للتشغيل) */}
+          <div
+            onClick={() => setFilterValidity((prev) => (prev === "valid" ? "all" : "valid"))}
+            className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+              filterValidity === "valid"
+                ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/30 shadow-xs ring-2 ring-emerald-500/20"
+                : "border-[var(--border)] bg-[var(--card)] hover:border-emerald-300"
+            }`}
+          >
+            <div className="flex items-center justify-between text-[var(--muted)] mb-2">
+              <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                {isEn ? "Valid for Operation" : "صالح للتشغيل"}
+              </span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+              {accountStats.valid}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px]">
+              <span className="text-emerald-700/80 dark:text-emerald-300/80 font-medium font-mono">
+                {accountStats.total > 0 ? `${Math.round((accountStats.valid / accountStats.total) * 100)}%` : "0%"}
+              </span>
+              <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-200">
+                {isEn ? "Valid" : "صالح"}
+              </span>
+            </div>
+          </div>
+
+          {/* 3. Invalid for Operation (غير صالح للتشغيل) */}
+          <div
+            onClick={() => setFilterValidity((prev) => (prev === "invalid" ? "all" : "invalid"))}
+            className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+              filterValidity === "invalid"
+                ? "border-rose-500 bg-rose-50/70 dark:bg-rose-950/30 shadow-xs ring-2 ring-rose-500/20"
+                : "border-[var(--border)] bg-[var(--card)] hover:border-rose-300"
+            }`}
+          >
+            <div className="flex items-center justify-between text-[var(--muted)] mb-2">
+              <span className="text-xs font-bold text-rose-800 dark:text-rose-300">
+                {isEn ? "Invalid / Blocked" : "غير صالح للتشغيل"}
+              </span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
+              {accountStats.invalid}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px]">
+              <span className="text-rose-700/80 dark:text-rose-300/80 font-medium font-mono">
+                {accountStats.total > 0 ? `${Math.round((accountStats.invalid / accountStats.total) * 100)}%` : "0%"}
+              </span>
+              <span className="inline-flex items-center rounded-full bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:text-rose-200">
+                {isEn ? "Invalid" : "غير صالح"}
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Assigned Accounts (مسند) */}
+          <div
+            onClick={() => setFilterAssignment((prev) => (prev === "assigned" ? "all" : "assigned"))}
+            className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+              filterAssignment === "assigned"
+                ? "border-purple-500 bg-purple-50/70 dark:bg-purple-950/30 shadow-xs ring-2 ring-purple-500/20"
+                : "border-[var(--border)] bg-[var(--card)] hover:border-purple-300"
+            }`}
+          >
+            <div className="flex items-center justify-between text-[var(--muted)] mb-2">
+              <span className="text-xs font-bold text-purple-800 dark:text-purple-300">
+                {isEn ? "Assigned Accounts" : "حسابات مسندة"}
+              </span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
+                <UserCheck className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black text-purple-600 dark:text-purple-400 font-mono">
+              {accountStats.assigned}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
+              <span>{isEn ? "Active with rider" : "مرتبطة بمناديب"}</span>
+              <span className="inline-flex items-center rounded-full bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 text-[10px] font-bold text-purple-800 dark:text-purple-200">
+                {isEn ? "Assigned" : "مسند"}
+              </span>
+            </div>
+          </div>
+
+          {/* 5. Unassigned Accounts (غير مسند) */}
+          <div
+            onClick={() => setFilterAssignment((prev) => (prev === "unassigned" ? "all" : "unassigned"))}
+            className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+              filterAssignment === "unassigned"
+                ? "border-sky-500 bg-sky-50/70 dark:bg-sky-950/30 shadow-xs ring-2 ring-sky-500/20"
+                : "border-[var(--border)] bg-[var(--card)] hover:border-sky-300"
+            }`}
+          >
+            <div className="flex items-center justify-between text-[var(--muted)] mb-2">
+              <span className="text-xs font-bold text-sky-800 dark:text-sky-300">
+                {isEn ? "Unassigned Accounts" : "حسابات غير مسندة"}
+              </span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400">
+                <UserPlus className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black text-sky-600 dark:text-sky-400 font-mono">
+              {accountStats.unassigned}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
+              <span>{isEn ? "Ready to assign" : "شاغرة للتعيين"}</span>
+              <span className="inline-flex items-center rounded-full bg-sky-100 dark:bg-sky-900/50 px-2 py-0.5 text-[10px] font-bold text-sky-800 dark:text-sky-200">
+                {isEn ? "Unassigned" : "غير مسند"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Vehicle Distribution Mini-Bar */}
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-[var(--muted)]">{isEn ? "Vehicle Breakdown (Assigned):" : "توزيع مركبات الحسابات المسندة:"}</span>
+            <div className="flex flex-wrap items-center gap-2 font-medium">
+              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 font-bold border border-indigo-200 dark:border-indigo-800">
+                <Car className="h-3.5 w-3.5" />
+                <span>مركبة شركة (سيارة): {accountStats.companyCarCount}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 font-bold border border-indigo-200 dark:border-indigo-800">
+                <Bike className="h-3.5 w-3.5" />
+                <span>مركبة شركة (دباب): {accountStats.companyMotorcycleCount}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 px-2 py-0.5 font-bold border border-teal-200 dark:border-teal-800">
+                <Car className="h-3.5 w-3.5" />
+                <span>مركبة خاصة (سيارة): {accountStats.privateCarCount}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 px-2 py-0.5 font-bold border border-teal-200 dark:border-teal-800">
+                <Bike className="h-3.5 w-3.5" />
+                <span>مركبة خاصة (دباب): {accountStats.privateMotorcycleCount}</span>
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] text-[var(--muted)]">
+            * الحسابات غير المسندة ({accountStats.unassigned}) لا تحتوي على مركبة مرتبطة حتى يتم تعيينها.
+          </span>
+        </div>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm space-y-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -2292,7 +2581,7 @@ export default function NinjaAccountsPage() {
               aria-label="تصفية حسب حالة الحساب"
               className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)]"
             >
-              <option value="all">جميع الحالات</option>
+              <option value="all">جميع حالات الحساب</option>
               <option value="Used">مستخدم هذا الشهر (Used)</option>
               <option value="Unused">غير مستخدم هذا الشهر (Unused)</option>
               <option value="Available">متاح (Available)</option>
@@ -2300,6 +2589,30 @@ export default function NinjaAccountsPage() {
               <option value="Suspended">موقوف (Suspended)</option>
               <option value="Retired">مستبعد (Retired)</option>
               <option value="Archived">مؤرشف (Archived)</option>
+            </select>
+
+            {/* Validity Filter */}
+            <select
+              value={filterValidity}
+              onChange={(e) => setFilterValidity(e.target.value as any)}
+              aria-label="تصفية حسب صلاحية التشغيل"
+              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] font-bold"
+            >
+              <option value="all">صلاحية التشغيل: الكل</option>
+              <option value="valid">صالح للتشغيل (Valid)</option>
+              <option value="invalid">غير صالح للتشغيل (Invalid)</option>
+            </select>
+
+            {/* Assignment Filter */}
+            <select
+              value={filterAssignment}
+              onChange={(e) => setFilterAssignment(e.target.value as any)}
+              aria-label="تصفية حسب حالة الإسناد"
+              className="rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] font-bold"
+            >
+              <option value="all">حالة الإسناد: الكل</option>
+              <option value="assigned">مسند لمندوب (Assigned)</option>
+              <option value="unassigned">غير مسند / شاغر (Unassigned)</option>
             </select>
 
             {/* Cooldown Filter */}
@@ -2391,6 +2704,62 @@ export default function NinjaAccountsPage() {
                 <button
                   type="button"
                   onClick={() => setFilterStatus("all")}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {filterValidity !== "all" && (
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold border ${
+                  filterValidity === "valid"
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                    : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                }`}
+              >
+                {filterValidity === "valid" ? (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <AlertTriangle className="h-3 w-3 text-rose-600 dark:text-rose-400" />
+                )}
+                <span>
+                  {filterValidity === "valid"
+                    ? "صالح للتشغيل (Valid)"
+                    : "غير صالح للتشغيل (Invalid)"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFilterValidity("all")}
+                  className="hover:text-red-500 rounded-full"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {filterAssignment !== "all" && (
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold border ${
+                  filterAssignment === "assigned"
+                    ? "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                    : "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800"
+                }`}
+              >
+                {filterAssignment === "assigned" ? (
+                  <UserCheck className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                ) : (
+                  <UserPlus className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+                )}
+                <span>
+                  {filterAssignment === "assigned"
+                    ? "حسابات مسندة (Assigned)"
+                    : "حسابات غير مسندة (Unassigned)"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFilterAssignment("all")}
                   className="hover:text-red-500 rounded-full"
                 >
                   <X className="h-3 w-3" />
@@ -2609,10 +2978,18 @@ export default function NinjaAccountsPage() {
                   </div>
                 </th>
 
-                {/* 2. Status */}
+                {/* 2. Operational Validity (صالح / غير صالح) */}
                 <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[170px]">
                   <div className="flex items-center gap-1.5 justify-start">
-                    <span>حالة الحساب</span>
+                    <span>صلاحية التشغيل والتقييم</span>
+                    <span className="text-[10px] text-[var(--muted)] font-normal">(حضور وامتثال)</span>
+                  </div>
+                </th>
+
+                {/* 3. Assignment & Account Status (مسند / غير مسند) */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[170px]">
+                  <div className="flex items-center gap-1.5 justify-start">
+                    <span>حالة الإسناد والحساب</span>
                     <TableHeaderColumnFilter
                       label="حالة الحساب"
                       value={colFilterStatus}
@@ -2668,16 +3045,16 @@ export default function NinjaAccountsPage() {
                   </div>
                 </th>
 
-                {/* 5. Rider Type */}
-                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[130px]">
+                {/* 5. Rider Type & Vehicle (ملكية ونوع المركبة) */}
+                <th className="px-4 py-3 font-bold whitespace-nowrap min-w-[170px]">
                   <div className="flex items-center gap-1.5 justify-start">
-                    <span>نوع المندوب</span>
+                    <span>ملكية ونوع المركبة</span>
                     <TableHeaderColumnFilter
-                      label="نوع المندوب"
+                      label="نوع المندوب والمركبة"
                       value={colFilterRiderType}
                       onChange={setColFilterRiderType}
                       options={riderTypeFilterOptions}
-                      placeholder="تصفية بنوع المندوب..."
+                      placeholder="تصفية بالمركبة..."
                       align="right"
                     />
                   </div>
@@ -2752,21 +3129,21 @@ export default function NinjaAccountsPage() {
             <tbody className="divide-y divide-[var(--border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center">
+                  <td colSpan={11} className="py-12 text-center">
                     <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
                     <p className="text-xs text-[var(--muted)]">جارٍ تحميل جميع حسابات نينجا...</p>
                   </td>
                 </tr>
               ) : fetchError ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-rose-600">
+                  <td colSpan={11} className="py-12 text-center text-rose-600">
                     <AlertTriangle className="h-8 w-8 mx-auto mb-2" />
                     <p className="font-bold">{fetchError}</p>
                   </td>
                 </tr>
               ) : displayedAccounts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-[var(--muted)]">
+                  <td colSpan={11} className="py-12 text-center text-[var(--muted)]">
                     <Zap className="h-10 w-10 mx-auto mb-2 text-[var(--muted)]/40" />
                     <p className="font-bold text-sm">لا توجد حسابات مطابقة.</p>
                   </td>
@@ -2774,11 +3151,8 @@ export default function NinjaAccountsPage() {
               ) : (
                 displayedAccounts.map((acc) => {
                   const accId = acc.accountId || acc.id || "";
-                  const isAssigned =
-                    (acc.status || "").toLowerCase() === "assigned" ||
-                    Boolean(acc.actualRiderProfileId || acc.currentAssignmentId);
-                  const isAvailable =
-                    (acc.status || "").toLowerCase() === "available" && !isAssigned;
+                  const isAssigned = isNinjaAccountAssigned(acc);
+                  const isAvailable = (acc.status || "").toLowerCase() === "available" && !isAssigned;
                   const isSuspended = (acc.status || "").toLowerCase() === "suspended";
                   const isRetired = (acc.status || "").toLowerCase() === "retired";
                   const isArchived = (acc.status || "").toLowerCase() === "archived";
@@ -2823,41 +3197,133 @@ export default function NinjaAccountsPage() {
                         )}
                       </td>
 
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        {(() => {
-                          const statusInfo = getStatusDisplay(acc);
-                          return (
-                            <div className="flex flex-col gap-1">
+                      {/* 2. Operational Validity (صالح / غير صالح) */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {isNinjaAccountValid(acc) ? (
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold border bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60 shadow-2xs">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>{acc.operationalValidityAr || (isEn ? "Valid" : "صالح")}</span>
+                            </span>
+                            {acc.attendance && (
+                              <div className="flex items-center gap-1.5 text-[10px]">
+                                {acc.attendance.attendanceRate !== undefined && (
+                                  <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded">
+                                    {Math.round(acc.attendance.attendanceRate * 100)}% حضور
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAttendanceAccount(acc)}
+                                  className="text-purple-600 dark:text-purple-400 hover:underline font-bold cursor-pointer"
+                                  title="عرض التقييم الكامل"
+                                >
+                                  التفاصيل
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1 items-start">
+                            <span
+                              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold border bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60 shadow-2xs"
+                              title={
+                                getAttendanceFailureExplanation(acc.attendance, isEn) ||
+                                acc.operationalBlockReason ||
+                                acc.statusReason ||
+                                (isEn ? "Invalid for operation" : "غير صالح للتشغيل")
+                              }
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                              <span>{acc.operationalValidityAr || (isEn ? "Invalid" : "غير صالح")}</span>
+                            </span>
+
+                            {acc.attendance ? (
+                              <div className="flex flex-col gap-1 max-w-[210px]">
+                                <div className="flex items-center gap-1.5 text-[10px]">
+                                  {acc.attendance.attendanceRate !== undefined && (
+                                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                      {Math.round(acc.attendance.attendanceRate * 100)}% حضور
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedAttendanceAccount(acc)}
+                                    className="text-purple-600 dark:text-purple-400 hover:underline font-bold cursor-pointer"
+                                    title="عرض التقييم الكامل"
+                                  >
+                                    التفاصيل
+                                  </button>
+                                </div>
+                                {acc.attendance.protectedDayAbsences &&
+                                  acc.attendance.protectedDayAbsences.length > 0 && (
+                                    <span
+                                      className="text-[10px] text-rose-700 dark:text-rose-300 font-bold bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 rounded leading-tight"
+                                      title={`غياب في أيام محمية: ${acc.attendance.protectedDayAbsences.join("، ")}`}
+                                    >
+                                      غياب يوم محمي ({acc.attendance.protectedDayAbsences.length})
+                                    </span>
+                                  )}
+                                {(!acc.attendance.protectedDayAbsences ||
+                                  acc.attendance.protectedDayAbsences.length === 0) &&
+                                  acc.attendance.reasons &&
+                                  acc.attendance.reasons.length > 0 && (
+                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium truncate max-w-[150px]">
+                                      {formatAttendanceReason(acc.attendance.reasons[0], isEn)}
+                                    </span>
+                                  )}
+                              </div>
+                            ) : (
+                              (acc.operationalBlockReason || acc.statusReason) && (
+                                <span
+                                  className="text-[10px] text-rose-600 dark:text-rose-400 font-medium truncate max-w-[140px]"
+                                  title={acc.operationalBlockReason || acc.statusReason || ""}
+                                >
+                                  {acc.operationalBlockReason || acc.statusReason}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 3. Assignment Status & Account Status */}
+                      <td className="px-4 py-3 space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {isAssigned ? (
+                            <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60">
+                              <UserCheck className="h-3 w-3 shrink-0" />
+                              {acc.assignmentStatusAr || (isEn ? "Assigned" : "مسند")}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black border bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800/60">
+                              <UserPlus className="h-3 w-3 shrink-0" />
+                              {acc.assignmentStatusAr || (isEn ? "Unassigned" : "غير مسند")}
+                            </span>
+                          )}
+
+                          {(() => {
+                            const statusInfo = getStatusDisplay(acc);
+                            return (
                               <span
-                                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold w-fit border ${statusInfo.badgeClass}`}
+                                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border ${statusInfo.badgeClass}`}
                               >
                                 <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dotClass}`} />
                                 {statusInfo.label}
                               </span>
+                            );
+                          })()}
+                        </div>
 
-                              {statusInfo.detailText && (
-                                <span
-                                  className={`line-clamp-1 flex items-center gap-1 ${statusInfo.detailClass}`}
-                                  title={statusInfo.detailText}
-                                >
-                                  {statusInfo.isSuspended && <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />}
-                                  <span>{statusInfo.detailText}</span>
-                                </span>
-                              )}
-
-                              {acc.monthlyUsageStatus && (
-                                <div className="mt-1">
-                                  <MonthlyUsageBadge
-                                    monthlyUsageStatus={acc.monthlyUsageStatus}
-                                    usageMonth={acc.usageMonth}
-                                    isEn={isEn}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        {acc.monthlyUsageStatus && (
+                          <div className="mt-1">
+                            <MonthlyUsageBadge
+                              monthlyUsageStatus={acc.monthlyUsageStatus}
+                              usageMonth={acc.usageMonth}
+                              isEn={isEn}
+                            />
+                          </div>
+                        )}
                       </td>
 
                       {/* Registered Owner & City/Sponsor */}
@@ -2918,34 +3384,53 @@ export default function NinjaAccountsPage() {
                         )}
                       </td>
 
-                      {/* Rider Type */}
+                      {/* 6. Vehicle Ownership & Type (ملكية ونوع المركبة) */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {acc.riderType ? (
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold border ${
-                              acc.riderType === "InternalCar"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                                : acc.riderType === "ExternalCar"
-                                ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
-                                : acc.riderType === "InternalMotorcycle"
-                                ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
-                                : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-                            }`}
-                          >
-                            {acc.riderType.includes("Motorcycle") ? (
-                              <Bike className="h-3.5 w-3.5 shrink-0" />
-                            ) : (
-                              <Car className="h-3.5 w-3.5 shrink-0" />
+                        {isAssigned ? (
+                          <div className="flex flex-col gap-1">
+                            {(() => {
+                              const ownership = getNinjaVehicleOwnershipAr(acc);
+                              const vType = getNinjaVehicleTypeAr(acc);
+                              if (!ownership && !vType) {
+                                return (
+                                  <span
+                                    className="text-[11px] text-[var(--muted)] font-medium"
+                                    title={isEn ? "No vehicle info recorded" : "لا تتوفر بيانات مركبة مسجلة"}
+                                  >
+                                    —
+                                  </span>
+                                );
+                              }
+                              const isCompany = ownership === "مركبة شركة";
+                              const isMoto = vType === "دباب";
+                              return (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {ownership && (
+                                    <span
+                                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-black border ${
+                                        isCompany
+                                          ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                                          : "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800"
+                                      }`}
+                                    >
+                                      {ownership}
+                                    </span>
+                                  )}
+                                  {vType && (
+                                    <span className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-black border bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
+                                      {isMoto ? <Bike className="h-3 w-3 shrink-0" /> : <Car className="h-3 w-3 shrink-0" />}
+                                      {vType}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            {acc.riderType && (
+                              <span className="text-[10px] text-[var(--muted)] font-mono">
+                                {acc.riderType}
+                              </span>
                             )}
-                            <span>{getNinjaRiderTypeLabel(acc.riderType, isEn)}</span>
-                          </span>
-                        ) : isAssigned ? (
-                          <span
-                            className="text-[11px] text-[var(--muted)] font-medium"
-                            title={isEn ? "Legacy assignment without recorded rider type" : "تعيين قديم بدون نوع مسجل"}
-                          >
-                            {isEn ? "— (Unknown)" : "— (غير محدد)"}
-                          </span>
+                          </div>
                         ) : (
                           <span className="text-[11px] text-[var(--muted)]">—</span>
                         )}
@@ -3084,16 +3569,30 @@ export default function NinjaAccountsPage() {
                             <SlidersHorizontal className="h-4 w-4" />
                           </button>
 
-                          {/* Assign Action */}
-                          {isAvailable && (
+                          {/* Assign Action (Available for any unassigned account) */}
+                          {!isAssigned && (
                             <button
                               type="button"
                               disabled={!canAssign}
                               onClick={() => openAssignModal(acc)}
-                              className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                              title="تعيين الحساب لمندوب"
+                              className={`relative shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                                !isNinjaAccountValid(acc)
+                                  ? "border-amber-300 dark:border-amber-800 bg-amber-50/80 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                  : "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300"
+                              }`}
+                              title={
+                                !isNinjaAccountValid(acc)
+                                  ? "تعيين الحساب لمندوب (تنبيه: الحساب غير صالح للتشغيل هذا الشهر)"
+                                  : "تعيين الحساب لمندوب"
+                              }
                             >
                               <UserPlus className="h-4 w-4" />
+                              {!isNinjaAccountValid(acc) && (
+                                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                                </span>
+                              )}
                             </button>
                           )}
 
@@ -3564,7 +4063,136 @@ export default function NinjaAccountsPage() {
       >
         {assigningAccount && (
           <form onSubmit={handleAssignSubmit} className="space-y-4" dir="rtl">
-            <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3 text-xs dark:border-purple-900/50 dark:bg-purple-950/30">
+            {/* Alert to admin if the account is invalid for operation this month */}
+            {!isNinjaAccountValid(assigningAccount) && (
+              <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 p-4 dark:border-amber-700 dark:bg-amber-950/50 text-amber-950 dark:text-amber-100 space-y-3 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm mt-0.5">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-black text-sm text-amber-900 dark:text-amber-200">
+                        {isEn
+                          ? "Warning: Account is Invalid this Month"
+                          : "⚠️ تنبيه للمسؤول: هذا الحساب غير صالح للتشغيل هذا الشهر"}
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-rose-100 dark:bg-rose-900/60 px-2.5 py-0.5 text-[11px] font-black text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700">
+                        {assigningAccount.operationalValidityAr || "غير صالح"}
+                      </span>
+                    </div>
+
+                    <p className="text-xs leading-relaxed text-amber-900/90 dark:text-amber-200/90 font-medium">
+                      {isEn
+                        ? "This Ninja account is currently classified as invalid for operation (غير صالح) this month. It is strongly advised to choose another valid account for this rider. However, you can still proceed and complete the assignment if you choose to do so."
+                        : "هذا الحساب مصنف حالياً كـ (غير صالح للتشغيل) خلال هذا الشهر. يُنصح بشدة باختيار حساب آخر صالح ومتاح للمندوب تجنباً للمشاكل التشغيلية، ولكن النظام لن يمنعك من المتابعة والتعيين إذا كنت ترغب في ذلك."}
+                    </p>
+
+                    {/* Attendance Evaluation Breakdown inside the alert */}
+                    {assigningAccount.attendance && (
+                      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-white/80 dark:bg-black/30 p-3 space-y-2.5">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 border-b border-amber-100 dark:border-amber-900/50 pb-1.5">
+                          <span>تقييم الحضور لشهر {assigningAccount.attendance.month || "الحالي"}</span>
+                          <span className="font-mono text-purple-700 dark:text-purple-300 font-black">
+                            {assigningAccount.attendance.attendanceRate !== undefined
+                              ? `${Math.round(assigningAccount.attendance.attendanceRate * 100)}% نسبة الحضور`
+                              : ""}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                          <div className="rounded-lg bg-amber-50/60 dark:bg-amber-950/30 p-2 border border-amber-100 dark:border-amber-900/40">
+                            <span className="block text-[10px] text-[var(--muted)]">الأيام المقيمة</span>
+                            <span className="font-black text-slate-800 dark:text-slate-200 font-mono">
+                              {assigningAccount.attendance.evaluatedDays ?? "—"} يوم
+                            </span>
+                          </div>
+                          <div className="rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 p-2 border border-emerald-100 dark:border-emerald-900/40">
+                            <span className="block text-[10px] text-emerald-800 dark:text-emerald-400">الأيام المؤهلة</span>
+                            <span className="font-black text-emerald-800 dark:text-emerald-300 font-mono">
+                              {assigningAccount.attendance.qualifiedDays ?? "—"} / {assigningAccount.attendance.requiredQualifiedDays ?? "—"}
+                            </span>
+                          </div>
+                          <div className="rounded-lg bg-rose-50/60 dark:bg-rose-950/30 p-2 border border-rose-100 dark:border-rose-900/40">
+                            <span className="block text-[10px] text-rose-800 dark:text-rose-400">أيام الغياب</span>
+                            <span className="font-black text-rose-800 dark:text-rose-300 font-mono">
+                              {assigningAccount.attendance.absentDays ?? 0}
+                            </span>
+                          </div>
+                          <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-2 border border-slate-200 dark:border-slate-800">
+                            <span className="block text-[10px] text-[var(--muted)]">ساعات ناقصة</span>
+                            <span className="font-black text-slate-800 dark:text-slate-200 font-mono">
+                              {assigningAccount.attendance.shortHoursDays ?? 0}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Crucial Explanation: Protected Day Absences */}
+                        {assigningAccount.attendance.protectedDayAbsences &&
+                          assigningAccount.attendance.protectedDayAbsences.length > 0 && (
+                            <div className="rounded-lg bg-rose-100/90 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 p-2.5 text-xs text-rose-900 dark:text-rose-200 space-y-1">
+                              <div className="flex items-center gap-1.5 font-black">
+                                <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                                <span>
+                                  سبب الفشل رغم نسبة الحضور ({Math.round((assigningAccount.attendance.attendanceRate || 0) * 100)}%):
+                                </span>
+                              </div>
+                              <p className="text-[11px] leading-relaxed">
+                                تم تسجيل غياب في يوم محمي محظور:{" "}
+                                <strong className="font-mono underline">
+                                  {assigningAccount.attendance.protectedDayAbsences.join("، ")}
+                                </strong>
+                                . غياب الأيام المحمية يُسقط صلاحية الحساب التشغيلية مباشرة حتى لو تجاوزت الأيام المؤهلة الحد الأدنى المطلوب.
+                              </p>
+                            </div>
+                          )}
+
+                        {assigningAccount.attendance.reasons &&
+                          assigningAccount.attendance.reasons.length > 0 && (
+                            <div className="text-[11px] text-amber-900 dark:text-amber-200">
+                              <span className="font-bold">أسباب عدم التأهل المسجلة: </span>
+                              <span>
+                                {assigningAccount.attendance.reasons
+                                  .map((r) => formatAttendanceReason(r, isEn))
+                                  .join("، ")}
+                              </span>
+                            </div>
+                          )}
+                      </div>
+                    )}
+
+                    {!assigningAccount.attendance &&
+                      (assigningAccount.operationalBlockReason || assigningAccount.statusReason) && (
+                        <div className="mt-2 rounded-xl bg-white/70 dark:bg-black/30 p-2.5 text-xs border border-amber-200 dark:border-amber-800">
+                          <span className="font-bold text-amber-950 dark:text-amber-100">
+                            سبب عدم الصلاحية المسجل:{" "}
+                          </span>
+                          <span className="font-semibold text-rose-700 dark:text-rose-300">
+                            {assigningAccount.operationalBlockReason || assigningAccount.statusReason}
+                          </span>
+                        </div>
+                      )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-amber-200/70 dark:border-amber-800/60">
+                  <span className="text-[11px] text-amber-800 dark:text-amber-300 font-bold">
+                    {isEn ? "Suggested action:" : "الإجراء الموصى به:"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setAssigningAccount(null)}
+                    className="gap-1.5 h-8 text-xs font-black border-amber-400 dark:border-amber-600 bg-white dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-900/60 shadow-xs cursor-pointer"
+                  >
+                    <ArrowRightLeft className="h-3.5 w-3.5" />
+                    {isEn ? "Choose Another Account" : "اختيار حساب آخر"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3 text-xs dark:border-purple-900/50 dark:bg-purple-950/30 space-y-1.5">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[var(--muted)]">كابتن ID: </span>
@@ -3576,6 +4204,32 @@ export default function NinjaAccountsPage() {
                   <span className="text-[var(--muted)]">المالك المسجل: </span>
                   <span className="font-bold text-[var(--foreground)]">
                     {assigningAccount.owner?.nameAr || assigningAccount.ownerRiderNameAr || "—"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t border-purple-100 dark:border-purple-900/40 pt-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[var(--muted)]">صلاحية التشغيل:</span>
+                  <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
+                    isNinjaAccountValid(assigningAccount) ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
+                  }`}>
+                    {isNinjaAccountValid(assigningAccount) ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>{assigningAccount.operationalValidityAr || "صالح"}</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>{assigningAccount.operationalValidityAr || "غير صالح"}</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[var(--muted)]">حالة الإسناد:</span>
+                  <span className="font-bold text-[11px] text-purple-700 dark:text-purple-300">
+                    {assigningAccount.assignmentStatusAr || (isNinjaAccountAssigned(assigningAccount) ? "مسند" : "غير مسند")}
                   </span>
                 </div>
               </div>
@@ -4849,6 +5503,246 @@ export default function NinjaAccountsPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* 9. Modal: Attendance Evaluation & Operational Qualification Details */}
+      <Modal
+        isOpen={Boolean(selectedAttendanceAccount)}
+        onClose={() => setSelectedAttendanceAccount(null)}
+        title="تفاصيل تقييم الحضور وصلاحية التشغيل"
+        maxWidth="max-w-2xl"
+      >
+        {selectedAttendanceAccount && (
+          <div className="space-y-4" dir="rtl">
+            {/* Account Header */}
+            <div className="rounded-2xl border border-purple-200 bg-purple-50/60 p-4 dark:border-purple-900/50 dark:bg-purple-950/30">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--muted)]">كابتن ID:</span>
+                    <span className="font-mono font-black text-base text-purple-700 dark:text-purple-300">
+                      {selectedAttendanceAccount.captainId}
+                    </span>
+                    {selectedAttendanceAccount.code && selectedAttendanceAccount.code !== selectedAttendanceAccount.captainId && (
+                      <span className="text-xs font-mono text-[var(--muted)]">
+                        ({selectedAttendanceAccount.code})
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-[var(--foreground)]">
+                    <span className="text-[var(--muted)]">المندوب الفعلي: </span>
+                    <strong className="font-bold">
+                      {selectedAttendanceAccount.actualRider?.nameAr ||
+                        selectedAttendanceAccount.actualRider?.nameEn ||
+                        selectedAttendanceAccount.actualRiderNameAr ||
+                        "غير معين"}
+                    </strong>
+                    {selectedAttendanceAccount.actualRider?.iqamaNo && (
+                      <span className="text-[11px] font-mono text-[var(--muted)] mr-2">
+                        (هوية: {selectedAttendanceAccount.actualRider.iqamaNo})
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 pt-1 text-[11px] text-[var(--muted)]">
+                    <span>
+                      الملكية والمركبة:{" "}
+                      <strong className="text-[var(--foreground)]">
+                        {getNinjaVehicleOwnershipAr(selectedAttendanceAccount) || "—"} - {getNinjaVehicleTypeAr(selectedAttendanceAccount) || "—"}
+                      </strong>
+                    </span>
+                    {selectedAttendanceAccount.riderType && (
+                      <span className="font-mono text-[10px]">({selectedAttendanceAccount.riderType})</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black border shadow-xs ${
+                      isNinjaAccountValid(selectedAttendanceAccount)
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {isNinjaAccountValid(selectedAttendanceAccount) ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>{selectedAttendanceAccount.operationalValidityAr || "صالح للتشغيل"}</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                        <span>{selectedAttendanceAccount.operationalValidityAr || "غير صالح للتشغيل"}</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300">
+                    {getNinjaAssignmentStatusAr(selectedAttendanceAccount)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {selectedAttendanceAccount.attendance ? (
+              <div className="space-y-4">
+                {/* Evaluation Period Header */}
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)]/60 p-3 text-xs space-y-2">
+                  <div className="flex items-center justify-between font-bold text-[var(--foreground)] border-b border-[var(--border)] pb-2">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-purple-600" />
+                      <span>فترة التقييم الشهري: {selectedAttendanceAccount.attendance.month || "غير محدد"}</span>
+                    </div>
+                    {selectedAttendanceAccount.attendance.firstDeliveryDate && (
+                      <span className="text-[11px] text-[var(--muted)]">
+                        تاريخ أول توصيل: <strong className="font-mono text-[var(--foreground)]">{selectedAttendanceAccount.attendance.firstDeliveryDate}</strong>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-[var(--muted)] pt-0.5">
+                    <span>
+                      تاريخ بدء التقييم:{" "}
+                      <strong className="font-mono text-[var(--foreground)]">
+                        {selectedAttendanceAccount.attendance.evaluatedFrom || "—"}
+                      </strong>
+                    </span>
+                    <span>
+                      تاريخ نهاية التقييم:{" "}
+                      <strong className="font-mono text-[var(--foreground)]">
+                        {selectedAttendanceAccount.attendance.evaluatedThrough || "—"}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* KPI Metrics Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* Attendance Rate */}
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-xs">
+                    <span className="text-[11px] font-bold text-[var(--muted)] block mb-1">
+                      نسبة الحضور
+                    </span>
+                    <div className="text-2xl font-black text-purple-600 dark:text-purple-400 font-mono">
+                      {selectedAttendanceAccount.attendance.attendanceRate !== undefined
+                        ? `${Math.round(selectedAttendanceAccount.attendance.attendanceRate * 100)}%`
+                        : "—"}
+                    </div>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      {selectedAttendanceAccount.attendance.attendanceRate !== undefined
+                        ? `القيمة: ${selectedAttendanceAccount.attendance.attendanceRate}`
+                        : ""}
+                    </span>
+                  </div>
+
+                  {/* Qualified Days vs Required */}
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-xs">
+                    <span className="text-[11px] font-bold text-[var(--muted)] block mb-1">
+                      الأيام المؤهلة
+                    </span>
+                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                      {selectedAttendanceAccount.attendance.qualifiedDays ?? "—"}
+                    </div>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      المطلوب: {selectedAttendanceAccount.attendance.requiredQualifiedDays ?? "—"} يوم
+                    </span>
+                  </div>
+
+                  {/* Evaluated Days */}
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-xs">
+                    <span className="text-[11px] font-bold text-[var(--muted)] block mb-1">
+                      الأيام المقيمة
+                    </span>
+                    <div className="text-2xl font-black text-slate-700 dark:text-slate-300 font-mono">
+                      {selectedAttendanceAccount.attendance.evaluatedDays ?? "—"}
+                    </div>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      إجمالي أيام النطاق
+                    </span>
+                  </div>
+
+                  {/* Absences & Short Hours */}
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-xs">
+                    <span className="text-[11px] font-bold text-[var(--muted)] block mb-1">
+                      غياب / ساعات ناقصة
+                    </span>
+                    <div className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
+                      {selectedAttendanceAccount.attendance.absentDays ?? 0}
+                    </div>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      ساعات غير مكتملة: {selectedAttendanceAccount.attendance.shortHoursDays ?? 0}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Protected Day Absences (Key Highlight) */}
+                {selectedAttendanceAccount.attendance.protectedDayAbsences &&
+                selectedAttendanceAccount.attendance.protectedDayAbsences.length > 0 ? (
+                  <div className="rounded-2xl border-2 border-rose-300 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/40 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-rose-900 dark:text-rose-200">
+                      <ShieldAlert className="h-5 w-5 text-rose-600 dark:text-rose-400 shrink-0" />
+                      <span className="font-black text-sm">
+                        أيام الغياب المحمية (Protected Day Absences)
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-rose-900/90 dark:text-rose-200/90">
+                      تسجيل الغياب في الأيام المحمية (مثل أيام الذروة أو عطلات نهاية الأسبوع المحمية) يُعد مخالفة تُسقط الصلاحية التشغيلية مباشرة، وهو ما يفسر سبب تصنيف الحساب كـ <strong>غير صالح (Invalid)</strong> على الرغم من تحقيق نسبة حضور عالية ({Math.round((selectedAttendanceAccount.attendance.attendanceRate || 0) * 100)}%).
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {selectedAttendanceAccount.attendance.protectedDayAbsences.map((dt) => (
+                        <span
+                          key={dt}
+                          className="inline-flex items-center gap-1 rounded-lg bg-white dark:bg-black/40 border border-rose-300 dark:border-rose-700 px-3 py-1 font-mono font-black text-xs text-rose-700 dark:text-rose-300 shadow-2xs"
+                        >
+                          <Calendar className="h-3.5 w-3.5 text-rose-500" />
+                          {dt}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/20 dark:text-emerald-300 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>لم يتم تسجيل أي غياب في الأيام المحمية (No protected day absences).</span>
+                  </div>
+                )}
+
+                {/* Reasons List */}
+                {selectedAttendanceAccount.attendance.reasons &&
+                  selectedAttendanceAccount.attendance.reasons.length > 0 && (
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-xs space-y-2">
+                      <span className="font-bold text-[var(--foreground)] block">
+                        أسباب التقييم المسجلة (Reasons):
+                      </span>
+                      <ul className="space-y-1 pr-4 list-disc text-[var(--muted)]">
+                        {selectedAttendanceAccount.attendance.reasons.map((r, idx) => (
+                          <li key={idx} className="leading-relaxed">
+                            <strong className="text-[var(--foreground)] font-mono text-[11px]">{r}</strong>
+                            {" — "}
+                            <span className="text-slate-700 dark:text-slate-300">
+                              {formatAttendanceReason(r, isEn)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-[var(--muted)] text-xs border border-dashed rounded-xl">
+                لا تتوفر تفاصيل تقييم حضور شهرية مسجلة لهذا الحساب.
+              </div>
+            )}
+
+            <div className="flex justify-end pt-3 border-t border-[var(--border)]">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSelectedAttendanceAccount(null)}
+              >
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* 6. Modal: Shared Account Day Usage Management */}

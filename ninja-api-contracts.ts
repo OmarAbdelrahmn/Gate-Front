@@ -76,6 +76,126 @@ export function getNinjaPaymentModelLabel(
   }
 }
 
+/**
+ * Resolves whether a Ninja account is assigned based on response or status.
+ */
+export function isNinjaAccountAssigned(acc: Partial<NinjaAccountResponse>): boolean {
+  if (typeof acc.isAssigned === "boolean") return acc.isAssigned;
+  if (acc.assignmentStatus) return acc.assignmentStatus.toLowerCase() === "assigned";
+  if (acc.assignmentStatusAr) return acc.assignmentStatusAr === "مسند";
+  return (
+    (acc.status || "").toLowerCase() === "assigned" ||
+    Boolean(acc.actualRiderProfileId || acc.currentAssignmentId)
+  );
+}
+
+/**
+ * Resolves assignmentStatusAr: "مسند" | "غير مسند"
+ */
+export function getNinjaAssignmentStatusAr(acc: Partial<NinjaAccountResponse>): "مسند" | "غير مسند" {
+  if (acc.assignmentStatusAr) return acc.assignmentStatusAr as "مسند" | "غير مسند";
+  return isNinjaAccountAssigned(acc) ? "مسند" : "غير مسند";
+}
+
+/**
+ * Formats a single attendance failure reason into localized Arabic or English.
+ */
+export function formatAttendanceReason(reason: string, isEn = false): string {
+  switch (reason) {
+    case "LeaveOnProtectedDay":
+      return isEn ? "Leave/absence on a protected day" : "غياب في يوم محمي (محظور)";
+    case "AttendanceRateBelowTarget":
+      return isEn ? "Attendance rate below target" : "نسبة الحضور أقل من المستهدف";
+    case "InsufficientQualifiedDays":
+      return isEn ? "Insufficient qualified days" : "أيام العمل المؤهلة غير كافية";
+    case "TooManyAbsentDays":
+      return isEn ? "Excessive absent days" : "تجاوز أيام الغياب المسموحة";
+    case "TooManyShortHoursDays":
+      return isEn ? "Excessive short hours days" : "ساعات عمل يومية غير مكتملة";
+    default:
+      return reason;
+  }
+}
+
+/**
+ * Returns a human-readable explanation of why an account failed attendance or operational validity.
+ */
+export function getAttendanceFailureExplanation(
+  attendance?: NinjaAccountAttendanceEvaluation | null,
+  isEn = false
+): string | null {
+  if (!attendance) return null;
+  const parts: string[] = [];
+  const protectedDays = attendance.protectedDayAbsences || [];
+  if (protectedDays.length > 0) {
+    parts.push(
+      isEn
+        ? `Absence on protected day(s): ${protectedDays.join(", ")}`
+        : `غياب في أيام محمية: ${protectedDays.join("، ")}`
+    );
+  }
+  const formattedReasons = (attendance.reasons || [])
+    .filter((r) => r !== "LeaveOnProtectedDay" || protectedDays.length === 0)
+    .map((r) => formatAttendanceReason(r, isEn));
+  if (formattedReasons.length > 0) {
+    parts.push(formattedReasons.join(isEn ? ", " : "، "));
+  }
+  return parts.length > 0 ? parts.join(isEn ? " — " : " — ") : null;
+}
+
+/**
+ * Resolves whether a Ninja account is valid for operation.
+ * Operational validity is independent of assignment status.
+ */
+export function isNinjaAccountValid(acc: Partial<NinjaAccountResponse>): boolean {
+  if (acc.attendance?.status) {
+    if (acc.attendance.status.toLowerCase() === "invalid") return false;
+    if (acc.attendance.status.toLowerCase() === "valid") return true;
+  }
+  if (acc.attendance?.protectedDayAbsences && acc.attendance.protectedDayAbsences.length > 0) {
+    return false;
+  }
+  if (typeof acc.isValidForOperation === "boolean") return acc.isValidForOperation;
+  if (acc.operationalValidity) return acc.operationalValidity.toLowerCase() === "valid";
+  if (acc.operationalValidityAr) return acc.operationalValidityAr === "صالح";
+  if (acc.isOperationallyBlocked) return false;
+  const s = (acc.status || "").toLowerCase();
+  if (s === "suspended" || s === "retired" || s === "archived") return false;
+  return true;
+}
+
+/**
+ * Resolves operationalValidityAr: "صالح" | "غير صالح"
+ */
+export function getNinjaOperationalValidityAr(acc: Partial<NinjaAccountResponse>): "صالح" | "غير صالح" {
+  if (acc.operationalValidityAr) return acc.operationalValidityAr as "صالح" | "غير صالح";
+  return isNinjaAccountValid(acc) ? "صالح" : "غير صالح";
+}
+
+/**
+ * Resolves vehicle ownership in Arabic: "مركبة شركة" | "مركبة خاصة" | null
+ */
+export function getNinjaVehicleOwnershipAr(acc: Partial<NinjaAccountResponse>): string | null {
+  if (acc.vehicleOwnershipAr) return acc.vehicleOwnershipAr;
+  if (acc.vehicleOwnership === "Company") return "مركبة شركة";
+  if (acc.vehicleOwnership === "Private") return "مركبة خاصة";
+  if (acc.riderType === "InternalCar" || acc.riderType === "InternalMotorcycle") return "مركبة شركة";
+  if (acc.riderType === "ExternalCar" || acc.riderType === "ExternalMotorcycle") return "مركبة خاصة";
+  return null;
+}
+
+/**
+ * Resolves vehicle type in Arabic: "سيارة" | "دباب" | null
+ */
+export function getNinjaVehicleTypeAr(acc: Partial<NinjaAccountResponse>): string | null {
+  if (acc.vehicleTypeAr) return acc.vehicleTypeAr;
+  if (acc.vehicleType === "Car") return "سيارة";
+  if (acc.vehicleType === "Motorcycle") return "دباب";
+  if (acc.riderType === "InternalCar" || acc.riderType === "ExternalCar") return "سيارة";
+  if (acc.riderType === "InternalMotorcycle" || acc.riderType === "ExternalMotorcycle") return "دباب";
+  return null;
+}
+
 export const ninjaPaths = {
   // Accounts & Lifecycle
   accounts: "/api/ninja/accounts",
@@ -211,6 +331,39 @@ export interface NinjaAccountResponse {
   // Monthly Usage
   monthlyUsageStatus?: "Used" | "Unused";
   usageMonth?: string;
+
+  // Assignment & Operational Validity
+  isAssigned?: boolean;
+  assignmentStatus?: "Assigned" | "Unassigned" | string;
+  assignmentStatusAr?: "مسند" | "غير مسند" | string;
+
+  isValidForOperation?: boolean;
+  operationalValidity?: "Valid" | "Invalid" | string;
+  operationalValidityAr?: "صالح" | "غير صالح" | string;
+
+  vehicleOwnership?: "Company" | "Private" | string | null;
+  vehicleOwnershipAr?: "مركبة شركة" | "مركبة خاصة" | string | null;
+  vehicleType?: "Car" | "Motorcycle" | string | null;
+  vehicleTypeAr?: "سيارة" | "دباب" | string | null;
+
+  // Monthly Attendance & Operational Qualification
+  attendance?: NinjaAccountAttendanceEvaluation | null;
+}
+
+export interface NinjaAccountAttendanceEvaluation {
+  month?: string | null;
+  firstDeliveryDate?: string | null;
+  evaluatedFrom?: string | null;
+  evaluatedThrough?: string | null;
+  evaluatedDays?: number;
+  qualifiedDays?: number;
+  requiredQualifiedDays?: number;
+  absentDays?: number;
+  shortHoursDays?: number;
+  attendanceRate?: number; // e.g. 0.95 means 95%
+  protectedDayAbsences?: string[]; // array of dates YYYY-MM-DD
+  reasons?: string[]; // e.g. ["LeaveOnProtectedDay"]
+  status?: "Valid" | "Invalid" | string;
 }
 
 export interface NinjaAccountStatusRequest {
