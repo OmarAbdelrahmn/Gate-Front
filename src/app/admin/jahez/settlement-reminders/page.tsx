@@ -32,16 +32,28 @@ import {
   ChevronRight,
   TrendingUp,
   DollarSign,
+  Package,
+  PackageX,
+  Activity,
   X,
 } from "lucide-react";
 
 type DaysFilter = "all" | "overdue" | "critical" | "within-limit";
 type DebtFilter = "all" | "gt-500" | "gt-1000" | "has-debt" | "zero-debt";
+type OrderFilter =
+  | "all"
+  | "no-orders-3days"
+  | "inactive-1-2"
+  | "active-orders"
+  | "assigned"
+  | "ended";
 type SortOption =
   | "debt-desc"
   | "debt-asc"
   | "days-desc"
   | "days-asc"
+  | "inactive-desc"
+  | "inactive-asc"
   | "date-asc"
   | "name-asc";
 
@@ -55,14 +67,18 @@ export default function JahezSettlementRemindersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [daysFilter, setDaysFilter] = useState<DaysFilter>("all");
   const [debtFilter, setDebtFilter] = useState<DebtFilter>("all");
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const [sortBy, setSortBy] = useState<SortOption>("debt-desc");
   const [isExporting, setIsExporting] = useState(false);
 
-  // Table header debt dropdown popover state
+  // Table header dropdown popover states
   const [isDebtDropdownOpen, setIsDebtDropdownOpen] = useState(false);
   const debtDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
+  const [isOrderDropdownOpen, setIsOrderDropdownOpen] = useState(false);
+  const orderDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -71,14 +87,20 @@ export default function JahezSettlementRemindersPage() {
       ) {
         setIsDebtDropdownOpen(false);
       }
+      if (
+        orderDropdownRef.current &&
+        !orderDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOrderDropdownOpen(false);
+      }
     }
-    if (isDebtDropdownOpen) {
+    if (isDebtDropdownOpen || isOrderDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isDebtDropdownOpen]);
+  }, [isDebtDropdownOpen, isOrderDropdownOpen]);
 
   // Fetch reminders data (loads all records across all pages)
   const fetchReminders = useCallback(async () => {
@@ -121,6 +143,40 @@ export default function JahezSettlementRemindersPage() {
 
   const getAnchorDateUtc = (item: JahezSettlementReminder): string => {
     return item.reminderAnchorAtUtc || item.ReminderAnchorAtUtc || "";
+  };
+
+  const getIsAssigned = (item: JahezSettlementReminder): boolean => {
+    return Boolean(item.isAssigned ?? item.IsAssigned ?? false);
+  };
+
+  const getLastOrderDate = (item: JahezSettlementReminder): string | null => {
+    return item.lastOrderDate ?? item.LastOrderDate ?? null;
+  };
+
+  const getDaysWithoutOrders = (item: JahezSettlementReminder): number | null => {
+    const val = item.daysWithoutOrders ?? item.DaysWithoutOrders;
+    return typeof val === "number" ? val : null;
+  };
+
+  const getNoOrdersForThreeDays = (item: JahezSettlementReminder): boolean => {
+    return Boolean(item.noOrdersForThreeDays ?? item.NoOrdersForThreeDays ?? false);
+  };
+
+  // Friendly order date formatting
+  const formatOrderDate = (isoOrDateString: string | null): string => {
+    if (!isoOrDateString) return "لا توجد طلبات مسجلة";
+    try {
+      const d = new Date(isoOrDateString);
+      if (isNaN(d.getTime())) return isoOrDateString;
+      return new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
+        timeZone: "Asia/Riyadh",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      }).format(d);
+    } catch {
+      return isoOrDateString;
+    }
   };
 
   // Friendly date formatting (in Riyadh timezone)
@@ -202,6 +258,32 @@ export default function JahezSettlementRemindersPage() {
       });
     }
 
+    // Filter by order inactivity / status
+    if (orderFilter !== "all") {
+      result = result.filter((item) => {
+        const isAssigned = getIsAssigned(item);
+        const noOrders3Days = getNoOrdersForThreeDays(item);
+        const daysInactive = getDaysWithoutOrders(item);
+
+        if (orderFilter === "no-orders-3days") {
+          return isAssigned && noOrders3Days;
+        }
+        if (orderFilter === "inactive-1-2") {
+          return isAssigned && daysInactive !== null && daysInactive > 0 && !noOrders3Days;
+        }
+        if (orderFilter === "active-orders") {
+          return isAssigned && daysInactive === 0;
+        }
+        if (orderFilter === "assigned") {
+          return isAssigned;
+        }
+        if (orderFilter === "ended") {
+          return !isAssigned;
+        }
+        return true;
+      });
+    }
+
     // Sort
     result.sort((a, b) => {
       const debtA = getAdministrativeDebt(a);
@@ -222,6 +304,16 @@ export default function JahezSettlementRemindersPage() {
           return daysB - daysA;
         case "days-asc":
           return daysA - daysB;
+        case "inactive-desc": {
+          const aDays = getDaysWithoutOrders(a) ?? -1;
+          const bDays = getDaysWithoutOrders(b) ?? -1;
+          return bDays - aDays;
+        }
+        case "inactive-asc": {
+          const aDays = getDaysWithoutOrders(a) ?? 9999;
+          const bDays = getDaysWithoutOrders(b) ?? 9999;
+          return aDays - bDays;
+        }
         case "date-asc":
           return dateA - dateB;
         case "name-asc":
@@ -232,7 +324,7 @@ export default function JahezSettlementRemindersPage() {
     });
 
     return result;
-  }, [reminders, searchTerm, daysFilter, debtFilter, sortBy]);
+  }, [reminders, searchTerm, daysFilter, debtFilter, orderFilter, sortBy]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -248,6 +340,12 @@ export default function JahezSettlementRemindersPage() {
         avgDays: 0,
         criticalDaysCount: 0,
         overdueCount: 0,
+        assignedCount: 0,
+        endedCount: 0,
+        noOrders3DaysCount: 0,
+        inactive1to2DaysCount: 0,
+        activeWithOrdersCount: 0,
+        maxDaysWithoutOrders: 0,
       };
     }
 
@@ -260,9 +358,19 @@ export default function JahezSettlementRemindersPage() {
     let criticalDaysCount = 0;
     let overdueCount = 0;
 
+    let assignedCount = 0;
+    let endedCount = 0;
+    let noOrders3DaysCount = 0;
+    let inactive1to2DaysCount = 0;
+    let activeWithOrdersCount = 0;
+    let maxDaysWithoutOrders = 0;
+
     for (const r of reminders) {
       const debt = getAdministrativeDebt(r);
       const days = getDaysSinceSettlement(r);
+      const isAssigned = getIsAssigned(r);
+      const noOrders3Days = getNoOrdersForThreeDays(r);
+      const daysWithoutOrders = getDaysWithoutOrders(r);
 
       totalDebt += debt;
       if (debt > 0) ridersWithDebt++;
@@ -273,6 +381,23 @@ export default function JahezSettlementRemindersPage() {
       sumDays += days;
       if (days >= 20) criticalDaysCount++;
       if (days > 10) overdueCount++;
+
+      if (isAssigned) {
+        assignedCount++;
+        if (noOrders3Days) {
+          noOrders3DaysCount++;
+        } else if (daysWithoutOrders !== null && daysWithoutOrders > 0) {
+          inactive1to2DaysCount++;
+        } else if (daysWithoutOrders === 0) {
+          activeWithOrdersCount++;
+        }
+
+        if (daysWithoutOrders !== null && daysWithoutOrders > maxDaysWithoutOrders) {
+          maxDaysWithoutOrders = daysWithoutOrders;
+        }
+      } else {
+        endedCount++;
+      }
     }
 
     return {
@@ -285,6 +410,12 @@ export default function JahezSettlementRemindersPage() {
       avgDays: Math.round((sumDays / total) * 10) / 10,
       criticalDaysCount,
       overdueCount,
+      assignedCount,
+      endedCount,
+      noOrders3DaysCount,
+      inactive1to2DaysCount,
+      activeWithOrdersCount,
+      maxDaysWithoutOrders,
     };
   }, [reminders]);
 
@@ -294,6 +425,15 @@ export default function JahezSettlementRemindersPage() {
       setSortBy("debt-asc");
     } else {
       setSortBy("debt-desc");
+    }
+  };
+
+  // Toggle order inactivity sorting (as / des)
+  const toggleOrderSort = () => {
+    if (sortBy === "inactive-desc") {
+      setSortBy("inactive-asc");
+    } else {
+      setSortBy("inactive-desc");
     }
   };
 
@@ -318,6 +458,24 @@ export default function JahezSettlementRemindersPage() {
             ? "تأخير تصفية (>10 أيام)"
             : "ضمن المدة (≤10 أيام)";
 
+        const isAssigned = getIsAssigned(item);
+        const noOrders3Days = getNoOrdersForThreeDays(item);
+        const daysInactive = getDaysWithoutOrders(item);
+        const lastOrder = getLastOrderDate(item);
+
+        let orderReminderText = "جلسة منتهية (غير مسند)";
+        if (isAssigned) {
+          if (noOrders3Days) {
+            orderReminderText = `تنبيه: بلا طلبات منذ ${daysInactive ?? 3} أيام`;
+          } else if (daysInactive !== null && daysInactive > 0) {
+            orderReminderText = `بدون طلبات منذ ${daysInactive} يوم`;
+          } else if (daysInactive === 0) {
+            orderReminderText = "نشط • سجل طلبات مؤخراً";
+          } else {
+            orderReminderText = "جلسة مسندة";
+          }
+        }
+
         return {
           "اسم المندوب": getRiderName(item),
           "حساب المنصة": getExternalAccountId(item) || "—",
@@ -325,6 +483,10 @@ export default function JahezSettlementRemindersPage() {
           "أيام منذ التصفية": days,
           "حالة التصفية": daysLabel,
           "تاريخ بداية الاحتساب / آخر تصفية": formatAnchorDate(getAnchorDateUtc(item)),
+          "حالة الجلسة": isAssigned ? "مسندة (نشطة)" : "منتهية",
+          "تذكير نشاط الطلبات": orderReminderText,
+          "أيام بدون طلبات": daysInactive !== null ? daysInactive : "—",
+          "تاريخ آخر طلب": formatOrderDate(lastOrder),
         };
       });
 
@@ -421,7 +583,7 @@ export default function JahezSettlementRemindersPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {/* Total Administrative Debt */}
         <div className="rounded-2xl border border-red-200/80 bg-gradient-to-br from-red-50/50 to-white p-5 shadow-sm transition hover:shadow-md dark:border-red-900/50 dark:from-red-950/20 dark:to-gray-900">
           <div className="flex items-center justify-between">
@@ -484,6 +646,35 @@ export default function JahezSettlementRemindersPage() {
           </div>
         </div>
 
+        {/* No Orders for 3+ Days (Inactivity Alert) */}
+        <div
+          onClick={() => setOrderFilter(orderFilter === "no-orders-3days" ? "all" : "no-orders-3days")}
+          className={`cursor-pointer rounded-2xl border p-5 shadow-sm transition hover:shadow-md ${
+            orderFilter === "no-orders-3days"
+              ? "border-red-400 bg-red-100/60 dark:border-red-700 dark:bg-red-950/60"
+              : "border-red-200/80 bg-gradient-to-br from-red-50/40 to-white dark:border-red-900/50 dark:from-red-950/20 dark:to-gray-900"
+          }`}
+          title="انقر لتصفية المناديب المتوقفين عن الطلبات 3 أيام فأكثر"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-red-700 dark:text-red-300">
+              تنبيه: بلا طلبات (≥ 3 أيام)
+            </span>
+            <div className="rounded-xl bg-red-100 p-2.5 text-red-700 dark:bg-red-900/60 dark:text-red-300">
+              <PackageX className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-red-600 dark:text-red-400">
+              {stats.noOrders3DaysCount.toLocaleString("ar-SA-u-nu-latn")}
+            </span>
+            <span className="text-xs text-gray-400">مندوب مسند</span>
+          </div>
+          <div className="mt-2 text-xs text-red-600/80 dark:text-red-400/80">
+            من إجمالي {stats.assignedCount.toLocaleString("ar-SA-u-nu-latn")} جلسة نشطة
+          </div>
+        </div>
+
         {/* Max Days Overdue */}
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-gray-800 dark:bg-gray-900">
           <div className="flex items-center justify-between">
@@ -536,13 +727,15 @@ export default function JahezSettlementRemindersPage() {
                 <option value="debt-asc">المديونية: الأقل أولاً (تصاعدي)</option>
                 <option value="days-desc">أيام التأخير: الأكثر أولاً</option>
                 <option value="days-asc">أيام التأخير: الأقل أولاً</option>
+                <option value="inactive-desc">أيام بدون طلبات: الأكثر أولاً (تنبيه التوقف)</option>
+                <option value="inactive-asc">أيام بدون طلبات: الأقل أولاً</option>
                 <option value="date-asc">التاريخ الأقدم أولاً</option>
                 <option value="name-asc">اسم المندوب أبجدياً</option>
               </select>
             </div>
           </div>
 
-          {/* Quick Filter Pills (Debt & Days) */}
+          {/* Quick Filter Pills (Debt, Days & Order Inactivity) */}
           <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3 dark:border-gray-800">
             {/* Debt Filter Pills */}
             <div className="flex items-center gap-1.5">
@@ -663,13 +856,90 @@ export default function JahezSettlementRemindersPage() {
               </div>
             </div>
 
+            {/* Order Inactivity / Activity Filter Pills (behind other filters) */}
+            <div className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400">
+                <Package className="h-3.5 w-3.5 text-amber-600" />
+                تذكير نشاط الطلبات:
+              </span>
+              <div className="flex flex-wrap items-center gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter("all")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    orderFilter === "all"
+                      ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+                      : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                  }`}
+                >
+                  الكل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter("no-orders-3days")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    orderFilter === "no-orders-3days"
+                      ? "bg-red-500 text-white shadow-sm"
+                      : "text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
+                  }`}
+                >
+                  بلا طلبات ≥ 3 أيام ({stats.noOrders3DaysCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter("inactive-1-2")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    orderFilter === "inactive-1-2"
+                      ? "bg-amber-500 text-white shadow-sm"
+                      : "text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40"
+                  }`}
+                >
+                  بدون طلبات (1-2 يوم) ({stats.inactive1to2DaysCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter("active-orders")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    orderFilter === "active-orders"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                  }`}
+                >
+                  نشط مع طلبات ({stats.activeWithOrdersCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter("assigned")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    orderFilter === "assigned"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                  }`}
+                >
+                  جلسات مسندة ({stats.assignedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter("ended")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    orderFilter === "ended"
+                      ? "bg-gray-600 text-white shadow-sm dark:bg-gray-600"
+                      : "text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  جلسات منتهية ({stats.endedCount})
+                </button>
+              </div>
+            </div>
+
             {/* Clear Filters Button if any active */}
-            {(debtFilter !== "all" || daysFilter !== "all" || searchTerm) && (
+            {(debtFilter !== "all" || daysFilter !== "all" || orderFilter !== "all" || searchTerm) && (
               <button
                 type="button"
                 onClick={() => {
                   setDebtFilter("all");
                   setDaysFilter("all");
+                  setOrderFilter("all");
                   setSearchTerm("");
                 }}
                 className="flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-red-600"
@@ -709,7 +979,7 @@ export default function JahezSettlementRemindersPage() {
                 ? "لا توجد جلسات مفتوحة أو منتهية بحاجة للمتابعة."
                 : "جرّب تغيير كلمات البحث أو إلغاء فلتر المديونية أو أيام التصفية."}
             </p>
-            {searchTerm || daysFilter !== "all" || debtFilter !== "all" ? (
+            {searchTerm || daysFilter !== "all" || debtFilter !== "all" || orderFilter !== "all" ? (
               <Button
                 variant="secondary"
                 size="sm"
@@ -717,6 +987,7 @@ export default function JahezSettlementRemindersPage() {
                   setSearchTerm("");
                   setDaysFilter("all");
                   setDebtFilter("all");
+                  setOrderFilter("all");
                 }}
                 className="mt-4"
               >
@@ -922,6 +1193,211 @@ export default function JahezSettlementRemindersPage() {
                   <th className="py-3.5 px-4 text-center">أيام منذ التصفية</th>
                   <th className="py-3.5 px-4">بداية الاحتساب / آخر تصفية</th>
                   <th className="py-3.5 px-4">حالة التصفية</th>
+
+                  {/* Order Activity & Inactivity Reminder Header with Sort and Filter Popover */}
+                  <th className="relative py-3.5 px-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-gray-900 dark:text-white">
+                        تذكير نشاط الطلبات
+                      </span>
+
+                      {/* Sort Button (Toggle Asc / Desc for Days Without Orders) */}
+                      <button
+                        type="button"
+                        onClick={toggleOrderSort}
+                        title={
+                          sortBy === "inactive-desc"
+                            ? "الترتيب الحالي: الأكثر أياماً بدون طلبات أولاً. انقر للترتيب تصاعدياً"
+                            : "الترتيب الحالي: الأقل أياماً بدون طلبات أولاً. انقر للترتيب تنازلياً"
+                        }
+                        className={`flex h-6 w-6 items-center justify-center rounded-md border transition ${
+                          sortBy === "inactive-desc" || sortBy === "inactive-asc"
+                            ? "border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-400"
+                            : "border-gray-200 bg-white text-gray-400 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-800"
+                        }`}
+                      >
+                        {sortBy === "inactive-desc" ? (
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        ) : sortBy === "inactive-asc" ? (
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowUpDown className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+
+                      {/* Filter Dropdown Trigger */}
+                      <div className="relative" ref={orderDropdownRef}>
+                        <button
+                          type="button"
+                          onClick={() => setIsOrderDropdownOpen(!isOrderDropdownOpen)}
+                          title="تصفية نشاط وتوقف الطلبات"
+                          className={`flex h-6 items-center gap-1 rounded-md border px-1.5 text-[11px] font-bold transition ${
+                            orderFilter !== "all"
+                              ? "border-amber-400 bg-amber-500 text-white shadow-sm"
+                              : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                          }`}
+                        >
+                          <Filter className="h-3 w-3" />
+                          <span>
+                            {orderFilter === "no-orders-3days"
+                              ? "≥ 3 أيام"
+                              : orderFilter === "inactive-1-2"
+                              ? "1-2 يوم"
+                              : orderFilter === "active-orders"
+                              ? "نشط"
+                              : orderFilter === "assigned"
+                              ? "مسندة"
+                              : orderFilter === "ended"
+                              ? "منتهية"
+                              : "فلتر"}
+                          </span>
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        {isOrderDropdownOpen && (
+                          <div className="absolute right-0 top-8 z-50 w-60 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                            <div className="border-b border-gray-100 px-2 py-1 text-[11px] font-bold text-gray-400 dark:border-gray-700">
+                              ترتيب نشاط الطلبات:
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSortBy("inactive-desc");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                sortBy === "inactive-desc"
+                                  ? "bg-amber-50 font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <ArrowDown className="h-3.5 w-3.5 text-amber-500" />
+                                الأكثر أياماً بدون طلبات أولاً
+                              </span>
+                              {sortBy === "inactive-desc" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSortBy("inactive-asc");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                sortBy === "inactive-asc"
+                                  ? "bg-amber-50 font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <ArrowUp className="h-3.5 w-3.5 text-amber-500" />
+                                الأقل أياماً بدون طلبات أولاً
+                              </span>
+                              {sortBy === "inactive-asc" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+
+                            <div className="mt-2 border-b border-t border-gray-100 px-2 py-1 text-[11px] font-bold text-gray-400 dark:border-gray-700">
+                              تصفية حسب النشاط والتوقف:
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrderFilter("all");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                orderFilter === "all"
+                                  ? "bg-blue-50 font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span>الكل (عرض الجميع)</span>
+                              {orderFilter === "all" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrderFilter("no-orders-3days");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                orderFilter === "no-orders-3days"
+                                  ? "bg-red-50 font-bold text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5 font-bold text-red-600">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                بلا طلبات ≥ 3 أيام (تنبيه)
+                              </span>
+                              {orderFilter === "no-orders-3days" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrderFilter("inactive-1-2");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                orderFilter === "inactive-1-2"
+                                  ? "bg-amber-50 font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span>بدون طلبات (1-2 يوم)</span>
+                              {orderFilter === "inactive-1-2" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrderFilter("active-orders");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                orderFilter === "active-orders"
+                                  ? "bg-emerald-50 font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span>نشط مع طلبات مؤخراً</span>
+                              {orderFilter === "active-orders" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrderFilter("assigned");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                orderFilter === "assigned"
+                                  ? "bg-blue-50 font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span>جلسات مسندة فقط</span>
+                              {orderFilter === "assigned" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrderFilter("ended");
+                                setIsOrderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition ${
+                                orderFilter === "ended"
+                                  ? "bg-gray-100 font-bold text-gray-800 dark:bg-gray-700 dark:text-white"
+                                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <span>جلسات منتهية</span>
+                              {orderFilter === "ended" && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </th>
+
                   <th className="py-3.5 px-4 text-center">إجراءات سريعة</th>
                 </tr>
               </thead>
@@ -933,6 +1409,11 @@ export default function JahezSettlementRemindersPage() {
                   const days = getDaysSinceSettlement(item);
                   const anchorDate = getAnchorDateUtc(item);
                   const daysSev = getDaysSeverity(days);
+
+                  const isAssigned = getIsAssigned(item);
+                  const noOrders3Days = getNoOrdersForThreeDays(item);
+                  const daysWithoutOrders = getDaysWithoutOrders(item);
+                  const lastOrder = getLastOrderDate(item);
 
                   return (
                     <tr
@@ -948,6 +1429,8 @@ export default function JahezSettlementRemindersPage() {
                                 ? "bg-red-600"
                                 : debt > 0
                                 ? "bg-amber-500"
+                                : isAssigned && noOrders3Days
+                                ? "bg-red-500"
                                 : daysSev === "critical"
                                 ? "bg-red-500"
                                 : "bg-blue-500"
@@ -956,8 +1439,18 @@ export default function JahezSettlementRemindersPage() {
                             <User className="h-4 w-4" />
                           </div>
                           <div>
-                            <div className="font-bold text-gray-900 dark:text-white">
-                              {riderName}
+                            <div className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-white">
+                              <span>{riderName}</span>
+                              {isAssigned && noOrders3Days && (
+                                <span className="inline-flex items-center gap-0.5 rounded border border-red-200 bg-red-50 px-1.5 py-0.2 text-[10px] font-bold text-red-600 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-400">
+                                  متوقف ≥ 3 أيام
+                                </span>
+                              )}
+                              {!isAssigned && (
+                                <span className="text-[10px] font-normal text-gray-400">
+                                  (منتهي)
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-gray-400">مندوب توصيل</div>
                           </div>
@@ -1087,9 +1580,90 @@ export default function JahezSettlementRemindersPage() {
                         )}
                       </td>
 
+                      {/* Order Inactivity & Reminder Cell */}
+                      <td className="py-3.5 px-4">
+                        {isAssigned ? (
+                          noOrders3Days ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge tone="red" className="flex items-center gap-1.5 font-bold">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+                                </span>
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                بلا طلبات ({daysWithoutOrders ?? 3} {daysWithoutOrders === 1 ? "يوم" : daysWithoutOrders === 2 ? "يومان" : "أيام"})
+                              </Badge>
+                              <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                                {lastOrder ? (
+                                  <span>
+                                    آخر طلب:{" "}
+                                    <strong className="text-gray-700 dark:text-gray-300">
+                                      {formatOrderDate(lastOrder)}
+                                    </strong>
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-amber-600 dark:text-amber-400">
+                                    لم يسجل أي طلب منذ التعيين
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : daysWithoutOrders !== null && daysWithoutOrders > 0 ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge tone="orange" className="flex items-center gap-1 font-semibold">
+                                <Clock className="h-3.5 w-3.5" />
+                                بدون طلبات ({daysWithoutOrders} {daysWithoutOrders === 1 ? "يوم" : daysWithoutOrders === 2 ? "يومان" : "أيام"})
+                              </Badge>
+                              <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                                {lastOrder ? (
+                                  <span>
+                                    آخر طلب:{" "}
+                                    <strong className="text-gray-700 dark:text-gray-300">
+                                      {formatOrderDate(lastOrder)}
+                                    </strong>
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">بدون طلبات منذ التعيين</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : daysWithoutOrders === 0 ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge tone="green" className="flex items-center gap-1 font-semibold">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                نشط • سجل طلبات مؤخراً
+                              </Badge>
+                              <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                                {lastOrder && (
+                                  <span>
+                                    آخر طلب:{" "}
+                                    <strong className="text-gray-700 dark:text-gray-300">
+                                      {formatOrderDate(lastOrder)}
+                                    </strong>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge tone="blue" className="text-xs">
+                                جلسة مسندة
+                              </Badge>
+                            </div>
+                          )
+                        ) : (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                              جلسة منتهية
+                            </span>
+                            <span className="text-[10px] text-gray-400">الحساب غير مسند حالياً</span>
+                          </div>
+                        )}
+                      </td>
+
                       {/* Action Links */}
                       <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-1.5">
                           {/* Navigate to Cashbox & Transferred Debt */}
                           <Link
                             href={`/admin/jahez/cashbox?tab=transferredDebt&search=${encodeURIComponent(
@@ -1108,6 +1682,20 @@ export default function JahezSettlementRemindersPage() {
                             >
                               <Wallet className="h-3.5 w-3.5" />
                               {debt > 0 ? "سداد المديونية" : "الخزنة"}
+                            </Button>
+                          </Link>
+
+                          {/* Navigate to Performance / Orders */}
+                          <Link
+                            href={`/admin/jahez/performance?search=${encodeURIComponent(riderName)}`}
+                            title="عرض أداء وطلبات المندوب"
+                          >
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
+                            >
+                              <Activity className="h-3.5 w-3.5" />
                             </Button>
                           </Link>
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Search,
   UserX,
+  UserCheck,
   Eye,
   Briefcase,
   Phone,
@@ -33,6 +34,7 @@ import { ExternalRiderStatusBadge } from "@/components/hr/ExternalRiderStatusBad
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { matchesArabicSearch } from "@/lib/utils/arabicSearch";
+import { ReactivateEmployeeModal } from "@/components/employees/ReactivateEmployeeModal";
 
 type TerminatedPerson = {
   id: string;
@@ -63,6 +65,7 @@ export default function TerminatedEmployeesPage() {
   const [headerNationalityFilter, setHeaderNationalityFilter] = useState<string[]>([]);
   const [headerCityFilter, setHeaderCityFilter] = useState<string[]>([]);
   const [headerRoleFilter, setHeaderRoleFilter] = useState<string[]>([]);
+  const [reactivateTarget, setReactivateTarget] = useState<TerminatedPerson | null>(null);
 
   const TERMINATED_FILTERS_SESSION_KEY = "admin_terminated_employees_filters_session";
   const isRestoredRef = useState({ current: false })[0];
@@ -634,7 +637,18 @@ export default function TerminatedEmployeesPage() {
                     </td>
 
                     <td className="px-5 py-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {can("employees.update") && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => setReactivateTarget(person)}
+                            className="h-8 px-2.5 text-xs text-emerald-700 hover:bg-emerald-50 border-emerald-300 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                            title={isEn ? "Reactivate Personnel (Return to work)" : "إعادة تفعيل الموظف / المندوب (العودة للعمل)"}
+                          >
+                            <UserCheck size={14} className="text-emerald-600 dark:text-emerald-400" />
+                            {isEn ? "Reactivate" : "إعادة تفعيل"}
+                          </Button>
+                        )}
                         <Link href={`/admin/hr/forms?template=final_settlement&personId=${person.id}`}>
                           <Button variant="secondary" className="h-8 px-2.5 text-xs text-[#1167c9] hover:bg-blue-50 border-blue-200">
                             <FileCheck size={14} />
@@ -664,6 +678,21 @@ export default function TerminatedEmployeesPage() {
           </div>
         )}
       </Card>
+
+      {/* Reactivation Modal for Terminated Personnel */}
+      {reactivateTarget && (
+        <ReactivateEmployeeModal
+          isOpen={Boolean(reactivateTarget)}
+          onClose={() => setReactivateTarget(null)}
+          employeeId={reactivateTarget.id}
+          employeeName={reactivateTarget.fullName}
+          iqamaNo={reactivateTarget.iqamaNo}
+          onSuccess={() => {
+            setReactivateTarget(null);
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 }

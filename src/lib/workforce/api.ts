@@ -326,3 +326,29 @@ export async function resolveEmployeeRiderProfile(employeeId: string): Promise<s
   }
 }
 
+export interface ReactivateEmployeeRequest {
+  effectiveDate: string;
+  reason?: string;
+}
+
+/**
+ * POST /api/employees/{employeeId}/reactivate
+ * Reactivates a terminated employee or rider.
+ * Requires: employees.update permission.
+ * Checks activation requirements, sets status to Active, clears termination date and reason,
+ * and records change in work history.
+ */
+export function reactivateEmployee(
+  employeeId: string,
+  payload: ReactivateEmployeeRequest,
+) {
+  return authFetch<EmployeeDetails>(
+    `/api/employees/${encodeURIComponent(employeeId)}/reactivate`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+

@@ -917,6 +917,10 @@ export interface JahezSettlementReminder {
   reminderAnchorAtUtc: string;
   daysSinceSettlement: number;
   administrativeDebt?: number;
+  isAssigned?: boolean;
+  lastOrderDate?: string | null;
+  daysWithoutOrders?: number | null;
+  noOrdersForThreeDays?: boolean;
   HandoverId?: string;
   AccountId?: string;
   ExternalAccountId?: string | null;
@@ -925,6 +929,10 @@ export interface JahezSettlementReminder {
   ReminderAnchorAtUtc?: string;
   DaysSinceSettlement?: number;
   AdministrativeDebt?: number;
+  IsAssigned?: boolean;
+  LastOrderDate?: string | null;
+  DaysWithoutOrders?: number | null;
+  NoOrdersForThreeDays?: boolean;
 }
 
 export interface JahezSettlementRemindersResponse {

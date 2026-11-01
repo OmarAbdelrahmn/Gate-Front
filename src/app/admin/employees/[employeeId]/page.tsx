@@ -21,6 +21,8 @@ import {
   UserRound,
   X,
   ExternalLink,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { useAuth } from "../../../../lib/auth/AuthProvider";
 import { translate } from "../../../../lib/i18n";
@@ -59,6 +61,7 @@ import { DriverLicensesView } from "../../../../components/employees/DriverLicen
 import { AssignmentPromissoryFiles } from "../../../../components/fleet/AssignmentPromissoryFiles";
 import { RiderAssignmentReportModal } from "@/components/fleet/RiderAssignmentReportModal";
 import { TakeVehicleModal } from "@/app/admin/fleet/assignments/components/TakeVehicleModal";
+import { ReactivateEmployeeModal } from "@/components/employees/ReactivateEmployeeModal";
 
 const relationshipLabels: Record<string, { ar: string; en: string }> = {
   SponsoredInternal: { ar: "على الكفالة", en: "Internal Sponsored Employee" },
@@ -473,6 +476,7 @@ export default function EmployeeDetailsPage({
   const [openRiderHistoryModal, setOpenRiderHistoryModal] = useState(false);
   const [isRiderPeriodReportOpen, setIsRiderPeriodReportOpen] = useState(false);
   const [isTakeVehicleModalOpen, setIsTakeVehicleModalOpen] = useState(false);
+  const [openReactivateModal, setOpenReactivateModal] = useState(false);
 
   // Vehicle Timeline & Details State
   const [vehicleTimeline, setVehicleTimeline] = useState<RiderVehicleTimelineResponse[]>([]);
@@ -1144,6 +1148,16 @@ export default function EmployeeDetailsPage({
               {locale === "en" ? "Complete History" : "سجل الأحداث الشامل"}
             </Button>
           </Link>
+          {employee.status === "Terminated" && can("employees.update") && (
+            <Button
+              variant="secondary"
+              onClick={() => setOpenReactivateModal(true)}
+              className="gap-2 border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold"
+            >
+              <UserCheck size={17} className="text-emerald-600 dark:text-emerald-400" />
+              {locale === "en" ? "Reactivate Employee" : "إعادة تفعيل الموظف"}
+            </Button>
+          )}
           <Link href={`/admin/employees/${employee.id}/actions`}>
             <Button>{locale === "en" ? "Employee Actions" : "إجراءات الموظف"}</Button>
           </Link>
@@ -1190,6 +1204,35 @@ export default function EmployeeDetailsPage({
           </Card>
         );
       })()}
+
+      {employee.status === "Terminated" && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900/50 dark:bg-red-950/20">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-red-100 p-2.5 text-red-700 dark:bg-red-900/40 dark:text-red-400">
+              <UserX size={22} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-red-900 dark:text-red-200">
+                {locale === "en" ? "Employee is Terminated" : "الموظف منتهي الخدمة"}
+              </h3>
+              <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">
+                {locale === "en"
+                  ? "This employee's service has ended. You can reactivate them to return to active service."
+                  : "تم إنهاء خدمة هذا الموظف. يمكنك إعادة تفعيله للعودة إلى رأس العمل النشط."}
+              </p>
+            </div>
+          </div>
+          {can("employees.update") && (
+            <Button
+              onClick={() => setOpenReactivateModal(true)}
+              className="w-full sm:w-auto shrink-0 gap-2 border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 font-bold shadow-sm"
+            >
+              <UserCheck size={18} />
+              {locale === "en" ? "Reactivate Employee" : "إعادة تفعيل الموظف"}
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-5">
@@ -1683,6 +1726,23 @@ export default function EmployeeDetailsPage({
           }}
           preselectedVehicle={null}
           preselectedEmployeeId={details.employee.id}
+        />
+      )}
+      {/* Reactivate Employee Modal */}
+      {openReactivateModal && (
+        <ReactivateEmployeeModal
+          isOpen={openReactivateModal}
+          onClose={() => setOpenReactivateModal(false)}
+          employeeId={employee.id}
+          employeeName={displayName}
+          iqamaNo={employee.iqamaNo}
+          onSuccess={async () => {
+            setOpenReactivateModal(false);
+            if (employeeId) {
+              const refreshed = await getEmployee(employeeId);
+              setDetails(refreshed);
+            }
+          }}
         />
       )}
     </div>

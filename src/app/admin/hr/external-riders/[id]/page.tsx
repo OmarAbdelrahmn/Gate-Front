@@ -28,8 +28,10 @@ import {
   X,
   CalendarDays,
   Trash2,
+  UserCheck,
 } from "lucide-react";
 import { RiderAssignmentReportModal } from "@/components/fleet/RiderAssignmentReportModal";
+import { ReactivateEmployeeModal } from "@/components/employees/ReactivateEmployeeModal";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import { getEmployee } from "@/lib/workforce/api";
@@ -80,10 +82,10 @@ export default function ExternalRiderProfilePage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Tabs: "overview" | "documents"
   const [activeTab, setActiveTab] = useState<"overview" | "documents">("overview");
   const [activeModalTab, setActiveModalTab] = useState<"docs" | "insurance" | null>(null);
   const [isRiderPeriodReportOpen, setIsRiderPeriodReportOpen] = useState(false);
+  const [openReactivateModal, setOpenReactivateModal] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.search.includes("tab=documents")) {
@@ -530,6 +532,17 @@ export default function ExternalRiderProfilePage({
               {isEn ? "Full Documents Hub" : "مركز الوثائق الكامل"}
             </Button>
           </Link>
+          {rider.status === "Terminated" && can("employees.update") && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setOpenReactivateModal(true)}
+              className="gap-2 border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold"
+            >
+              <UserCheck size={15} className="text-emerald-600 dark:text-emerald-400" />
+              {isEn ? "Reactivate Rider" : "إعادة تفعيل المندوب"}
+            </Button>
+          )}
           {canDelete && rider.engagementType !== "SponsoredInternal" && (
             <Button
               variant="danger"
@@ -591,6 +604,17 @@ export default function ExternalRiderProfilePage({
             </p>
           </div>
         </div>
+
+        {rider.status === "Terminated" && can("employees.update") && (
+          <Button
+            type="button"
+            onClick={() => setOpenReactivateModal(true)}
+            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 font-bold shrink-0 shadow-sm"
+          >
+            <UserCheck size={16} />
+            {isEn ? "Reactivate Rider" : "إعادة تفعيل المندوب"}
+          </Button>
+        )}
       </div>
 
       {/* Tabs Switcher */}
@@ -1251,6 +1275,21 @@ export default function ExternalRiderProfilePage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Reactivate Rider Modal */}
+      {openReactivateModal && rider && (
+        <ReactivateEmployeeModal
+          isOpen={openReactivateModal}
+          onClose={() => setOpenReactivateModal(false)}
+          employeeId={rider.employeeId}
+          employeeName={rider.fullNameAr}
+          iqamaNo={rider.iqamaNo}
+          onSuccess={async () => {
+            setOpenReactivateModal(false);
+            await loadRiderData();
+          }}
+        />
       )}
     </div>
   );
