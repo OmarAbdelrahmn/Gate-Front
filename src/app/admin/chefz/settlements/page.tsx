@@ -38,6 +38,7 @@ import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
 import { getRiderIqama, ensureRiderIqamaLoaded } from "@/lib/fleet/rider-iqama-cache";
 import { ChefzBulkOrderSettlementPanel } from "@/components/chefz/ChefzBulkOrderSettlementPanel";
+import { ChefzDeleteSettlementsModal } from "@/components/chefz/ChefzDeleteSettlementsModal";
 import {
   CreditCard,
   Plus,
@@ -59,6 +60,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Trash2,
 } from "lucide-react";
 
 export default function ChefzSettlementsPage() {
@@ -68,6 +70,8 @@ export default function ChefzSettlementsPage() {
   const { can, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
+
+  const canDeleteSettlements = can("chefz.settlements.delete");
 
   // Data states
   const [platform, setPlatform] = useState<PlatformResponse | null>(null);
@@ -91,6 +95,9 @@ export default function ChefzSettlementsPage() {
   // View Mode: History vs Bulk Order Settlements
   const [viewMode, setViewMode] = useState<"history" | "bulk-orders">("history");
   const [viewImportId, setViewImportId] = useState<string | null>(null);
+
+  // Delete Settlements Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   // New Settlement Modal State (Manual Wallet)
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -676,6 +683,17 @@ export default function ChefzSettlementsPage() {
             <Upload className="h-4 w-4" />
             تصفية من ملف الطلبات
           </Button>
+
+          {canDeleteSettlements && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/40"
+            >
+              <Trash2 className="h-4 w-4" />
+              حذف تصفيات نصف شهر
+            </Button>
+          )}
 
           {can("chefz.settlements.create") && (
             <Button
@@ -1708,6 +1726,26 @@ export default function ChefzSettlementsPage() {
           </div>
         )}
       </Modal>
+
+      {/* Delete Settlements for Period Modal */}
+      {canDeleteSettlements && (
+        <ChefzDeleteSettlementsModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          initialYear={filterYear !== "all" ? Number(filterYear) : undefined}
+          initialMonth={filterMonth !== "all" ? Number(filterMonth) : undefined}
+          initialHalf={
+            filterHalf === "1" ? 1 : filterHalf === "2" ? 2 : undefined
+          }
+          onSuccess={() => {
+            loadData();
+          }}
+          onNavigateToBulkOrders={() => {
+            setViewImportId(null);
+            setViewMode("bulk-orders");
+          }}
+        />
+      )}
     </div>
   );
 }

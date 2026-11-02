@@ -43,7 +43,40 @@ export const chefzPaths = {
   },
   walletPreview: `${CHEFZ_BASE_PATH}/settlements/preview`,
   walletSave: `${CHEFZ_BASE_PATH}/settlements`,
+  deleteSettlements: (year: number, month: number, half: 1 | 2) => {
+    const params = new URLSearchParams({
+      year: String(year),
+      month: String(month),
+      half: String(half),
+    });
+    return `${CHEFZ_BASE_PATH}/settlements?${params}`;
+  },
 } as const;
+
+export interface ChefzDeleteSettlementsResponse {
+  periodFrom: DateOnly;
+  periodTo: DateOnly;
+  PeriodFrom?: DateOnly;
+  PeriodTo?: DateOnly;
+  deletedWalletSettlementsCount?: number;
+  DeletedWalletSettlementsCount?: number;
+  deletedOrderSettlementsCount?: number;
+  DeletedOrderSettlementsCount?: number;
+  deletedOrderRowsCount?: number;
+  DeletedOrderRowsCount?: number;
+  deletedImportRecordsCount?: number;
+  DeletedImportRecordsCount?: number;
+  totalDeletedCount?: number;
+  TotalDeletedCount?: number;
+  counts?: {
+    walletSettlements?: number;
+    orderSettlements?: number;
+    orderRows?: number;
+    importRecords?: number;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
 
 export type {
   ChefzAllRidersReportQuery,

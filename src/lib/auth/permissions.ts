@@ -154,6 +154,7 @@ export const PERMISSIONS = [
   "chefz.read",
   "chefz.accounts.update",
   "chefz.settlements.create",
+  "chefz.settlements.delete",
   "chefz.performance.import",
 
   // Ninja Platform

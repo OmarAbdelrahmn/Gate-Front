@@ -345,6 +345,18 @@ export const CHEFZ_PERMISSION_CATALOG_ITEMS: PermissionCatalogItem[] = [
     requiresClientScope: false,
   },
   {
+    key: "chefz.settlements.delete",
+    module: "Chefz",
+    nameAr: "حذف تصفيات شيفز",
+    nameEn: "Delete Chefz Settlements",
+    descriptionAr: "حذف تصفيات المحافظ والطلبات لشيفز لنصف شهر محدد نهائياً مع صفوف الطلبات وسجلات الاستيراد",
+    descriptionEn: "Permanently delete Chefz wallet and order settlements for a half-month period with imported rows and import records",
+    isSensitive: false,
+    isHighTrust: true,
+    requiresHousingScope: false,
+    requiresClientScope: true,
+  },
+  {
     key: "chefz.performance.import",
     module: "Chefz",
     nameAr: "استيراد تقارير أداء شيفز",

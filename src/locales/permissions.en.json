@@ -101,6 +101,7 @@
   "chefz.read": "View Chefz accounts, operations, and settlements",
   "chefz.accounts.update": "Configure and update Chefz accounts",
   "chefz.settlements.create": "Create and record Chefz wallet settlements",
+  "chefz.settlements.delete": "Permanently delete Chefz settlements for a half-month period",
   "chefz.performance.import": "Import Chefz daily performance reports",
   "ninja.read": "View Ninja accounts, operations, reports, and deductions",
   "ninja.accounts.update": "Configure and update Ninja accounts and sheets",

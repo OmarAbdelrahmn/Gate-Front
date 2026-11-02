@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
 import { exportToExcel } from "@/lib/export-excel";
 import { getRiderIqama, ensureRiderIqamaLoaded } from "@/lib/fleet/rider-iqama-cache";
+import { ChefzDeleteSettlementsModal } from "./ChefzDeleteSettlementsModal";
 import {
   ArrowRight,
   Upload,
@@ -39,6 +40,7 @@ import {
   Check,
   ShieldAlert,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
 
 interface ChefzBulkOrderSettlementPanelProps {
@@ -56,7 +58,11 @@ export function ChefzBulkOrderSettlementPanel({
 }: ChefzBulkOrderSettlementPanelProps) {
   const { can } = useAuth();
   const canSavePermission = can("chefz.settlements.create");
+  const canDeletePermission = can("chefz.settlements.delete");
   const canReadPermission = can("chefz.read");
+
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   // File state
   const [file, setFile] = useState<File | null>(null);
@@ -554,6 +560,17 @@ export function ChefzBulkOrderSettlementPanel({
             >
               <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
               تصدير إكسل
+            </Button>
+          )}
+
+          {canDeletePermission && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="gap-2 text-xs font-semibold border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/40"
+            >
+              <Trash2 className="h-4 w-4" />
+              حذف تصفيات نصف شهر
             </Button>
           )}
 
@@ -1367,6 +1384,23 @@ export function ChefzBulkOrderSettlementPanel({
             </div>
           )}
         </div>
+      )}
+
+      {/* Delete Settlements Modal */}
+      {canDeletePermission && (
+        <ChefzDeleteSettlementsModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onSuccess={() => {
+            // Reset local file and preview so the user can upload a fresh file
+            setFile(null);
+            setResponse(null);
+            setSavedSuccess(false);
+            setErrorMessage(null);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            onSaveSuccess?.();
+          }}
+        />
       )}
     </div>
   );

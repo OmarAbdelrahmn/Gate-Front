@@ -101,6 +101,7 @@
   "chefz.read": "عرض حسابات وعمليات وتصفيات شيفز",
   "chefz.accounts.update": "تعديل وإعداد حسابات شيفز",
   "chefz.settlements.create": "إنشاء وتوثيق تصفيات شيفز",
+  "chefz.settlements.delete": "حذف تصفيات شيفز لنصف شهر نهائياً",
   "chefz.performance.import": "رفع واستيراد تقارير أداء شيفز",
   "ninja.read": "عرض حسابات وعمليات وتقارير وخصومات نينجا",
   "ninja.accounts.update": "تعديل وإعداد حسابات وشيتات نينجا",

@@ -1,5 +1,5 @@
 // src/lib/chefz/api.ts
-import { authFetch } from "../auth/api";
+import { authFetch, type CustomRequestInit } from "../auth/api";
 import { getPlatforms, type PlatformResponse } from "../platforms/api";
 import { registerRiderIqama } from "@/lib/fleet/rider-iqama-cache";
 import type {
@@ -20,6 +20,7 @@ import type {
   ChefzAllRidersReportQuery,
   ChefzSettlement,
   ChefzSettlementRequest,
+  ChefzDeleteSettlementsResponse,
   ChefzSettingsRequest,
   ChefzSettingsResponse,
   ChefzSponsorAccountCounts,
@@ -34,6 +35,7 @@ import {
 } from "./chefz-new-endpoints-contracts";
 
 export { chefzPaths, uploadOrderSettlements };
+export type { ChefzDeleteSettlementsResponse };
 export type {
   UpdateChefzAssignmentStartDateRequest,
   UpdateChefzAssignmentStartDateResponse,
@@ -362,6 +364,138 @@ export async function getAllChefzSettlements(params?: {
   }
 
   return all;
+}
+
+/**
+ * Permanently deletes all wallet and order settlements for a chosen half-month period,
+ * their imported order rows, and import records whose settlements are entirely in that period.
+ *
+ * @param year e.g. 2026
+ * @param month 1-12
+ * @param half 1 (1–15) or 2 (16 through last day of the month)
+ */
+export async function deleteChefzSettlements(
+  year: number,
+  month: number,
+  half: 1 | 2,
+  init?: CustomRequestInit
+): Promise<ChefzDeleteSettlementsResponse> {
+  const normalizedYear = Math.floor(Number(year));
+  const normalizedMonth = Math.floor(Number(month));
+  const normalizedHalf = Number(half);
+
+  if (
+    isNaN(normalizedYear) ||
+    normalizedYear < 2000 ||
+    normalizedYear > 2100 ||
+    isNaN(normalizedMonth) ||
+    normalizedMonth < 1 ||
+    normalizedMonth > 12 ||
+    (normalizedHalf !== 1 && normalizedHalf !== 2)
+  ) {
+    throw new Error("فترة التصفية غير صالحة. يرجى تحديد سنة وشهر صحيحين ونصف شهر (1 أو 2).");
+  }
+
+  const path = chefzPaths.deleteSettlements(
+    normalizedYear,
+    normalizedMonth,
+    normalizedHalf as 1 | 2
+  );
+
+  try {
+    return await authFetch<ChefzDeleteSettlementsResponse>(path, {
+      ...init,
+      method: "DELETE",
+      suppressErrorToast: init?.suppressErrorToast ?? true,
+    });
+  } catch (err: any) {
+    const status = err?.status;
+    const body = err?.details;
+    const serverMsg = err?.message || body?.detail || body?.title || "";
+
+    if (status === 409) {
+      const conflictMsg =
+        serverMsg && !serverMsg.includes("409")
+          ? serverMsg
+          : "الملف المستورد يمتد عبر فترات متعددة ولا يمكن حذفه لنصف شهر بمفرده. للحفاظ على الفترة الأخرى وإعادة حساب الملف يلزم دعم استيراد إضافي.";
+      const error = new Error(conflictMsg);
+      (error as any).status = 409;
+      (error as any).details = body;
+      (error as any).isMultiPeriodConflict = true;
+      throw error;
+    }
+
+    if (status === 403) {
+      const forbiddenMsg =
+        serverMsg && !serverMsg.includes("403")
+          ? serverMsg
+          : "عفواً، لا تملك الصلاحية الكافية لحذف تصفيات شيفز (تتطلب صلاحية chefz.settlements.delete على نطاق شيفز).";
+      const error = new Error(forbiddenMsg);
+      (error as any).status = 403;
+      (error as any).details = body;
+      throw error;
+    }
+
+    if (status === 400) {
+      const badReqMsg =
+        serverMsg && !serverMsg.includes("400")
+          ? serverMsg
+          : "فترة التصفية المحددة غير صالحة. يرجى التحقق من السنة والشهر ونصف الشهر.";
+      const error = new Error(badReqMsg);
+      (error as any).status = 400;
+      (error as any).details = body;
+      throw error;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Normalizes counts returned from DELETE /api/chefz/settlements.
+ */
+export function extractDeletedSettlementsCounts(res: ChefzDeleteSettlementsResponse) {
+  const periodFrom = res.periodFrom || res.PeriodFrom || "";
+  const periodTo = res.periodTo || res.PeriodTo || "";
+
+  const walletSettlements =
+    res.deletedWalletSettlementsCount ??
+    res.DeletedWalletSettlementsCount ??
+    res.counts?.walletSettlements ??
+    0;
+
+  const orderSettlements =
+    res.deletedOrderSettlementsCount ??
+    res.DeletedOrderSettlementsCount ??
+    res.counts?.orderSettlements ??
+    0;
+
+  const orderRows =
+    res.deletedOrderRowsCount ??
+    res.DeletedOrderRowsCount ??
+    res.counts?.orderRows ??
+    0;
+
+  const importRecords =
+    res.deletedImportRecordsCount ??
+    res.DeletedImportRecordsCount ??
+    res.counts?.importRecords ??
+    0;
+
+  const total =
+    res.totalDeletedCount ??
+    res.TotalDeletedCount ??
+    walletSettlements + orderSettlements;
+
+  return {
+    periodFrom,
+    periodTo,
+    walletSettlements,
+    orderSettlements,
+    orderRows,
+    importRecords,
+    total,
+  };
 }
 
 /**
