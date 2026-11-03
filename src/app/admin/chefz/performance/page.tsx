@@ -36,6 +36,7 @@ import {
   ChefzPerformanceSettingsForm,
   ChefzPerformanceSettingsModal,
 } from "@/components/chefz/ChefzPerformanceSettingsModal";
+import { ChefzDeletePerformanceModal } from "@/components/chefz/ChefzDeletePerformanceModal";
 import {
   BarChart3,
   Upload,
@@ -62,6 +63,7 @@ import {
   LayoutGrid,
   List,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 
 type PerformanceTab = "riderReport" | "managementReport" | "dailyRecords" | "settings";
@@ -137,6 +139,10 @@ export default function ChefzPerformancePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<ChefzImportResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Delete Daily Performance Modal State
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteDate, setDeleteDate] = useState(todayStr);
 
   // Load platform & filter lookups
   const loadLookups = async () => {
@@ -1011,14 +1017,14 @@ export default function ChefzPerformancePage() {
     }
   };
 
-  if (!can("chefz.read")) {
+  if (!can("chefz.read") && !can("chefz.performance.delete") && !can("chefz.performance.import")) {
     return (
       <div className="p-8 text-center" dir="rtl">
         <div className="mx-auto max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
           <ShieldAlert className="mx-auto mb-3 text-red-500" size={32} />
           <h2 className="text-lg font-bold text-[var(--foreground)]">لا توجد صلاحية للوصول</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            ليس لديك الصلاحية الكافية لعرض تقارير أداء شيفز (chefz.read).
+            ليس لديك الصلاحية الكافية لعرض وإدارة تقارير أداء شيفز.
           </p>
         </div>
       </div>
@@ -1181,6 +1187,22 @@ export default function ChefzPerformancePage() {
                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>تصدير إكسل</span>
               </Button>
+
+              {can("chefz.performance.delete") && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setDeleteDate(filterTo || todayStr);
+                    setIsDeleteOpen(true);
+                  }}
+                  className="gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+                  title="حذف تقرير أداء يوم محدد نهائياً"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                  <span>حذف تقرير يوم</span>
+                </Button>
+              )}
 
               {can("chefz.performance.import") && (
                 <Button
@@ -1630,7 +1652,7 @@ export default function ChefzPerformancePage() {
                       {daysList.map((d) => (
                         <th
                           key={d.dateStr}
-                          className="px-2 py-2 text-center min-w-[56px] border-r border-[var(--border)]/40"
+                          className="group/daycol px-2 py-2 text-center min-w-[56px] border-r border-[var(--border)]/40"
                           title={`${d.dateStr} (${d.dayNameAr})`}
                         >
                           <div className="font-mono text-xs font-black text-[var(--foreground)]">
@@ -1639,6 +1661,20 @@ export default function ChefzPerformancePage() {
                           <div className="text-[10px] text-[var(--muted)] font-normal whitespace-nowrap">
                             {d.dayFormatted}
                           </div>
+                          {can("chefz.performance.delete") && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteDate(d.dateStr);
+                                setIsDeleteOpen(true);
+                              }}
+                              className="mt-0.5 inline-flex items-center justify-center rounded p-0.5 text-[var(--muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors opacity-60 hover:opacity-100"
+                              title={`حذف تقرير أداء تاريخ ${d.dateStr}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </th>
                       ))}
                     </tr>
@@ -2263,19 +2299,28 @@ export default function ChefzPerformancePage() {
                       <th className="px-4 py-3.5 text-center">الطلبات المرفوضة</th>
                       <th className="px-4 py-3.5 text-center">الطلبات الفائتة</th>
                       <th className="px-4 py-3.5 text-center">نسبة القبول</th>
+                      {can("chefz.performance.delete") && (
+                        <th className="px-4 py-3.5 text-center">إجراءات</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
                     {dailyLoading ? (
                       <tr>
-                        <td colSpan={11} className="py-12 text-center text-sm text-[var(--muted)]">
+                        <td
+                          colSpan={can("chefz.performance.delete") ? 12 : 11}
+                          className="py-12 text-center text-sm text-[var(--muted)]"
+                        >
                           <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
                           جارٍ تحميل سجلات الأداء اليومي...
                         </td>
                       </tr>
                     ) : filteredPerformanceRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="py-12 text-center text-sm text-[var(--muted)]">
+                        <td
+                          colSpan={can("chefz.performance.delete") ? 12 : 11}
+                          className="py-12 text-center text-sm text-[var(--muted)]"
+                        >
                           لا توجد بيانات أداء مستوردة في نطاق التواريخ المحدد.
                         </td>
                       </tr>
@@ -2371,6 +2416,22 @@ export default function ChefzPerformancePage() {
                                 {p.acceptanceRate}%
                               </span>
                             </td>
+                            {can("chefz.performance.delete") && (
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDeleteDate(p.reportDate);
+                                    setIsDeleteOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                                  title={`حذف تقرير أداء ${p.reportDate}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <span>حذف</span>
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })
@@ -2662,6 +2723,17 @@ export default function ChefzPerformancePage() {
         onClose={() => setIsSettingsModalOpen(false)}
         onSettingsSaved={() => {
           if (activeTab === "dailyRecords") loadDailyPerformance();
+        }}
+      />
+
+      {/* Delete Daily Performance Modal */}
+      <ChefzDeletePerformanceModal
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        initialDate={deleteDate}
+        existingDates={Array.from(new Set(performanceRecords.map((x) => x.reportDate).filter(Boolean)))}
+        onSuccess={() => {
+          loadDailyPerformance();
         }}
       />
     </div>

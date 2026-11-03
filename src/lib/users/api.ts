@@ -368,6 +368,18 @@ export const CHEFZ_PERMISSION_CATALOG_ITEMS: PermissionCatalogItem[] = [
     requiresHousingScope: false,
     requiresClientScope: false,
   },
+  {
+    key: "chefz.performance.delete",
+    module: "Chefz",
+    nameAr: "حذف تقارير أداء شيفز",
+    nameEn: "Delete Chefz Performance",
+    descriptionAr: "حذف تقارير وسجلات الأداء اليومي لشيفز لتاريخ محدد نهائياً",
+    descriptionEn: "Permanently delete Chefz daily performance reports and records for a specific date",
+    isSensitive: false,
+    isHighTrust: true,
+    requiresHousingScope: false,
+    requiresClientScope: true,
+  },
 ];
 
 export async function getPermissionCatalogue(): Promise<PermissionCatalogItem[]> {

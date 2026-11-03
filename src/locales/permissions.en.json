@@ -103,6 +103,7 @@
   "chefz.settlements.create": "Create and record Chefz wallet settlements",
   "chefz.settlements.delete": "Permanently delete Chefz settlements for a half-month period",
   "chefz.performance.import": "Import Chefz daily performance reports",
+  "chefz.performance.delete": "Permanently delete Chefz daily performance reports for a specific date",
   "ninja.read": "View Ninja accounts, operations, reports, and deductions",
   "ninja.accounts.update": "Configure and update Ninja accounts and sheets",
   "ninja.assignments.create": "Assign Ninja accounts to riders",

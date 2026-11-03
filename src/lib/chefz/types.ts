@@ -133,6 +133,7 @@ export type {
   ChefzRiderCycleSettlement,
   ChefzOrderSettlementImportResponse,
   ChefzDeleteSettlementsResponse,
+  ChefzDeletePerformanceResponse,
 } from "./chefz-new-endpoints-contracts";
 
 export interface ChefzPerformance {

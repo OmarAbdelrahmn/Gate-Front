@@ -21,6 +21,7 @@ import type {
   ChefzSettlement,
   ChefzSettlementRequest,
   ChefzDeleteSettlementsResponse,
+  ChefzDeletePerformanceResponse,
   ChefzSettingsRequest,
   ChefzSettingsResponse,
   ChefzSponsorAccountCounts,
@@ -35,7 +36,7 @@ import {
 } from "./chefz-new-endpoints-contracts";
 
 export { chefzPaths, uploadOrderSettlements };
-export type { ChefzDeleteSettlementsResponse };
+export type { ChefzDeleteSettlementsResponse, ChefzDeletePerformanceResponse };
 export type {
   UpdateChefzAssignmentStartDateRequest,
   UpdateChefzAssignmentStartDateResponse,
@@ -569,6 +570,115 @@ export async function uploadChefzPerformance(
     body: form,
     signal,
   });
+}
+
+/**
+ * Permanently deletes daily performance records for a specific date.
+ * Endpoint: DELETE /api/chefz/performance?reportDate=YYYY-MM-DD
+ * Requires permission: chefz.performance.delete
+ *
+ * @param reportDate Date in format YYYY-MM-DD (e.g. "2026-10-15")
+ * @param init Optional custom fetch options
+ */
+export async function deleteChefzPerformance(
+  reportDate: string,
+  init?: CustomRequestInit
+): Promise<ChefzDeletePerformanceResponse> {
+  const normalizedDate = (reportDate || "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    throw new Error("تاريخ التقرير غير صالح. يرجى تحديد تاريخ صحيح بصيغة YYYY-MM-DD (مثال: 2026-10-15).");
+  }
+
+  const path = chefzPaths.deletePerformance(normalizedDate);
+
+  try {
+    return await authFetch<ChefzDeletePerformanceResponse>(path, {
+      ...init,
+      method: "DELETE",
+      suppressErrorToast: init?.suppressErrorToast ?? true,
+    });
+  } catch (err: any) {
+    const status = err?.status;
+    const body = err?.details;
+    const serverMsg = err?.message || body?.detail || body?.title || "";
+
+    if (status === 403) {
+      const forbiddenMsg =
+        serverMsg && !serverMsg.includes("403")
+          ? serverMsg
+          : "عفواً، لا تملك الصلاحية الكافية لحذف تقارير أداء شيفز (تتطلب صلاحية chefz.performance.delete على نطاق شيفز).";
+      const error = new Error(forbiddenMsg);
+      (error as any).status = 403;
+      (error as any).details = body;
+      throw error;
+    }
+
+    if (status === 404) {
+      const notFoundMsg =
+        serverMsg && !serverMsg.includes("404")
+          ? serverMsg
+          : `لا توجد سجلات أداء مسجلة في النظام لتاريخ ${normalizedDate}.`;
+      const error = new Error(notFoundMsg);
+      (error as any).status = 404;
+      (error as any).details = body;
+      throw error;
+    }
+
+    if (status === 400) {
+      const badReqMsg =
+        serverMsg && !serverMsg.includes("400")
+          ? serverMsg
+          : "تاريخ التقرير المحدد غير صالح. يرجى التحقق من صيغة التاريخ (YYYY-MM-DD).";
+      const error = new Error(badReqMsg);
+      (error as any).status = 400;
+      (error as any).details = body;
+      throw error;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Normalizes counts returned from DELETE /api/chefz/performance?reportDate=...
+ */
+export function extractDeletedPerformanceCounts(
+  res: ChefzDeletePerformanceResponse | null | undefined,
+  fallbackDate: string
+) {
+  if (!res) {
+    return {
+      reportDate: fallbackDate,
+      performanceRowsDeleted: 0,
+      sourcesDeleted: 0,
+      importsDeleted: 0,
+      totalDeleted: 0,
+      deletedCount: 0,
+    };
+  }
+
+  const reportDate = String(res.reportDate || res.ReportDate || fallbackDate);
+  const performanceRowsDeleted = Number(
+    res.performanceRowsDeleted ?? res.PerformanceRowsDeleted ?? 0
+  );
+  const sourcesDeleted = Number(
+    res.sourcesDeleted ?? res.SourcesDeleted ?? 0
+  );
+  const importsDeleted = Number(
+    res.importsDeleted ?? res.ImportsDeleted ?? 0
+  );
+  const totalDeleted = performanceRowsDeleted + sourcesDeleted + importsDeleted;
+  const deletedCount = performanceRowsDeleted || totalDeleted;
+
+  return {
+    reportDate,
+    performanceRowsDeleted,
+    sourcesDeleted,
+    importsDeleted,
+    totalDeleted,
+    deletedCount,
+  };
 }
 
 export async function getChefzPerformance(params: {

@@ -387,7 +387,9 @@ export const navigation: NavItem[] = [
       "chefz.read",
       "chefz.accounts.update",
       "chefz.settlements.create",
+      "chefz.settlements.delete",
       "chefz.performance.import",
+      "chefz.performance.delete",
     ],
     children: [
       {
@@ -402,14 +404,14 @@ export const navigation: NavItem[] = [
         labelKey: "nav.chefzSettlements",
         href: "/admin/chefz/settlements",
         icon: CreditCard,
-        permissionsAny: ["chefz.read", "chefz.settlements.create"],
+        permissionsAny: ["chefz.read", "chefz.settlements.create", "chefz.settlements.delete"],
       },
       {
         label: "الأداء",
         labelKey: "nav.chefzPerformance",
         href: "/admin/chefz/performance",
         icon: BarChart3,
-        permissionsAny: ["chefz.read", "chefz.performance.import", "chefz.accounts.update"],
+        permissionsAny: ["chefz.read", "chefz.performance.import", "chefz.performance.delete", "chefz.accounts.update"],
       },
       {
         label: "إحصائيات الكفلاء",

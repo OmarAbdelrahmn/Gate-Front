@@ -51,7 +51,23 @@ export const chefzPaths = {
     });
     return `${CHEFZ_BASE_PATH}/settlements?${params}`;
   },
+  deletePerformance: (reportDate: string) => {
+    const params = new URLSearchParams({ reportDate });
+    return `${CHEFZ_BASE_PATH}/performance?${params}`;
+  },
 } as const;
+
+export interface ChefzDeletePerformanceResponse {
+  reportDate: DateOnly | string;
+  performanceRowsDeleted: number;
+  sourcesDeleted: number;
+  importsDeleted: number;
+  ReportDate?: DateOnly | string;
+  PerformanceRowsDeleted?: number;
+  SourcesDeleted?: number;
+  ImportsDeleted?: number;
+  [key: string]: any;
+}
 
 export interface ChefzDeleteSettlementsResponse {
   periodFrom: DateOnly;
