@@ -1,0 +1,142 @@
+// src/app/admin/hunger/components/WalletReviewResultCard.tsx
+"use client";
+
+import { Badge } from "@/components/ui/Badge";
+import type { HungerWalletReviewResponse } from "@/lib/hunger/types";
+import { AlertTriangle, Clock } from "lucide-react";
+
+interface WalletReviewResultCardProps {
+  title: string;
+  review: HungerWalletReviewResponse;
+  fallbackCurrentPeriodBalance?: number | null;
+}
+
+function formatNullableAmount(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "غير معروف";
+  }
+  const num = Number(value);
+  return `${num >= 0 ? `+${num.toFixed(2)}` : num.toFixed(2)} SAR`;
+}
+
+function formatExpiryTime(expiresAtUtc?: string | null): string {
+  if (!expiresAtUtc) return "20 دقيقة من الإنشاء";
+  try {
+    const dt = new Date(expiresAtUtc);
+    if (Number.isNaN(dt.getTime())) return expiresAtUtc;
+    return dt.toLocaleString("ar-SA", {
+      timeZone: "Asia/Riyadh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return expiresAtUtc;
+  }
+}
+
+export function WalletReviewResultCard({
+  title,
+  review,
+}: WalletReviewResultCardProps) {
+  const isPriorCloseUnknown =
+    review.canConfirm === false || review.closingBalance === null;
+
+  return (
+    <div
+      className={`space-y-2.5 rounded-xl border p-3.5 text-xs ${
+        isPriorCloseUnknown
+          ? "border-amber-300 bg-amber-50/80 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          : "border-emerald-300 bg-emerald-50/80 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
+        <span>{title}</span>
+        <Badge tone={isPriorCloseUnknown ? "orange" : "green"}>
+          {isPriorCloseUnknown ? "غير قابل للتأكيد" : "جاهزة للتأكيد النهائي"}
+        </Badge>
+      </div>
+
+      {isPriorCloseUnknown && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 p-2.5 text-rose-900 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+          <p className="font-bold">
+            لا يوجد إقفال مسجل للشهر السابق — سجّل الإقفال ثم أنشئ مراجعة جديدة
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 rounded-lg bg-[var(--surface)]/90 p-2.5 text-[11px]">
+        <div>
+          <span className="text-[var(--muted)]">رصيد الجوال:</span>
+          <p className="font-bold text-[var(--foreground)]" dir="ltr">
+            {formatNullableAmount(review.mobileBalance)}
+          </p>
+        </div>
+        <div>
+          <span className="text-[var(--muted)]">رصيد الإقفال السابق:</span>
+          <p className="font-bold text-[var(--foreground)]" dir="ltr">
+            {formatNullableAmount(review.closingBalance)}
+          </p>
+        </div>
+        <div>
+          <span className="text-[var(--muted)]">التسويات المثبتة:</span>
+          <p className="font-bold text-[var(--foreground)]" dir="ltr">
+            {formatNullableAmount(review.provenAdjustments)}
+          </p>
+        </div>
+        <div>
+          <span className="text-[var(--muted)]">صافي رصيد الفترة الحالية:</span>
+          <p className="font-extrabold text-[var(--foreground)]" dir="ltr">
+            {isPriorCloseUnknown && review.currentPeriodBalance === null
+              ? "غير معروف"
+              : formatNullableAmount(review.currentPeriodBalance)}
+          </p>
+        </div>
+        <div>
+          <span className="text-[var(--muted)]">الرصيد المنسوب (Attributed):</span>
+          <p className="font-bold text-[var(--foreground)]" dir="ltr">
+            {isPriorCloseUnknown &&
+            (review.attributedBalance === null ||
+              review.attributedBalance === undefined)
+              ? "غير معروف"
+              : formatNullableAmount(review.attributedBalance)}
+          </p>
+        </div>
+        <div>
+          <span className="text-[var(--muted)]">التغير في ذمة المندوب:</span>
+          <p className="font-bold text-[var(--foreground)]" dir="ltr">
+            {isPriorCloseUnknown &&
+            (review.riderBalanceChange === null ||
+              review.riderBalanceChange === undefined)
+              ? "غير معروف"
+              : formatNullableAmount(review.riderBalanceChange)}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
+        <Clock className="h-3.5 w-3.5 shrink-0" />
+        <span>تاريخ انتهاء صلاحية المراجعة (expiresAtUtc):</span>
+        <strong className="text-[var(--foreground)]" dir="ltr">
+          {formatExpiryTime(review.expiresAtUtc)}
+        </strong>
+      </div>
+
+      {review.summary && (
+        <p className="text-[11px] font-medium">{review.summary}</p>
+      )}
+
+      {review.warnings && review.warnings.length > 0 && (
+        <ul className="list-inside list-disc space-y-0.5 text-[11px] text-amber-800 dark:text-amber-300">
+          {review.warnings.map((w, idx) => (
+            <li key={idx}>{w}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

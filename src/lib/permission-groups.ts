@@ -7,6 +7,7 @@ export const permissionGroups = [
   "Compliance",
   "Documents",
   "Operations",
+  "Hungerstation",
   "Reporting",
   "Fleet",
   "Fuel",
@@ -25,6 +26,7 @@ const labels: Record<PermissionGroup, { ar: string; en: string }> = {
   Compliance: { ar: "الالتزام والوثائق", en: "Compliance" },
   Documents: { ar: "المستندات", en: "Documents" },
   Operations: { ar: "العمليات والتشغيل", en: "Operations" },
+  Hungerstation: { ar: "إدارة هنقرستيشن", en: "Hungerstation" },
   Reporting: { ar: "التقارير والإشعارات", en: "Reporting" },
   Fleet: { ar: "الأسطول", en: "Fleet" },
   Fuel: { ar: "الوقود", en: "Fuel" },
@@ -40,6 +42,7 @@ export function permissionGroup(key: string): PermissionGroup {
   if (/^(employees|riders|external_riders|sponsors|legal_cases)\./.test(key)) return "Workforce";
   if (/^(residency|licenses|rider_cards|health_cards|insurance|promissory_notes)\./.test(key)) return "Compliance";
   if (key.startsWith("documents.")) return "Documents";
+  if (key.startsWith("hunger.")) return "Hungerstation";
   if (/^(platform_accounts|platform_credentials|platform_assignments|housing|phone_sims|jahez|chefz|ninja)\./.test(key)) return "Operations";
   if (/^(reports|exports|notifications)\./.test(key)) return "Reporting";
   if (key.startsWith("fleet.")) return "Fleet";

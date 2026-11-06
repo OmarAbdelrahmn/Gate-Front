@@ -42,6 +42,7 @@ import {
   UtensilsCrossed,
   Zap,
   Landmark,
+  Flame,
   type LucideIcon,
 } from "lucide-react";
 
@@ -493,6 +494,73 @@ export const navigation: NavItem[] = [
         permissionsAny: [
           "ninja.read",
           "ninja.deductions.import",
+        ],
+      },
+    ],
+  },
+  {
+    label: "إدارة هنقرستيشن",
+    labelKey: "nav.hunger",
+    icon: Flame,
+    permissionsAny: [
+      "hunger.read",
+      "hunger.accounts.import",
+      "hunger.accounts.update",
+      "hunger.quality.import",
+      "hunger.quality.export",
+      "hunger.performance.import",
+      "hunger.performance.export",
+      "hunger.alerts.manage",
+      "hunger.finance.manage",
+      "hunger.finance.configure",
+      "hunger.remittances.confirm",
+    ],
+    children: [
+      {
+        label: "الحسابات والتسليم والتأسيس",
+        labelKey: "nav.hungerAccounts",
+        href: "/admin/hunger/accounts",
+        icon: Server,
+        permissionsAny: [
+          "hunger.read",
+          "hunger.accounts.import",
+          "hunger.accounts.update",
+          "hunger.finance.manage",
+        ],
+      },
+      {
+        label: "التشغيل اليومي والتنبيهات",
+        labelKey: "nav.hungerOperations",
+        href: "/admin/hunger/operations",
+        icon: BarChart3,
+        permissionsAny: [
+          "hunger.read",
+          "hunger.performance.import",
+          "hunger.performance.export",
+          "hunger.alerts.manage",
+        ],
+      },
+      {
+        label: "الجودة التراكمية",
+        labelKey: "nav.hungerQuality",
+        href: "/admin/hunger/quality",
+        icon: ShieldCheck,
+        permissionsAny: [
+          "hunger.read",
+          "hunger.quality.import",
+          "hunger.quality.export",
+        ],
+      },
+      {
+        label: "المحافظ والتوريد والتسويات",
+        labelKey: "nav.hungerFinance",
+        href: "/admin/hunger/finance",
+        icon: BadgeDollarSign,
+        permissionsAny: [
+          "hunger.read",
+          "hunger.finance.manage",
+          "hunger.finance.configure",
+          "hunger.remittances.confirm",
         ],
       },
     ],

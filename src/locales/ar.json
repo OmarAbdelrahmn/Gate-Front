@@ -160,6 +160,11 @@
     "ninjaSheetUpdates": "فحص ومراجعة الشيتات",
     "ninjaPerformance": "الأداء والتقارير",
     "ninjaDeductions": "الخصومات اليومية",
+    "hunger": "إدارة هنقرستيشن",
+    "hungerAccounts": "الحسابات والتسليم والتأسيس",
+    "hungerOperations": "التشغيل اليومي والتنبيهات",
+    "hungerQuality": "الجودة التراكمية",
+    "hungerFinance": "المحافظ والتوريد والتسويات",
     "collapseMenu": "تصغير القائمة",
     "expandMenu": "توسيع القائمة"
   },

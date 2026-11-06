@@ -160,6 +160,11 @@
     "ninjaSheetUpdates": "Sheet Reviews",
     "ninjaPerformance": "Performance",
     "ninjaDeductions": "Daily Deductions",
+    "hunger": "Hungerstation",
+    "hungerAccounts": "Accounts & Handovers",
+    "hungerOperations": "Daily Operations & Alerts",
+    "hungerQuality": "Cumulative Quality",
+    "hungerFinance": "Wallets, Remittances & Settlements",
     "collapseMenu": "Collapse Menu",
     "expandMenu": "Expand Menu"
   },
