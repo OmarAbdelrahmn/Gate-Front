@@ -176,7 +176,6 @@ export default function HungerAccountsPage() {
   // Table Header Column Filters
   const [colFilterAccount, setColFilterAccount] = useState<string[]>([]);
   const [colFilterOwner, setColFilterOwner] = useState<string[]>([]);
-  const [colFilterSource, setColFilterSource] = useState<string[]>([]);
   const [colFilterRider, setColFilterRider] = useState<string[]>([]);
   const [colFilterDisposition, setColFilterDisposition] = useState<string[]>(
     [],
@@ -430,14 +429,14 @@ export default function HungerAccountsPage() {
   // Table Header Column Filter Options
   const accountColumnFilterOptions = useMemo<FilterOption[]>(() => {
     let usedCount = 0;
-    let unusedCount = 0;
+    let unknownCount = 0;
     let hasPassCount = 0;
     let noPassCount = 0;
     const segments = new Map<string, number>();
 
     for (const a of accounts) {
       if (a.monthlyUsageStatus === "Used") usedCount++;
-      else if (a.monthlyUsageStatus === "Unused") unusedCount++;
+      else unknownCount++;
       if (a.hasPassword === true) hasPassCount++;
       else if (a.hasPassword === false) noPassCount++;
       if (a.latestQualitySegment) {
@@ -453,9 +452,9 @@ export default function HungerAccountsPage() {
         count: usedCount,
       },
       {
-        value: "MONTHLY_UNUSED",
-        label: "غير مستخدم هذا الشهر (Unused)",
-        count: unusedCount,
+        value: "MONTHLY_UNKNOWN",
+        label: "غير مثبت استخدامه (Unknown)",
+        count: unknownCount,
       },
       {
         value: "HAS_PASSWORD",
@@ -510,39 +509,6 @@ export default function HungerAccountsPage() {
     return opts;
   }, [accounts]);
 
-  const sourceColumnFilterOptions = useMemo<FilterOption[]>(() => {
-    const map = new Map<string, { label: string; sublabel?: string; count: number }>();
-    let hasSourceCount = 0;
-    let noSourceCount = 0;
-    for (const a of accounts) {
-      const name = a.sourceUserNameAr || a.sourceUserNameEn;
-      if (!name) {
-        noSourceCount++;
-        continue;
-      }
-      hasSourceCount++;
-      const key = a.sourceNationalId || name;
-      const existing = map.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        map.set(key, {
-          label: name,
-          sublabel: a.sourceNationalId ? `هوية: ${a.sourceNationalId}` : undefined,
-          count: 1,
-        });
-      }
-    }
-    const opts: FilterOption[] = [
-      { value: "HAS_SOURCE", label: "يوجد مستخدم وارد بالمصدر", count: hasSourceCount },
-      { value: "NO_SOURCE", label: "غير محدد بالمصدر", count: noSourceCount },
-    ];
-    for (const [value, item] of map.entries()) {
-      opts.push({ value, ...item });
-    }
-    return opts;
-  }, [accounts]);
-
   const riderColumnFilterOptions = useMemo<FilterOption[]>(() => {
     const map = new Map<string, { label: string; sublabel?: string; count: number }>();
     let assignedCount = 0;
@@ -550,8 +516,14 @@ export default function HungerAccountsPage() {
     let commissionCount = 0;
     let targetCount = 0;
     for (const a of accounts) {
-      const name = a.assignedRiderNameAr || a.assignedRiderNameEn;
-      if (!name && !a.assignedRiderProfileId) {
+      const isAssigned =
+        a.assignmentStatus === "Assigned" ||
+        Boolean(a.actualRider?.nameAr || a.actualRider?.riderProfileId);
+      const name =
+        a.actualRider?.nameAr ||
+        a.actualRider?.nameEn ||
+        (isAssigned ? a.assignedRiderNameAr || a.assignedRiderNameEn : null);
+      if (!isAssigned || !name) {
         unassignedCount++;
         continue;
       }
@@ -559,22 +531,23 @@ export default function HungerAccountsPage() {
       if ((a.compensationModel || "").toLowerCase() === "commission") commissionCount++;
       else if ((a.compensationModel || "").toLowerCase() === "target") targetCount++;
 
-      const key = a.assignedNationalId || name || a.assignedRiderProfileId || "";
+      const iqama = a.actualRider?.iqamaNo || a.assignedNationalId;
+      const key = iqama || name || a.actualRider?.riderProfileId || "";
       if (!key) continue;
       const existing = map.get(key);
       if (existing) {
         existing.count++;
       } else {
         map.set(key, {
-          label: name || "مندوب مكلف",
-          sublabel: a.assignedNationalId ? `هوية: ${a.assignedNationalId}` : undefined,
+          label: name,
+          sublabel: iqama ? `هوية: ${iqama}` : undefined,
           count: 1,
         });
       }
     }
     const opts: FilterOption[] = [
-      { value: "STATE_ASSIGNED", label: "مكلف لمندوب فعليًا", count: assignedCount },
-      { value: "STATE_UNASSIGNED", label: "شاغر (غير مكلف)", count: unassignedCount },
+      { value: "STATE_ASSIGNED", label: "مكلف لمندوب (Assigned)", count: assignedCount },
+      { value: "STATE_UNASSIGNED", label: "غير مكلف (Unassigned)", count: unassignedCount },
       { value: "COMP_COMMISSION", label: "نظام عمولة (Commission)", count: commissionCount },
       { value: "COMP_TARGET", label: "نظام تارجت (Target)", count: targetCount },
     ];
@@ -673,9 +646,9 @@ export default function HungerAccountsPage() {
   const filteredAccounts = useMemo(() => {
     const q = search.trim().toLowerCase();
     return accounts.filter((acc) => {
-      const isAssigned = Boolean(
-        acc.assignedRiderProfileId || acc.assignedRiderNameAr,
-      );
+      const isAssigned =
+        acc.assignmentStatus === "Assigned" ||
+        Boolean(acc.actualRider?.nameAr || acc.actualRider?.riderProfileId);
       if (filterAssignment === "assigned" && !isAssigned) return false;
       if (filterAssignment === "unassigned" && isAssigned) return false;
       if (
@@ -690,8 +663,8 @@ export default function HungerAccountsPage() {
       if (colFilterAccount.length > 0) {
         const match = colFilterAccount.some((val) => {
           if (val === "MONTHLY_USED") return acc.monthlyUsageStatus === "Used";
-          if (val === "MONTHLY_UNUSED")
-            return acc.monthlyUsageStatus === "Unused";
+          if (val === "MONTHLY_UNKNOWN" || val === "MONTHLY_UNUSED")
+            return acc.monthlyUsageStatus !== "Used";
           if (val === "HAS_PASSWORD") return acc.hasPassword === true;
           if (val === "NO_PASSWORD") return acc.hasPassword === false;
           if (val.startsWith("SEG_")) {
@@ -713,25 +686,17 @@ export default function HungerAccountsPage() {
         if (!match) return false;
       }
 
-      // 3. Source User Column Filter
-      if (colFilterSource.length > 0) {
-        const srcName = acc.sourceUserNameAr || acc.sourceUserNameEn;
-        const srcKey = acc.sourceNationalId || srcName || "";
-        const match = colFilterSource.some((val) => {
-          if (val === "HAS_SOURCE") return Boolean(srcName);
-          if (val === "NO_SOURCE") return !srcName;
-          return val === srcKey || val === srcName;
-        });
-        if (!match) return false;
-      }
-
-      // 4. Actual Rider Column Filter
+      // 3. Actual Rider Column Filter (المندوب المكلف)
       if (colFilterRider.length > 0) {
-        const riderName = acc.assignedRiderNameAr || acc.assignedRiderNameEn;
+        const riderName =
+          acc.actualRider?.nameAr ||
+          acc.actualRider?.nameEn ||
+          (isAssigned ? acc.assignedRiderNameAr || acc.assignedRiderNameEn : null);
+        const riderIqama = acc.actualRider?.iqamaNo || acc.assignedNationalId;
         const riderKey =
-          acc.assignedNationalId ||
+          riderIqama ||
           riderName ||
-          acc.assignedRiderProfileId ||
+          acc.actualRider?.riderProfileId ||
           "";
         const match = colFilterRider.some((val) => {
           if (val === "STATE_ASSIGNED") return isAssigned;
@@ -745,7 +710,7 @@ export default function HungerAccountsPage() {
         if (!match) return false;
       }
 
-      // 5. Disposition Column Filter
+      // 4. Disposition Column Filter
       if (colFilterDisposition.length > 0) {
         const dispVal = (acc.disposition || "Unknown").toLowerCase();
         const match = colFilterDisposition.some(
@@ -754,7 +719,7 @@ export default function HungerAccountsPage() {
         if (!match) return false;
       }
 
-      // 6. City & Sponsor Column Filter
+      // 5. City & Sponsor Column Filter
       if (colFilterCitySponsor.length > 0) {
         const sp = acc.commercialRegistrationName || acc.sponsorNameAr || "";
         const match = colFilterCitySponsor.some((val) => {
@@ -767,7 +732,7 @@ export default function HungerAccountsPage() {
         if (!match) return false;
       }
 
-      // 7. Vehicle & SIM Column Filter
+      // 6. Vehicle & SIM Column Filter
       if (colFilterVehicleSim.length > 0) {
         const hasV = Boolean(
           acc.registeredVehiclePlate ||
@@ -794,10 +759,10 @@ export default function HungerAccountsPage() {
         acc.ownerNameEn,
         acc.ownerNationalId,
         acc.ownerPhoneNumber,
-        acc.sourceUserNameAr,
-        acc.sourceUserNameEn,
-        acc.sourceNationalId,
-        acc.sourcePhone,
+        acc.actualRider?.nameAr,
+        acc.actualRider?.nameEn,
+        acc.actualRider?.iqamaNo,
+        acc.actualRider?.phoneNumber,
         acc.assignedRiderNameAr,
         acc.assignedRiderNameEn,
         acc.assignedNationalId,
@@ -824,7 +789,6 @@ export default function HungerAccountsPage() {
     filterCity,
     colFilterAccount,
     colFilterOwner,
-    colFilterSource,
     colFilterRider,
     colFilterDisposition,
     colFilterCitySponsor,
@@ -850,7 +814,15 @@ export default function HungerAccountsPage() {
       else if (d === "deferrednextmonth") deferred++;
       else unknown++;
 
-      if (a.assignedRiderProfileId || a.assignedRiderNameAr) assigned++;
+      const isAssigned =
+        a.assignmentStatus === "Assigned" ||
+        Boolean(
+          a.actualRider?.riderProfileId ||
+            a.actualRider?.nameAr ||
+            a.assignedRiderProfileId ||
+            a.assignedRiderNameAr,
+        );
+      if (isAssigned) assigned++;
     }
     return {
       total,
@@ -984,22 +956,18 @@ export default function HungerAccountsPage() {
     setClosingEvidence("");
     setAdjustmentEvidence("");
     setWalletBusinessDate(getRiyadhTodayIso());
-    const sourceRiderId =
-      acc.sourceRiderProfileId || acc.sourceActualRider?.riderProfileId || "";
-    const defaultFrom =
-      acc.sourceAssignmentFrom?.slice(0, 10) || getRiyadhTodayIso();
-    setAssignRiderProfileId(action === "Deliver" ? sourceRiderId : "");
-    setAssignEffectiveFrom(defaultFrom);
+    const initialDeliverRider =
+      action === "Deliver"
+        ? acc.actualRider?.riderProfileId || ""
+        : "";
+    setAssignRiderProfileId(initialDeliverRider);
+    setAssignEffectiveFrom(getRiyadhTodayIso());
     setAssignCompensationModel(
       (acc.compensationModel as HungerCompensationModel) || "Commission",
     );
     setAssignPaymentModel(acc.paymentModel || "Commission");
-    setAssignReason(
-      action === "Deliver" && sourceRiderId ? "تسليم حساب هنقر" : "",
-    );
-    setAssignBackdatedReason(
-      defaultFrom < getRiyadhTodayIso() ? "تأسيس موثق من الملف" : "",
-    );
+    setAssignReason(action === "Deliver" ? "تسليم حساب هنقر" : "");
+    setAssignBackdatedReason("");
     setReturnEffectiveTo(getRiyadhTodayIso());
     setReturnReason("");
     setReturnDayUsage(null);
@@ -1044,8 +1012,8 @@ export default function HungerAccountsPage() {
     const holderRiderId =
       walletAction === "Deliver"
         ? assignRiderProfileId
-        : selectedAccount.assignedRiderProfileId ||
-          selectedAccount.actualRider?.riderProfileId ||
+        : selectedAccount.actualRider?.riderProfileId ||
+          selectedAccount.assignedRiderProfileId ||
           "";
 
     let previousDayUsages = undefined;
@@ -1334,22 +1302,32 @@ export default function HungerAccountsPage() {
           isText: true,
         },
         {
-          header: "المستخدم الوارد في المصدر",
-          accessor: (a) => a.sourceUserNameAr || a.sourceUserNameEn || "—",
-        },
-        {
-          header: "هوية مستخدم المصدر",
-          accessor: (a) => a.sourceNationalId || "—",
-          isText: true,
-        },
-        {
-          header: "المندوب المكلف فعليًا",
+          header: "حالة التكليف",
           accessor: (a) =>
-            a.assignedRiderNameAr || a.assignedRiderNameEn || "شاغر",
+            a.assignmentStatus === "Assigned" || a.actualRider
+              ? "مكلف (Assigned)"
+              : "غير مكلف (Unassigned)",
+        },
+        {
+          header: "المندوب المكلف",
+          accessor: (a) =>
+            a.actualRider?.nameAr ||
+            a.actualRider?.nameEn ||
+            (a.assignmentStatus === "Assigned"
+              ? a.assignedRiderNameAr || a.assignedRiderNameEn
+              : null) ||
+            "غير مكلف",
         },
         {
           header: "هوية المندوب المكلف",
-          accessor: (a) => a.assignedNationalId || "—",
+          accessor: (a) =>
+            a.actualRider?.iqamaNo || a.assignedNationalId || "—",
+          isText: true,
+        },
+        {
+          header: "جوال المندوب المكلف",
+          accessor: (a) =>
+            a.actualRider?.phoneNumber || a.assignedPhoneNumber || "—",
           isText: true,
         },
         {
@@ -1537,7 +1515,7 @@ export default function HungerAccountsPage() {
 
         <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/50 p-4 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20">
           <div className="flex items-center justify-between text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            <span>طبيعي (نشط)</span>
+            <span>يعمل (نشط تشغيلياً)</span>
             <CheckCircle2 className="h-4 w-4" />
           </div>
           <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
@@ -1547,7 +1525,7 @@ export default function HungerAccountsPage() {
 
         <div className="rounded-2xl border border-blue-200/70 bg-blue-50/50 p-4 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
           <div className="flex items-center justify-between text-xs font-medium text-blue-700 dark:text-blue-300">
-            <span>مكلف لمندوب فعليًا</span>
+            <span>المندوب المكلف</span>
             <Users className="h-4 w-4" />
           </div>
           <p className="mt-2 text-2xl font-bold text-blue-700 dark:text-blue-300">
@@ -1703,22 +1681,9 @@ export default function HungerAccountsPage() {
                 </th>
                 <th className="px-4 py-3.5 whitespace-nowrap">
                   <div className="flex items-center justify-start gap-1.5">
-                    <span>المستخدم الوارد في المصدر</span>
+                    <span>المندوب المكلف</span>
                     <TableHeaderColumnFilter
-                      label="المستخدم الوارد في المصدر"
-                      value={colFilterSource}
-                      onChange={setColFilterSource}
-                      options={sourceColumnFilterOptions}
-                      placeholder="بحث بالمستخدم الوارد بالمصدر..."
-                      align="right"
-                    />
-                  </div>
-                </th>
-                <th className="px-4 py-3.5 whitespace-nowrap">
-                  <div className="flex items-center justify-start gap-1.5">
-                    <span>المستخدم المكلف فعليًا</span>
-                    <TableHeaderColumnFilter
-                      label="المستخدم المكلف فعليًا"
+                      label="المندوب المكلف"
                       value={colFilterRider}
                       onChange={setColFilterRider}
                       options={riderColumnFilterOptions}
@@ -1776,7 +1741,7 @@ export default function HungerAccountsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="py-14 text-center text-sm text-[var(--muted)]"
                   >
                     جارٍ تحميل حسابات منصة هنقرستيشن...
@@ -1785,7 +1750,7 @@ export default function HungerAccountsPage() {
               ) : filteredAccounts.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="py-14 text-center text-sm text-[var(--muted)]"
                   >
                     لا توجد حسابات مطابقة لمعايير البحث الحالية.
@@ -1794,9 +1759,18 @@ export default function HungerAccountsPage() {
               ) : (
                 filteredAccounts.map((acc, idx) => {
                   const disp = getDispositionMeta(acc.disposition);
-                  const isAssigned = Boolean(
-                    acc.assignedRiderProfileId || acc.assignedRiderNameAr,
-                  );
+                  const isAssigned =
+                    acc.assignmentStatus === "Assigned" ||
+                    Boolean(
+                      acc.actualRider?.riderProfileId ||
+                        acc.actualRider?.nameAr,
+                    );
+                  const riderDisplayName =
+                    acc.actualRider?.nameAr ||
+                    acc.actualRider?.nameEn ||
+                    (isAssigned
+                      ? acc.assignedRiderNameAr || acc.assignedRiderNameEn
+                      : null);
                   const externalLabel =
                     acc.externalAccountId ||
                     acc.accountName ||
@@ -1856,7 +1830,7 @@ export default function HungerAccountsPage() {
                             >
                               {acc.monthlyUsageStatus === "Used"
                                 ? "مستخدم هذا الشهر"
-                                : "غير مستخدم هذا الشهر"}
+                                : "غير مثبت استخدامه"}
                             </Badge>
                           )}
                           {acc.latestQualitySegment && (
@@ -1895,82 +1869,58 @@ export default function HungerAccountsPage() {
                         )}
                       </td>
 
-                      {/* 3. Source User (المستخدم الوارد في المصدر) */}
+                      {/* 3. Assigned Rider (المندوب المكلف) */}
                       <td className="px-4 py-3.5">
-                        <div className="font-medium text-[var(--foreground)]">
-                          {acc.sourceUserNameAr ||
-                            acc.sourceUserNameEn ||
-                            "غير محدد بالمصدر"}
-                        </div>
-                        {acc.sourceNationalId && (
-                          <div className="mt-0.5 text-[11px] text-[var(--muted)]">
-                            هوية: {acc.sourceNationalId}
-                          </div>
-                        )}
-                        {acc.sourcePhone && (
-                          <div
-                            className="mt-0.5 text-[11px] text-slate-400"
-                            dir="ltr"
-                          >
-                            {acc.sourcePhone}
-                          </div>
-                        )}
-                        {acc.sourceAssignmentFrom && (
-                          <div className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400">
-                            بالمصدر منذ:{" "}
-                            {acc.sourceAssignmentFrom.slice(0, 10)}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* 4. Actual Assigned User (المستخدم المكلف فعليًا) */}
-                      <td className="px-4 py-3.5">
-                        {isAssigned ? (
+                        {isAssigned && riderDisplayName ? (
                           <div>
                             <div className="font-bold text-blue-700 dark:text-blue-400">
-                              {acc.assignedRiderNameAr ||
-                                acc.assignedRiderNameEn}
+                              {riderDisplayName}
                             </div>
-                            {acc.assignedNationalId && (
+                            {(acc.actualRider?.iqamaNo ||
+                              acc.assignedNationalId) && (
                               <div className="text-[11px] text-[var(--muted)]">
-                                هوية: {acc.assignedNationalId}
+                                هوية:{" "}
+                                {acc.actualRider?.iqamaNo ||
+                                  acc.assignedNationalId}
                               </div>
                             )}
-                            {acc.assignedPhoneNumber && (
+                            {(acc.actualRider?.phoneNumber ||
+                              acc.assignedPhoneNumber) && (
                               <div
                                 className="text-[11px] text-slate-400"
                                 dir="ltr"
                               >
-                                {acc.assignedPhoneNumber}
+                                {acc.actualRider?.phoneNumber ||
+                                  acc.assignedPhoneNumber}
                               </div>
                             )}
                             <div className="mt-1 flex flex-wrap items-center gap-1">
-                              <Badge tone="blue">
-                                {getCompensationModelLabel(
-                                  acc.compensationModel,
-                                  isEn,
-                                )}
-                              </Badge>
-                              {acc.assignmentEffectiveFrom && (
+                              {acc.compensationModel && (
+                                <Badge tone="blue">
+                                  {getCompensationModelLabel(
+                                    acc.compensationModel,
+                                    isEn,
+                                  )}
+                                </Badge>
+                              )}
+                              {(acc.assignmentFrom ||
+                                acc.assignmentEffectiveFrom) && (
                                 <span className="text-[10px] text-slate-400">
-                                  منذ {acc.assignmentEffectiveFrom.slice(0, 10)}
+                                  منذ{" "}
+                                  {(
+                                    acc.assignmentFrom ||
+                                    acc.assignmentEffectiveFrom
+                                  )?.slice(0, 10)}
                                 </span>
                               )}
                             </div>
                           </div>
                         ) : (
-                          <div>
-                            <Badge tone="gray">شاغر (غير مكلف)</Badge>
-                            {acc.sourceUserNameAr && (
-                              <div className="mt-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                                بانتظار مراجعة محفظة للمستخدم بالمصدر
-                              </div>
-                            )}
-                          </div>
+                          <Badge tone="gray">غير مكلف</Badge>
                         )}
                       </td>
 
-                      {/* 5. Operational Disposition */}
+                      {/* 4. Operational Disposition */}
                       <td className="px-4 py-3.5">
                         <Badge tone={disp.badgeTone}>
                           {isEn ? disp.labelEn : disp.labelAr}
@@ -1990,7 +1940,7 @@ export default function HungerAccountsPage() {
                         )}
                       </td>
 
-                      {/* 6. City / Registry / Vehicle / SIM */}
+                      {/* 5. City / Registry / Vehicle / SIM */}
                       <td className="px-4 py-3.5">
                         <div className="space-y-1 text-[11px] text-[var(--muted)]">
                           {acc.operatingCityNameAr && (
@@ -2123,7 +2073,7 @@ export default function HungerAccountsPage() {
                         </div>
                       </td>
 
-                      {/* 7. Actions */}
+                      {/* 6. Actions */}
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-start gap-1.5 flex-nowrap">
                           {canWalletReview && !isAssigned && (

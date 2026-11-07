@@ -93,12 +93,13 @@ export function RiderSwapModal({
   const assignmentContextRef = useRef<AssignmentContextSectionRef | null>(null);
 
   const oldRiderId =
-    account?.assignedRiderProfileId ||
     account?.actualRider?.riderProfileId ||
+    account?.assignedRiderProfileId ||
     "";
   const oldRiderName =
-    account?.assignedRiderNameAr ||
     account?.actualRider?.nameAr ||
+    account?.actualRider?.nameEn ||
+    account?.assignedRiderNameAr ||
     account?.assignedRiderNameEn ||
     "المندوب الحالي";
 

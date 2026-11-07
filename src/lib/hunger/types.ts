@@ -292,14 +292,15 @@ export interface HungerAccountItem {
     | null;
   dispositionReason?: string | null;
   deferredUntil?: string | null;
-  assignmentStatus?: string | null;
+  assignmentStatus?: "Assigned" | "Unassigned" | string | null;
+  reportedAssignmentStatus?: "Assigned" | "Unassigned" | string | null;
 
   // Nested Person Objects returned by GET /api/hunger/accounts
   owner?: HungerPersonSummary | null;
   actualRider?: HungerPersonSummary | null;
   sourceActualRider?: HungerPersonSummary | null;
   reportedCurrentRider?: HungerPersonSummary | null;
-  currentRiderSource?: string | null;
+  currentRiderSource?: "Assignment" | "None" | string | null;
 
   // Normalized Owner convenience fields (صاحب الحساب)
   ownerEmployeeId?: string | null;
@@ -377,8 +378,8 @@ export interface HungerAccountItem {
   contextVerifiedAtUtc?: string | null;
 
   // Usage, Credentials & Quality Snapshot
-  monthlyUsageStatus?: "Used" | "Unused" | "Unknown" | string | null;
-  monthlyUsageSource?: string | null;
+  monthlyUsageStatus?: "Used" | "Unknown" | string | null;
+  monthlyUsageSource?: "ObservedWorkingHours" | "None" | string | null;
   usageMonth?: string | null;
   latestQualitySegment?: string | null;
   latestQualityRank?: number | null;

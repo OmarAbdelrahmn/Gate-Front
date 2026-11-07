@@ -174,8 +174,8 @@ export const HUNGER_DISPOSITIONS: Array<{
 }> = [
   {
     value: "Normal",
-    labelAr: "طبيعي (نشط)",
-    labelEn: "Normal",
+    labelAr: "يعمل (نشط تشغيلياً)",
+    labelEn: "Working (Normal)",
     badgeTone: "green",
   },
   {
@@ -769,7 +769,6 @@ export function normalizeHungerAccountItem(
   const owner = asPerson(raw.owner);
   const actualRider = asPerson(raw.actualRider);
   const sourceActualRider = asPerson(raw.sourceActualRider);
-  const reportedCurrentRider = asPerson(raw.reportedCurrentRider);
   const sim = asSim(raw.sim);
   const simHolder = asPerson(raw.simHolder);
   const simResponsibleEmployee = asPerson(raw.simResponsibleEmployee);
@@ -795,6 +794,43 @@ export function normalizeHungerAccountItem(
     asStr(raw.activeAssignmentRowVersion) ??
     null;
 
+  const rawAssignmentStatus = asStr(raw.assignmentStatus);
+  const assignmentStatus: "Assigned" | "Unassigned" =
+    rawAssignmentStatus === "Assigned" || rawAssignmentStatus === "Unassigned"
+      ? (rawAssignmentStatus as "Assigned" | "Unassigned")
+      : actualRider?.riderProfileId || actualRider?.nameAr || currentAssignmentId
+        ? "Assigned"
+        : "Unassigned";
+
+  const reportedAssignmentStatus: "Assigned" | "Unassigned" =
+    asStr(raw.reportedAssignmentStatus) === "Assigned" ||
+    asStr(raw.reportedAssignmentStatus) === "Unassigned"
+      ? (asStr(raw.reportedAssignmentStatus) as "Assigned" | "Unassigned")
+      : assignmentStatus;
+
+  const reportedCurrentRider =
+    asPerson(raw.reportedCurrentRider) ?? actualRider;
+
+  const currentRiderSource: "Assignment" | "None" =
+    asStr(raw.currentRiderSource) === "Assignment" ||
+    asStr(raw.currentRiderSource) === "None"
+      ? (asStr(raw.currentRiderSource) as "Assignment" | "None")
+      : assignmentStatus === "Assigned" || actualRider
+        ? "Assignment"
+        : "None";
+
+  const rawMonthlyStatus = asStr(raw.monthlyUsageStatus);
+  const monthlyUsageStatus: "Used" | "Unknown" =
+    rawMonthlyStatus === "Used" ? "Used" : "Unknown";
+
+  const rawMonthlySource = asStr(raw.monthlyUsageSource);
+  const monthlyUsageSource: "ObservedWorkingHours" | "None" =
+    rawMonthlySource === "ObservedWorkingHours" || rawMonthlySource === "None"
+      ? (rawMonthlySource as "ObservedWorkingHours" | "None")
+      : monthlyUsageStatus === "Used"
+        ? "ObservedWorkingHours"
+        : "None";
+
   const disposition =
     asStr(raw.disposition) ?? asStr(raw.operationalDisposition) ?? "Unknown";
 
@@ -813,13 +849,14 @@ export function normalizeHungerAccountItem(
     operationalDisposition: asStr(raw.operationalDisposition) ?? disposition,
     dispositionReason:
       asStr(raw.dispositionReason) ?? asStr(raw.statusReason) ?? null,
-    assignmentStatus: asStr(raw.assignmentStatus) ?? null,
+    assignmentStatus,
+    reportedAssignmentStatus,
 
     owner,
     actualRider,
     sourceActualRider,
     reportedCurrentRider,
-    currentRiderSource: asStr(raw.currentRiderSource) ?? null,
+    currentRiderSource,
 
     // Owner flat fields
     ownerEmployeeId: owner?.employeeId ?? asStr(raw.ownerEmployeeId) ?? null,
@@ -932,8 +969,8 @@ export function normalizeHungerAccountItem(
     contextVerifiedAtUtc: asStr(raw.contextVerifiedAtUtc) ?? null,
 
     // Monthly Usage, Quality Snapshot & Password Flag
-    monthlyUsageStatus: asStr(raw.monthlyUsageStatus) ?? null,
-    monthlyUsageSource: asStr(raw.monthlyUsageSource) ?? null,
+    monthlyUsageStatus,
+    monthlyUsageSource,
     usageMonth: asStr(raw.usageMonth) ?? null,
     latestQualitySegment: asStr(raw.latestQualitySegment) ?? null,
     latestQualityRank:
