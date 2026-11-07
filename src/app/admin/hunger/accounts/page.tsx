@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
-  getHungerAccounts,
+  getAllHungerAccounts,
   exportHungerAccounts,
   downloadHungerAccountsTemplate,
   getHungerPlatform,
@@ -102,8 +102,6 @@ import {
 const INITIAL_API_FILTERS: HungerAccountsFilterParams = {
   from: getRiyadhCurrentMonthStartIso(),
   through: getRiyadhTodayIso(),
-  page: 1,
-  pageSize: 50,
 };
 
 export default function HungerAccountsPage() {
@@ -157,7 +155,6 @@ export default function HungerAccountsPage() {
   // Core Data & Server Query Filters
   const [platformId, setPlatformId] = useState("");
   const [accounts, setAccounts] = useState<HungerAccountItem[]>([]);
-  const [totalCount, setTotalCount] = useState<number>(0);
   const [apiFilters, setApiFilters] =
     useState<HungerAccountsFilterParams>(INITIAL_API_FILTERS);
   const [loading, setLoading] = useState(true);
@@ -290,18 +287,15 @@ export default function HungerAccountsPage() {
     }
     setLoading(true);
     try {
-      const paged = await getHungerAccounts(
-        {
-          ...apiFilters,
-          disposition:
-            filterDisposition !== "all"
-              ? filterDisposition
-              : apiFilters.disposition,
-        },
-        { suppressErrorToast: true },
-      );
-      setAccounts(paged.items);
-      setTotalCount(paged.totalCount);
+      const baseApiFilters: HungerAccountsFilterParams = { ...apiFilters };
+      delete baseApiFilters.page;
+      delete baseApiFilters.pageSize;
+      delete baseApiFilters.disposition;
+
+      const all = await getAllHungerAccounts(baseApiFilters, {
+        suppressErrorToast: true,
+      });
+      setAccounts(all);
     } catch (err) {
       toast.error(
         getHungerErrorMessage(err, "تعذر تحميل حسابات منصة هنقرستيشن"),
@@ -309,7 +303,7 @@ export default function HungerAccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canRead, apiFilters, filterDisposition]);
+  }, [canRead, apiFilters]);
 
   const loadLookups = useCallback(async () => {
     const [platRes, citiesRes, empRes, ridersRes, vehiclesRes, simsRes] =
@@ -659,6 +653,16 @@ export default function HungerAccountsPage() {
         return false;
       }
 
+      // Operational Disposition Filter (Quick filter pills or toolbar dropdown)
+      if (filterDisposition !== "all") {
+        const d = (acc.disposition || "Unknown").toLowerCase();
+        if (filterDisposition === "blocked_or_stopped") {
+          if (d !== "blocked" && d !== "administrativestop") return false;
+        } else if (filterDisposition.toLowerCase() !== d) {
+          return false;
+        }
+      }
+
       // 1. Account Column Filter
       if (colFilterAccount.length > 0) {
         const match = colFilterAccount.some((val) => {
@@ -776,6 +780,23 @@ export default function HungerAccountsPage() {
         acc.registeredVehicleSerial,
         acc.actualVehiclePlate,
         acc.sourceVehicleDescription,
+        // Statuses and operational disposition labels (Arabic & English)
+        acc.disposition,
+        getDispositionMeta(acc.disposition).labelAr,
+        getDispositionMeta(acc.disposition).labelEn,
+        // Assignment status
+        acc.assignmentStatus,
+        isAssigned ? "مكلف assigned" : "شاغر غير مكلف unassigned",
+        // Monthly usage status
+        acc.monthlyUsageStatus,
+        acc.monthlyUsageStatus === "Used" ? "مستخدم هذا الشهر used" : "غير مثبت unknown",
+        // Account status
+        acc.status,
+        // Compensation model
+        acc.compensationModel,
+        acc.compensationModel ? getCompensationModelLabel(acc.compensationModel) : null,
+        // Quality segment
+        acc.latestQualitySegment ? `شريحة ${acc.latestQualitySegment}` : null,
       ]
         .filter(Boolean)
         .join(" ")
@@ -785,6 +806,7 @@ export default function HungerAccountsPage() {
   }, [
     accounts,
     search,
+    filterDisposition,
     filterAssignment,
     filterCity,
     colFilterAccount,
@@ -1496,72 +1518,184 @@ export default function HungerAccountsPage() {
           setApiFilters((prev) => ({
             ...prev,
             externalAccountId: extId,
-            page: 1,
           }));
         }}
       />
 
-      {/* Summary KPI Cards */}
+      {/* Summary KPI Cards (Interactive Status Filters across all pages) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        {/* All Accounts */}
+        <button
+          type="button"
+          onClick={() => {
+            setFilterDisposition("all");
+            setFilterAssignment("all");
+          }}
+          className={`group rounded-2xl border bg-[var(--surface)] p-4 text-right shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+            filterDisposition === "all" && filterAssignment === "all"
+              ? "border-amber-500 ring-2 ring-amber-500/30"
+              : "border-[var(--border)]"
+          }`}
+        >
           <div className="flex items-center justify-between text-xs font-medium text-[var(--muted)]">
             <span>إجمالي الحسابات</span>
-            <Server className="h-4 w-4 text-slate-400" />
+            <Server className="h-4 w-4 text-slate-400 group-hover:text-amber-500" />
           </div>
           <p className="mt-2 text-2xl font-bold text-[var(--foreground)]">
             {stats.total}
           </p>
-        </div>
+          <span className="mt-1 block text-[10px] text-[var(--muted)]">
+            {filterDisposition === "all" && filterAssignment === "all"
+              ? "● الكل معروض"
+              : "عرض كافة الحالات"}
+          </span>
+        </button>
 
-        <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/50 p-4 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20">
+        {/* Normal / Working */}
+        <button
+          type="button"
+          onClick={() => {
+            setFilterDisposition((prev) =>
+              prev.toLowerCase() === "normal" ? "all" : "Normal",
+            );
+          }}
+          className={`group rounded-2xl border p-4 text-right shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+            filterDisposition.toLowerCase() === "normal"
+              ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/30 dark:border-emerald-600 dark:bg-emerald-950/40"
+              : "border-emerald-200/70 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20"
+          }`}
+        >
           <div className="flex items-center justify-between text-xs font-medium text-emerald-700 dark:text-emerald-300">
             <span>يعمل (نشط تشغيلياً)</span>
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
             {stats.normal}
           </p>
-        </div>
+          <span className="mt-1 block text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+            {filterDisposition.toLowerCase() === "normal"
+              ? "● الفلتر مفعل (انقر للإلغاء)"
+              : "انقر للتصفية"}
+          </span>
+        </button>
 
-        <div className="rounded-2xl border border-blue-200/70 bg-blue-50/50 p-4 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
+        {/* Assigned */}
+        <button
+          type="button"
+          onClick={() => {
+            setFilterAssignment((prev) =>
+              prev === "assigned" ? "all" : "assigned",
+            );
+          }}
+          className={`group rounded-2xl border p-4 text-right shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+            filterAssignment === "assigned"
+              ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/30 dark:border-blue-600 dark:bg-blue-950/40"
+              : "border-blue-200/70 bg-blue-50/50 dark:border-blue-900/40 dark:bg-blue-950/20"
+          }`}
+        >
           <div className="flex items-center justify-between text-xs font-medium text-blue-700 dark:text-blue-300">
             <span>المندوب المكلف</span>
-            <Users className="h-4 w-4" />
+            <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-blue-700 dark:text-blue-300">
             {stats.assigned}
           </p>
-        </div>
+          <span className="mt-1 block text-[10px] text-blue-600/80 dark:text-blue-400/80">
+            {filterAssignment === "assigned"
+              ? "● الفلتر مفعل (انقر للإلغاء)"
+              : "انقر للتصفية"}
+          </span>
+        </button>
 
-        <div className="rounded-2xl border border-amber-200/70 bg-amber-50/50 p-4 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
+        {/* Problem */}
+        <button
+          type="button"
+          onClick={() => {
+            setFilterDisposition((prev) =>
+              prev.toLowerCase() === "problem" ? "all" : "Problem",
+            );
+          }}
+          className={`group rounded-2xl border p-4 text-right shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+            filterDisposition.toLowerCase() === "problem"
+              ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500/30 dark:border-amber-600 dark:bg-amber-950/40"
+              : "border-amber-200/70 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20"
+          }`}
+        >
           <div className="flex items-center justify-between text-xs font-medium text-amber-700 dark:text-amber-300">
             <span>مشكلة تشغيلية</span>
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-300">
             {stats.problem}
           </p>
-        </div>
+          <span className="mt-1 block text-[10px] text-amber-600/80 dark:text-amber-400/80">
+            {filterDisposition.toLowerCase() === "problem"
+              ? "● الفلتر مفعل (انقر للإلغاء)"
+              : "انقر للتصفية"}
+          </span>
+        </button>
 
-        <div className="rounded-2xl border border-rose-200/70 bg-rose-50/50 p-4 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/20">
+        {/* Blocked or Stopped */}
+        <button
+          type="button"
+          onClick={() => {
+            setFilterDisposition((prev) =>
+              prev === "blocked_or_stopped" ? "all" : "blocked_or_stopped",
+            );
+          }}
+          className={`group rounded-2xl border p-4 text-right shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+            filterDisposition === "blocked_or_stopped" ||
+            filterDisposition.toLowerCase() === "blocked" ||
+            filterDisposition.toLowerCase() === "administrativestop"
+              ? "border-rose-500 bg-rose-50 ring-2 ring-rose-500/30 dark:border-rose-600 dark:bg-rose-950/40"
+              : "border-rose-200/70 bg-rose-50/50 dark:border-rose-900/40 dark:bg-rose-950/20"
+          }`}
+        >
           <div className="flex items-center justify-between text-xs font-medium text-rose-700 dark:text-rose-300">
             <span>إيقاف إداري / محظور</span>
-            <ShieldAlert className="h-4 w-4" />
+            <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-rose-700 dark:text-rose-300">
             {stats.blockedOrStopped}
           </p>
-        </div>
+          <span className="mt-1 block text-[10px] text-rose-600/80 dark:text-rose-400/80">
+            {filterDisposition === "blocked_or_stopped" ||
+            filterDisposition.toLowerCase() === "blocked" ||
+            filterDisposition.toLowerCase() === "administrativestop"
+              ? "● الفلتر مفعل (انقر للإلغاء)"
+              : "انقر للتصفية"}
+          </span>
+        </button>
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--subtle-bg)] p-4 shadow-sm">
+        {/* Deferred Next Month */}
+        <button
+          type="button"
+          onClick={() => {
+            setFilterDisposition((prev) =>
+              prev.toLowerCase() === "deferrednextmonth"
+                ? "all"
+                : "DeferredNextMonth",
+            );
+          }}
+          className={`group rounded-2xl border p-4 text-right shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+            filterDisposition.toLowerCase() === "deferrednextmonth"
+              ? "border-slate-500 bg-slate-100 ring-2 ring-slate-500/30 dark:border-slate-600 dark:bg-slate-800"
+              : "border-[var(--border)] bg-[var(--subtle-bg)]"
+          }`}
+        >
           <div className="flex items-center justify-between text-xs font-medium text-[var(--muted)]">
             <span>مؤجل للشهر القادم</span>
-            <CalendarClock className="h-4 w-4" />
+            <CalendarClock className="h-4 w-4 text-slate-500" />
           </div>
           <p className="mt-2 text-2xl font-bold text-[var(--foreground)]">
             {stats.deferred}
           </p>
-        </div>
+          <span className="mt-1 block text-[10px] text-[var(--muted)]">
+            {filterDisposition.toLowerCase() === "deferrednextmonth"
+              ? "● الفلتر مفعل (انقر للإلغاء)"
+              : "انقر للتصفية"}
+          </span>
+        </button>
       </div>
 
       {/* Server-side Vehicle / SIM / Date Range Filter Panel */}
@@ -1571,6 +1705,15 @@ export default function HungerAccountsPage() {
         onReset={() => {
           setApiFilters(INITIAL_API_FILTERS);
           setFilterDisposition("all");
+          setFilterAssignment("all");
+          setFilterCity("all");
+          setSearch("");
+          setColFilterAccount([]);
+          setColFilterOwner([]);
+          setColFilterRider([]);
+          setColFilterDisposition([]);
+          setColFilterCitySponsor([]);
+          setColFilterVehicleSim([]);
         }}
         employeeOptions={supervisorOptions}
         riderOptions={riderOptions}
@@ -1580,23 +1723,30 @@ export default function HungerAccountsPage() {
       {/* Filters Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
         <div className="flex flex-1 flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[250px] flex-1 sm:max-w-sm">
+          <div className="relative min-w-[260px] flex-1 sm:max-w-md">
             <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث برقم الحساب، المالك، المندوب، الهوية، الجوال..."
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pr-9 pl-3 text-xs text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:bg-[var(--surface)] focus:outline-none"
+              placeholder="بحث شامل: الحساب، المالك، المندوب، الهوية، الجوال، اللوحة، الحالة..."
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pr-9 pl-8 text-xs text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:bg-[var(--surface)] focus:outline-none"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--foreground)] text-sm font-bold"
+                title="مسح البحث"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           <select
             value={filterDisposition}
-            onChange={(e) => {
-              setFilterDisposition(e.target.value);
-              setApiFilters((prev) => ({ ...prev, page: 1 }));
-            }}
+            onChange={(e) => setFilterDisposition(e.target.value)}
             className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] px-3 py-2 text-xs font-medium text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
           >
             <option value="all">جميع الحالات التشغيلية</option>
@@ -1605,6 +1755,7 @@ export default function HungerAccountsPage() {
                 {isEn ? d.labelEn : d.labelAr}
               </option>
             ))}
+            <option value="blocked_or_stopped">إيقاف إداري ومحظور معاً</option>
             <option value="Unknown">غير مصنف (Unknown)</option>
           </select>
 
@@ -1636,6 +1787,37 @@ export default function HungerAccountsPage() {
               ))}
             </select>
           )}
+
+          {(search ||
+            filterDisposition !== "all" ||
+            filterAssignment !== "all" ||
+            filterCity !== "all" ||
+            colFilterAccount.length > 0 ||
+            colFilterOwner.length > 0 ||
+            colFilterRider.length > 0 ||
+            colFilterDisposition.length > 0 ||
+            colFilterCitySponsor.length > 0 ||
+            colFilterVehicleSim.length > 0) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setFilterDisposition("all");
+                setFilterAssignment("all");
+                setFilterCity("all");
+                setColFilterAccount([]);
+                setColFilterOwner([]);
+                setColFilterRider([]);
+                setColFilterDisposition([]);
+                setColFilterCitySponsor([]);
+                setColFilterVehicleSim([]);
+              }}
+              className="text-xs text-[var(--muted)] hover:text-amber-600"
+            >
+              إعادة تعيين الفلاتر
+            </Button>
+          )}
         </div>
 
         <div className="text-xs font-semibold text-[var(--muted)]">
@@ -1643,7 +1825,7 @@ export default function HungerAccountsPage() {
           <span className="font-bold text-[var(--foreground)]">
             {filteredAccounts.length}
           </span>{" "}
-          من أصل {totalCount || accounts.length}
+          من أصل {accounts.length} حساب
         </div>
       </div>
 
@@ -2149,61 +2331,68 @@ export default function HungerAccountsPage() {
           </table>
         </div>
 
-        {/* Pagination Bar */}
+        {/* One-Page Footer Summary */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--subtle-bg)] px-4 py-3 text-xs">
           <div className="flex items-center gap-2 text-[var(--muted)]">
-            <span>الصفحة {apiFilters.page || 1}</span>
+            <span className="inline-flex items-center gap-1.5 font-medium text-[var(--foreground)]">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              عرض كافة الحسابات في صفحة واحدة
+            </span>
             <span>—</span>
-            <span>إجمالي السجلات: {totalCount || accounts.length}</span>
+            <span>
+              إجمالي الحسابات:{" "}
+              <strong className="text-[var(--foreground)]">
+                {accounts.length}
+              </strong>
+            </span>
+            <span>—</span>
+            <span>
+              المعروض حالياً:{" "}
+              <strong className="text-amber-600 dark:text-amber-400">
+                {filteredAccounts.length}
+              </strong>
+            </span>
           </div>
+
           <div className="flex items-center gap-2">
-            <select
-              value={apiFilters.pageSize || 50}
-              onChange={(e) =>
-                setApiFilters((prev) => ({
-                  ...prev,
-                  pageSize: Number(e.target.value) || 50,
-                  page: 1,
-                }))
-              }
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs"
-            >
-              <option value={25}>25 / صفحة</option>
-              <option value={50}>50 / صفحة</option>
-              <option value={100}>100 / صفحة</option>
-              <option value={250}>250 / صفحة</option>
-            </select>
+            {(search ||
+              filterDisposition !== "all" ||
+              filterAssignment !== "all" ||
+              filterCity !== "all" ||
+              colFilterAccount.length > 0 ||
+              colFilterOwner.length > 0 ||
+              colFilterRider.length > 0 ||
+              colFilterDisposition.length > 0 ||
+              colFilterCitySponsor.length > 0 ||
+              colFilterVehicleSim.length > 0) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setFilterDisposition("all");
+                  setFilterAssignment("all");
+                  setFilterCity("all");
+                  setColFilterAccount([]);
+                  setColFilterOwner([]);
+                  setColFilterRider([]);
+                  setColFilterDisposition([]);
+                  setColFilterCitySponsor([]);
+                  setColFilterVehicleSim([]);
+                }}
+                className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                مسح جميع الفلاتر
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"
-              disabled={(apiFilters.page || 1) <= 1 || loading}
-              onClick={() =>
-                setApiFilters((prev) => ({
-                  ...prev,
-                  page: Math.max(1, (prev.page || 1) - 1),
-                }))
-              }
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
             >
-              السابق
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={
-                loading ||
-                accounts.length < (apiFilters.pageSize || 50) ||
-                (totalCount > 0 &&
-                  (apiFilters.page || 1) * (apiFilters.pageSize || 50) >=
-                    totalCount)
-              }
-              onClick={() =>
-                setApiFilters((prev) => ({
-                  ...prev,
-                  page: (prev.page || 1) + 1,
-                }))
-              }
-            >
-              التالي
+              العودة للأعلى ↑
             </Button>
           </div>
         </div>

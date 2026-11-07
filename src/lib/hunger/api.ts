@@ -1115,32 +1115,72 @@ export async function getHungerAccounts(
 
 export async function getAllHungerAccounts(
   dispositionOrParams?: string | HungerAccountsFilterParams,
+  init?: CustomRequestInit,
 ): Promise<HungerAccountItem[]> {
   const baseParams: HungerAccountsFilterParams =
     typeof dispositionOrParams === "string"
       ? { disposition: dispositionOrParams }
-      : dispositionOrParams || {};
+      : { ...(dispositionOrParams || {}) };
 
-  const first = await getHungerAccounts({
-    ...baseParams,
-    page: 1,
-    pageSize: 100,
-  });
+  const first = await getHungerAccounts(
+    {
+      ...baseParams,
+      page: 1,
+      pageSize: 100,
+    },
+    init,
+  );
   let all = [...first.items];
   const totalPages = Math.ceil(first.totalCount / (first.pageSize || 100));
-  for (let p = 2; p <= totalPages && p <= 25; p++) {
-    try {
-      const next = await getHungerAccounts({
-        ...baseParams,
-        page: p,
-        pageSize: 100,
-      });
-      all = all.concat(next.items);
-    } catch {
-      break;
+  if (totalPages <= 1) {
+    return all;
+  }
+
+  // Fetch remaining pages in parallel batches of up to 6 requests
+  const maxPages = Math.min(totalPages, 100);
+  const remainingPages: number[] = [];
+  for (let p = 2; p <= maxPages; p++) {
+    remainingPages.push(p);
+  }
+
+  const batchSize = 6;
+  for (let i = 0; i < remainingPages.length; i += batchSize) {
+    const batch = remainingPages.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map((p) =>
+        getHungerAccounts(
+          {
+            ...baseParams,
+            page: p,
+            pageSize: 100,
+          },
+          init,
+        ),
+      ),
+    );
+    for (const res of results) {
+      if (res.status === "fulfilled" && Array.isArray(res.value?.items)) {
+        all = all.concat(res.value.items);
+      }
     }
   }
-  return all;
+
+  // Deduplicate by unique account identifier
+  const seenIds = new Set<string>();
+  const deduplicated: HungerAccountItem[] = [];
+  for (const item of all) {
+    const key =
+      item.accountId ||
+      item.id ||
+      item.externalAccountId ||
+      `${deduplicated.length}`;
+    if (!seenIds.has(key)) {
+      seenIds.add(key);
+      deduplicated.push(item);
+    }
+  }
+
+  return deduplicated;
 }
 
 export async function downloadHungerAccountsTemplate(): Promise<void> {
