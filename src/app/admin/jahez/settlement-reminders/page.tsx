@@ -121,7 +121,10 @@ export default function JahezSettlementRemindersPage() {
   }, [hasReadPermission]);
 
   useEffect(() => {
-    fetchReminders();
+    const timer = setTimeout(() => {
+      void fetchReminders();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [fetchReminders]);
 
   // Helpers to safely extract normalized fields
@@ -138,7 +141,9 @@ export default function JahezSettlementRemindersPage() {
   };
 
   const getAdministrativeDebt = (item: JahezSettlementReminder): number => {
-    return Number(item.administrativeDebt ?? item.AdministrativeDebt ?? 0) || 0;
+    const raw =
+      Number(item.administrativeDebt ?? item.AdministrativeDebt ?? 0) || 0;
+    return raw === 0 ? 0 : -raw;
   };
 
   const getAnchorDateUtc = (item: JahezSettlementReminder): string => {
@@ -372,10 +377,12 @@ export default function JahezSettlementRemindersPage() {
       const noOrders3Days = getNoOrdersForThreeDays(r);
       const daysWithoutOrders = getDaysWithoutOrders(r);
 
-      totalDebt += debt;
-      if (debt > 0) ridersWithDebt++;
-      if (debt > 500) debtGt500Count++;
-      if (debt > maxDebt) maxDebt = debt;
+      if (debt > 0) {
+        totalDebt += debt;
+        ridersWithDebt++;
+        if (debt > 500) debtGt500Count++;
+        if (debt > maxDebt) maxDebt = debt;
+      }
 
       if (days > maxDays) maxDays = days;
       sumDays += days;
@@ -1493,6 +1500,15 @@ export default function JahezSettlementRemindersPage() {
                             </div>
                             <span className="text-[10px] text-gray-400">
                               رصيد مديونية إدارية حالي
+                            </span>
+                          </div>
+                        ) : debt < 0 ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(debt)}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              رصيد دائن للمندوب (فائض)
                             </span>
                           </div>
                         ) : (

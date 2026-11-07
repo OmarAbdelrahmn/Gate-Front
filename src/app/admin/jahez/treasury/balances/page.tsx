@@ -32,9 +32,10 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/jahez/treasury/TreasuryModal";
 import { toast } from "@/components/ui/Toast";
+import { exportToExcel } from "@/lib/export-excel";
 import {
   Building2, Wallet, Landmark, Fuel, ArrowDownLeft, ArrowUpRight,
-  RefreshCw, Search, ChevronLeft, ChevronRight, Eye, AlertCircle, FileText,
+  RefreshCw, Search, ChevronLeft, ChevronRight, Eye, AlertCircle, FileText, FileSpreadsheet,
 } from "lucide-react";
 
 export default function TreasuryBalancesPage() {
@@ -57,6 +58,7 @@ export default function TreasuryBalancesPage() {
   const [journalLoading, setJournalLoading] = useState(false);
   const [journalError, setJournalError] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Journal Filters
   const today = useMemo(() => getRiyadhTodayDate(), []);
@@ -105,9 +107,10 @@ export default function TreasuryBalancesPage() {
           // Non-blocking
         }
       }
-    } catch (err: any) {
-      setFetchError(err.message || "حدث خطأ أثناء تحميل بيانات الخزائن");
-      toast.error(err.message || "حدث خطأ أثناء تحميل بيانات الخزائن");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "حدث خطأ أثناء تحميل بيانات الخزائن";
+      setFetchError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -131,8 +134,9 @@ export default function TreasuryBalancesPage() {
 
       const res = await getTreasuryJournal(filter);
       setJournalRows(res?.items || []);
-    } catch (err: any) {
-      setJournalError(err.message || "تعذر تحميل حركة الأموال. حاول مرة أخرى.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "تعذر تحميل حركة الأموال. حاول مرة أخرى.";
+      setJournalError(msg);
       setJournalRows([]);
     } finally {
       setJournalLoading(false);
@@ -140,11 +144,17 @@ export default function TreasuryBalancesPage() {
   }, [canReadTreasury, fromDate, toDate, firstOfMonth, today, page, pageSize, selectedSponsorId, selectedAccountId, selectedPurpose]);
 
   useEffect(() => {
-    loadCoreData();
+    const timer = setTimeout(() => {
+      void loadCoreData();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadCoreData]);
 
   useEffect(() => {
-    loadJournal();
+    const timer = setTimeout(() => {
+      void loadJournal();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadJournal]);
 
   // Sponsors Map for Quick Name Lookup
@@ -239,6 +249,141 @@ export default function TreasuryBalancesPage() {
       );
     });
   }, [journalRows, searchQuery]);
+
+  // Export Treasury Journal to Excel
+  const handleExportJournal = async () => {
+    if (filteredJournalRows.length === 0 && journalRows.length === 0) {
+      toast.warning("لا توجد حركات أموال لتصديرها");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      let rowsToExport: TreasuryJournalRow[] = [];
+
+      // If user filtered by search query in the current page, export those rows
+      if (searchQuery.trim()) {
+        rowsToExport = filteredJournalRows;
+      } else {
+        // Fetch all matching rows across pages for the selected date/filter
+        try {
+          const filter: TreasuryFilter = {
+            fromDate: fromDate || firstOfMonth,
+            toDate: toDate || today,
+            pageSize: 100,
+          };
+          if (selectedSponsorId) filter.sponsorId = selectedSponsorId;
+          if (selectedAccountId) filter.subAccountId = selectedAccountId;
+          if (selectedPurpose) filter.purpose = Number(selectedPurpose);
+
+          let p = 1;
+          const allItems: TreasuryJournalRow[] = [];
+          while (p <= 50) {
+            const res = await getTreasuryJournal({ ...filter, page: p });
+            const items = res?.items || [];
+            if (items.length === 0) break;
+            allItems.push(...items);
+            if (items.length < 100) break;
+            const total = res?.totalCount;
+            if (typeof total === "number" && allItems.length >= total) break;
+            p++;
+          }
+          rowsToExport = allItems.length > 0 ? allItems : filteredJournalRows;
+        } catch {
+          rowsToExport = filteredJournalRows;
+        }
+      }
+
+      if (rowsToExport.length === 0) {
+        toast.warning("لا توجد حركات أموال لتصديرها");
+        return;
+      }
+
+      const filename = `حركة_أموال_الخزينة_${fromDate || "all"}_${toDate || "all"}`;
+
+      await exportToExcel({
+        filename,
+        sheetName: "حركة الأموال",
+        data: rowsToExport,
+        columns: [
+          {
+            header: "التاريخ والوقت (الرياض)",
+            accessor: (r) => formatRiyadhDateTime(r.posting?.occurredAtUtc),
+          },
+          {
+            header: "اسم الحساب",
+            accessor: (r) => r.accountNameAr || "—",
+          },
+          {
+            header: "كود الحساب",
+            accessor: (r) => r.accountCode || "—",
+            isText: true,
+          },
+          {
+            header: "الكفيل / الشركة",
+            accessor: (r) => r.sponsorNameAr || "—",
+          },
+          {
+            header: "نوع الحركة",
+            accessor: (r) => getTreasuryEntryKindLabel(r.posting?.kind),
+          },
+          {
+            header: "الاتجاه",
+            accessor: (r) => ((r.posting?.amount ?? 0) > 0 ? "وارد" : "صادر"),
+          },
+          {
+            header: "المبلغ (ر.س)",
+            accessor: (r) => r.posting?.amount ?? 0,
+          },
+          {
+            header: "المبلغ المنسق",
+            accessor: (r) => formatSAR(r.posting?.amount ?? 0),
+          },
+          {
+            header: "المرجع",
+            accessor: (r) => r.posting?.reference || "—",
+            isText: true,
+          },
+          {
+            header: "المندوب",
+            accessor: (r) => displayPersonName(r.driverNameAr, "driver"),
+          },
+          {
+            header: "هوية المندوب",
+            accessor: (r) => r.iqamaNo || "—",
+            isText: true,
+          },
+          {
+            header: "حساب المنصة",
+            accessor: (r) => r.platformAccountId || "—",
+            isText: true,
+          },
+          {
+            header: "منفذ الحركة",
+            accessor: (r) => displayPersonName(r.posting?.actorNameAr, "user"),
+          },
+          {
+            header: "حالة التسوية",
+            accessor: (r) => (r.isReconciled ? "مسوّى" : "غير مسوّى"),
+          },
+          {
+            header: "السبب / البيان",
+            accessor: (r) => r.posting?.reason || "—",
+          },
+        ],
+      });
+
+      toast.success(`تم تصدير ${rowsToExport.length} حركة أموال إلى إكسل بنجاح`);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "تعذر تصدير حركة الأموال إلى إكسل";
+      toast.error(msg);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -370,8 +515,28 @@ export default function TreasuryBalancesPage() {
             <Button
               variant="secondary"
               size="sm"
+              onClick={() => void handleExportJournal()}
+              disabled={
+                isExporting ||
+                journalLoading ||
+                (journalRows.length === 0 && filteredJournalRows.length === 0)
+              }
+              className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+              title="تصدير حركة الأموال إلى ملف إكسل"
+            >
+              <FileSpreadsheet
+                className={`h-4 w-4 ${
+                  isExporting ? "animate-pulse text-emerald-600" : "text-emerald-600"
+                }`}
+              />
+              <span>{isExporting ? "جارٍ التصدير..." : "تصدير Excel"}</span>
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={loadJournal}
-              disabled={journalLoading}
+              disabled={journalLoading || isExporting}
               className="gap-2"
             >
               <RefreshCw className={`h-4 w-4 ${journalLoading ? "animate-spin" : ""}`} />
