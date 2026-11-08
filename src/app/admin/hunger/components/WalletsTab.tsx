@@ -15,6 +15,7 @@ import {
   getRemittanceStatusMeta,
   HUNGER_WALLET_RECEIPT_STATES,
   getHungerErrorMessage,
+  resolveHungerEvidenceUrl,
   type HungerAccountsFilterParams,
   type HungerWalletHistoryEventItem,
   type HungerWalletListItem,
@@ -26,6 +27,7 @@ import {
   History,
   Info,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 
 interface SelectOption {
@@ -634,7 +636,25 @@ export function WalletsTab({
                             </div>
                           </td>
                           <td className="px-3 py-2 font-mono text-[11px]">
-                            {ev.evidenceReference || "غير معروف"}
+                            {(() => {
+                              const imgUrl = resolveHungerEvidenceUrl(
+                                ev.evidenceReference,
+                              );
+                              if (imgUrl) {
+                                return (
+                                  <a
+                                    href={imgUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 font-sans font-bold text-blue-600 hover:underline dark:text-blue-400"
+                                  >
+                                    <span>صورة الإثبات</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                );
+                              }
+                              return ev.evidenceReference || "غير معروف";
+                            })()}
                           </td>
                         </tr>
                       );
@@ -803,7 +823,24 @@ export function WalletsTab({
                         <td className="px-3 py-2 text-[11px]">
                           <div>{obs.riderNameAr || "غير معروف"}</div>
                           <div className="font-mono text-[var(--muted-foreground)]">
-                            {obs.evidence || obs.walletEvidence || "غير معروف"}
+                            {(() => {
+                              const ref = obs.evidence || obs.walletEvidence;
+                              const imgUrl = resolveHungerEvidenceUrl(ref);
+                              if (imgUrl) {
+                                return (
+                                  <a
+                                    href={imgUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 font-sans font-bold text-blue-600 hover:underline dark:text-blue-400"
+                                  >
+                                    <span>صورة الإثبات</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                );
+                              }
+                              return ref || "غير معروف";
+                            })()}
                           </div>
                         </td>
                       </tr>

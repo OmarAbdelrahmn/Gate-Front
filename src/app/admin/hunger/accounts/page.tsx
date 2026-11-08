@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { translate } from "@/lib/i18n";
 import {
@@ -13,6 +14,8 @@ import {
   updateHungerAccountDisposition,
   createHungerWalletReview,
   confirmHungerWalletReview,
+  checkAccountWalletPeriodStatus,
+  parseRiderAccountLimitError,
   getPlatformAccountBusinessContext,
   updatePlatformAccountBusiness,
   revealPlatformAccountCredentials,
@@ -72,6 +75,8 @@ import {
 } from "@/components/shared/AssignmentContextSection";
 import { SharedAccountDayUsageModal } from "@/components/shared/SharedAccountDayUsageModal";
 import type { PlatformAccountDayUsageInput } from "@/lib/platforms/day-usage-types";
+import { getRiderPlatformHistory } from "@/lib/platforms/api";
+import type { PlatformAssignmentLimit } from "@/lib/platforms/capacity";
 import {
   Flame,
   Search,
@@ -91,7 +96,10 @@ import {
   Copy,
   Check,
   CheckCircle2,
+  AlertCircle,
   AlertTriangle,
+  Loader2,
+  Trash2,
   ShieldAlert,
   CalendarClock,
   Wallet,
@@ -103,6 +111,56 @@ const INITIAL_API_FILTERS: HungerAccountsFilterParams = {
   from: getRiyadhCurrentMonthStartIso(),
   through: getRiyadhTodayIso(),
 };
+
+const MAX_WALLET_FILE_SIZE = 5 * 1024 * 1024; // 5 MiB (5,242,880 bytes)
+const ALLOWED_WALLET_FILE_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/bmp",
+  "image/x-ms-bmp",
+]);
+const ALLOWED_WALLET_FILE_EXTS = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".dib",
+]);
+
+function validateWalletEvidenceFile(file: File): string | null {
+  if (file.size === 0) {
+    return "الملف المختار فارغ (0 بايت). يرجى اختيار ملف صورة صالح.";
+  }
+  if (file.size > MAX_WALLET_FILE_SIZE) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+    return `حجم الملف (${sizeMb} ميجابايت) يتجاوز الحد الأقصى المسموح به (5 ميجابايت).`;
+  }
+
+  const name = file.name.toLowerCase();
+  const extMatch = name.match(/\.[a-z0-9]+$/);
+  const ext = extMatch ? extMatch[0] : "";
+
+  if (ext === ".svg" || file.type === "image/svg+xml") {
+    return "ملفات SVG غير مدعومة لأسباب أمنية. يرجى اختيار صورة بصيغة JPEG أو PNG أو WebP أو GIF أو BMP.";
+  }
+  if (ext === ".pdf" || file.type === "application/pdf") {
+    return "ملفات PDF غير مدعومة. يرجى اختيار صورة شاشة أو صورة إثبات.";
+  }
+
+  const isAllowedExt = ALLOWED_WALLET_FILE_EXTS.has(ext);
+  const isAllowedMime = ALLOWED_WALLET_FILE_TYPES.has(file.type.toLowerCase());
+
+  if (!isAllowedExt && !isAllowedMime) {
+    return "نوع الملف غير مدعوم. الصيغ المدعومة هي: JPEG (.jpg, .jpeg), PNG, WebP, GIF, BMP (.bmp, .dib).";
+  }
+
+  return null;
+}
 
 export default function HungerAccountsPage() {
   const { can, canAny, authorization, user, locale } = useAuth();
@@ -212,11 +270,56 @@ export default function HungerAccountsPage() {
   const [walletClosingBalance, setWalletClosingBalance] = useState("");
   const [walletProvenAdjustments, setWalletProvenAdjustments] =
     useState("0.00");
-  const [walletEvidence, setWalletEvidence] = useState("");
+  const [walletEvidenceFile, setWalletEvidenceFile] = useState<File | null>(null);
+  const [walletEvidencePreview, setWalletEvidencePreview] = useState<string | null>(null);
+  const [walletEvidenceError, setWalletEvidenceError] = useState<string | null>(null);
+  const walletFileInputRef = useRef<HTMLInputElement | null>(null);
   const [closingEvidence, setClosingEvidence] = useState("");
   const [adjustmentEvidence, setAdjustmentEvidence] = useState("");
   const [walletBusinessDate, setWalletBusinessDate] =
     useState(getRiyadhTodayIso());
+
+  useEffect(() => {
+    return () => {
+      if (walletEvidencePreview) {
+        URL.revokeObjectURL(walletEvidencePreview);
+      }
+    };
+  }, [walletEvidencePreview]);
+
+  const handleWalletFileSelect = (file: File | null) => {
+    if (!file) {
+      handleWalletFileRemove();
+      return;
+    }
+    const error = validateWalletEvidenceFile(file);
+    if (error) {
+      setWalletEvidenceError(error);
+      toast.error(error);
+      if (walletFileInputRef.current) walletFileInputRef.current.value = "";
+      return;
+    }
+    setWalletEvidenceError(null);
+    if (walletEvidencePreview) {
+      URL.revokeObjectURL(walletEvidencePreview);
+    }
+    setWalletEvidenceFile(file);
+    setWalletEvidencePreview(URL.createObjectURL(file));
+    setWalletReviewResult(null);
+  };
+
+  const handleWalletFileRemove = () => {
+    if (walletEvidencePreview) {
+      URL.revokeObjectURL(walletEvidencePreview);
+    }
+    setWalletEvidenceFile(null);
+    setWalletEvidencePreview(null);
+    setWalletEvidenceError(null);
+    if (walletFileInputRef.current) {
+      walletFileInputRef.current.value = "";
+    }
+    setWalletReviewResult(null);
+  };
 
   // Deliver fields
   const [assignRiderProfileId, setAssignRiderProfileId] = useState("");
@@ -240,6 +343,28 @@ export default function HungerAccountsPage() {
     useState<HungerWalletReviewResponse | null>(null);
   const [walletStaleError, setWalletStaleError] = useState<string | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
+
+  // Wallet Period History State (for distinguishing new accounts without history vs prior activity)
+  const [walletHistoryCheck, setWalletHistoryCheck] = useState<{
+    loading: boolean;
+    hasNoHistory: boolean;
+    missingContract: boolean;
+    reason: string;
+  }>({
+    loading: false,
+    hasNoHistory: false,
+    missingContract: false,
+    reason: "",
+  });
+
+  // Rider Limit & Eligibility Errors (attached to the rider field on 409 or pre-check)
+  const [riderLimitError, setRiderLimitError] = useState<string | null>(null);
+  const [riderLimitDetails, setRiderLimitDetails] =
+    useState<PlatformAssignmentLimit | null>(null);
+  const [riderPreCheckWarning, setRiderPreCheckWarning] = useState<
+    string | null
+  >(null);
+  const [riderPreCheckLoading, setRiderPreCheckLoading] = useState(false);
 
   // 3b. Rider Swap Modal State
   const [swapModalAccount, setSwapModalAccount] =
@@ -858,19 +983,32 @@ export default function HungerAccountsPage() {
     };
   }, [accounts]);
 
-  // Live calculation for Wallet Review (null when closingBalance is omitted)
+  // Live calculation for Wallet Review (null when closingBalance is omitted, unless confirmed no previous history)
   const computedCurrentPeriodBalance = useMemo<number | null>(() => {
-    if (String(walletClosingBalance).trim() === "") {
+    const rawClosing = String(walletClosingBalance).trim();
+    if (rawClosing === "") {
+      // Authoritative account data confirms there is no previous wallet period: closing is 0, adjustments is 0
+      if (walletAction === "Deliver" && walletHistoryCheck.hasNoHistory) {
+        const mobile =
+          parseFloat(String(walletMobileBalance).replace(/,/g, "")) || 0;
+        return Number(mobile.toFixed(2));
+      }
       return null;
     }
     const mobile =
       parseFloat(String(walletMobileBalance).replace(/,/g, "")) || 0;
     const closing =
-      parseFloat(String(walletClosingBalance).replace(/,/g, "")) || 0;
+      parseFloat(rawClosing.replace(/,/g, "")) || 0;
     const adj =
       parseFloat(String(walletProvenAdjustments).replace(/,/g, "")) || 0;
     return Number((mobile - (closing + adj)).toFixed(2));
-  }, [walletMobileBalance, walletClosingBalance, walletProvenAdjustments]);
+  }, [
+    walletMobileBalance,
+    walletClosingBalance,
+    walletProvenAdjustments,
+    walletAction,
+    walletHistoryCheck.hasNoHistory,
+  ]);
 
   const copyText = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -963,6 +1101,9 @@ export default function HungerAccountsPage() {
     setWalletAction(action);
     setWalletReviewResult(null);
     setWalletStaleError(null);
+    setRiderLimitError(null);
+    setRiderLimitDetails(null);
+    setRiderPreCheckWarning(null);
     setWalletMobileBalance(
       acc.lastWalletBalance !== undefined && acc.lastWalletBalance !== null
         ? String(acc.lastWalletBalance)
@@ -974,15 +1115,27 @@ export default function HungerAccountsPage() {
         : "",
     );
     setWalletProvenAdjustments("0.00");
-    setWalletEvidence("");
+    if (walletEvidencePreview) {
+      URL.revokeObjectURL(walletEvidencePreview);
+    }
+    setWalletEvidenceFile(null);
+    setWalletEvidencePreview(null);
+    setWalletEvidenceError(null);
+    if (walletFileInputRef.current) {
+      walletFileInputRef.current.value = "";
+    }
     setClosingEvidence("");
     setAdjustmentEvidence("");
     setWalletBusinessDate(getRiyadhTodayIso());
+    setRiderLimitError(null);
+    setRiderLimitDetails(null);
+    setRiderPreCheckWarning(null);
     const initialDeliverRider =
       action === "Deliver"
         ? acc.actualRider?.riderProfileId || ""
         : "";
     setAssignRiderProfileId(initialDeliverRider);
+    setRiderPreCheckLoading(action === "Deliver" && Boolean(initialDeliverRider));
     setAssignEffectiveFrom(getRiyadhTodayIso());
     setAssignCompensationModel(
       (acc.compensationModel as HungerCompensationModel) || "Commission",
@@ -994,17 +1147,95 @@ export default function HungerAccountsPage() {
     setReturnReason("");
     setReturnDayUsage(null);
     setWalletModalOpen(true);
+
+    const accId = acc.accountId || acc.id || "";
+    if (action === "Deliver") {
+      setWalletHistoryCheck({
+        loading: true,
+        hasNoHistory: false,
+        missingContract: false,
+        reason: "",
+      });
+      void checkAccountWalletPeriodStatus(accId, acc).then((res) => {
+        setWalletHistoryCheck({
+          loading: false,
+          hasNoHistory: res.hasNoHistory,
+          missingContract: res.missingContract,
+          reason: res.reason,
+        });
+      });
+    } else {
+      setWalletHistoryCheck({
+        loading: false,
+        hasNoHistory: false,
+        missingContract: false,
+        reason: "",
+      });
+    }
   };
+
+  // Pre-review eligibility check for Deliver
+  useEffect(() => {
+    if (
+      !walletModalOpen ||
+      walletAction !== "Deliver" ||
+      !assignRiderProfileId
+    ) {
+      return;
+    }
+
+    let isMounted = true;
+
+    getRiderPlatformHistory(assignRiderProfileId)
+      .then((res) => {
+        if (!isMounted) return;
+        const openAssignments = (res?.assignments || []).filter(
+          (a) => a.effectiveTo === null,
+        );
+        const activeHunger = openAssignments.filter(
+          (a) =>
+            a.platformCode?.toUpperCase().includes("HUNGER") ||
+            a.platformId === platformId,
+        );
+        if (activeHunger.length >= 1) {
+          const accNumbers = activeHunger
+            .map((a) => a.externalAccountId || a.accountCode || a.accountId)
+            .filter(Boolean)
+            .join("، ");
+          setRiderPreCheckWarning(
+            `تنبيه مسبق: المندوب لديه حاليًا حساب هنقرستيشن نشط${accNumbers ? ` رقم ${accNumbers}` : ""}. الحد الأقصى المسموح به هو حساب واحد فقط.`,
+          );
+        } else if (openAssignments.length > 0) {
+          const otherNames = openAssignments
+            .map(
+              (a) =>
+                `${a.platformNameAr || a.platformCode || "منصة"}: ${a.externalAccountId || a.accountId}`,
+            )
+            .join("، ");
+          setRiderPreCheckWarning(
+            `تنبيه مسبق: المندوب لديه تعيينات نشطة في منصات أخرى (${otherNames}). يرجى التحقق من أهليته وسعة حسابه.`,
+          );
+        } else {
+          setRiderPreCheckWarning(null);
+        }
+      })
+      .catch(() => {
+        // Silently catch pre-check network errors
+      })
+      .finally(() => {
+        if (isMounted) setRiderPreCheckLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [walletModalOpen, walletAction, assignRiderProfileId, platformId]);
 
   const handleCreateWalletReview = async () => {
     if (!selectedAccount) return;
     const accId = selectedAccount.accountId || selectedAccount.id || "";
     if (!walletSupervisorId) {
       toast.warning("يرجى اختيار المشرف المسؤول عن المراجعة المالية");
-      return;
-    }
-    if (!walletEvidence.trim()) {
-      toast.warning("يرجى إدخال مرجع إثبات رصيد المحفظة (صورة شاشة / سند)");
       return;
     }
     const todayIso = getRiyadhTodayIso();
@@ -1047,13 +1278,62 @@ export default function HungerAccountsPage() {
       previousDayUsages = assignmentContextRef.current.getPreviousDayUsages();
     }
 
-    const parsedClosing =
-      String(walletClosingBalance).trim() === ""
-        ? null
-        : parseFloat(String(walletClosingBalance).replace(/,/g, "")) || 0;
+    const hasRawClosing = String(walletClosingBalance).trim() !== "";
+    let isNoHistory = false;
+    let isMissingContract = false;
+
+    if (!hasRawClosing && walletAction === "Deliver") {
+      let currentCheck = walletHistoryCheck;
+      if (currentCheck.loading) {
+        setWalletBusy(true);
+        const resolved = await checkAccountWalletPeriodStatus(
+          accId,
+          selectedAccount,
+        );
+        currentCheck = {
+          loading: false,
+          hasNoHistory: resolved.hasNoHistory,
+          missingContract: resolved.missingContract,
+          reason: resolved.reason,
+        };
+        setWalletHistoryCheck(currentCheck);
+      }
+      isNoHistory = currentCheck.hasNoHistory;
+      isMissingContract = currentCheck.missingContract;
+    }
+
+    let payloadClosingBalance: number | null;
+    let payloadClosingEvidence: string | null;
+    let payloadProvenAdjustments: number;
+    let payloadAdjustmentEvidence: string | null;
+
+    if (hasRawClosing) {
+      payloadClosingBalance =
+        parseFloat(String(walletClosingBalance).replace(/,/g, "")) || 0;
+      payloadClosingEvidence = closingEvidence.trim() || null;
+      payloadProvenAdjustments =
+        parseFloat(String(walletProvenAdjustments).replace(/,/g, "")) || 0;
+      payloadAdjustmentEvidence = adjustmentEvidence.trim() || null;
+    } else if (isNoHistory) {
+      // Authoritative account data confirms there is no previous wallet period:
+      // Send closingBalance: 0, closingEvidence: null, provenAdjustments: 0, adjustmentEvidence: null
+      payloadClosingBalance = 0;
+      payloadClosingEvidence = null;
+      payloadProvenAdjustments = 0;
+      payloadAdjustmentEvidence = null;
+    } else {
+      // Accounts with prior activity and unknown closing balance, or missing contract: preserve null
+      payloadClosingBalance = null;
+      payloadClosingEvidence = closingEvidence.trim() || null;
+      payloadProvenAdjustments =
+        parseFloat(String(walletProvenAdjustments).replace(/,/g, "")) || 0;
+      payloadAdjustmentEvidence = adjustmentEvidence.trim() || null;
+    }
 
     setWalletBusy(true);
     setWalletStaleError(null);
+    setRiderLimitError(null);
+    setRiderLimitDetails(null);
     try {
       const review = await createHungerWalletReview(
         accId,
@@ -1063,12 +1343,11 @@ export default function HungerAccountsPage() {
           supervisorEmployeeId: walletSupervisorId,
           businessDate: walletBusinessDate,
           mobileBalance: String(walletMobileBalance).trim(),
-          closingBalance: parsedClosing,
-          provenAdjustments:
-            parseFloat(String(walletProvenAdjustments).replace(/,/g, "")) || 0,
-          walletEvidence: walletEvidence.trim(),
-          closingEvidence: closingEvidence.trim() || null,
-          adjustmentEvidence: adjustmentEvidence.trim() || null,
+          closingBalance: payloadClosingBalance,
+          provenAdjustments: payloadProvenAdjustments,
+          walletEvidence: walletEvidenceFile || null,
+          closingEvidence: payloadClosingEvidence,
+          adjustmentEvidence: payloadAdjustmentEvidence,
           assignment:
             walletAction === "Deliver"
               ? {
@@ -1103,13 +1382,41 @@ export default function HungerAccountsPage() {
         { suppressErrorToast: true },
       );
       setWalletReviewResult(review);
-      toast.success(
-        review.canConfirm === false || review.closingBalance === null
-          ? "تم حفظ مراجعة المحفظة (رصيد الفترة غير معروف لعدم توفر رصيد الإقفال)"
-          : "تمت مراجعة المحفظة بنجاح (صالحة لمدة 20 دقيقة) — يمكنك الآن التأكيد النهائي",
-      );
+      if (review.canConfirm === false || review.closingBalance === null) {
+        if (isMissingContract) {
+          toast.warning(
+            "تم حفظ مراجعة المحفظة — تعذر التحقق من الفترات السابقة (عقد الـ API غير مكتمل)؛ يجب تسجيل رصيد الإقفال السابق مع دليله للاعتماد",
+          );
+        } else {
+          toast.warning(
+            "تم حفظ مراجعة المحفظة — الحساب له نشاط سابق؛ يجب تسجيل رصيد الإقفال السابق مع دليله للاعتماد النهائي",
+          );
+        }
+      } else {
+        toast.success(
+          "تمت مراجعة المحفظة بنجاح (صالحة لمدة 20 دقيقة) — يمكنك الآن التأكيد النهائي",
+        );
+      }
     } catch (err) {
-      toast.error(getHungerErrorMessage(err, "تعذر إنشاء مراجعة المحفظة"));
+      const parsedLimit = parseRiderAccountLimitError(err);
+      if (parsedLimit) {
+        setRiderLimitError(parsedLimit.message);
+        setRiderLimitDetails(parsedLimit.limit || null);
+        toast.error(parsedLimit.message);
+      } else {
+        const details =
+          (err as { details?: Record<string, unknown> })?.details ||
+          (err as Record<string, unknown>);
+        const errorCode = String(
+          details?.errorCode || (err as { code?: string })?.code || "",
+        );
+        if (errorCode === "files.invalid_file") {
+          setWalletEvidenceError(
+            "صورة الإثبات غير صالحة أو غير مدعومة. يرجى اختيار صورة بصيغة (JPEG, PNG, WebP, GIF, BMP) لا يتجاوز حجمها 5 ميجابايت.",
+          );
+        }
+        toast.error(getHungerErrorMessage(err, "تعذر إنشاء مراجعة المحفظة"));
+      }
     } finally {
       setWalletBusy(false);
     }
@@ -1125,12 +1432,24 @@ export default function HungerAccountsPage() {
       });
       setWalletModalOpen(false);
       setWalletReviewResult(null);
+      setRiderLimitError(null);
+      setRiderLimitDetails(null);
+      toast.success("تم تأكيد مراجعة المحفظة واعتماد العملية بنجاح");
       await loadAccounts();
     } catch (err) {
-      if (isWalletReviewExpiredOrSuperseded(err)) {
+      const parsedLimit = parseRiderAccountLimitError(err);
+      if (parsedLimit) {
+        // Structured 409 limit error: attach to rider field, keep modal open, preserve form data
+        setRiderLimitError(parsedLimit.message);
+        setRiderLimitDetails(parsedLimit.limit || null);
+        // Force fresh review after resolving blocker
+        setWalletReviewResult(null);
+        toast.error(parsedLimit.message);
+      } else if (isWalletReviewExpiredOrSuperseded(err)) {
         const staleMsg =
           "انتهت صلاحية المراجعة أو استُبدلت بمراجعة أحدث — أنشئ مراجعة جديدة";
         setWalletStaleError(staleMsg);
+        setWalletReviewResult(null);
         toast.error(staleMsg);
       } else {
         toast.error(getHungerErrorMessage(err, "تعذر تأكيد مراجعة المحفظة"));
@@ -2498,6 +2817,73 @@ export default function HungerAccountsPage() {
             </p>
           </div>
 
+          {/* Deliver: Wallet Period History Check Banner */}
+          {walletAction === "Deliver" && (
+            <>
+              {walletHistoryCheck.loading && (
+                <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/60 p-2.5 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
+                  <span>
+                    جارٍ التحقق من السجل المالي وسوابق المحفظة للحساب...
+                  </span>
+                </div>
+              )}
+              {!walletHistoryCheck.loading &&
+                walletHistoryCheck.hasNoHistory &&
+                !walletClosingBalance.trim() && (
+                  <div className="flex items-start gap-2 rounded-xl border border-emerald-300 bg-emerald-50/80 p-3 text-xs text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <div>
+                      <p className="font-bold">
+                        حساب جديد دون فترات محفظة سابقة
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed">
+                        أكدت البيانات المعتمدة عدم وجود فترات محفظة سابقة. سيتم
+                        إرسال رصيد إقفال بقيمة 0 والتسويات بقيمة 0 تلقائيًا بدون
+                        أدلة لاعتماد التسليم مباشرة.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              {!walletHistoryCheck.loading &&
+                !walletHistoryCheck.hasNoHistory &&
+                !walletHistoryCheck.missingContract &&
+                !walletClosingBalance.trim() && (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="font-bold">
+                        الحساب لديه نشاط أو فترات سابقة — يلزم تسجيل رصيد الإقفال
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed">
+                        {walletHistoryCheck.reason ||
+                          "الحساب لديه سجل محفظة سابق؛ لا يمكن اعتماد التسليم برصيد إقفال غير معروف. يرجى إدخال رصيد الإقفال السابق مع إثباته للاعتماد."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              {!walletHistoryCheck.loading &&
+                walletHistoryCheck.missingContract &&
+                !walletClosingBalance.trim() && (
+                  <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50/80 p-3 text-xs text-rose-950 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <div>
+                      <p className="font-bold">
+                        عقد الـ API لا يتيح التحقق القاطع من سجل المحفظة (Missing
+                        Backend Contract)
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed">
+                        تعذر تأكيد ما إذا كان الحساب جديدًا كليًا أو لديه فترات
+                        سابقة. تم الإبقاء على رصيد الإقفال كـ null منعًا للخطأ
+                        المالي؛ يجب تسجيل رصيد الإقفال السابق يدويًا مع دليله
+                        للاعتماد.
+                      </p>
+                    </div>
+                  </div>
+                )}
+            </>
+          )}
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
@@ -2530,8 +2916,15 @@ export default function HungerAccountsPage() {
               type="number"
               step="0.01"
               value={walletClosingBalance}
-              onChange={(e) => setWalletClosingBalance(e.target.value)}
-              placeholder="اتركه فارغًا إن لم يتوفر"
+              onChange={(e) => {
+                setWalletClosingBalance(e.target.value);
+                setWalletReviewResult(null);
+              }}
+              placeholder={
+                walletAction === "Deliver" && walletHistoryCheck.hasNoHistory
+                  ? "0.00 (حساب جديد بدون فترات سابقة)"
+                  : "اتركه فارغًا إن لم يتوفر"
+              }
             />
             <Input
               label="التسويات المثبتة"
@@ -2574,25 +2967,123 @@ export default function HungerAccountsPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Input
-              label="مرجع إثبات المحفظة *"
-              value={walletEvidence}
-              onChange={(e) => setWalletEvidence(e.target.value)}
-              placeholder="رقم السند / رابط صورة الشاشة"
-            />
-            <Input
-              label="مرجع إثبات الإقفال (اختياري)"
-              value={closingEvidence}
-              onChange={(e) => setClosingEvidence(e.target.value)}
-              placeholder="مرجع الإقفال"
-            />
-            <Input
-              label="مرجع إثبات التسويات (اختياري)"
-              value={adjustmentEvidence}
-              onChange={(e) => setAdjustmentEvidence(e.target.value)}
-              placeholder="مرجع التسوية"
-            />
+          {/* Wallet Evidence Image & Optional Reference Evidences */}
+          <div className="space-y-3 rounded-xl border border-[var(--border)] p-3.5">
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-[var(--foreground)]">
+                  صورة إثبات رصيد المحفظة (اختياري)
+                </label>
+                <span className="text-[11px] text-[var(--muted)]">
+                  JPG, PNG, WebP, GIF, BMP — الحد الأقصى 5 ميجابايت
+                </span>
+              </div>
+
+              <input
+                ref={walletFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,.jpg,.jpeg,.png,.webp,.gif,.bmp,.dib"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null;
+                  handleWalletFileSelect(f);
+                }}
+              />
+
+              {!walletEvidenceFile ? (
+                <div
+                  onClick={() => walletFileInputRef.current?.click()}
+                  className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--subtle-bg)]/40 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/20 dark:hover:border-blue-700"
+                >
+                  <Upload className="h-6 w-6 text-[var(--muted)]" />
+                  <p className="mt-1 text-xs font-semibold text-[var(--foreground)]">
+                    انقر لاختيار صورة إثبات رصيد المحفظة
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-[var(--muted)]">
+                    (اختياري — يمكنك المتابعة بدون إرفاق صورة)
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+                  <div className="flex items-center gap-3">
+                    {walletEvidencePreview && (
+                      <div className="relative h-12 w-12 overflow-hidden rounded-lg border border-[var(--border)] bg-black/5 dark:bg-white/5">
+                        <Image
+                          src={walletEvidencePreview}
+                          alt="معاينة إثبات المحفظة"
+                          width={48}
+                          height={48}
+                          unoptimized
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <p
+                        className="max-w-[200px] truncate text-xs font-bold text-[var(--foreground)] sm:max-w-[300px]"
+                        dir="ltr"
+                      >
+                        {walletEvidenceFile.name}
+                      </p>
+                      <p className="text-[11px] text-[var(--muted)]">
+                        {(walletEvidenceFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {walletEvidencePreview && (
+                      <a
+                        href={walletEvidencePreview}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] shadow-sm hover:bg-[var(--subtle-bg)]"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>معاينة</span>
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => walletFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] shadow-sm hover:bg-[var(--subtle-bg)]"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>استبدال</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleWalletFileRemove}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 shadow-sm hover:bg-rose-100 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>حذف</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {walletEvidenceError && (
+                <p className="mt-1.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                  {walletEvidenceError}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 border-t border-[var(--border)] pt-2 sm:grid-cols-2">
+              <Input
+                label="مرجع إثبات الإقفال (اختياري)"
+                value={closingEvidence}
+                onChange={(e) => setClosingEvidence(e.target.value)}
+                placeholder="مرجع الإقفال"
+              />
+              <Input
+                label="مرجع إثبات التسويات (اختياري)"
+                value={adjustmentEvidence}
+                onChange={(e) => setAdjustmentEvidence(e.target.value)}
+                placeholder="مرجع التسوية"
+              />
+            </div>
           </div>
 
           {walletAction === "Deliver" ? (
@@ -2608,9 +3099,78 @@ export default function HungerAccountsPage() {
                   <SearchableSelect
                     options={riderOptions}
                     value={assignRiderProfileId}
-                    onChange={setAssignRiderProfileId}
+                    onChange={(val) => {
+                      setAssignRiderProfileId(val);
+                      setRiderLimitError(null);
+                      setRiderLimitDetails(null);
+                      setRiderPreCheckWarning(null);
+                      setRiderPreCheckLoading(Boolean(val));
+                      setWalletReviewResult(null);
+                    }}
                     placeholder="ابحث باسم المندوب أو رقم الإقامة..."
                   />
+
+                  {riderPreCheckLoading && (
+                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                      <span>جارٍ التحقق من أهلية وسعة المندوب...</span>
+                    </p>
+                  )}
+
+                  {!riderLimitError && riderPreCheckWarning && (
+                    <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold leading-relaxed">
+                          {riderPreCheckWarning}
+                        </p>
+                        <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                          يُرجى معالجة التكليفات القائمة أو اختيار مندوب مؤهل قبل إجراء المراجعة المالية.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {riderLimitError && (
+                    <div className="mt-2 space-y-1.5 rounded-xl border border-rose-300 bg-rose-50/90 p-3 text-xs text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                        <div className="space-y-1.5">
+                          <p className="font-bold leading-relaxed">{riderLimitError}</p>
+                          {riderLimitDetails?.activeAccounts &&
+                            riderLimitDetails.activeAccounts.length > 0 && (
+                              <div className="rounded-lg border border-rose-200 bg-white/70 p-2 text-[11px] text-rose-950 dark:border-rose-900/40 dark:bg-zinc-900/80 dark:text-rose-200">
+                                <span className="font-semibold">
+                                  الحسابات النشطة للمندوب حاليًا:
+                                </span>
+                                <ul className="mt-1 list-inside list-disc space-y-0.5">
+                                  {riderLimitDetails.activeAccounts.map((acc, idx) => (
+                                    <li key={acc.assignmentId || acc.accountId || idx}>
+                                      {acc.platformNameAr ||
+                                        (acc.platformCode &&
+                                        acc.platformCode
+                                          .toUpperCase()
+                                          .includes("HUNGER")
+                                          ? "هنقرستيشن"
+                                          : acc.platformCode) ||
+                                        "منصة"}{" "}
+                                      — رقم الحساب:{" "}
+                                      <strong dir="ltr">
+                                        {acc.externalAccountId || acc.accountId}
+                                      </strong>
+                                      {acc.paymentModel ? ` (${acc.paymentModel})` : ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          <p className="text-[11px] text-rose-700 dark:text-rose-300">
+                            * بعد معالجة وإنهاء التكليف المانع أو تعديل السعة عبر المسار المعتمد، يجب إنشاء مراجعة محفظة جديدة قبل تأكيد العملية.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <DateInput
                   label="تاريخ بداية التكليف *"

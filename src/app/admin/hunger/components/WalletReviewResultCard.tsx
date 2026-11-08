@@ -3,7 +3,8 @@
 
 import { Badge } from "@/components/ui/Badge";
 import type { HungerWalletReviewResponse } from "@/lib/hunger/types";
-import { AlertTriangle, Clock } from "lucide-react";
+import { resolveHungerEvidenceUrl } from "@/lib/hunger/api";
+import { AlertTriangle, Clock, ExternalLink, FileImage } from "lucide-react";
 
 interface WalletReviewResultCardProps {
   title: string;
@@ -117,6 +118,49 @@ export function WalletReviewResultCard({
           </p>
         </div>
       </div>
+
+      {/* Wallet Evidence Image / Reference */}
+      {(() => {
+        if (!review.walletEvidence) {
+          return (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--surface)]/90 p-2.5 text-[11px]">
+              <span className="text-[var(--muted)]">صورة إثبات المحفظة:</span>
+              <span className="text-[var(--muted)]">لم يتم إرفاق صورة</span>
+            </div>
+          );
+        }
+        const resolvedUrl = resolveHungerEvidenceUrl(review.walletEvidence);
+        if (resolvedUrl) {
+          return (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--surface)]/90 p-2.5 text-[11px]">
+              <div className="flex items-center gap-1.5">
+                <FileImage className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-[var(--muted)]">مستند إثبات المحفظة:</span>
+              </div>
+              <a
+                href={resolvedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-bold text-blue-600 hover:underline dark:text-blue-400"
+              >
+                <span>عرض صورة الإثبات</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          );
+        }
+        return (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--surface)]/90 p-2.5 text-[11px]">
+            <span className="text-[var(--muted)]">مرجع إثبات المحفظة:</span>
+            <span
+              className="font-mono font-medium text-[var(--foreground)]"
+              dir="ltr"
+            >
+              {review.walletEvidence}
+            </span>
+          </div>
+        );
+      })()}
 
       <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
         <Clock className="h-3.5 w-3.5 shrink-0" />

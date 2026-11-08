@@ -3,6 +3,7 @@
 
 import { authFetch, authDownload, type CustomRequestInit } from "../auth/api";
 import { getPlatforms, type PlatformResponse } from "../platforms/api";
+import type { PlatformAssignmentLimit } from "../platforms/capacity";
 import type {
   HungerAccountItem,
   HungerAccountsFilterParams,
@@ -474,6 +475,18 @@ export function getHungerErrorMessage(
   const status = (err as { status?: number })?.status;
   if (status === 403) {
     return "ليس لديك صلاحية تنفيذ هذه العملية.";
+  }
+  if (status === 413) {
+    return "حجم الطلب تجاوز الحد المسموح به (6 ميجابايت). يرجى تقليل حجم صورة إثبات المحفظة.";
+  }
+  const details =
+    (err as { details?: Record<string, unknown> })?.details ||
+    (err as Record<string, unknown>);
+  const errorCode = String(
+    details?.errorCode || (err as { code?: string })?.code || "",
+  );
+  if (errorCode === "files.invalid_file") {
+    return "صورة الإثبات غير صالحة أو غير مدعومة. يرجى اختيار صورة بصيغة (JPEG, PNG, WebP, GIF, BMP) لا يتجاوز حجمها 5 ميجابايت.";
   }
   if (err instanceof Error && err.message) {
     return err.message;
@@ -2055,17 +2068,147 @@ export async function getHungerPendingCollections(
   };
 }
 
+export function resolveHungerEvidenceUrl(
+  path?: string | null,
+): string | null {
+  if (!path || typeof path !== "string") return null;
+  const trimmed = path.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/")) {
+    const apiBase = (
+      process.env.NEXT_PUBLIC_API_URL || "https://gat.premiumasp.net"
+    ).replace(/\/$/, "");
+    return `${apiBase}${trimmed}`;
+  }
+  return null;
+}
+
+export function buildHungerWalletReviewFormData(
+  payload: HungerWalletReviewRequest,
+): FormData {
+  const form = new FormData();
+
+  const append = (
+    key: string,
+    value: string | number | boolean | null | undefined,
+  ) => {
+    if (value !== null && value !== undefined) {
+      form.append(key, String(value));
+    }
+  };
+
+  append("action", payload.action);
+  append("riderProfileId", payload.riderProfileId);
+  append("supervisorEmployeeId", payload.supervisorEmployeeId);
+  append("businessDate", payload.businessDate);
+  append("mobileBalance", payload.mobileBalance);
+
+  // Send 0 for a confirmed first-period account; omit when unknown (null/undefined)
+  if (payload.closingBalance !== null && payload.closingBalance !== undefined) {
+    append("closingBalance", payload.closingBalance);
+  }
+
+  // Send 0 when there are no adjustments
+  append("provenAdjustments", payload.provenAdjustments ?? 0);
+
+  if (payload.closingEvidence && payload.closingEvidence.trim()) {
+    append("closingEvidence", payload.closingEvidence.trim());
+  }
+
+  if (payload.adjustmentEvidence && payload.adjustmentEvidence.trim()) {
+    append("adjustmentEvidence", payload.adjustmentEvidence.trim());
+  }
+
+  // walletEvidence: optional file. Omit the part when no image is selected.
+  // Do not append null, undefined, or a text reference as the walletEvidence part. It accepts a file only.
+  if (payload.walletEvidence instanceof File) {
+    form.append("walletEvidence", payload.walletEvidence);
+  }
+
+  if (payload.action === "Deliver" && payload.assignment) {
+    const asg = payload.assignment;
+    append(
+      "assignment.actualRiderProfileId",
+      asg.actualRiderProfileId || payload.riderProfileId,
+    );
+    append("assignment.effectiveFrom", asg.effectiveFrom);
+    if (asg.reason && asg.reason.trim()) {
+      append("assignment.reason", asg.reason.trim());
+    }
+    append("assignment.wasBackdated", asg.wasBackdated ? "true" : "false");
+    if (asg.backdatedReason && asg.backdatedReason.trim()) {
+      append("assignment.backdatedReason", asg.backdatedReason.trim());
+    }
+    if (asg.compensationModel) {
+      append("assignment.compensationModel", asg.compensationModel);
+    }
+    if (asg.paymentModel) {
+      append("assignment.paymentModel", asg.paymentModel);
+    }
+
+    if (
+      Array.isArray(asg.previousDayUsages) &&
+      asg.previousDayUsages.length > 0
+    ) {
+      asg.previousDayUsages.forEach((usage, idx) => {
+        const prefix = `assignment.previousDayUsages[${idx}]`;
+        if (Array.isArray(usage.assignmentIds)) {
+          usage.assignmentIds.forEach((id, idIdx) => {
+            append(`${prefix}.assignmentIds[${idIdx}]`, id);
+          });
+        }
+        if (usage.rowVersion) {
+          append(`${prefix}.rowVersion`, usage.rowVersion);
+        }
+        if (
+          usage.usageRowVersions &&
+          typeof usage.usageRowVersions === "object"
+        ) {
+          for (const [rKey, rVal] of Object.entries(usage.usageRowVersions)) {
+            if (rVal) append(`${prefix}.usageRowVersions.${rKey}`, rVal);
+          }
+        }
+        if (usage.figures && typeof usage.figures === "object") {
+          for (const [figKey, figVal] of Object.entries(usage.figures)) {
+            if (figVal !== null && figVal !== undefined) {
+              append(`${prefix}.figures.${figKey}`, figVal as string | number);
+            }
+          }
+        }
+      });
+    }
+  } else if (payload.action === "Return" && payload.return) {
+    const ret = payload.return;
+    append("return.effectiveTo", ret.effectiveTo);
+    append("return.status", "Ended");
+    append("return.reason", ret.reason);
+    append("return.rowVersion", ret.rowVersion);
+
+    if (ret.dayUsage && typeof ret.dayUsage === "object") {
+      for (const [dKey, dVal] of Object.entries(ret.dayUsage)) {
+        if (dVal !== null && dVal !== undefined) {
+          append(`return.dayUsage.${dKey}`, dVal as string | number);
+        }
+      }
+    }
+  }
+
+  return form;
+}
+
 export async function createHungerWalletReview(
   accountId: string,
   payload: HungerWalletReviewRequest,
   init?: CustomRequestInit,
 ): Promise<HungerWalletReviewResponse> {
+  const form = buildHungerWalletReviewFormData(payload);
   return authFetch<HungerWalletReviewResponse>(
     `${BASE}/accounts/${encodeURIComponent(accountId)}/wallet-review`,
     {
       ...init,
       method: "POST",
-      body: JSON.stringify(payload),
+      body: form,
     },
   );
 }
@@ -2084,6 +2227,207 @@ export async function confirmHungerWalletReview(
         "تم اعتماد مراجعة المحفظة وتنفيذ العملية المالية بنجاح",
     },
   );
+}
+
+export function formatRiderAccountLimitError(
+  limit?: PlatformAssignmentLimit | null,
+  fallbackDetail?: string,
+): string {
+  if (!limit) {
+    return (
+      fallbackDetail ||
+      "وصل المندوب إلى الحد الأقصى للحسابات النشطة المسموح بها في المنصة. يجب إنهاء تكليفه الحالي أو تعديل الحد المسموح عبر المسار المعتمد قبل تسليم حساب آخر."
+    );
+  }
+
+  const max = limit.maximumActiveAccounts ?? 1;
+  let msg = `وصل المندوب إلى الحد الأقصى للحسابات النشطة (${max}).`;
+
+  if (Array.isArray(limit.activeAccounts) && limit.activeAccounts.length > 0) {
+    if (limit.activeAccounts.length === 1) {
+      const acc = limit.activeAccounts[0];
+      const plat =
+        acc.platformNameAr ||
+        (acc.platformCode &&
+        acc.platformCode.toUpperCase().includes("HUNGER")
+          ? "هنقرستيشن"
+          : acc.platformCode) ||
+        "هنقرستيشن";
+      const num = acc.externalAccountId || acc.accountId || "";
+      msg += ` لديه حاليًا حساب ${plat}${num ? ` رقم ${num}` : ""}.`;
+    } else {
+      const accList = limit.activeAccounts
+        .map((acc) => {
+          const plat =
+            acc.platformNameAr ||
+            (acc.platformCode &&
+            acc.platformCode.toUpperCase().includes("HUNGER")
+              ? "هنقرستيشن"
+              : acc.platformCode) ||
+            "منصة";
+          const num = acc.externalAccountId || acc.accountId || "";
+          return `حساب ${plat}${num ? ` رقم ${num}` : ""}`;
+        })
+        .join("، ");
+      msg += ` لديه حاليًا: [${accList}].`;
+    }
+  }
+
+  msg +=
+    " يجب إنهاء تكليفه الحالي أو تعديل الحد المسموح عبر المسار المعتمد قبل تسليم حساب آخر.";
+
+  if (
+    Array.isArray(limit.allowedPaymentModels) &&
+    limit.allowedPaymentModels.length > 0
+  ) {
+    msg += ` (يمكن تعديل نموذج الدفع إلى أحد النماذج المتاحة: ${limit.allowedPaymentModels.join("، ")}).`;
+  }
+
+  return msg;
+}
+
+export interface ParsedAssignmentLimitError {
+  isLimitReached: boolean;
+  field?: string;
+  limit?: PlatformAssignmentLimit;
+  message: string;
+}
+
+export function parseRiderAccountLimitError(
+  err: unknown,
+): ParsedAssignmentLimitError | null {
+  if (!err || typeof err !== "object") return null;
+
+  const anyErr = err as Record<string, unknown>;
+  const details =
+    anyErr.details && typeof anyErr.details === "object"
+      ? (anyErr.details as Record<string, unknown>)
+      : anyErr.problem && typeof anyErr.problem === "object"
+        ? (anyErr.problem as Record<string, unknown>)
+        : anyErr;
+
+  const errorCode = String(
+    details.errorCode ?? anyErr.errorCode ?? anyErr.code ?? details.code ?? "",
+  );
+  const field =
+    typeof details.field === "string"
+      ? details.field
+      : typeof anyErr.field === "string"
+        ? (anyErr.field as string)
+        : undefined;
+
+  const assignmentLimit = (details.assignmentLimit ||
+    anyErr.assignmentLimit) as PlatformAssignmentLimit | undefined;
+
+  if (
+    errorCode === "platform.rider_account_limit_reached" ||
+    Boolean(assignmentLimit) ||
+    (anyErr.status === 409 &&
+      (field === "actualRiderProfileId" ||
+        String(details.detail || anyErr.message || "").includes(
+          "الحد الأقصى للحسابات النشطة",
+        )))
+  ) {
+    const detail =
+      typeof details.detail === "string"
+        ? details.detail
+        : typeof anyErr.message === "string"
+          ? anyErr.message
+          : undefined;
+    return {
+      isLimitReached: true,
+      field: field || "actualRiderProfileId",
+      limit: assignmentLimit,
+      message: formatRiderAccountLimitError(assignmentLimit, detail),
+    };
+  }
+
+  return null;
+}
+
+export async function checkAccountWalletPeriodStatus(
+  accountId: string,
+  account?: HungerAccountItem | null,
+  init?: CustomRequestInit,
+): Promise<{
+  hasNoHistory: boolean;
+  isDefinite: boolean;
+  missingContract: boolean;
+  reason: string;
+}> {
+  if (account) {
+    const raw = account as unknown as Record<string, unknown>;
+    if (
+      raw.hasPreviousWalletPeriod === false ||
+      raw.hasWalletHistory === false
+    ) {
+      return {
+        hasNoHistory: true,
+        isDefinite: true,
+        missingContract: false,
+        reason: "تم التأكيد من بيانات الحساب بعدم وجود فترات محفظة سابقة.",
+      };
+    }
+    if (
+      raw.hasPreviousWalletPeriod === true ||
+      raw.hasWalletHistory === true
+    ) {
+      return {
+        hasNoHistory: false,
+        isDefinite: true,
+        missingContract: false,
+        reason: "الحساب لديه فترات محفظة سابقة موثقة.",
+      };
+    }
+  }
+
+  try {
+    const history = await getHungerAccountWalletHistory(
+      accountId,
+      {
+        pageSize: 1,
+        eventsPageSize: 1,
+        observationsPageSize: 1,
+      },
+      init,
+    );
+
+    const totalEvents = history.totalEvents ?? history.events?.length ?? 0;
+    const totalObservations =
+      history.totalObservations ?? history.observations?.length ?? 0;
+
+    if (totalEvents === 0 && totalObservations === 0) {
+      const hasUsage = account?.monthlyUsageStatus === "Used";
+      const hasRecordedClose =
+        account?.lastClosingBalance !== null &&
+        account?.lastClosingBalance !== undefined;
+
+      if (!hasUsage && !hasRecordedClose) {
+        return {
+          hasNoHistory: true,
+          isDefinite: true,
+          missingContract: false,
+          reason:
+            "أكدت واجهة سجل المحفظة (GET /wallet-history) عدم وجود أي فترات أو إقفالات سابقة للحساب.",
+        };
+      }
+    }
+
+    return {
+      hasNoHistory: false,
+      isDefinite: true,
+      missingContract: false,
+      reason: `الحساب لديه سجل محفظة سابق (${totalObservations} إقفالات وملاحظات، و${totalEvents} حركات مالية).`,
+    };
+  } catch {
+    return {
+      hasNoHistory: false,
+      isDefinite: false,
+      missingContract: true,
+      reason:
+        "تعذر استدعاء واجهة سجل المحفظة (GET /wallet-history) للتحقق بشكل قاطع من وجود فترات سابقة.",
+    };
+  }
 }
 
 export async function createHungerRiderSwapReview(

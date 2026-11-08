@@ -1066,7 +1066,7 @@ export interface HungerWalletReviewRequest {
   mobileBalance: string | number;
   closingBalance?: number | null;
   provenAdjustments: number;
-  walletEvidence: string;
+  walletEvidence?: File | null;
   closingEvidence?: string | null;
   adjustmentEvidence?: string | null;
   assignment?: {
@@ -1103,6 +1103,7 @@ export interface HungerWalletReviewResponse {
   expiresAtUtc?: string | null;
   warnings?: string[];
   summary?: string | null;
+  walletEvidence?: string | null;
 }
 
 export interface HungerRiderSwapReviewRequest {
