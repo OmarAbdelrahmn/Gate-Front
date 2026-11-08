@@ -31,6 +31,7 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
 import { listSponsors, type Sponsor } from "@/lib/workforce/api";
 import { getOperatingCities, type OperatingCityCatalogItem } from "@/lib/workforce/external-riders-api";
+import { invalidateVehiclePlatesCache } from "@/lib/fleet/vehicle-plate-cache";
 import { Sparkles, Landmark, ShieldCheck, Building2, Info, AlertCircle, Activity } from "lucide-react";
 
 interface Props {
@@ -61,6 +62,7 @@ const COMMON_VEHICLE_COLORS = [
 export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle }: Props) {
   const { can } = useAuth();
   const canDecommission = can("fleet.vehicles.decommission");
+  const canEditIdentity = !editingVehicle || can("fleet.vehicles.fields.identity");
   const [isPending, startTransition] = useTransition();
   const [currentOperationalStatus, setCurrentOperationalStatus] = useState<number | null>(null);
 
@@ -405,11 +407,11 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
       try {
         const payload: VehicleUpsertRequest = {
           ...formData,
-          assetNumber: formData.assetNumber?.trim() || null,
-          serialNumber: formData.serialNumber?.trim() || null,
-          chassisNumber: formData.chassisNumber?.trim() || null,
-          plateNumberAr: formData.plateNumberAr?.trim() || null,
-          plateNumberEn: formData.plateNumberEn?.trim() || null,
+          assetNumber: formData.assetNumber?.trim() || (editingVehicle?.summary.assetNumber ?? null),
+          serialNumber: formData.serialNumber?.trim() || (editingVehicle?.serialNumber ?? null),
+          chassisNumber: formData.chassisNumber?.trim() || (editingVehicle?.chassisNumber ?? null),
+          plateNumberAr: formData.plateNumberAr?.trim() || (editingVehicle?.summary.plateNumberAr ?? null),
+          plateNumberEn: formData.plateNumberEn?.trim() || (editingVehicle?.summary.plateNumberEn ?? null),
           plateLettersAr: formData.plateLettersAr?.trim() || null,
           plateLettersEn: formData.plateLettersEn?.trim() || null,
           plateDigits: formData.plateDigits?.trim() || null,
@@ -419,6 +421,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
           operatingCityId: formData.operatingCityId || null,
           purchasedFromSupplierId: formData.purchasedFromSupplierId || null,
           registeredOwnerSupplierId: ownerMode === "implicit" ? null : (formData.registeredOwnerSupplierId || null),
+          registrationType: formData.registrationType ?? (editingVehicle ? (editingVehicle.registrationType ?? editingVehicle.summary.registrationType) : VehicleRegistrationType.Private),
           colorAr: formData.colorAr?.trim() || null,
           colorEn: formData.colorEn?.trim() || null,
           ownerName: formData.ownerName?.trim() || null,
@@ -430,25 +433,56 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
         };
 
         if (editingVehicle) {
-          // Strictly preserve protected vehicle identity fields on PUT request
-          payload.serialNumber = editingVehicle.serialNumber ?? null;
-          payload.chassisNumber = editingVehicle.chassisNumber ?? null;
-          payload.plateNumberAr = editingVehicle.summary.plateNumberAr ?? null;
-          payload.plateNumberEn = editingVehicle.summary.plateNumberEn ?? null;
-          payload.plateLettersAr = editingVehicle.plateLettersAr ?? null;
-          payload.plateLettersEn = editingVehicle.plateLettersEn ?? null;
-          payload.plateDigits = editingVehicle.plateDigits ?? null;
-          payload.registrationType = editingVehicle.registrationType ?? editingVehicle.summary.registrationType;
-
-          await updateVehicle(editingVehicle.summary.id, payload);
+          await updateVehicle(editingVehicle.summary.id, payload, { suppressErrorToast: true });
         } else {
-          await createVehicle(payload);
+          await createVehicle(payload, { suppressErrorToast: true });
         }
+        invalidateVehiclePlatesCache();
         onSuccess();
       } catch (err: unknown) {
-        const e = err as { status?: number; message?: string };
-        if (e?.status === 404) {
-          toast.error("خطأ في المالك المسجل", e.message || "المالك المسجل المحدد غير موجود أو تمت أرشفته");
+        const e = err as {
+          status?: number;
+          message?: string;
+          code?: string;
+          details?: Record<string, unknown>;
+        };
+        const rawCode = String(e?.code || e?.details?.errorCode || "").toLowerCase();
+        const rawMsg = String(e?.message || e?.details?.detail || "").toLowerCase();
+
+        if (e?.status === 409) {
+          if (
+            rawCode.includes("concurrency") ||
+            rawMsg.includes("concurrency") ||
+            rawMsg.includes("stale") ||
+            rawMsg.includes("rowversion")
+          ) {
+            toast.error(
+              "تعارض بالتزامن (Stale Data)",
+              "تم تحديث بيانات المركبة مسبقاً بواسطة مستخدم آخر. يرجى إعادة تحميل الصفحة والمحاولة مجدداً."
+            );
+          } else {
+            toast.error(
+              "بيانات مكررة",
+              e?.message && !e.message.includes("409")
+                ? e.message
+                : "الرقم التسلسلي أو رقم الهيكل أو رقم اللوحة أو الرقم المرجعي أو VIN مستخدم بالفعل لمركبة أخرى في النظام."
+            );
+          }
+        } else if (e?.status === 403) {
+          toast.error(
+            "صلاحية غير كافية",
+            "ليس لديك صلاحية تعديل حقول هوية المركبة (fleet.vehicles.fields.identity)."
+          );
+        } else if (e?.status === 404) {
+          toast.error(
+            "غير موجود",
+            e?.message || "المركبة أو المالك المسجل المحدد غير موجود أو تمت أرشفته"
+          );
+        } else {
+          toast.error(
+            "خطأ في الحفظ",
+            e?.message || "تعذر حفظ بيانات المركبة، يرجى التحقق من المدخلات والمحاولة مجدداً."
+          );
         }
       }
     });
@@ -462,9 +496,10 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
         <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">هوية المركبة الأساسية</h3>
           
-          {editingVehicle && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 p-3 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 font-medium">
-              <span>بيانات الهوية والتسجيل (الرقم التسلسلي، رقم الهيكل، تفاصيل اللوحة، ونوع التسجيل) محمية من التعديل المباشر عند تحديث المركبة.</span>
+          {editingVehicle && !canEditIdentity && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 p-3 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 font-medium">
+              <Info className="h-4 w-4 shrink-0 text-slate-500" />
+              <span>حقول هوية المركبة (اللوحة، الهيكل، الرقم التسلسلي، الصانع، الموديل، النوع، والـ VIN) للقراءة فقط لعدم توفر صلاحية تعديل الهوية (fleet.vehicles.fields.identity).</span>
             </div>
           )}
 
@@ -479,7 +514,11 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                   الرقم المرجعي (Asset) <span className="text-red-500">*</span>
                 </label>
-                <Input value={formData.assetNumber || ""} disabled readOnly />
+                <Input
+                  value={formData.assetNumber || ""}
+                  onChange={(e) => setFormData({ ...formData, assetNumber: e.target.value })}
+                  disabled={!canEditIdentity}
+                />
               </div>
             )}
             <div>
@@ -490,7 +529,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.serialNumber || ""}
                 onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
                 placeholder="SN-001"
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -501,7 +540,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.chassisNumber || ""}
                 onChange={(e) => setFormData({ ...formData, chassisNumber: e.target.value })}
                 placeholder="CH-001"
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -510,6 +549,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.vin || ""}
                 onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
                 placeholder="1HGCM82633A123456"
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -528,7 +568,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.plateNumberAr || ""}
                 onChange={(e) => setFormData({ ...formData, plateNumberAr: e.target.value })}
                 placeholder="أ ب ج 1234"
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -539,7 +579,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.plateNumberEn || ""}
                 onChange={(e) => setFormData({ ...formData, plateNumberEn: e.target.value })}
                 placeholder="ABC 1234"
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -548,7 +588,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.plateLettersAr || ""}
                 onChange={(e) => setFormData({ ...formData, plateLettersAr: e.target.value })}
                 placeholder="أ ب ج"
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -557,7 +597,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.plateLettersEn || ""}
                 onChange={(e) => setFormData({ ...formData, plateLettersEn: e.target.value })}
                 placeholder="ABC"
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -566,7 +606,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 value={formData.plateDigits || ""}
                 onChange={(e) => setFormData({ ...formData, plateDigits: e.target.value })}
                 placeholder="1234"
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>
@@ -586,7 +626,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 ]}
                 value={formData.registrationType.toString()}
                 onChange={(v) => setFormData({ ...formData, registrationType: parseInt(v) as VehicleRegistrationType })}
-                disabled={Boolean(editingVehicle)}
+                disabled={!canEditIdentity}
               />
             </div>
           </div>
@@ -607,6 +647,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 onChange={(v) => {
                   setFormData({ ...formData, vehicleManufacturerId: v, vehicleModelId: "" });
                 }}
+                disabled={!canEditIdentity}
               />
             </div>
             <div className="md:col-span-2">
@@ -630,7 +671,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                     setFormData({ ...formData, vehicleModelId: v });
                   }
                 }}
-                disabled={!formData.vehicleManufacturerId}
+                disabled={!canEditIdentity || !formData.vehicleManufacturerId}
               />
             </div>
             <div>
@@ -659,6 +700,7 @@ export function VehicleUpsertModal({ isOpen, onClose, onSuccess, editingVehicle 
                 ]}
                 value={formData.vehicleType.toString()}
                 onChange={(v) => setFormData({ ...formData, vehicleType: parseInt(v) as VehicleType })}
+                disabled={!canEditIdentity}
               />
             </div>
             <div>

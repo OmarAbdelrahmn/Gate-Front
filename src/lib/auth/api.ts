@@ -255,6 +255,12 @@ export function getFriendlyErrorMessage(
         return "السجل المطلوب غير موجود أو تم حذفه.";
       case "fleet.forbidden":
         return "عفواً، لا تملك الصلاحية اللازمة لتنفيذ هذا الإجراء.";
+      case "fleet.vehicles.fields.identity":
+      case "fleet.identity_permission_required":
+        return "ليس لديك صلاحية تعديل حقول هوية المركبة (fleet.vehicles.fields.identity).";
+      case "fleet.duplicate":
+      case "fleet.duplicate_vehicle":
+        return rawMessage || "الرقم التسلسلي أو رقم الهيكل أو رقم اللوحة أو الرقم المرجعي أو VIN مستخدم بالفعل لمركبة أخرى في النظام.";
       case "fuel.monthly_rider_conflict":
         return "لا يمكن إسناد بطاقة الوقود إلى رايدرين مختلفين في الشهر نفسه.";
       case "fuel.active_assignment_conflict":

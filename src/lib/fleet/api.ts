@@ -191,18 +191,20 @@ export const getVehiclesLookup = (search: string) =>
 export const getVehicleDetail = (id: string) =>
   authFetch<T.VehicleDetailResponse>(`/api/vehicles/${id}`);
 
-export const createVehicle = (payload: T.VehicleUpsertRequest) =>
+export const createVehicle = (payload: T.VehicleUpsertRequest, init?: CustomRequestInit) =>
   authFetch<T.VehicleDetailResponse>("/api/vehicles", {
+    ...init,
     method: "POST",
     body: JSON.stringify(payload),
-    notifySuccess: "تم إضافة المركبة بنجاح",
+    notifySuccess: init?.notifySuccess !== undefined ? init.notifySuccess : "تم إضافة المركبة بنجاح",
   });
 
-export const updateVehicle = (id: string, payload: T.VehicleUpsertRequest) =>
+export const updateVehicle = (id: string, payload: T.VehicleUpsertRequest, init?: CustomRequestInit) =>
   authFetch<T.VehicleDetailResponse>(`/api/vehicles/${id}`, {
+    ...init,
     method: "PUT",
     body: JSON.stringify(payload),
-    notifySuccess: "تم تحديث بيانات المركبة بنجاح",
+    notifySuccess: init?.notifySuccess !== undefined ? init.notifySuccess : "تم تحديث بيانات المركبة بنجاح",
   });
 
 export const archiveVehicle = (id: string, payload: T.ArchiveVehicleRequest) =>
@@ -433,12 +435,13 @@ export const getAllVehicleAssignments = async (params: {
 
   if (!firstRes) return [];
 
+  const paged = firstRes as (T.PagedResponse<T.RiderVehicleAssignmentResponse> & { data?: T.RiderVehicleAssignmentResponse[] }) | null;
   let allItems: T.RiderVehicleAssignmentResponse[] =
-    (firstRes as any).items || (firstRes as any).data || [];
-  const totalCount = (firstRes as any).totalCount ?? allItems.length;
+    paged?.items || paged?.data || [];
+  const totalCount = paged?.totalCount ?? allItems.length;
 
   if (totalCount > allItems.length) {
-    const actualPageSize = (firstRes as any).pageSize || pageSize;
+    const actualPageSize = paged?.pageSize || pageSize;
     const totalPages = Math.ceil(totalCount / actualPageSize);
     const pagePromises = [];
     for (let p = 2; p <= totalPages; p++) {
@@ -453,8 +456,8 @@ export const getAllVehicleAssignments = async (params: {
     for (const res of remainingResults) {
       if (Array.isArray(res)) {
         allItems = allItems.concat(res);
-      } else if (res && (res as any).items) {
-        allItems = allItems.concat((res as any).items);
+      } else if (res && "items" in res && Array.isArray(res.items)) {
+        allItems = allItems.concat(res.items);
       }
     }
   }
@@ -529,12 +532,34 @@ export const addVehicleInspection = (vehicleId: string, payload: T.VehicleInspec
     notifySuccess: "تمت إضافة الفحص الدوري بنجاح",
   });
 
+interface RawOperationCard {
+  id: string;
+  vehicleId: string;
+  type?: string;
+  number?: string;
+  cardNumber?: string;
+  operationCardNumber?: string;
+  issuer?: string;
+  issuingAuthority?: string;
+  effectiveFrom?: string;
+  issueDate?: string;
+  cardIssueDate?: string;
+  expiryDate?: string;
+  cardExpiryDate?: string;
+  dueStatus?: T.VehicleComplianceDueStatus;
+  status?: T.VehicleComplianceDueStatus;
+  isCurrent?: boolean;
+  previousRecordId?: string | null;
+  rowVersion: string;
+  notes?: string | null;
+}
+
 export const getVehicleOperationCards = async (
   vehicleId: string
 ): Promise<T.VehicleOperationCardResponse[]> => {
-  const raw = await authFetch<any[]>(`/api/vehicles/${vehicleId}/operation-cards`);
+  const raw = await authFetch<RawOperationCard[]>(`/api/vehicles/${vehicleId}/operation-cards`);
   if (!Array.isArray(raw)) return [];
-  return raw.map((item: any) => ({
+  return raw.map((item: RawOperationCard) => ({
     id: item.id,
     vehicleId: item.vehicleId,
     type: item.type || "OperationCard",
@@ -558,7 +583,7 @@ export const renewVehicleOperationCard = async (
   vehicleId: string,
   payload: T.VehicleOperationCardRequest
 ): Promise<T.VehicleOperationCardResponse> => {
-  const raw = await authFetch<any>(`/api/vehicles/${vehicleId}/operation-cards`, {
+  const raw = await authFetch<RawOperationCard>(`/api/vehicles/${vehicleId}/operation-cards`, {
     method: "POST",
     body: JSON.stringify({
       cardNumber: payload.cardNumber,
