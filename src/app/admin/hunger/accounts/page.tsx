@@ -452,9 +452,10 @@ export default function HungerAccountsPage() {
       setEmployees(empList);
       const matched = empList.find(
         (e) =>
-          (user?.userName && e.iqamaNo && e.iqamaNo === user.userName) ||
-          (user?.displayNameAr && e.fullNameAr === user.displayNameAr) ||
-          (user?.displayNameEn && e.fullNameEn === user.displayNameEn),
+          e.isEmployee === true &&
+          ((user?.userName && e.iqamaNo && e.iqamaNo === user.userName) ||
+            (user?.displayNameAr && e.fullNameAr === user.displayNameAr) ||
+            (user?.displayNameEn && e.fullNameEn === user.displayNameEn)),
       );
       if (matched) {
         setWalletSupervisorId((prev) => prev || matched.id);
@@ -494,11 +495,13 @@ export default function HungerAccountsPage() {
   // Select options (Human-readable names + Iqama/Plate/Phone — NO raw IDs shown)
   const supervisorOptions = useMemo(
     () =>
-      employees.map((e) => ({
-        value: e.id,
-        label: `${e.fullNameAr}${e.iqamaNo ? ` — هوية: ${e.iqamaNo}` : ""}`,
-        sublabel: e.jobTitleAr || e.operationalWorkTypeAr || undefined,
-      })),
+      employees
+        .filter((e) => e.isEmployee === true)
+        .map((e) => ({
+          value: e.id,
+          label: `${e.fullNameAr}${e.iqamaNo ? ` — هوية: ${e.iqamaNo}` : ""}`,
+          sublabel: e.jobTitleAr || e.operationalWorkTypeAr || undefined,
+        })),
     [employees],
   );
 

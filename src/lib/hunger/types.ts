@@ -569,8 +569,32 @@ export interface HungerQualityReportItem {
 // 3. Daily Operations, Monthly Summary & Alert Rules
 // ---------------------------------------------------------------------------
 
+export interface HungerDailyCounters {
+  orders?: number | null;
+  completedOrders?: number | null;
+  acceptedOrders?: number | null;
+  stackedOrders?: number | null;
+  rejectedOrders?: number | null;
+  cancelledOrders?: number | null;
+  workingHours?: number | null;
+  hours?: number | null;
+  hoursUnit?: HungerHoursUnit | string | null;
+  captainClassification?: string | null;
+  noShowCount?: number | null;
+  noShow?: number | null;
+  lateLoginMinutes?: number | null;
+  acceptanceRate?: number | null;
+}
+
 export interface HungerOperationsPreviewRow {
   rowNumber?: number;
+  accountId?: string | null;
+  status?: "New" | "Rejected" | "Updated" | string | null;
+  error?: string | null;
+  errorMessage?: string | null;
+  dailyCounters?: HungerDailyCounters | null;
+  adjustsNextRecord?: boolean;
+  allocationStatus?: "Resolved" | "UnresolvedAllocation" | string | null;
   externalAccountId?: string | null;
   accountName?: string | null;
   riderNameAr?: string | null;
@@ -589,20 +613,18 @@ export interface HungerOperationsPreviewRow {
   noShow?: number | null;
   lateLoginMinutes?: number | null;
   acceptanceRate?: number | null;
-  status?: string | null;
-  errorMessage?: string | null;
 }
 
 export interface HungerOperationsImportPreviewResponse {
   previewId: string;
   reportDate: string;
-  hoursUnit?: HungerHoursUnit | string | null;
   expiresAtUtc?: string | null;
+  canConfirm?: boolean;
+  rows?: HungerOperationsPreviewRow[];
   totalRows?: number;
   validRows?: number;
   invalidRows?: number;
-  canConfirm?: boolean;
-  rows?: HungerOperationsPreviewRow[];
+  hoursUnit?: HungerHoursUnit | string | null;
   warnings?: string[];
   errors?: string[];
 }

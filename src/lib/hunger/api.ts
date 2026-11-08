@@ -1430,7 +1430,7 @@ export async function previewHungerOperationsImport(
   const formData = new FormData();
   formData.append("file", file);
   formData.append("reportDate", reportDate);
-  return authFetch<HungerOperationsImportPreviewResponse>(
+  const raw = await authFetch<HungerOperationsImportPreviewResponse>(
     `${BASE}/operations/imports/preview`,
     {
       ...init,
@@ -1438,6 +1438,69 @@ export async function previewHungerOperationsImport(
       body: formData,
     },
   );
+
+  const rawRows = Array.isArray(raw.rows) ? raw.rows : [];
+  const rows = rawRows.map((r, idx) => {
+    const counters = r.dailyCounters;
+    const accountId = r.accountId || r.externalAccountId || null;
+    const error = r.error || r.errorMessage || null;
+    return {
+      ...r,
+      rowNumber: r.rowNumber ?? idx + 1,
+      accountId,
+      externalAccountId: r.externalAccountId || accountId,
+      error,
+      errorMessage: r.errorMessage || error,
+      status: r.status || (error ? "Rejected" : "New"),
+      orders: r.orders ?? counters?.orders ?? null,
+      completedOrders: r.completedOrders ?? counters?.completedOrders ?? null,
+      acceptedOrders: r.acceptedOrders ?? counters?.acceptedOrders ?? null,
+      stackedOrders: r.stackedOrders ?? counters?.stackedOrders ?? null,
+      rejectedOrders: r.rejectedOrders ?? counters?.rejectedOrders ?? null,
+      cancelledOrders: r.cancelledOrders ?? counters?.cancelledOrders ?? null,
+      workingHours: r.workingHours ?? counters?.workingHours ?? null,
+      hours: r.hours ?? counters?.hours ?? counters?.workingHours ?? null,
+      hoursUnit: r.hoursUnit || counters?.hoursUnit || raw.hoursUnit || null,
+      captainClassification:
+        r.captainClassification || counters?.captainClassification || null,
+      noShowCount: r.noShowCount ?? counters?.noShowCount ?? null,
+      noShow: r.noShow ?? counters?.noShow ?? counters?.noShowCount ?? null,
+      lateLoginMinutes: r.lateLoginMinutes ?? counters?.lateLoginMinutes ?? null,
+      acceptanceRate: r.acceptanceRate ?? counters?.acceptanceRate ?? null,
+    };
+  });
+
+  const totalRows = raw.totalRows ?? rows.length;
+  const invalidRows =
+    raw.invalidRows ??
+    rows.filter(
+      (r) =>
+        r.status?.toLowerCase() === "rejected" ||
+        r.status?.toLowerCase() === "invalid" ||
+        Boolean(r.error),
+    ).length;
+  const validRows = raw.validRows ?? Math.max(0, totalRows - invalidRows);
+
+  const errors = Array.isArray(raw.errors) ? [...raw.errors] : [];
+  if (errors.length === 0) {
+    rows.forEach((r) => {
+      if (r.error) {
+        errors.push(
+          `صف ${r.rowNumber ?? "?"} (حساب ${r.accountId || "غير معروف"}): ${r.error}`,
+        );
+      }
+    });
+  }
+
+  return {
+    ...raw,
+    totalRows,
+    validRows,
+    invalidRows,
+    rows,
+    errors,
+    canConfirm: raw.canConfirm ?? (invalidRows === 0),
+  };
 }
 
 export async function confirmHungerOperationsImport(

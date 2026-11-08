@@ -401,11 +401,13 @@ export default function HungerFinancePage() {
   // Human-readable options
   const supervisorOptions = useMemo(
     () =>
-      employees.map((e) => ({
-        value: e.id,
-        label: `${e.fullNameAr}${e.iqamaNo ? ` — هوية: ${e.iqamaNo}` : ""}`,
-        sublabel: e.jobTitleAr || e.operationalWorkTypeAr || undefined,
-      })),
+      employees
+        .filter((e) => e.isEmployee === true)
+        .map((e) => ({
+          value: e.id,
+          label: `${e.fullNameAr}${e.iqamaNo ? ` — هوية: ${e.iqamaNo}` : ""}`,
+          sublabel: e.jobTitleAr || e.operationalWorkTypeAr || undefined,
+        })),
     [employees],
   );
 

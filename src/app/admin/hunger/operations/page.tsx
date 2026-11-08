@@ -1638,16 +1638,19 @@ export default function HungerOperationsPage() {
           {importPreview && (
             <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
-                <span>إجمالي الصفوف: {importPreview.totalRows ?? 0}</span>
+                <span>إجمالي الصفوف: {importPreview.totalRows ?? importPreview.rows?.length ?? 0}</span>
                 <span className="text-emerald-600">
                   صالحة: {importPreview.validRows ?? 0}
                 </span>
                 <span className="text-rose-600">
                   غير صالحة: {importPreview.invalidRows ?? 0}
                 </span>
+                <Badge tone={importPreview.canConfirm ? "green" : "red"}>
+                  {importPreview.canConfirm ? "جاهز للاعتماد" : "غير قابل للاعتماد (صفوف مرفوضة)"}
+                </Badge>
                 {importPreview.hoursUnit && (
                   <Badge tone="blue">
-                    وحدة الساعات المكتشفة:{" "}
+                    وحدة الساعات:{" "}
                     {importPreview.hoursUnit === "Minutes"
                       ? "دقائق (Minutes)"
                       : "ساعات (Hours)"}
@@ -1656,35 +1659,98 @@ export default function HungerOperationsPage() {
               </div>
 
               {importPreview.rows && importPreview.rows.length > 0 && (
-                <div className="max-h-56 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                <div className="max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
                   <table className="w-full text-right text-[11px]">
                     <thead className="sticky top-0 bg-slate-100 font-bold dark:bg-slate-800">
                       <tr>
                         <th className="px-2.5 py-1.5">#</th>
-                        <th className="px-2.5 py-1.5">الحساب</th>
-                        <th className="px-2.5 py-1.5">الطلبات</th>
-                        <th className="px-2.5 py-1.5">مقبولة / مكدسة</th>
-                        <th className="px-2.5 py-1.5">الساعات</th>
-                        <th className="px-2.5 py-1.5">تصنيف الكابتن</th>
+                        <th className="px-2.5 py-1.5">معرف الحساب (accountId)</th>
+                        <th className="px-2.5 py-1.5">حالة الصف</th>
+                        <th className="px-2.5 py-1.5">التخصيص</th>
+                        <th className="px-2.5 py-1.5">الطلبات / الساعات</th>
+                        <th className="px-2.5 py-1.5">الخطأ / الملاحظات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border)]">
-                      {importPreview.rows.slice(0, 25).map((r, i) => (
-                        <tr key={i}>
+                      {importPreview.rows.slice(0, 50).map((r, i) => (
+                        <tr
+                          key={i}
+                          className={
+                            r.status === "Rejected" || Boolean(r.error)
+                              ? "bg-rose-50/50 dark:bg-rose-950/20"
+                              : ""
+                          }
+                        >
                           <td className="px-2.5 py-1.5">{r.rowNumber ?? i + 1}</td>
-                          <td className="px-2.5 py-1.5 font-semibold">
-                            {r.externalAccountId || r.accountName || "—"}
-                          </td>
-                          <td className="px-2.5 py-1.5">{r.orders ?? 0}</td>
-                          <td className="px-2.5 py-1.5">
-                            {r.acceptedOrders ?? "—"} / {r.stackedOrders ?? "—"}
+                          <td className="px-2.5 py-1.5 font-mono font-bold" dir="ltr">
+                            {r.accountId || r.externalAccountId || "—"}
                           </td>
                           <td className="px-2.5 py-1.5">
-                            {r.hours ?? 0} س{" "}
-                            {r.hoursUnit ? `(${r.hoursUnit})` : ""}
+                            <Badge
+                              tone={
+                                r.status === "New"
+                                  ? "green"
+                                  : r.status === "Rejected"
+                                    ? "red"
+                                    : r.status === "Updated"
+                                      ? "orange"
+                                      : "gray"
+                              }
+                            >
+                              {r.status === "New"
+                                ? "جديد (New)"
+                                : r.status === "Rejected"
+                                  ? "مرفوض (Rejected)"
+                                  : r.status === "Updated"
+                                    ? "محدث (Updated)"
+                                    : r.status || "—"}
+                            </Badge>
                           </td>
                           <td className="px-2.5 py-1.5">
-                            {r.captainClassification || "—"}
+                            {r.allocationStatus ? (
+                              <Badge
+                                tone={
+                                  r.allocationStatus === "Resolved"
+                                    ? "blue"
+                                    : r.allocationStatus === "UnresolvedAllocation"
+                                      ? "orange"
+                                      : "gray"
+                                }
+                              >
+                                {r.allocationStatus === "Resolved"
+                                  ? "مخصص (Resolved)"
+                                  : r.allocationStatus === "UnresolvedAllocation"
+                                    ? "معلق (Unresolved)"
+                                    : r.allocationStatus}
+                              </Badge>
+                            ) : (
+                              <span className="text-[var(--muted)]">—</span>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-1.5">
+                            {r.dailyCounters || r.orders !== null ? (
+                              <span>
+                                طلبات: <strong>{r.orders ?? 0}</strong> | ساعات:{" "}
+                                <strong>{r.hours ?? 0}</strong>
+                              </span>
+                            ) : (
+                              <span className="text-[var(--muted)]">—</span>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-1.5">
+                            {r.error || r.errorMessage ? (
+                              <span className="font-semibold text-rose-600 dark:text-rose-400">
+                                {r.error || r.errorMessage}
+                              </span>
+                            ) : r.adjustsNextRecord ? (
+                              <span className="font-medium text-amber-600 dark:text-amber-400">
+                                تعديل السجل التالي
+                              </span>
+                            ) : (
+                              <span className="text-emerald-600 dark:text-emerald-400">
+                                سليم
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1725,6 +1791,7 @@ export default function HungerOperationsPage() {
                 onClick={() => void handleConfirmOperationsImport()}
                 disabled={
                   importBusy ||
+                  importPreview.canConfirm === false ||
                   Boolean(
                     importPreview.invalidRows && importPreview.invalidRows > 0,
                   )
