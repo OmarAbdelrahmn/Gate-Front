@@ -2732,6 +2732,7 @@ export default function ChefzPerformancePage() {
         onClose={() => setIsDeleteOpen(false)}
         initialDate={deleteDate}
         existingDates={Array.from(new Set(performanceRecords.map((x) => x.reportDate).filter(Boolean)))}
+        sponsors={sponsors}
         onSuccess={() => {
           loadDailyPerformance();
         }}

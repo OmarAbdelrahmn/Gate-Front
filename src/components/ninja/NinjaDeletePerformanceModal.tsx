@@ -1,0 +1,429 @@
+// src/components/ninja/NinjaDeletePerformanceModal.tsx
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { toast } from "@/components/ui/Toast";
+import {
+  deleteNinjaPerformance,
+  getRiyadhTodayDate,
+  type NinjaDeletePerformanceResponse,
+} from "@/lib/ninja/api";
+import {
+  AlertTriangle,
+  Trash2,
+  Calendar,
+  CheckCircle2,
+  ShieldAlert,
+  Info,
+  Clock,
+  RotateCcw,
+  Building2,
+  Users,
+  FileCheck2,
+  ArrowRight,
+} from "lucide-react";
+
+export interface NinjaDeletePerformanceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (result: NinjaDeletePerformanceResponse, deletedDate: string) => void;
+  initialDate?: string;
+  existingDates?: string[];
+  sponsors?: Array<{ id: string; nameAr?: string; nameEn?: string; registryNameAr?: string }>;
+}
+
+export function NinjaDeletePerformanceModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  initialDate,
+  existingDates,
+  sponsors = [],
+}: NinjaDeletePerformanceModalProps) {
+  const todayStr = getRiyadhTodayDate();
+  const [reportDate, setReportDate] = useState<string>(initialDate || todayStr);
+  const [scopeMode, setScopeMode] = useState<"all" | "sponsor">("all");
+  const [selectedSponsorId, setSelectedSponsorId] = useState<string>("");
+  const [reason, setReason] = useState<string>("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<NinjaDeletePerformanceResponse | null>(null);
+
+  // Synchronize state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setReportDate(initialDate || todayStr);
+      setScopeMode("all");
+      setSelectedSponsorId(sponsors[0]?.id || "");
+      setReason("");
+      setConfirmed(false);
+      setError(null);
+      setResult(null);
+    }
+  }, [isOpen, initialDate, todayStr, sponsors]);
+
+  const hasRecordedData = existingDates && existingDates.includes(reportDate);
+
+  const getSponsorDisplayName = (sponsorId: string): string => {
+    const s = sponsors.find((x) => x.id === sponsorId);
+    if (!s) return sponsorId;
+    return s.registryNameAr || s.nameAr || s.nameEn || sponsorId;
+  };
+
+  const isReasonValid = reason.trim().length > 0 && reason.trim().length <= 1000;
+  const isSponsorSelectionValid = scopeMode === "all" || Boolean(selectedSponsorId);
+  const canSubmit = confirmed && Boolean(reportDate) && isReasonValid && isSponsorSelectionValid && !submitting;
+
+  const handleDelete = async () => {
+    if (!canSubmit) return;
+
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const sponsorParam = scopeMode === "sponsor" ? selectedSponsorId : null;
+      const response = await deleteNinjaPerformance(reportDate, reason.trim(), sponsorParam);
+      setResult(response);
+
+      const totalDeleted = response.performanceRowsDeleted ?? 0;
+      toast.success(
+        "تم تنفيذ عملية حذف أداء نينجا بنجاح",
+        totalDeleted > 0
+          ? `تم حذف ${totalDeleted} صف أداء (${response.sourcesDeleted} مصدر) لتاريخ ${reportDate}`
+          : `تم تنفيذ العملية بنجاح لتاريخ ${reportDate} (لا توجد سجلات مطابقة متبقية)`
+      );
+      onSuccess(response, reportDate);
+    } catch (err: any) {
+      const message =
+        err?.message ||
+        "تعذر حذف أداء نينجا اليومي. يرجى التحقق من صلاحية ninja.performance.delete وصحة البيانات.";
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={submitting ? () => {} : onClose}
+      title="حذف أداء نينجا اليومي لتصحيح التكليفات"
+      maxWidth="max-w-xl"
+    >
+      <div className="space-y-5" dir="rtl">
+        {/* Success View */}
+        {result ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <h3 className="font-bold">تم حذف سجلات وتوزيعات الأداء بنجاح</h3>
+                  <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
+                    تم حذف مصادر الأداء المحددة، وتوزيعات المناديب، وتتبع التخصيص (provenance) مع إنشاء سجل تدقيق في معاملة واحدة.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Scope & Date Meta Card */}
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3.5 text-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-[var(--muted)]">التاريخ المنفذ:</div>
+                  <div className="mt-1 flex items-center gap-2 font-mono font-bold text-[var(--foreground)] text-base">
+                    <Calendar className="h-4 w-4 text-red-500" />
+                    <span>{result.reportDate}</span>
+                  </div>
+                </div>
+                <Badge tone="green">تمت المعاملة بنجاح</Badge>
+              </div>
+
+              <div className="pt-2 border-t border-[var(--border)] text-xs text-[var(--muted)] flex items-center justify-between">
+                <span>نطاق الحذف:</span>
+                <span className="font-semibold text-[var(--foreground)]">
+                  {result.sponsorId ? `كفيل محدد: ${getSponsorDisplayName(result.sponsorId)}` : "جميع حسابات نينجا المصرّح بها"}
+                </span>
+              </div>
+            </div>
+
+            {/* Counts Breakdown Grid */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-center shadow-xs">
+                <div className="text-xs text-[var(--muted)]">صفوف الأداء</div>
+                <div className="mt-1 text-xl font-extrabold text-[var(--foreground)] font-mono">
+                  {(result.performanceRowsDeleted ?? 0).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-center shadow-xs">
+                <div className="text-xs text-[var(--muted)]">مصادر الأداء</div>
+                <div className="mt-1 text-xl font-extrabold text-[var(--foreground)] font-mono">
+                  {(result.sourcesDeleted ?? 0).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-center shadow-xs">
+                <div className="text-xs text-[var(--muted)]">سجلات التتبع</div>
+                <div className="mt-1 text-xl font-extrabold text-[var(--foreground)] font-mono">
+                  {(result.provenanceRowsDeleted ?? 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* Correction Workflow Next Steps Guide */}
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3.5 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200 space-y-1.5">
+              <div className="flex items-center gap-2 font-bold">
+                <Info className="h-4 w-4 text-blue-600 shrink-0" />
+                <span>الخطوات التالية لتصحيح التكليف:</span>
+              </div>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] text-blue-800 dark:text-blue-300 pr-1">
+                <li>قم بتصحيح فترات تكليف المناديب وحل أي تعارضات سابقة لهذا التاريخ.</li>
+                <li>أعد استيراد نفس ملف الأداء الأصلي لاستعادة بيانات الحسابات وتوزيعها وفق التكليف الجديد.</li>
+                <li>الملف نفسه يستعيد الحسابات المحذوفة ويتخطى السجلات السليمة القائمة دون تغيير.</li>
+              </ol>
+            </div>
+
+            {/* Close Button */}
+            <div className="mt-6 flex items-center justify-end border-t border-[var(--border)] pt-4">
+              <Button onClick={onClose} className="bg-[var(--brand)] text-white">
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* Main Deletion Form */
+          <div className="space-y-4">
+            {/* High-Trust Permission Header Note */}
+            <div className="flex items-center justify-between rounded-xl bg-red-50/80 px-3 py-2 text-xs font-semibold text-red-800 border border-red-200/70 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/50">
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400" />
+                صلاحية حساسة عالية الثقة (High-Trust)
+              </span>
+              <span className="font-mono text-[11px] opacity-80" dir="ltr">
+                ninja.performance.delete
+              </span>
+            </div>
+
+            {/* Scope / Clarification Notice */}
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="space-y-1 text-[11px] leading-relaxed">
+                  <p className="font-bold text-xs">تنبيه نطاق الحذف والبيانات المحفوظة:</p>
+                  <p>
+                    • سيتم حذف مصادر الأداء وتوزيعات المناديب لهذا اليوم لتسهيل تصحيح فترات التكليف.
+                  </p>
+                  <p>
+                    • الخصومات، والعهد، وسياق التقييم، واللقطات المحفوظة، وأصل ملفات الاستيراد تبقى محفوظة كأدلة تاريخية ولا تُحذف.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Error Message if any */}
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                  <span>{error}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Date Selection */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-[var(--foreground)]">
+                تاريخ الأداء المراد حذفه <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={reportDate}
+                onChange={(e) => {
+                  setReportDate(e.target.value);
+                  setError(null);
+                }}
+                max={todayStr}
+                disabled={submitting}
+                required
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2.5 px-3 text-sm text-[var(--foreground)] outline-none focus:border-red-500 font-mono"
+              />
+              <div className="flex items-center justify-between text-[11px] text-[var(--muted)]">
+                <span>الصيغة: YYYY-MM-DD (لا يتجاوز اليوم بتوقيت الرياض)</span>
+                {hasRecordedData ? (
+                  <Badge tone="blue" className="text-[10px]">
+                    توجد سجلات أداء مسجلة لهذا التاريخ
+                  </Badge>
+                ) : (
+                  <span className="flex items-center gap-1 text-[var(--muted)]">
+                    <Clock className="h-3 w-3" />
+                    اليوم الأقصى: {todayStr}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Sponsor Scope Selection */}
+            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+              <label className="block text-xs font-bold text-[var(--foreground)]">
+                نطاق الحذف (كافة الحسابات أم كفيل محدد) <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScopeMode("all")}
+                  disabled={submitting}
+                  className={`flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-bold transition-all border ${
+                    scopeMode === "all"
+                      ? "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span>جميع حسابات نينجا</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setScopeMode("sponsor")}
+                  disabled={submitting}
+                  className={`flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-bold transition-all border ${
+                    scopeMode === "sponsor"
+                      ? "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                  <span>حسابات كفيل محدد</span>
+                </button>
+              </div>
+
+              {scopeMode === "sponsor" && (
+                <div className="mt-2 space-y-1 pt-2 border-t border-[var(--border)]">
+                  <label className="block text-[11px] font-semibold text-[var(--foreground)]">
+                    اختر الكفيل المراد حذف حساباته فقط <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedSponsorId}
+                    onChange={(e) => setSelectedSponsorId(e.target.value)}
+                    disabled={submitting}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-2 px-3 text-xs text-[var(--foreground)] outline-none focus:border-red-500"
+                  >
+                    <option value="" disabled>
+                      -- اختر الكفيل --
+                    </option>
+                    {sponsors.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.registryNameAr || s.nameAr || s.nameEn || s.id}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-[var(--muted)]">
+                    سيتم حذف سجلات الحسابات المرتبطة بهذا الكفيل فقط، وتبقى حسابات الكفلاء الآخرين سليمة.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Reason Textarea (Required, max 1,000 chars) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-[var(--foreground)]">
+                  سبب إجراء التصحيح والحذف <span className="text-red-500">*</span>
+                </label>
+                <span
+                  className={`text-[10px] font-mono ${
+                    reason.length > 1000 ? "text-red-500 font-bold" : "text-[var(--muted)]"
+                  }`}
+                >
+                  {reason.length} / 1000 حرف
+                </span>
+              </div>
+              <textarea
+                value={reason}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  setError(null);
+                }}
+                disabled={submitting}
+                rows={3}
+                maxLength={1000}
+                required
+                placeholder="مثال: تصحيح فترة تكليف المندوب وإعادة الاستيراد بالتكليف الصحيح..."
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 text-xs text-[var(--foreground)] outline-none focus:border-red-500 leading-relaxed"
+              />
+              <p className="text-[10px] text-[var(--muted)]">
+                يتم تسجيل سبب التصحيح في سجل التدقيق (Audit Entry) لأغراض الرقابة والمطابقة.
+              </p>
+            </div>
+
+            {/* Confirmation Checkbox */}
+            <div className="rounded-xl border border-red-200/80 bg-red-50/40 p-3 dark:border-red-900/40 dark:bg-red-950/20">
+              <label className="flex cursor-pointer items-start gap-2.5 text-xs select-none">
+                <input
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={(e) => setConfirmed(e.target.checked)}
+                  disabled={submitting || !reportDate || !isReasonValid || !isSponsorSelectionValid}
+                  className="mt-0.5 h-4 w-4 rounded border-[var(--border)] text-red-600 focus:ring-red-500"
+                />
+                <span className="font-semibold text-red-900 dark:text-red-200 leading-relaxed">
+                  أؤكد رغبتي في حذف أداء نينجا لتاريخ{" "}
+                  <span className="font-mono underline font-bold" dir="ltr">
+                    {reportDate || "—"}
+                  </span>{" "}
+                  {scopeMode === "sponsor" && selectedSponsorId ? (
+                    <>
+                      لكفيل (
+                      <span className="font-bold underline">
+                        {getSponsorDisplayName(selectedSponsorId)}
+                      </span>
+                      )
+                    </>
+                  ) : (
+                    <>لكافة الحسابات المصرّح بها</>
+                  )}{" "}
+                  للبدء في إجراءات تصحيح التكليف وإعادة الاستيراد.
+                </span>
+              </label>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
+              <Button
+                variant="secondary"
+                onClick={onClose}
+                disabled={submitting}
+                className="text-xs font-semibold"
+              >
+                إلغاء
+              </Button>
+
+              <Button
+                onClick={handleDelete}
+                disabled={!canSubmit}
+                className="gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-sm disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <RotateCcw className="h-3.5 w-3.5 animate-spin" />
+                    <span>جارٍ الحذف والتدقيق...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>حذف أداء اليوم للتصحيح</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}

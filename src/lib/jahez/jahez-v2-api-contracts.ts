@@ -20,4 +20,5 @@ export type {
   FeeRefundPreviewResponse,
   FeeRefundExecutionRequest,
   AccountFeeRefund,
+  JahezDeletePerformanceResponse,
 } from "./types";

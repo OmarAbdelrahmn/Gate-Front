@@ -843,6 +843,13 @@ export interface HungerPerformanceReportResponse {
   totals?: HungerPerformanceReportTotals | null;
 }
 
+export interface HungerDeletePerformanceResponse {
+  reportDate: string;
+  sponsorId: string | null;
+  performanceRowsDeleted: number;
+  potentialFinesDeleted: number;
+}
+
 export interface HungerPotentialFineItem {
   id: string;
   fineId?: string;

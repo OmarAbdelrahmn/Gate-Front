@@ -51,14 +51,17 @@ export const chefzPaths = {
     });
     return `${CHEFZ_BASE_PATH}/settlements?${params}`;
   },
-  deletePerformance: (reportDate: string) => {
+  deletePerformance: (reportDate: string, reason?: string, sponsorId?: string | null) => {
     const params = new URLSearchParams({ reportDate });
-    return `${CHEFZ_BASE_PATH}/performance?${params}`;
+    if (reason) params.set("reason", reason);
+    if (sponsorId) params.set("sponsorId", sponsorId);
+    return `${CHEFZ_BASE_PATH}/performance?${params.toString()}`;
   },
 } as const;
 
 export interface ChefzDeletePerformanceResponse {
   reportDate: DateOnly | string;
+  sponsorId?: string | null;
   performanceRowsDeleted: number;
   sourcesDeleted: number;
   importsDeleted: number;

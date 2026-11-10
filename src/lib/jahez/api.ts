@@ -58,6 +58,7 @@ import type {
   JahezRiderPerformanceParams,
   JahezRiderPerformanceResponse,
   JahezSettlementReminder,
+  JahezDeletePerformanceResponse,
   JahezSettlementRemindersResponse,
 } from "./types";
 
@@ -1356,6 +1357,41 @@ export async function downloadJahezImportFile(
   return authDownload(`${ROOT}/import-files/${encodeURIComponent(fileId)}`);
 }
 
+/**
+ * Deletes Jahez daily dispatch / order rows for a specific date by account session,
+ * preserving original rows in the audit log and retaining uploaded files, parsed source rows, batches, and receipts.
+ * Requires 'jahez.performance.delete' permission.
+ * Endpoint: DELETE /api/jahez/v2/performance?reportDate=YYYY-MM-DD&reason=...[&sponsorId=...]
+ */
+export async function deleteJahezPerformance(
+  reportDate: string,
+  reason: string,
+  sponsorId?: string | null,
+  init?: CustomRequestInit,
+): Promise<JahezDeletePerformanceResponse> {
+  const normalizedDate = (reportDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    throw new Error("تاريخ التقرير غير صالح. يرجى تحديد تاريخ صحيح بصيغة YYYY-MM-DD.");
+  }
+
+  const params = new URLSearchParams({
+    reportDate: normalizedDate,
+    reason: (reason || "").trim(),
+  });
+  if (sponsorId) {
+    params.set("sponsorId", sponsorId.trim());
+  }
+
+  return authFetch<JahezDeletePerformanceResponse>(
+    `${ROOT}/performance?${params.toString()}`,
+    {
+      ...init,
+      method: "DELETE",
+      suppressErrorToast: init?.suppressErrorToast ?? true,
+    },
+  );
+}
+
 // ----------------------------------------------------------------------
 // 8. Profit Report
 // ----------------------------------------------------------------------
@@ -1570,6 +1606,11 @@ export function jahezClient(init?: CustomRequestInit) {
       executeJahezFeeRefund(data, key, init),
     getHandoverFeeRefunds: (handoverId: string) =>
       getJahezHandoverFeeRefunds(handoverId, init),
+    deletePerformance: (
+      reportDate: string,
+      reason: string,
+      sponsorId?: string | null,
+    ) => deleteJahezPerformance(reportDate, reason, sponsorId, init),
   };
 }
 

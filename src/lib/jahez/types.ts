@@ -942,4 +942,10 @@ export interface JahezSettlementRemindersResponse {
   totalCount?: number;
 }
 
+export interface JahezDeletePerformanceResponse {
+  reportDate: string;
+  sponsorId: string | null;
+  performanceRowsDeleted: number;
+}
+
 

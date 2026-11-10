@@ -214,6 +214,16 @@ export const ninjaPaths = {
 
   // Raw Daily Records
   performance: "/api/ninja/performance",
+  deletePerformance: (reportDate: string, reason: string, sponsorId?: string | null) => {
+    const params = new URLSearchParams({
+      reportDate,
+      reason,
+    });
+    if (sponsorId) {
+      params.set("sponsorId", sponsorId);
+    }
+    return `/api/ninja/performance?${params.toString()}`;
+  },
   deductions: "/api/ninja/deductions",
 
   // Aggregate Reports
@@ -512,6 +522,14 @@ export interface NinjaImportResponse {
 // -------------------------------------------------------------
 // Raw Daily Records
 // -------------------------------------------------------------
+
+export interface NinjaDeletePerformanceResponse {
+  reportDate: DateOnly;
+  sponsorId: Guid | null;
+  performanceRowsDeleted: number;
+  sourcesDeleted: number;
+  provenanceRowsDeleted: number;
+}
 
 export interface NinjaPerformanceResponse {
   id: Guid;
@@ -840,6 +858,19 @@ export function createNinjaClient(send: AuthenticatedFetch) {
       form.append("file", file, file.name);
       const res = await send(ninjaPaths.importPerformance, { method: "POST", body: form, signal });
       return handleResponse<NinjaImportResponse>(res);
+    },
+
+    async deletePerformance(
+      reportDate: string,
+      reason: string,
+      sponsorId?: string | null,
+      signal?: AbortSignal
+    ): Promise<NinjaDeletePerformanceResponse> {
+      const res = await send(ninjaPaths.deletePerformance(reportDate, reason, sponsorId), {
+        method: "DELETE",
+        signal,
+      });
+      return handleResponse<NinjaDeletePerformanceResponse>(res);
     },
 
     async importDeductions(reportDate: string, file: File, signal?: AbortSignal): Promise<NinjaImportResponse> {

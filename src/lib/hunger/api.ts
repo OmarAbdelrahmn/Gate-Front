@@ -32,6 +32,7 @@ import type {
   HungerOperationalDisposition,
   HungerOperationsImportConfirmResponse,
   HungerOperationsImportPreviewResponse,
+  HungerDeletePerformanceResponse,
   HungerOperationsReportItem,
   HungerPagedResponse,
   HungerPendingCollectionsResponse,
@@ -2780,6 +2781,41 @@ export async function updateSimCardOwnership(
       method: "PUT",
       body: JSON.stringify(payload),
       notifySuccess: init?.notifySuccess ?? "تم تحديث ملكية شريحة الاتصال بنجاح",
+    },
+  );
+}
+
+/**
+ * Soft-deletes Hungerstation daily operations, embedded allocations/manual comparisons,
+ * and unresolved potential fines for a specific date.
+ * Requires 'hunger.performance.delete' permission.
+ * Endpoint: DELETE /api/hunger/performance?reportDate=YYYY-MM-DD&reason=...&sponsorId=...
+ */
+export async function deleteHungerPerformance(
+  reportDate: string,
+  reason: string,
+  sponsorId?: string | null,
+  init?: CustomRequestInit,
+): Promise<HungerDeletePerformanceResponse> {
+  const normalizedDate = (reportDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    throw new Error("تاريخ التقرير غير صالح. يرجى تحديد تاريخ صحيح بصيغة YYYY-MM-DD.");
+  }
+
+  const params = new URLSearchParams({
+    reportDate: normalizedDate,
+    reason: (reason || "").trim(),
+  });
+  if (sponsorId) {
+    params.set("sponsorId", sponsorId.trim());
+  }
+
+  return authFetch<HungerDeletePerformanceResponse>(
+    `${BASE}/performance?${params.toString()}`,
+    {
+      ...init,
+      method: "DELETE",
+      suppressErrorToast: init?.suppressErrorToast ?? true,
     },
   );
 }

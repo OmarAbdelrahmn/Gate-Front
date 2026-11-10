@@ -582,6 +582,8 @@ export async function uploadChefzPerformance(
  */
 export async function deleteChefzPerformance(
   reportDate: string,
+  reasonOrInit?: string | CustomRequestInit,
+  sponsorId?: string | null,
   init?: CustomRequestInit
 ): Promise<ChefzDeletePerformanceResponse> {
   const normalizedDate = (reportDate || "").trim();
@@ -590,13 +592,22 @@ export async function deleteChefzPerformance(
     throw new Error("تاريخ التقرير غير صالح. يرجى تحديد تاريخ صحيح بصيغة YYYY-MM-DD (مثال: 2026-10-15).");
   }
 
-  const path = chefzPaths.deletePerformance(normalizedDate);
+  let reason = "Performance day correction";
+  let fetchInit = init;
+
+  if (typeof reasonOrInit === "string") {
+    reason = reasonOrInit;
+  } else if (reasonOrInit && typeof reasonOrInit === "object") {
+    fetchInit = reasonOrInit;
+  }
+
+  const path = chefzPaths.deletePerformance(normalizedDate, reason, sponsorId);
 
   try {
     return await authFetch<ChefzDeletePerformanceResponse>(path, {
-      ...init,
+      ...fetchInit,
       method: "DELETE",
-      suppressErrorToast: init?.suppressErrorToast ?? true,
+      suppressErrorToast: fetchInit?.suppressErrorToast ?? true,
     });
   } catch (err: any) {
     const status = err?.status;

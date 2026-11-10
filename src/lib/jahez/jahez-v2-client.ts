@@ -12,6 +12,7 @@ import {
   previewJahezFeeRefund,
   executeJahezFeeRefund,
   getJahezHandoverFeeRefunds,
+  deleteJahezPerformance,
 } from "./api";
 import type {
   JahezProfitReport,
@@ -33,6 +34,7 @@ import type {
   JahezRiderPerformanceParams,
   JahezSettlementReminder,
   JahezSettlementRemindersResponse,
+  JahezDeletePerformanceResponse,
 } from "./types";
 import type { CustomRequestInit } from "../auth/api";
 
@@ -50,6 +52,7 @@ export {
   previewJahezFeeRefund,
   executeJahezFeeRefund,
   getJahezHandoverFeeRefunds,
+  deleteJahezPerformance,
 };
 export type {
   JahezProfitReport,
@@ -71,6 +74,7 @@ export type {
   JahezRiderPerformanceParams,
   JahezSettlementReminder,
   JahezSettlementRemindersResponse,
+  JahezDeletePerformanceResponse,
   CustomRequestInit,
 };
 

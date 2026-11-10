@@ -40,6 +40,7 @@ import {
 import { PerformanceReportTab } from "../components/PerformanceReportTab";
 import { PotentialFinesTab } from "../components/PotentialFinesTab";
 import { AccountsFilterPanel } from "../components/AccountsFilterPanel";
+import { HungerDeletePerformanceModal } from "../components/HungerDeletePerformanceModal";
 import {
   listRiders,
   listEmployees,
@@ -76,6 +77,7 @@ import {
   Server,
   ShieldAlert,
   TrendingUp,
+  Trash2,
 } from "lucide-react";
 
 type ActiveTab =
@@ -102,6 +104,8 @@ export default function HungerOperationsPage() {
   const canExportOps = can("hunger.performance.export") && can("hunger.read");
   const canManageAlerts = can("hunger.alerts.manage");
   const canManageFinance = can("hunger.finance.manage");
+  // Dedicated high-trust permission for daily performance/operations deletion
+  const canDeleteOps = can("hunger.performance.delete");
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("operations");
   const [platformId, setPlatformId] = useState<string>("");
@@ -137,6 +141,10 @@ export default function HungerOperationsPage() {
   const [importPreview, setImportPreview] =
     useState<HungerOperationsImportPreviewResponse | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+
+  // Delete Daily Operations Modal
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteReportDate, setDeleteReportDate] = useState(getRiyadhTodayIso());
 
   // Manual Comparison Modal
   const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -914,6 +922,22 @@ export default function HungerOperationsPage() {
                     استيراد التشغيل اليومي
                   </Button>
                 )}
+
+                {canDeleteOps && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setDeleteReportDate(throughDate || getRiyadhTodayIso());
+                      setDeleteModalOpen(true);
+                    }}
+                    className="gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+                    title="حذف تشغيل يوم محدد لتصحيح التكليفات"
+                  >
+                    <Trash2 className="ml-1.5 h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                    حذف تشغيل يوم
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -1036,7 +1060,23 @@ export default function HungerOperationsPage() {
                           className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                         >
                           <td className="px-4 py-3.5 font-medium">
-                            {row.reportDate?.slice(0, 10) || "—"}
+                            <div className="flex items-center gap-1.5">
+                              <span>{row.reportDate?.slice(0, 10) || "—"}</span>
+                              {canDeleteOps && row.reportDate && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteReportDate(row.reportDate.slice(0, 10));
+                                    setDeleteModalOpen(true);
+                                  }}
+                                  className="text-[var(--muted)] hover:text-red-600 transition-colors opacity-60 hover:opacity-100"
+                                  title={`حذف تشغيل يوم ${row.reportDate.slice(0, 10)}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="font-bold text-[var(--foreground)]">
@@ -2104,6 +2144,20 @@ export default function HungerOperationsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* =====================================================================
+          MODAL D: Delete Daily Operations (Section 4)
+         ===================================================================== */}
+      <HungerDeletePerformanceModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        initialDate={deleteReportDate}
+        existingDates={Array.from(new Set(opsRows.map((r) => r.reportDate).filter(Boolean)))}
+        sponsors={sponsors}
+        onSuccess={() => {
+          void loadOperations();
+        }}
+      />
     </div>
   );
 }

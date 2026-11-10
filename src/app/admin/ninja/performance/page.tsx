@@ -27,8 +27,9 @@ import {
   type NinjaImportIssue,
   type NinjaReportQuery,
 } from "@/lib/ninja/api";
-import { listRiders } from "@/lib/workforce/api";
+import { listRiders, listSponsors, type Sponsor } from "@/lib/workforce/api";
 import type { Rider } from "@/lib/workforce/types";
+import { NinjaDeletePerformanceModal } from "@/components/ninja/NinjaDeletePerformanceModal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -67,6 +68,7 @@ import {
   LayoutGrid,
   List,
   CreditCard,
+  Trash2,
 } from "lucide-react";
 
 type PerformanceTab = "summary" | "riders" | "daily" | "records";
@@ -79,6 +81,8 @@ export default function NinjaPerformancePage() {
   const canRead = can("ninja.read") || can("ninja.performance.import");
   // Strictly require ninja.performance.import — never infer import access from ninja.read!
   const canImport = can("ninja.performance.import");
+  // Strictly require ninja.performance.delete — never infer deletion from read or import!
+  const canDelete = can("ninja.performance.delete");
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFrom = useMemo(() => getRiyadhFirstDayOfMonth(), []);
@@ -95,6 +99,7 @@ export default function NinjaPerformancePage() {
   // Lookups
   const [accounts, setAccounts] = useState<NinjaAccountResponse[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
 
   // 1. Range Summary Report State
   const [summaryReport, setSummaryReport] = useState<NinjaPerformanceReport | null>(null);
@@ -160,16 +165,22 @@ export default function NinjaPerformancePage() {
   const [uploadResult, setUploadResult] = useState<NinjaImportResponse | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Delete Daily Performance Modal State
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteDate, setDeleteDate] = useState(todayRiyadh);
+
   // Load lookups
   useEffect(() => {
     const loadLookups = async () => {
       try {
-        const [accList, riderList] = await Promise.all([
+        const [accList, riderList, sponsorList] = await Promise.all([
           getAllNinjaAccounts(100).catch(() => []),
           listRiders().catch(() => []),
+          listSponsors().catch(() => []),
         ]);
         setAccounts(accList);
         setRiders(riderList);
+        setSponsors(sponsorList);
       } catch (e) {
         console.warn("Could not load lookups", e);
       }
@@ -854,6 +865,21 @@ export default function NinjaPerformancePage() {
               رفع شيت أداء يومي
             </Button>
           )}
+
+          {canDelete && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteDate(filterTo || todayRiyadh);
+                setIsDeleteOpen(true);
+              }}
+              className="gap-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+              title="حذف أداء يوم محدد لتصحيح التكليفات"
+            >
+              <Trash2 className="h-4 w-4" />
+              حذف أداء يوم
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1304,6 +1330,20 @@ export default function NinjaPerformancePage() {
                                 />
                               </button>
                               <span dir="ltr">{day.date}</span>
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteDate(day.date);
+                                    setIsDeleteOpen(true);
+                                  }}
+                                  className="h-5 w-5 flex items-center justify-center rounded text-[var(--muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                                  title={`حذف أداء تاريخ ${day.date}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                               {hasSponsors && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
                                   <Building2 className="h-3 w-3" />
@@ -2107,6 +2147,28 @@ export default function NinjaPerformancePage() {
           </div>
         </form>
       </Modal>
+
+      {/* Delete Performance Modal */}
+      <NinjaDeletePerformanceModal
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        initialDate={deleteDate}
+        existingDates={Array.from(
+          new Set(
+            dailyReportItems
+              .map((d) => d.date)
+              .concat(records.map((r) => r.reportDate))
+              .filter(Boolean)
+          )
+        )}
+        sponsors={sponsors}
+        onSuccess={() => {
+          loadSummary();
+          if (activeTab === "riders") loadRiderReport();
+          if (activeTab === "daily") loadDailyReport();
+          if (activeTab === "records") loadRawRecords();
+        }}
+      />
     </div>
   );
 }

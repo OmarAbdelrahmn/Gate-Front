@@ -23,6 +23,8 @@ import {
 } from "@/lib/jahez/types";
 import { JahezVehicleTypeBadge } from "@/components/jahez/JahezVehicleTypeBadge";
 import { JahezRiderPerformanceReportView } from "@/components/jahez/JahezRiderPerformanceReportView";
+import { JahezDeletePerformanceModal } from "@/components/jahez/JahezDeletePerformanceModal";
+import { listSponsors } from "@/lib/workforce/api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -56,6 +58,7 @@ import {
   Filter,
   RotateCcw,
   CalendarDays,
+  Trash2,
 } from "lucide-react";
 import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 
@@ -64,11 +67,19 @@ export default function JahezOrderPerformancePage() {
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
+  // Strictly require dedicated jahez.performance.delete permission — never infer from read/import!
+  const canDelete = can("jahez.performance.delete");
+
   // Data states
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
+  const [sponsorsList, setSponsorsList] = useState<Array<{ id: string; nameAr?: string; nameEn?: string; registryNameAr?: string }>>([]);
   const [loading, setLoading] = useState(true);
+
+  // Delete Daily Performance Modal State
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteDate, setDeleteDate] = useState(getRiyadhTodayDate());
 
   // Performance Filters & View State
   const [activeTab, setActiveTab] = useState<"periodReport" | "orders" | "batches">("periodReport");
@@ -107,15 +118,17 @@ export default function JahezOrderPerformancePage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [statRes, impRes, accRes] = await Promise.allSettled([
+      const [statRes, impRes, accRes, spsRes] = await Promise.allSettled([
         getJahezStatistics(),
         getJahezImports(1, 50),
         getAllJahezAccounts(100),
+        listSponsors(),
       ]);
 
       if (statRes.status === "fulfilled") setStatistics(statRes.value);
       if (impRes.status === "fulfilled") setImportBatches(impRes.value.items || []);
       if (accRes.status === "fulfilled") setAccounts(accRes.value.items || []);
+      if (spsRes.status === "fulfilled" && Array.isArray(spsRes.value)) setSponsorsList(spsRes.value);
     } catch {
       toast.error("خطأ", "تعذر جلب بيانات أداء الطلبات");
     } finally {
@@ -470,6 +483,22 @@ export default function JahezOrderPerformancePage() {
             <Upload className="h-4 w-4" />
             رفع شيت طلبات يومية (XLSX)
           </Button>
+
+          {canDelete && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setDeleteDate(getRiyadhTodayDate());
+                setIsDeleteOpen(true);
+              }}
+              className="gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+              title="حذف طلبات يوم محدد لتصحيح فترات التكليف"
+            >
+              <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+              حذف طلبات يوم
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1465,6 +1494,21 @@ export default function JahezOrderPerformancePage() {
           ) : null}
         </div>
       </Modal>
+
+      {/* Delete Daily Performance Modal */}
+      <JahezDeletePerformanceModal
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        initialDate={deleteDate}
+        sponsors={
+          sponsorsList.length > 0
+            ? sponsorsList
+            : uniqueSponsors.map((s) => ({ id: s.id, nameAr: s.name }))
+        }
+        onSuccess={() => {
+          loadAll();
+        }}
+      />
     </div>
   );
 }

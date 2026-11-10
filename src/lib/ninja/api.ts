@@ -13,6 +13,7 @@ import {
   type NinjaCredentialRequest,
   type NinjaCredentialResponse,
   type NinjaDeductionResponse,
+  type NinjaDeletePerformanceResponse,
   type NinjaImportResponse,
   type NinjaLifecycleResponse,
   type NinjaPage,
@@ -378,6 +379,24 @@ export async function importNinjaDeductions(
     body: form,
     signal,
     suppressErrorToast: true, // We handle errors and issue table in the UI
+  });
+}
+
+/**
+ * Permanently deletes daily performance records for a specific date (optionally filtered by sponsor).
+ * Requires 'ninja.performance.delete' permission.
+ * Endpoint: DELETE /api/ninja/performance?reportDate=YYYY-MM-DD&reason=...&sponsorId=...
+ */
+export async function deleteNinjaPerformance(
+  reportDate: string,
+  reason: string,
+  sponsorId?: string | null,
+  signal?: AbortSignal
+): Promise<NinjaDeletePerformanceResponse> {
+  const path = ninjaPaths.deletePerformance(reportDate, reason, sponsorId);
+  return authFetch<NinjaDeletePerformanceResponse>(path, {
+    method: "DELETE",
+    signal,
   });
 }
 
