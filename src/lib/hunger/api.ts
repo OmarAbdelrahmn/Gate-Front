@@ -489,6 +489,13 @@ export function getHungerErrorMessage(
   if (errorCode === "files.invalid_file") {
     return "صورة الإثبات غير صالحة أو غير مدعومة. يرجى اختيار صورة بصيغة (JPEG, PNG, WebP, GIF, BMP) لا يتجاوز حجمها 5 ميجابايت.";
   }
+  // Extract server-supplied ProblemDetails detail or title if available
+  const serverDetail = String(
+    details?.detail || details?.title || details?.message || "",
+  ).trim();
+  if (serverDetail) {
+    return serverDetail;
+  }
   if (err instanceof Error && err.message) {
     return err.message;
   }
@@ -496,31 +503,40 @@ export function getHungerErrorMessage(
 }
 
 export function isWalletReviewExpiredOrSuperseded(err: unknown): boolean {
-  const status = (err as { status?: number })?.status;
   const code = String((err as { code?: string })?.code || "").toLowerCase();
+  const details =
+    ((err as { details?: Record<string, unknown> })?.details ||
+      (err as Record<string, unknown>)) ||
+    {};
+  const detailStr = String(
+    details?.detail || details?.title || details?.message || "",
+  ).toLowerCase();
   const msg = String(
-    err instanceof Error ? err.message : err || "",
+    err instanceof Error ? err.message : (err as { detail?: string })?.detail || err || "",
   ).toLowerCase();
-  const detailsStr = JSON.stringify(
-    (err as { details?: unknown })?.details || {},
-  ).toLowerCase();
+  const detailsJson = JSON.stringify(details).toLowerCase();
 
-  if (
+  // ONLY return true for explicit expiry or supersession/replacement.
+  // Never treat a generic 409 status code as stale/superseded!
+  return (
     code.includes("expired") ||
     code.includes("superseded") ||
     code.includes("stale") ||
-    msg.includes("expired") ||
-    msg.includes("superseded") ||
-    msg.includes("stale") ||
+    msg.includes("انتهت مراجعة المحفظة") ||
     msg.includes("انتهت صلاحية") ||
-    msg.includes("استبدل") ||
-    detailsStr.includes("expired") ||
-    detailsStr.includes("superseded") ||
-    status === 409
-  ) {
-    return true;
-  }
-  return false;
+    msg.includes("تم استبدال مراجعة") ||
+    msg.includes("استبدلت بمراجعة") ||
+    msg.includes("superseded") ||
+    msg.includes("expired") ||
+    msg.includes("stale") ||
+    detailStr.includes("انتهت مراجعة المحفظة") ||
+    detailStr.includes("تم استبدال مراجعة") ||
+    detailStr.includes("expired") ||
+    detailStr.includes("superseded") ||
+    detailStr.includes("stale") ||
+    detailsJson.includes("superseded") ||
+    detailsJson.includes("\"expired\"")
+  );
 }
 
 export const HUNGER_FINANCIAL_EVENT_KINDS: Array<{
@@ -2217,22 +2233,38 @@ export function buildHungerWalletReviewFormData(
     ) {
       asg.previousDayUsages.forEach((usage, idx) => {
         const prefix = `assignment.previousDayUsages[${idx}]`;
-        if (Array.isArray(usage.assignmentIds)) {
-          usage.assignmentIds.forEach((id, idIdx) => {
-            append(`${prefix}.assignmentIds[${idIdx}]`, id);
-          });
-        }
+        const assignmentIds = Array.isArray(usage.assignmentIds)
+          ? usage.assignmentIds
+          : [];
+
+        assignmentIds.forEach((id, idIdx) => {
+          append(`${prefix}.assignmentIds[${idIdx}]`, id);
+        });
+
         if (usage.rowVersion) {
           append(`${prefix}.rowVersion`, usage.rowVersion);
         }
-        if (
-          usage.usageRowVersions &&
-          typeof usage.usageRowVersions === "object"
-        ) {
-          for (const [rKey, rVal] of Object.entries(usage.usageRowVersions)) {
-            if (rVal) append(`${prefix}.usageRowVersions.${rKey}`, rVal);
-          }
+
+        // Retain complete usageRowVersions map using canonical bracket syntax:
+        // assignment.previousDayUsages[0].usageRowVersions[<assignment-guid>] = <usage-version>
+        // Include an entry for every assignment in the group, including explicit empty values for null tokens.
+        // Never use a truthiness check that omits null entries.
+        const usageVersions =
+          usage.usageRowVersions && typeof usage.usageRowVersions === "object"
+            ? usage.usageRowVersions
+            : {};
+
+        const allAssignmentIds = new Set<string>([
+          ...assignmentIds,
+          ...Object.keys(usageVersions),
+        ]);
+
+        for (const id of allAssignmentIds) {
+          const rawVal = usageVersions[id];
+          const tokenStr = rawVal === null || rawVal === undefined ? "" : String(rawVal);
+          append(`${prefix}.usageRowVersions[${id}]`, tokenStr);
         }
+
         if (usage.figures && typeof usage.figures === "object") {
           for (const [figKey, figVal] of Object.entries(usage.figures)) {
             if (figVal !== null && figVal !== undefined) {

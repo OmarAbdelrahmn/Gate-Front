@@ -342,7 +342,9 @@ export default function HungerAccountsPage() {
   const [walletReviewResult, setWalletReviewResult] =
     useState<HungerWalletReviewResponse | null>(null);
   const [walletStaleError, setWalletStaleError] = useState<string | null>(null);
+  const [walletConfirmError, setWalletConfirmError] = useState<string | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
+  const walletReviewReqId = useRef(0);
 
   // Wallet Period History State (for distinguishing new accounts without history vs prior activity)
   const [walletHistoryCheck, setWalletHistoryCheck] = useState<{
@@ -1104,6 +1106,7 @@ export default function HungerAccountsPage() {
     setWalletAction(action);
     setWalletReviewResult(null);
     setWalletStaleError(null);
+    setWalletConfirmError(null);
     setRiderLimitError(null);
     setRiderLimitDetails(null);
     setRiderPreCheckWarning(null);
@@ -1274,6 +1277,10 @@ export default function HungerAccountsPage() {
 
     let previousDayUsages = undefined;
     if (walletAction === "Deliver" && assignmentContextRef.current) {
+      // If a review already exists or failed, read a fresh assignment context before re-evaluating
+      if (walletReviewResult) {
+        await assignmentContextRef.current.reloadContext();
+      }
       if (!assignmentContextRef.current.isValid) {
         toast.warning("يرجى استكمال توزيع استخدام اليوم السابق أولاً");
         return;
@@ -1333,8 +1340,10 @@ export default function HungerAccountsPage() {
       payloadAdjustmentEvidence = adjustmentEvidence.trim() || null;
     }
 
+    const currentReq = ++walletReviewReqId.current;
     setWalletBusy(true);
     setWalletStaleError(null);
+    setWalletConfirmError(null);
     setRiderLimitError(null);
     setRiderLimitDetails(null);
     try {
@@ -1384,6 +1393,10 @@ export default function HungerAccountsPage() {
         },
         { suppressErrorToast: true },
       );
+      // Prevent overlapping review requests from overwriting newer state with an older response
+      if (currentReq !== walletReviewReqId.current) {
+        return;
+      }
       setWalletReviewResult(review);
       if (review.canConfirm === false || review.closingBalance === null) {
         if (isMissingContract) {
@@ -1426,11 +1439,15 @@ export default function HungerAccountsPage() {
   };
 
   const handleConfirmWalletReview = async () => {
-    if (!walletReviewResult?.reviewId) return;
+    // Confirm the newest successful reviewId
+    const currentReview = walletReviewResult;
+    if (!currentReview?.reviewId) return;
+
     setWalletBusy(true);
     setWalletStaleError(null);
+    setWalletConfirmError(null);
     try {
-      await confirmHungerWalletReview(walletReviewResult.reviewId, {
+      await confirmHungerWalletReview(currentReview.reviewId, {
         suppressErrorToast: true,
       });
       setWalletModalOpen(false);
@@ -1449,13 +1466,19 @@ export default function HungerAccountsPage() {
         setWalletReviewResult(null);
         toast.error(parsedLimit.message);
       } else if (isWalletReviewExpiredOrSuperseded(err)) {
+        // Reserve the expiry/replacement message for an explicit expiry/replacement response
         const staleMsg =
           "انتهت صلاحية المراجعة أو استُبدلت بمراجعة أحدث — أنشئ مراجعة جديدة";
         setWalletStaleError(staleMsg);
         setWalletReviewResult(null);
         toast.error(staleMsg);
       } else {
-        toast.error(getHungerErrorMessage(err, "تعذر تأكيد مراجعة المحفظة"));
+        // Display the server's actual ProblemDetails for assignment, day-usage, and other business conflicts
+        const serverError = getHungerErrorMessage(err, "تعذر تأكيد مراجعة المحفظة");
+        setWalletConfirmError(serverError);
+        // Already stored reviews with missing token dictionaries must not be reused
+        setWalletReviewResult(null);
+        toast.error(serverError);
       }
     } finally {
       setWalletBusy(false);
@@ -3260,6 +3283,12 @@ export default function HungerAccountsPage() {
           {walletStaleError && (
             <div className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
               {walletStaleError}
+            </div>
+          )}
+
+          {walletConfirmError && (
+            <div className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+              {walletConfirmError}
             </div>
           )}
 

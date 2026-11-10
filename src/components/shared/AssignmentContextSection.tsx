@@ -190,11 +190,21 @@ export const AssignmentContextSection = forwardRef<
             : c.figures.missedOffers ?? null,
       };
 
+      const usageRowVersions: Record<string, string | null> = {};
+      const contextVersions = c.usageRowVersions || {};
+
+      for (const id of c.assignmentIds) {
+        usageRowVersions[id] = contextVersions[id] !== undefined ? contextVersions[id] : null;
+      }
+      for (const [k, v] of Object.entries(contextVersions)) {
+        usageRowVersions[k] = v !== undefined ? v : null;
+      }
+
       previousDayUsages.push({
         assignmentIds: [...c.assignmentIds],
         figures: mergedFigures,
         rowVersion: c.rowVersion,
-        usageRowVersions: { ...c.usageRowVersions },
+        usageRowVersions,
       });
     }
 
