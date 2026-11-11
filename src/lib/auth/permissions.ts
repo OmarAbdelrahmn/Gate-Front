@@ -204,6 +204,11 @@ export const PERMISSIONS = [
   "hunger.finance.withdrawal.arrival.confirm",
   "hunger.finance.rider.payment",
   "hunger.finance.wallet.review",
+  "hunger.finance.seal",
+  "hunger.finance.funding.approve",
+  "hunger.finance.exception.request",
+  "hunger.finance.exception.approve",
+  "hunger.finance.owner_collections.confirm",
   "hunger.remittances.submit",
   "hunger.remittances.cancel_reverse",
   "fleet.vehicles.fields.identity",
@@ -430,6 +435,17 @@ export function hasPermission(
     snapshot.deniedPermissionKeys ?? snapshot.directDenies ?? [],
   );
   if (denied.has(permission)) return false;
+  const roles = (snapshot.roles ?? []).map((r) =>
+    typeof r === "string" ? r.trim().toLowerCase() : "",
+  );
+  if (
+    roles.includes("systemadmin") ||
+    roles.includes("superadmin") ||
+    roles.includes("admin") ||
+    roles.includes("administrator")
+  ) {
+    return true;
+  }
   const perms = [
     ...(snapshot.effectivePermissionKeys ?? []),
     ...(snapshot.effectivePermissions ?? []),

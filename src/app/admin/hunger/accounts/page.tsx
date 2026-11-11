@@ -14,6 +14,9 @@ import {
   updateHungerAccountDisposition,
   createHungerWalletReview,
   confirmHungerWalletReview,
+  createHungerFinanceException,
+  getHungerFinanceExceptions,
+  generateHungerIdempotencyKey,
   checkAccountWalletPeriodStatus,
   parseRiderAccountLimitError,
   getPlatformAccountBusinessContext,
@@ -35,6 +38,7 @@ import {
   type HungerAccountsFilterParams,
   type HungerOperationalDisposition,
   type HungerCompensationModel,
+  type HungerExceptionItem,
   type HungerSimOwnership,
   type HungerWalletReviewResponse,
   type PlatformAccountBusinessContextResponse,
@@ -196,6 +200,7 @@ export default function HungerAccountsPage() {
   const canImportSeed = can("hunger.accounts.import");
   const canUpdateAccount = can("hunger.accounts.update");
   const canWalletReview = canFinanceAction("hunger.finance.wallet.review");
+  const canRequestException = can("hunger.finance.exception.request");
   const canExportAccounts =
     can("hunger.performance.export") && can("hunger.read");
 
@@ -266,18 +271,38 @@ export default function HungerAccountsPage() {
     "Deliver",
   );
   const [walletSupervisorId, setWalletSupervisorId] = useState("");
-  const [walletMobileBalance, setWalletMobileBalance] = useState("0.00");
-  const [walletClosingBalance, setWalletClosingBalance] = useState("");
-  const [walletProvenAdjustments, setWalletProvenAdjustments] =
-    useState("0.00");
+  const [walletBalanceSign, setWalletBalanceSign] = useState<"+" | "-" | "0">(
+    "0",
+  );
+  const [walletBalanceMagnitude, setWalletBalanceMagnitude] = useState("0.00");
   const [walletEvidenceFile, setWalletEvidenceFile] = useState<File | null>(null);
   const [walletEvidencePreview, setWalletEvidencePreview] = useState<string | null>(null);
   const [walletEvidenceError, setWalletEvidenceError] = useState<string | null>(null);
   const walletFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [closingEvidence, setClosingEvidence] = useState("");
-  const [adjustmentEvidence, setAdjustmentEvidence] = useState("");
   const [walletBusinessDate, setWalletBusinessDate] =
     useState(getRiyadhTodayIso());
+
+  // CR-005 NonZeroHandover Exception state inside Wallet Review Modal
+  const [walletApprovedExceptions, setWalletApprovedExceptions] = useState<
+    HungerExceptionItem[]
+  >([]);
+  const [walletExceptionApprovalId, setWalletExceptionApprovalId] =
+    useState("");
+  const [walletExceptionReason, setWalletExceptionReason] = useState(
+    "تسليم حساب برصيد محفظة غير صفري",
+  );
+  const [requestingWalletException, setRequestingWalletException] =
+    useState(false);
+  const [loadingWalletExceptions, setLoadingWalletExceptions] = useState(false);
+
+  const signedWalletMobileBalance = useMemo(() => {
+    if (walletBalanceSign === "0") return 0;
+    const mag = Math.abs(
+      parseFloat(String(walletBalanceMagnitude).replace(/,/g, "")) || 0,
+    );
+    if (mag === 0) return 0;
+    return walletBalanceSign === "-" ? -mag : mag;
+  }, [walletBalanceSign, walletBalanceMagnitude]);
 
   useEffect(() => {
     return () => {
@@ -988,32 +1013,65 @@ export default function HungerAccountsPage() {
     };
   }, [accounts]);
 
-  // Live calculation for Wallet Review (null when closingBalance is omitted, unless confirmed no previous history)
-  const computedCurrentPeriodBalance = useMemo<number | null>(() => {
-    const rawClosing = String(walletClosingBalance).trim();
-    if (rawClosing === "") {
-      // Authoritative account data confirms there is no previous wallet period: closing is 0, adjustments is 0
-      if (walletAction === "Deliver" && walletHistoryCheck.hasNoHistory) {
-        const mobile =
-          parseFloat(String(walletMobileBalance).replace(/,/g, "")) || 0;
-        return Number(mobile.toFixed(2));
+  const loadWalletApprovedExceptions = async (accId: string) => {
+    if (!platformId) return;
+    setLoadingWalletExceptions(true);
+    try {
+      const res = await getHungerFinanceExceptions(
+        {
+          platformId,
+          status: "Approved",
+          page: 1,
+          pageSize: 50,
+        },
+        { suppressErrorToast: true },
+      );
+      const matching = (res.items || []).filter(
+        (ex) =>
+          ex.kind === "NonZeroHandover" &&
+          (!ex.accountId || ex.accountId === accId),
+      );
+      setWalletApprovedExceptions(matching);
+      if (matching.length > 0 && !walletExceptionApprovalId) {
+        setWalletExceptionApprovalId(matching[0].exceptionId);
       }
-      return null;
+    } catch {
+      // ignore
+    } finally {
+      setLoadingWalletExceptions(false);
     }
-    const mobile =
-      parseFloat(String(walletMobileBalance).replace(/,/g, "")) || 0;
-    const closing =
-      parseFloat(rawClosing.replace(/,/g, "")) || 0;
-    const adj =
-      parseFloat(String(walletProvenAdjustments).replace(/,/g, "")) || 0;
-    return Number((mobile - (closing + adj)).toFixed(2));
-  }, [
-    walletMobileBalance,
-    walletClosingBalance,
-    walletProvenAdjustments,
-    walletAction,
-    walletHistoryCheck.hasNoHistory,
-  ]);
+  };
+
+  const handleRequestWalletException = async () => {
+    if (!selectedAccount || !platformId) {
+      toast.warning("تعذر تحديد الحساب أو المنصة لطلب الاستثناء");
+      return;
+    }
+    const accId = selectedAccount.accountId || selectedAccount.id || "";
+    const reqAmount =
+      walletReviewResult?.attributedBalance ?? signedWalletMobileBalance;
+    if (!walletExceptionReason.trim()) {
+      toast.warning("يرجى كتابة سبب طلب الاستثناء");
+      return;
+    }
+    setRequestingWalletException(true);
+    try {
+      await createHungerFinanceException({
+        platformId,
+        kind: "NonZeroHandover",
+        accountId: accId,
+        supervisorEmployeeId: walletSupervisorId || undefined,
+        amount: reqAmount,
+        reason: walletExceptionReason.trim(),
+        idempotencyKey: generateHungerIdempotencyKey("exc-wallet"),
+      });
+      await loadWalletApprovedExceptions(accId);
+    } catch (err) {
+      toast.error(getHungerErrorMessage(err, "تعذر إرسال طلب الاستثناء"));
+    } finally {
+      setRequestingWalletException(false);
+    }
+  };
 
   const copyText = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -1110,17 +1168,18 @@ export default function HungerAccountsPage() {
     setRiderLimitError(null);
     setRiderLimitDetails(null);
     setRiderPreCheckWarning(null);
-    setWalletMobileBalance(
+    const initialBal =
       acc.lastWalletBalance !== undefined && acc.lastWalletBalance !== null
-        ? String(acc.lastWalletBalance)
-        : "0.00",
+        ? Number(acc.lastWalletBalance)
+        : 0;
+    setWalletBalanceSign(
+      initialBal > 0 ? "+" : initialBal < 0 ? "-" : "0",
     );
-    setWalletClosingBalance(
-      acc.lastClosingBalance !== undefined && acc.lastClosingBalance !== null
-        ? String(acc.lastClosingBalance)
-        : "",
+    setWalletBalanceMagnitude(
+      initialBal !== 0 ? Math.abs(initialBal).toFixed(2) : "0.00",
     );
-    setWalletProvenAdjustments("0.00");
+    setWalletExceptionApprovalId("");
+    setWalletExceptionReason("تسليم حساب برصيد محفظة غير صفري");
     if (walletEvidencePreview) {
       URL.revokeObjectURL(walletEvidencePreview);
     }
@@ -1130,8 +1189,6 @@ export default function HungerAccountsPage() {
     if (walletFileInputRef.current) {
       walletFileInputRef.current.value = "";
     }
-    setClosingEvidence("");
-    setAdjustmentEvidence("");
     setWalletBusinessDate(getRiyadhTodayIso());
     setRiderLimitError(null);
     setRiderLimitDetails(null);
@@ -1156,6 +1213,7 @@ export default function HungerAccountsPage() {
 
     const accId = acc.accountId || acc.id || "";
     if (action === "Deliver") {
+      void loadWalletApprovedExceptions(accId);
       setWalletHistoryCheck({
         loading: true,
         hasNoHistory: false,
@@ -1171,6 +1229,7 @@ export default function HungerAccountsPage() {
         });
       });
     } else {
+      setWalletApprovedExceptions([]);
       setWalletHistoryCheck({
         loading: false,
         hasNoHistory: false,
@@ -1244,6 +1303,10 @@ export default function HungerAccountsPage() {
       toast.warning("يرجى اختيار المشرف المسؤول عن المراجعة المالية");
       return;
     }
+    if (!walletEvidenceFile) {
+      toast.warning("يرجى إرفاق صورة إثبات رصيد المحفظة (إلزامي)");
+      return;
+    }
     const todayIso = getRiyadhTodayIso();
     const isBackdatedDeliver =
       walletAction === "Deliver" && assignEffectiveFrom < todayIso;
@@ -1288,58 +1351,6 @@ export default function HungerAccountsPage() {
       previousDayUsages = assignmentContextRef.current.getPreviousDayUsages();
     }
 
-    const hasRawClosing = String(walletClosingBalance).trim() !== "";
-    let isNoHistory = false;
-    let isMissingContract = false;
-
-    if (!hasRawClosing && walletAction === "Deliver") {
-      let currentCheck = walletHistoryCheck;
-      if (currentCheck.loading) {
-        setWalletBusy(true);
-        const resolved = await checkAccountWalletPeriodStatus(
-          accId,
-          selectedAccount,
-        );
-        currentCheck = {
-          loading: false,
-          hasNoHistory: resolved.hasNoHistory,
-          missingContract: resolved.missingContract,
-          reason: resolved.reason,
-        };
-        setWalletHistoryCheck(currentCheck);
-      }
-      isNoHistory = currentCheck.hasNoHistory;
-      isMissingContract = currentCheck.missingContract;
-    }
-
-    let payloadClosingBalance: number | null;
-    let payloadClosingEvidence: string | null;
-    let payloadProvenAdjustments: number;
-    let payloadAdjustmentEvidence: string | null;
-
-    if (hasRawClosing) {
-      payloadClosingBalance =
-        parseFloat(String(walletClosingBalance).replace(/,/g, "")) || 0;
-      payloadClosingEvidence = closingEvidence.trim() || null;
-      payloadProvenAdjustments =
-        parseFloat(String(walletProvenAdjustments).replace(/,/g, "")) || 0;
-      payloadAdjustmentEvidence = adjustmentEvidence.trim() || null;
-    } else if (isNoHistory) {
-      // Authoritative account data confirms there is no previous wallet period:
-      // Send closingBalance: 0, closingEvidence: null, provenAdjustments: 0, adjustmentEvidence: null
-      payloadClosingBalance = 0;
-      payloadClosingEvidence = null;
-      payloadProvenAdjustments = 0;
-      payloadAdjustmentEvidence = null;
-    } else {
-      // Accounts with prior activity and unknown closing balance, or missing contract: preserve null
-      payloadClosingBalance = null;
-      payloadClosingEvidence = closingEvidence.trim() || null;
-      payloadProvenAdjustments =
-        parseFloat(String(walletProvenAdjustments).replace(/,/g, "")) || 0;
-      payloadAdjustmentEvidence = adjustmentEvidence.trim() || null;
-    }
-
     const currentReq = ++walletReviewReqId.current;
     setWalletBusy(true);
     setWalletStaleError(null);
@@ -1354,12 +1365,13 @@ export default function HungerAccountsPage() {
           riderProfileId: holderRiderId,
           supervisorEmployeeId: walletSupervisorId,
           businessDate: walletBusinessDate,
-          mobileBalance: String(walletMobileBalance).trim(),
-          closingBalance: payloadClosingBalance,
-          provenAdjustments: payloadProvenAdjustments,
-          walletEvidence: walletEvidenceFile || null,
-          closingEvidence: payloadClosingEvidence,
-          adjustmentEvidence: payloadAdjustmentEvidence,
+          mobileBalance: signedWalletMobileBalance,
+          provenAdjustments: 0,
+          walletEvidence: walletEvidenceFile,
+          exceptionApprovalId:
+            walletAction === "Deliver" && walletExceptionApprovalId.trim()
+              ? walletExceptionApprovalId.trim()
+              : null,
           assignment:
             walletAction === "Deliver"
               ? {
@@ -1398,16 +1410,14 @@ export default function HungerAccountsPage() {
         return;
       }
       setWalletReviewResult(review);
-      if (review.canConfirm === false || review.closingBalance === null) {
-        if (isMissingContract) {
-          toast.warning(
-            "تم حفظ مراجعة المحفظة — تعذر التحقق من الفترات السابقة (عقد الـ API غير مكتمل)؛ يجب تسجيل رصيد الإقفال السابق مع دليله للاعتماد",
-          );
-        } else {
-          toast.warning(
-            "تم حفظ مراجعة المحفظة — الحساب له نشاط سابق؛ يجب تسجيل رصيد الإقفال السابق مع دليله للاعتماد النهائي",
-          );
-        }
+      if (review.requiresException) {
+        toast.warning(
+          "تم حفظ مراجعة المحفظة — يتطلب تسليم الحساب برصيد غير صفري استثناءً معتمدًا (NonZeroHandover) لتفعيل التأكيد",
+        );
+      } else if (review.canConfirm === false || review.closingBalance === null) {
+        toast.warning(
+          "تم حفظ مراجعة المحفظة — لا يوجد إقفال أو فاتورة مسجلة للشهر السابق؛ سجّل الإقفال أو الفاتورة ثم أنشئ مراجعة جديدة",
+        );
       } else {
         toast.success(
           "تمت مراجعة المحفظة بنجاح (صالحة لمدة 20 دقيقة) — يمكنك الآن التأكيد النهائي",
@@ -2837,11 +2847,28 @@ export default function HungerAccountsPage() {
               </span>
             </div>
             <p className="mt-1 text-[11px]">
-              يُقبل رصيد الجوال الموجب أو السالب أو الصفر في كلٍ من التسليم
-              والاستلام دون الحاجة لصلاحية استثنائية، وتُحفظ المراجعة لمدة 20
-              دقيقة قبل التنفيذ النهائي.
+              يُحتسب رصيد الإقفال السابق والتسويات المثبتة تلقائيًا من النظام
+              (الفاتورة الضريبية أو الإقفال الشهري الموثق)، وتُحفظ المراجعة لمدة
+              20 دقيقة قبل التنفيذ النهائي.
             </p>
           </div>
+
+          {selectedAccount?.disposition === "WalletPending" && (
+            <div className="flex items-start gap-2 rounded-xl border border-purple-300 bg-purple-50/80 p-3 text-xs text-purple-950 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-100">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-purple-600 dark:text-purple-400" />
+              <div>
+                <p className="font-bold">
+                  الحساب في وضعية انتظار تصفية المحفظة (WalletPending)
+                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed">
+                  هذا الحساب معلّق بسبب وجود مقترح عهدة مفتوح (CustodyProposal).
+                  لن يعود الحساب إلى الحالة التشغيلية النشطة (Normal) إلا عند
+                  إجراء مراجعة وتأكيد تسليم (Deliver) برصيد محفظة يساوي صفر
+                  (mobileBalance = 0).
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Deliver: Wallet Period History Check Banner */}
           {walletAction === "Deliver" && (
@@ -2855,54 +2882,16 @@ export default function HungerAccountsPage() {
                 </div>
               )}
               {!walletHistoryCheck.loading &&
-                walletHistoryCheck.hasNoHistory &&
-                !walletClosingBalance.trim() && (
+                walletHistoryCheck.hasNoHistory && (
                   <div className="flex items-start gap-2 rounded-xl border border-emerald-300 bg-emerald-50/80 p-3 text-xs text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                     <div>
                       <p className="font-bold">
-                        حساب جديد دون فترات محفظة سابقة
+                        حساب جديد دون فترات محفظة سابقة (NoPriorPeriod)
                       </p>
                       <p className="mt-0.5 text-[11px] leading-relaxed">
-                        أكدت البيانات المعتمدة عدم وجود فترات محفظة سابقة. سيتم
-                        إرسال رصيد إقفال بقيمة 0 والتسويات بقيمة 0 تلقائيًا بدون
-                        أدلة لاعتماد التسليم مباشرة.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              {!walletHistoryCheck.loading &&
-                !walletHistoryCheck.hasNoHistory &&
-                !walletHistoryCheck.missingContract &&
-                !walletClosingBalance.trim() && (
-                  <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                    <div>
-                      <p className="font-bold">
-                        الحساب لديه نشاط أو فترات سابقة — يلزم تسجيل رصيد الإقفال
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-relaxed">
-                        {walletHistoryCheck.reason ||
-                          "الحساب لديه سجل محفظة سابق؛ لا يمكن اعتماد التسليم برصيد إقفال غير معروف. يرجى إدخال رصيد الإقفال السابق مع إثباته للاعتماد."}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              {!walletHistoryCheck.loading &&
-                walletHistoryCheck.missingContract &&
-                !walletClosingBalance.trim() && (
-                  <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50/80 p-3 text-xs text-rose-950 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                    <div>
-                      <p className="font-bold">
-                        عقد الـ API لا يتيح التحقق القاطع من سجل المحفظة (Missing
-                        Backend Contract)
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-relaxed">
-                        تعذر تأكيد ما إذا كان الحساب جديدًا كليًا أو لديه فترات
-                        سابقة. تم الإبقاء على رصيد الإقفال كـ null منعًا للخطأ
-                        المالي؛ يجب تسجيل رصيد الإقفال السابق يدويًا مع دليله
-                        للاعتماد.
+                        أكدت البيانات المعتمدة عدم وجود فترات محفظة سابقة. سيعتمد
+                        الخادم رصيد إقفال بقيمة 0 تلقائيًا.
                       </p>
                     </div>
                   </div>
@@ -2930,75 +2919,103 @@ export default function HungerAccountsPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Input
-              label="رصيد الجوال الحالي (+ / - / 0) *"
-              value={walletMobileBalance}
-              onChange={(e) => setWalletMobileBalance(e.target.value)}
-              placeholder="مثال: -100.00 أو +250.00"
-            />
-            <Input
-              label="رصيد الإقفال السابق (اختياري)"
-              type="number"
-              step="0.01"
-              value={walletClosingBalance}
-              onChange={(e) => {
-                setWalletClosingBalance(e.target.value);
-                setWalletReviewResult(null);
-              }}
-              placeholder={
-                walletAction === "Deliver" && walletHistoryCheck.hasNoHistory
-                  ? "0.00 (حساب جديد بدون فترات سابقة)"
-                  : "اتركه فارغًا إن لم يتوفر"
-              }
-            />
-            <Input
-              label="التسويات المثبتة"
-              type="number"
-              step="0.01"
-              value={walletProvenAdjustments}
-              onChange={(e) => setWalletProvenAdjustments(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] px-4 py-3">
-            <span className="text-xs font-semibold text-[var(--muted)]">
-              صافي رصيد الفترة الحالية المحسوب:
-            </span>
-            {computedCurrentPeriodBalance === null ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
-                  غير معروف
+          {/* Mobile Balance: 3 exclusive sign controls (+ / - / 0) + magnitude */}
+          <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)]/50 p-3.5">
+            <label className="block text-xs font-bold text-[var(--foreground)]">
+              رصيد الجوال الحالي (اختر الإشارة الحصرية ثم المقدار) *
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setWalletBalanceSign("+");
+                  setWalletReviewResult(null);
+                }}
+                className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                  walletBalanceSign === "+"
+                    ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--subtle-bg)]"
+                }`}
+              >
+                + موجب (لصالح المحفظة)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setWalletBalanceSign("-");
+                  setWalletReviewResult(null);
+                }}
+                className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                  walletBalanceSign === "-"
+                    ? "border-rose-600 bg-rose-600 text-white shadow-sm"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--subtle-bg)]"
+                }`}
+              >
+                − سالب (مديونية)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setWalletBalanceSign("0");
+                  setWalletBalanceMagnitude("0.00");
+                  setWalletReviewResult(null);
+                }}
+                className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                  walletBalanceSign === "0"
+                    ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--subtle-bg)]"
+                }`}
+              >
+                0 صفر
+              </button>
+            </div>
+            <div className="flex items-center gap-3 pt-1">
+              <div className="flex-1">
+                <Input
+                  label="مقدار الرصيد"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  disabled={walletBalanceSign === "0"}
+                  value={
+                    walletBalanceSign === "0" ? "0.00" : walletBalanceMagnitude
+                  }
+                  onChange={(e) => {
+                    setWalletBalanceMagnitude(e.target.value);
+                    setWalletReviewResult(null);
+                  }}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="mt-5 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-center">
+                <span className="block text-[10px] text-[var(--muted)]">
+                  القيمة المرسلة
                 </span>
-                <span className="text-[11px] text-[var(--muted)]">
-                  (حفظ المراجعة فقط — يتوقف التأكيد لعدم إدخال رصيد الإقفال)
+                <span
+                  className={`font-mono text-sm font-extrabold ${
+                    signedWalletMobileBalance < 0
+                      ? "text-rose-600 dark:text-rose-400"
+                      : signedWalletMobileBalance > 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-[var(--foreground)]"
+                  }`}
+                  dir="ltr"
+                >
+                  {signedWalletMobileBalance >= 0
+                    ? `+${signedWalletMobileBalance.toFixed(2)}`
+                    : signedWalletMobileBalance.toFixed(2)}{" "}
+                  SAR
                 </span>
               </div>
-            ) : (
-              <span
-                className={`text-base font-extrabold ${
-                  computedCurrentPeriodBalance < 0
-                    ? "text-rose-600 dark:text-rose-400"
-                    : computedCurrentPeriodBalance > 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-[var(--foreground)]"
-                }`}
-                dir="ltr"
-              >
-                {computedCurrentPeriodBalance >= 0
-                  ? `+${computedCurrentPeriodBalance.toFixed(2)}`
-                  : computedCurrentPeriodBalance.toFixed(2)}{" "}
-                SAR
-              </span>
-            )}
+            </div>
           </div>
 
-          {/* Wallet Evidence Image & Optional Reference Evidences */}
+          {/* Mandatory Wallet Evidence Image */}
           <div className="space-y-3 rounded-xl border border-[var(--border)] p-3.5">
             <div>
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-[var(--foreground)]">
-                  صورة إثبات رصيد المحفظة (اختياري)
+                  صورة إثبات رصيد المحفظة (إلزامي) *
                 </label>
                 <span className="text-[11px] text-[var(--muted)]">
                   JPG, PNG, WebP, GIF, BMP — الحد الأقصى 5 ميجابايت
@@ -3023,10 +3040,10 @@ export default function HungerAccountsPage() {
                 >
                   <Upload className="h-6 w-6 text-[var(--muted)]" />
                   <p className="mt-1 text-xs font-semibold text-[var(--foreground)]">
-                    انقر لاختيار صورة إثبات رصيد المحفظة
+                    انقر لاختيار صورة إثبات رصيد المحفظة *
                   </p>
-                  <p className="mt-0.5 text-[11px] text-[var(--muted)]">
-                    (اختياري — يمكنك المتابعة بدون إرفاق صورة)
+                  <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">
+                    (إلزامي لإجراء مراجعة المحفظة)
                   </p>
                 </div>
               ) : (
@@ -3095,22 +3112,82 @@ export default function HungerAccountsPage() {
                 </p>
               )}
             </div>
-
-            <div className="grid grid-cols-1 gap-3 border-t border-[var(--border)] pt-2 sm:grid-cols-2">
-              <Input
-                label="مرجع إثبات الإقفال (اختياري)"
-                value={closingEvidence}
-                onChange={(e) => setClosingEvidence(e.target.value)}
-                placeholder="مرجع الإقفال"
-              />
-              <Input
-                label="مرجع إثبات التسويات (اختياري)"
-                value={adjustmentEvidence}
-                onChange={(e) => setAdjustmentEvidence(e.target.value)}
-                placeholder="مرجع التسوية"
-              />
-            </div>
           </div>
+
+          {/* NonZeroHandover Exception Request & Selection for Deliver */}
+          {walletAction === "Deliver" &&
+            (walletReviewResult?.requiresException ||
+              walletApprovedExceptions.length > 0 ||
+              signedWalletMobileBalance !== 0) && (
+              <div className="space-y-2.5 rounded-xl border border-amber-300 bg-amber-50/70 p-3.5 text-xs dark:border-amber-800 dark:bg-amber-950/30">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-bold text-amber-950 dark:text-amber-100">
+                    استثناء تسليم برصيد غير صفري (NonZeroHandover — exceptionApprovalId)
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      selectedAccount &&
+                      void loadWalletApprovedExceptions(
+                        selectedAccount.accountId || selectedAccount.id || "",
+                      )
+                    }
+                    disabled={loadingWalletExceptions}
+                  >
+                    <RefreshCw className="ml-1 h-3.5 w-3.5" />
+                    تحديث الاستثناءات المعتمدة
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-semibold">
+                      اختر استثناءً معتمدًا (Approved) لهذا الحساب:
+                    </label>
+                    <select
+                      value={walletExceptionApprovalId}
+                      onChange={(e) => {
+                        setWalletExceptionApprovalId(e.target.value);
+                        setWalletReviewResult(null);
+                      }}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs"
+                    >
+                      <option value="">-- بدون استثناء --</option>
+                      {walletApprovedExceptions.map((ex) => (
+                        <option key={ex.exceptionId} value={ex.exceptionId}>
+                          {ex.exceptionId.slice(0, 8)} — المبلغ: {ex.amount} SAR
+                          — {ex.reason}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {canRequestException && (
+                    <div className="space-y-1.5">
+                      <Input
+                        label="طلب استثناء جديد (السبب)"
+                        value={walletExceptionReason}
+                        onChange={(e) =>
+                          setWalletExceptionReason(e.target.value)
+                        }
+                        placeholder="سبب التسليم برصيد غير صفري..."
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void handleRequestWalletException()}
+                        disabled={requestingWalletException}
+                      >
+                        {requestingWalletException
+                          ? "جارٍ إرسال الطلب..."
+                          : "طلب استثناء NonZeroHandover"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
           {walletAction === "Deliver" ? (
             <div className="space-y-3 rounded-xl border border-[var(--border)] p-3.5">

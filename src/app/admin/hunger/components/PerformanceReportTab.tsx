@@ -32,6 +32,7 @@ import {
   ChevronUp,
   Download,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 interface SelectOption {
@@ -43,6 +44,8 @@ interface SelectOption {
 interface PerformanceReportTabProps {
   canReadPerformance: boolean;
   canExportPerformance: boolean;
+  canDeletePerformance?: boolean;
+  onOpenDeleteModal?: (dateStr?: string) => void;
   accountOptions: SelectOption[];
   riderOptions: SelectOption[];
   employeeOptions: SelectOption[];
@@ -98,6 +101,8 @@ function getSeverityTone(severity?: string | null): BadgeTone {
 export function PerformanceReportTab({
   canReadPerformance,
   canExportPerformance,
+  canDeletePerformance = false,
+  onOpenDeleteModal,
   accountOptions,
   riderOptions,
   employeeOptions,
@@ -527,7 +532,7 @@ export function PerformanceReportTab({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -546,6 +551,18 @@ export function PerformanceReportTab({
               >
                 <Download className="ml-1.5 h-3.5 w-3.5" />
                 تصدير الأداء (.xlsx)
+              </Button>
+            )}
+            {canDeletePerformance && onOpenDeleteModal && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onOpenDeleteModal(throughDate || todayIso)}
+                className="gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+                title="حذف تشغيل يوم محدد لتصحيح التكليفات"
+              >
+                <Trash2 className="ml-1.5 h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                حذف تشغيل يوم
               </Button>
             )}
           </div>
@@ -869,7 +886,25 @@ export function PerformanceReportTab({
 
                           {/* Period */}
                           <td className="px-3 py-2.5 font-mono">
-                            {formatPeriod(row.period, period)}
+                            <div className="flex items-center gap-1.5">
+                              <span>{formatPeriod(row.period, period)}</span>
+                              {canDeletePerformance &&
+                                onOpenDeleteModal &&
+                                period === "day" &&
+                                row.period && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onOpenDeleteModal(row.period.slice(0, 10));
+                                    }}
+                                    className="rounded p-0.5 text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 transition-colors"
+                                    title={`حذف تشغيل يوم ${row.period.slice(0, 10)}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                            </div>
                           </td>
 
                           {/* Coverage Through */}
@@ -1234,7 +1269,24 @@ export function PerformanceReportTab({
                   </th>
                   {horizontalPeriods.map((colPeriod) => (
                     <th key={colPeriod} className="px-3 py-2.5 font-mono">
-                      {formatPeriod(colPeriod, period)}
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{formatPeriod(colPeriod, period)}</span>
+                        {canDeletePerformance &&
+                          onOpenDeleteModal &&
+                          period === "day" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenDeleteModal(colPeriod.slice(0, 10));
+                              }}
+                              className="rounded p-0.5 text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 transition-colors"
+                              title={`حذف تشغيل يوم ${colPeriod.slice(0, 10)}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                      </div>
                     </th>
                   ))}
                 </tr>

@@ -11,8 +11,10 @@ import {
   getHungerWallets,
   exportHungerWallets,
   getHungerAccountWalletHistory,
+  getApprovalStatusMeta,
   getFinancialEventKindMeta,
   getRemittanceStatusMeta,
+  getWalletAlertMeta,
   HUNGER_WALLET_RECEIPT_STATES,
   getHungerErrorMessage,
   resolveHungerEvidenceUrl,
@@ -67,6 +69,7 @@ export function WalletsTab({
   const [balanceThrough, setBalanceThrough] = useState("");
   const [balanceEqual, setBalanceEqual] = useState("");
   const [receiptState, setReceiptState] = useState("all");
+  const [alertOnly, setAlertOnly] = useState(false);
   const [accountFilters, setAccountFilters] =
     useState<HungerAccountsFilterParams>({});
 
@@ -105,6 +108,7 @@ export function WalletsTab({
       balanceThrough: balanceThrough.trim() || undefined,
       balanceEqual: balanceEqual.trim() || undefined,
       receiptState: receiptState !== "all" ? receiptState : undefined,
+      alertOnly: alertOnly || undefined,
       accountFilters,
     }),
     [
@@ -114,6 +118,7 @@ export function WalletsTab({
       balanceThrough,
       balanceEqual,
       receiptState,
+      alertOnly,
       accountFilters,
     ],
   );
@@ -293,6 +298,18 @@ export function WalletsTab({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-amber-300 bg-amber-50/70 px-3 py-2 text-xs font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <input
+                type="checkbox"
+                checked={alertOnly}
+                onChange={(e) => {
+                  setAlertOnly(e.target.checked);
+                  setPage(1);
+                }}
+                className="h-4 w-4 rounded border-amber-400 text-amber-600"
+              />
+              <span>المحافظ ذات التنبيهات فقط (alertOnly)</span>
+            </label>
             <Button
               variant="secondary"
               size="sm"
@@ -410,21 +427,34 @@ export function WalletsTab({
                 items.map((row) => {
                   const observed = row.observedOn || row.observedAtUtc;
                   const ev = row.evidence || row.walletEvidence;
+                  const alertMeta = getWalletAlertMeta(row.alert);
                   return (
                     <tr
                       key={row.accountId}
                       className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                     >
                       <td className="px-4 py-3.5">
-                        <div className="font-mono font-bold text-[var(--foreground)]">
-                          {row.externalAccountId ||
-                            row.accountCode ||
-                            row.accountId}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono font-bold text-[var(--foreground)]">
+                            {row.externalAccountId ||
+                              row.accountCode ||
+                              row.accountId}
+                          </span>
+                          {alertMeta && (
+                            <Badge tone={alertMeta.badgeTone}>
+                              {alertMeta.labelAr}
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-[11px] text-[var(--muted-foreground)]">
                           المندوب: {row.assignedRiderNameAr || "غير معروف"} |
                           المالك: {row.ownerNameAr || "غير معروف"}
                         </div>
+                        {row.alert === "CustodyProposalOpen" && (
+                          <div className="mt-1 rounded bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                            الحساب بوضعية WalletPending — يُعاد فتحه لـ Normal فقط عند تأكيد تسليم (Deliver) برصيد محفظة يساوي 0
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="space-y-0.5">
@@ -603,6 +633,20 @@ export function WalletsTab({
                           </td>
                           <td className="px-3 py-2 text-[11px]">
                             <div className="flex flex-wrap items-center gap-1.5">
+                              {ev.approvalStatus &&
+                                ev.approvalStatus !== "NotRequired" && (
+                                  <Badge
+                                    tone={
+                                      getApprovalStatusMeta(ev.approvalStatus)
+                                        .badgeTone
+                                    }
+                                  >
+                                    {
+                                      getApprovalStatusMeta(ev.approvalStatus)
+                                        .labelAr
+                                    }
+                                  </Badge>
+                                )}
                               {remMeta && (
                                 <Badge tone={remMeta.badgeTone}>
                                   {remMeta.labelAr}

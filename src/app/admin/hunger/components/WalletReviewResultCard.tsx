@@ -3,8 +3,8 @@
 
 import { Badge } from "@/components/ui/Badge";
 import type { HungerWalletReviewResponse } from "@/lib/hunger/types";
-import { resolveHungerEvidenceUrl } from "@/lib/hunger/api";
-import { AlertTriangle, Clock, ExternalLink, FileImage } from "lucide-react";
+import { getClosingSourceMeta, resolveHungerEvidenceUrl } from "@/lib/hunger/api";
+import { AlertTriangle, Clock, ExternalLink, FileImage, ShieldAlert } from "lucide-react";
 
 interface WalletReviewResultCardProps {
   title: string;
@@ -43,30 +43,55 @@ export function WalletReviewResultCard({
   title,
   review,
 }: WalletReviewResultCardProps) {
+  const isBlocked = review.canConfirm === false;
   const isPriorCloseUnknown =
-    review.canConfirm === false || review.closingBalance === null;
+    review.closingBalance === null ||
+    review.closingSource === "InvoiceAbsent" ||
+    review.closingSource === "Unknown";
+  const closingSourceMeta = getClosingSourceMeta(review.closingSource);
 
   return (
     <div
       className={`space-y-2.5 rounded-xl border p-3.5 text-xs ${
-        isPriorCloseUnknown
+        isBlocked
           ? "border-amber-300 bg-amber-50/80 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
           : "border-emerald-300 bg-emerald-50/80 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
         <span>{title}</span>
-        <Badge tone={isPriorCloseUnknown ? "orange" : "green"}>
-          {isPriorCloseUnknown ? "غير قابل للتأكيد" : "جاهزة للتأكيد النهائي"}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {review.closingSource && (
+            <Badge tone={closingSourceMeta.badgeTone}>
+              مصدر الإقفال: {closingSourceMeta.labelAr}
+            </Badge>
+          )}
+          <Badge tone={isBlocked ? "orange" : "green"}>
+            {isBlocked ? "غير قابل للتأكيد" : "جاهزة للتأكيد النهائي"}
+          </Badge>
+        </div>
       </div>
 
       {isPriorCloseUnknown && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 p-2.5 text-rose-900 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
           <p className="font-bold">
-            لا يوجد إقفال مسجل للشهر السابق — سجّل الإقفال ثم أنشئ مراجعة جديدة
+            لا يوجد إقفال أو فاتورة مسجلة للشهر السابق — سجّل الفاتورة أو الإقفال الشهري ثم أنشئ مراجعة جديدة
           </p>
+        </div>
+      )}
+
+      {review.requiresException && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-100/80 p-2.5 text-amber-950 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-100">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="space-y-0.5">
+            <p className="font-bold">
+              يتطلب استثناء تسليم برصيد غير صفري (NonZeroHandover)
+            </p>
+            <p className="text-[11px]">
+              رصيد المحفظة المنسوب غير صفري ({formatNullableAmount(review.attributedBalance)}). يرجى طلب استثناء واعتماده ثم إعادة المراجعة مع ربط الاستثناء المعتمد لتفعيل التأكيد.
+            </p>
+          </div>
         </div>
       )}
 

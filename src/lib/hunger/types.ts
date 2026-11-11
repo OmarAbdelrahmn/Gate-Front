@@ -11,7 +11,8 @@ export type HungerOperationalDisposition =
   | "Problem"
   | "AdministrativeStop"
   | "Blocked"
-  | "DeferredNextMonth";
+  | "DeferredNextMonth"
+  | "WalletPending";
 
 export type HungerCompensationModel = "Commission" | "Target" | "Unknown";
 
@@ -112,7 +113,57 @@ export type HungerFinancialEventKind =
   | "Collection"
   | "WithdrawalCompany"
   | "WithdrawalSupervisor"
-  | "RiderPayment";
+  | "RiderPayment"
+  | "OwnerCollectionReceipt"
+  | "OwnerCollectionConfirmation"
+  | "CloseAdjustmentAdvance"
+  | "CloseAdjustmentWash"
+  | "CustodyProposal"
+  | "FundingApproval"
+  | "Seal"
+  | "SealRejection"
+  | "WalletDelivery"
+  | "WalletReturn";
+
+export type HungerApprovalStatus =
+  | "PendingSeal"
+  | "Sealed"
+  | "Rejected"
+  | "NotRequired";
+
+export type HungerEvidencePurpose =
+  | "WalletBefore"
+  | "WalletAfter"
+  | "Wallet"
+  | "Arrival";
+
+export type HungerDestinationChannel =
+  | "Stc"
+  | "Cashbox"
+  | "Bank"
+  | "OwnerVault";
+
+export type HungerClosingSource =
+  | "Invoice"
+  | "Manual"
+  | "NoPriorPeriod"
+  | "InvoiceAbsent"
+  | "Unknown";
+
+export type HungerWalletAlert =
+  | "None"
+  | "WalletNotZero"
+  | "CustodyProposalOpen";
+
+export type HungerExceptionKind =
+  | "NonZeroHandover"
+  | "CustodyIdentityMismatch";
+
+export type HungerExceptionStatus =
+  | "Pending"
+  | "Approved"
+  | "Rejected"
+  | "Consumed";
 
 export type HungerSettlementDocumentKind =
   | "Invoice"
@@ -926,19 +977,116 @@ export interface HungerFinanceEventCreateRequest {
   businessDate: string;
   idempotencyKey: string;
   evidenceReference: string;
-  // Withdrawal extra fields (v2.1)
+  // Withdrawal extra fields (v2.1 + CR-005)
   sourceWalletBalance?: number | null;
   destinationType?: "Company" | "Supervisor" | string | null;
   destinationOwnerId?: string | null;
+  destinationChannel?: HungerDestinationChannel | string | null;
   transferReference?: string | null;
   transferDate?: string | null;
   againstReservedRights?: boolean | null;
+  // CR-005 evidence & replacement fields
+  evidenceBeforeId?: string | null;
+  evidenceAfterId?: string | null;
+  walletEvidenceId?: string | null;
+  supersedesEventId?: string | null;
 }
 
 export interface HungerWithdrawalActionRequest {
   idempotencyKey: string;
   businessDate: string;
   evidenceReference: string;
+}
+
+export interface HungerEvidenceUploadRequest {
+  platformId: string;
+  accountId: string;
+  purpose: HungerEvidencePurpose;
+  observedOn: string;
+  file: File;
+}
+
+export interface HungerEvidenceItem {
+  evidenceFileId: string;
+  purpose: HungerEvidencePurpose | string;
+  observedOn: string;
+  link: string;
+}
+
+export interface HungerSealRequest {
+  accounts?: Record<string, string> | null;
+  note?: string | null;
+}
+
+export interface HungerRejectEventRequest {
+  reason: string;
+}
+
+export interface HungerFundingApproveRequest {
+  amount?: number | null;
+  sourceSubAccountId: string;
+  note?: string | null;
+}
+
+export interface HungerFundingRejectRequest {
+  note: string;
+}
+
+export interface HungerExecuteRequestBody {
+  evidenceBeforeId?: string | null;
+  evidenceAfterId?: string | null;
+}
+
+export interface HungerExceptionCreateRequest {
+  platformId: string;
+  kind: HungerExceptionKind;
+  accountId?: string | null;
+  supervisorEmployeeId?: string | null;
+  amount: number;
+  reason: string;
+  idempotencyKey: string;
+  evidenceReference?: string | null;
+}
+
+export interface HungerExceptionDecisionRequest {
+  note?: string | null;
+}
+
+export interface HungerExceptionItem {
+  id?: string;
+  exceptionId: string;
+  kind: HungerExceptionKind | string;
+  status: HungerExceptionStatus | string;
+  accountId?: string | null;
+  supervisorEmployeeId?: string | null;
+  amount: number;
+  reason: string;
+  requestedByUserId: string;
+  requestedAtUtc?: string | null;
+  decidedByUserId?: string | null;
+  decidedAtUtc?: string | null;
+  decisionNote?: string | null;
+  note?: string | null;
+  consumedByEventId?: string | null;
+}
+
+export interface HungerCustodySettlementReport {
+  fundingDelivered: number;
+  topUpAdvance: number;
+  topUpCollected: number;
+  cancelledTopUps: number;
+  expectedBalance: number;
+  postingBalance: number;
+  difference: number;
+  balanced: boolean;
+  exceptionApproved: boolean;
+}
+
+export interface HungerOwnerCollectionConfirmRequest {
+  idempotencyKey: string;
+  businessDate: string;
+  evidenceReference: string;
+  capacity: "Accountant" | "Owner";
 }
 
 export interface HungerFinanceEventItem {
@@ -950,6 +1098,7 @@ export interface HungerFinanceEventItem {
   supervisorNameAr?: string | null;
   kind: HungerFinancialEventKind | string;
   amount: number;
+  riderBalanceChange?: number | null;
   confirmedAmount?: number | null;
   remainingAmount?: number | null;
   remainingRemittableAmount?: number | null;
@@ -964,6 +1113,10 @@ export interface HungerFinanceEventItem {
   businessDate: string;
   evidenceReference?: string | null;
   status?: string | null;
+  approvalStatus?: HungerApprovalStatus | string | null;
+  approvedAtUtc?: string | null;
+  supersedesEventId?: string | null;
+  rejectionReason?: string | null;
   withdrawalStatus?: HungerWithdrawalStatus | string | null;
   arrivalStatus?: HungerWithdrawalStatus | string | null;
   requestStatus?: string | null;
@@ -971,6 +1124,7 @@ export interface HungerFinanceEventItem {
   destinationType?: "Company" | "Supervisor" | string | null;
   destinationOwnerId?: string | null;
   destinationOwnerNameAr?: string | null;
+  destinationChannel?: HungerDestinationChannel | string | null;
   transferReference?: string | null;
   transferDate?: string | null;
   againstReservedRights?: boolean | null;
@@ -982,9 +1136,11 @@ export interface HungerFinanceEventItem {
 export interface HungerFinanceEventsListResponse {
   custodyBalance?: number;
   pendingBalance?: number;
+  pendingRemittances?: number;
   pendingRemittanceBalance?: number;
   totalCollections?: number;
   items: HungerFinanceEventItem[];
+  events?: HungerFinanceEventItem[];
   requests?: HungerFinanceEventItem[];
   page?: number;
   pageSize?: number;
@@ -1016,6 +1172,7 @@ export interface HungerRemittanceConfirmRequest {
   destinationSubAccountId?: string | null;
   destinationType?: "Company" | "Supervisor" | string | null;
   destinationOwnerId?: string | null;
+  destinationChannel?: "Cashbox" | "Bank" | string | null;
   sources?: HungerRemittanceSourceInput[];
   selectedSourceIds?: string[];
   idempotencyKey: string;
@@ -1098,6 +1255,7 @@ export interface HungerWalletReviewRequest {
   walletEvidence?: File | null;
   closingEvidence?: string | null;
   adjustmentEvidence?: string | null;
+  exceptionApprovalId?: string | null;
   assignment?: {
     actualRiderProfileId: string;
     riderProfileId?: string;
@@ -1120,12 +1278,15 @@ export interface HungerWalletReviewRequest {
 
 export interface HungerWalletReviewResponse {
   reviewId: string;
-  accountId: string;
-  action: "Deliver" | "Return";
-  mobileBalance: number;
+  accountId?: string;
+  action?: "Deliver" | "Return";
+  mobileBalance?: number;
   closingBalance: number | null;
   provenAdjustments: number;
+  closingSource?: HungerClosingSource | string | null;
+  requiresException?: boolean;
   currentPeriodBalance: number | null;
+  restrictedRights?: number | null;
   attributedBalance?: number | null;
   riderBalanceChange?: number | null;
   canConfirm?: boolean;
@@ -1144,9 +1305,10 @@ export interface HungerRiderSwapReviewRequest {
     mobileBalance: string | number;
     closingBalance?: number | null;
     provenAdjustments: number;
-    walletEvidence: string;
+    walletEvidence?: string | null;
     closingEvidence?: string | null;
     adjustmentEvidence?: string | null;
+    exceptionApprovalId?: string | null;
     return: {
       effectiveTo: string;
       status: "Ended";
@@ -1166,6 +1328,7 @@ export interface HungerRiderSwapReviewRequest {
     paymentModel?: string;
     previousDayUsages?: PreviousDayUsageInput[];
   };
+  handoverExceptionApprovalId?: string | null;
 }
 
 export interface HungerRiderSwapReviewResponse {
@@ -1180,26 +1343,52 @@ export interface HungerRiderSwapConfirmResponse {
   handover: unknown;
 }
 
+export interface HungerInvoiceSourceLine {
+  sourceKey: string;
+  level: "RiderLVL" | "AccountLVL" | "DriverLVL" | string;
+  accountId: string;
+  riderProfileId?: string | null;
+  signedNetAmount: number;
+  taxAmount: number;
+  existingFinancialEventId?: string | null;
+  evidenceReference: string;
+  noShowCount?: number | null;
+  riderBalance?: number | null;
+}
+
 export interface HungerSettlementDocumentCreateRequest {
   platformId: string;
   accountId?: string | null;
-  month: string;
+  month?: string;
   invoicePeriod?: string | null;
+  chargeFrom?: string | null;
+  chargeThrough?: string | null;
+  observedOn?: string | null;
+  walletBalance?: number | null;
+  companyControlTotal?: number | null;
+  canonicalLevel?: string | null;
+  lines?: HungerInvoiceSourceLine[] | null;
+  invoiceDocumentId?: string | null;
+  idempotencyKey?: string | null;
   kind: HungerSettlementDocumentKind;
-  documentReference: string;
-  amount: number;
+  documentReference?: string;
+  amount?: number;
   evidenceReference: string;
   notes?: string | null;
-  businessDate: string;
+  businessDate?: string;
   // Adjustment required fields (v2.1)
   sourceDocumentType?: string | null;
   sourceReference?: string | null;
   closingSnapshotId?: string | null;
+  // CR-005 invoice rider balance control total
+  riderBalanceControlTotal?: number | null;
 }
 
 export interface HungerSettlementReconcileRequest {
   closingSnapshotId: string;
   evidenceReference: string;
+  approvalDate?: string | null;
+  supervisorEmployeeId?: string | null;
 }
 
 export interface HungerSettlementDocumentItem {
@@ -1212,10 +1401,14 @@ export interface HungerSettlementDocumentItem {
   ownerNameAr?: string | null;
   month: string;
   chargeFrom?: string | null;
+  chargeThrough?: string | null;
   invoicePeriod?: string | null;
   kind: HungerSettlementDocumentKind | string;
   documentReference: string;
   amount: number;
+  walletBalance?: number | null;
+  canonicalGrossTotal?: number | null;
+  companyControlTotal?: number | null;
   reconciledAmount?: number | null;
   varianceAmount?: number | null;
   reconciliationStatus?: string | null;
@@ -1223,6 +1416,8 @@ export interface HungerSettlementDocumentItem {
   sourceDocumentType?: string | null;
   sourceReference?: string | null;
   closingSnapshotId?: string | null;
+  generatedCloses?: number | null;
+  closeConflictAccountIds?: string[] | null;
   evidenceReference: string;
   notes?: string | null;
   businessDate?: string | null;
@@ -1236,6 +1431,7 @@ export interface HungerWalletsQuery {
   balanceThrough?: string;
   balanceEqual?: string;
   receiptState?: HungerWalletReceiptState | string;
+  alertOnly?: boolean;
   accountFilters?: HungerAccountsFilterParams;
 }
 
@@ -1261,6 +1457,7 @@ export interface HungerWalletListItem {
   pendingReceipts: number | null;
   confirmedReceipts: number | null;
   receiptState?: HungerWalletReceiptState | string | null;
+  alert?: HungerWalletAlert | string | null;
 }
 
 export interface HungerWalletObservationItem {
@@ -1291,6 +1488,7 @@ export interface HungerWalletHistoryEventItem {
   amount: number;
   evidenceReference?: string | null;
   status?: string | null;
+  approvalStatus?: HungerApprovalStatus | string | null;
   withdrawalStatus?: string | null;
   remittanceId?: string | null;
   remittanceStatus?: string | null;

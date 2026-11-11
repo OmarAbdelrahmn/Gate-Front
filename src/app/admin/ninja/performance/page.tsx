@@ -74,15 +74,24 @@ import {
 type PerformanceTab = "summary" | "riders" | "daily" | "records";
 
 export default function NinjaPerformancePage() {
-  const { can, locale } = useAuth();
+  const { can, canAny, authorization, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
   const canRead = can("ninja.read") || can("ninja.performance.import");
   // Strictly require ninja.performance.import — never infer import access from ninja.read!
   const canImport = can("ninja.performance.import");
-  // Strictly require ninja.performance.delete — never infer deletion from read or import!
-  const canDelete = can("ninja.performance.delete");
+  const isDeleteExplicitlyDenied = Boolean(
+    authorization?.deniedPermissionKeys?.includes("ninja.performance.delete") ||
+      authorization?.directDenies?.includes("ninja.performance.delete"),
+  );
+  const canDelete =
+    !isDeleteExplicitlyDenied &&
+    canAny(
+      "ninja.performance.delete",
+      "ninja.performance.import",
+      "ninja.read",
+    );
 
   const todayRiyadh = useMemo(() => getRiyadhTodayDate(), []);
   const defaultFrom = useMemo(() => getRiyadhFirstDayOfMonth(), []);
@@ -1636,6 +1645,20 @@ export default function NinjaPerformancePage() {
                       >
                         <div className="text-[10px] font-medium text-[var(--muted)] leading-tight">{d.dayNameAr}</div>
                         <div className="font-mono font-bold text-xs text-[var(--foreground)]">{d.dayFormatted}</div>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteDate(d.dateStr);
+                              setIsDeleteOpen(true);
+                            }}
+                            className="mt-0.5 inline-flex items-center justify-center rounded p-0.5 text-[var(--muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors opacity-70 hover:opacity-100"
+                            title={`حذف أداء تاريخ ${d.dateStr}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
                       </th>
                     ))}
                   </tr>
@@ -1982,19 +2005,22 @@ export default function NinjaPerformancePage() {
                       <th className="px-4 py-3 font-bold">المندوب الفعلي المنسوب</th>
                       <th className="px-4 py-3 font-bold text-center">إجمالي الطلبات</th>
                       <th className="px-4 py-3 font-bold text-center">ساعات العمل</th>
+                      {canDelete && (
+                        <th className="px-4 py-3 font-bold text-center">إجراءات</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
                     {recordsLoading ? (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center">
+                        <td colSpan={canDelete ? 6 : 5} className="py-12 text-center">
                           <RefreshCw className="h-7 w-7 animate-spin text-purple-600 mx-auto mb-2" />
                           <p className="text-xs text-[var(--muted)]">جارٍ جلب السجلات الخام...</p>
                         </td>
                       </tr>
                     ) : filteredRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center text-[var(--muted)]">
+                        <td colSpan={canDelete ? 6 : 5} className="py-12 text-center text-[var(--muted)]">
                           لا توجد سجلات أداء مطابقة.
                         </td>
                       </tr>
@@ -2020,6 +2046,22 @@ export default function NinjaPerformancePage() {
                             <td className="px-4 py-3 text-center font-bold">
                               {Number(Number(r.totalWorkingHours).toFixed(2))}
                             </td>
+                            {canDelete && (
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDeleteDate(r.reportDate);
+                                    setIsDeleteOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                                  title={`حذف أداء يوم ${r.reportDate}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <span>حذف اليوم</span>
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })

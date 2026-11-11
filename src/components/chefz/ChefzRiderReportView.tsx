@@ -49,11 +49,14 @@ import {
   Sparkles,
   ArrowUpDown,
   CreditCard,
+  Trash2,
 } from "lucide-react";
 
 interface Props {
   accounts?: AccountResponse[];
   riders?: Rider[];
+  canDelete?: boolean;
+  onOpenDeleteModal?: (dateStr?: string) => void;
 }
 
 type RatingFilterType = "ALL" | "A" | "B" | "C" | "D" | "CHANGE" | "UNRATED";
@@ -61,7 +64,12 @@ type AccountFilterType = "ALL" | "SINGLE" | "DUAL";
 type AccountTypeFilter = "ALL" | "FullTime" | "Freelancer" | "Unconfigured";
 type SortField = "name" | "orders_desc" | "orders_asc" | "rate_desc" | "rate_asc" | "days_desc";
 
-export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
+export function ChefzRiderReportView({
+  accounts = [],
+  riders = [],
+  canDelete = false,
+  onOpenDeleteModal,
+}: Props) {
   const { can } = useAuth();
   const canRead = can("chefz.read");
 
@@ -498,6 +506,18 @@ export function ChefzRiderReportView({ accounts = [], riders = [] }: Props) {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             تحديث التقرير
           </Button>
+
+          {canDelete && onOpenDeleteModal && (
+            <Button
+              variant="secondary"
+              onClick={() => onOpenDeleteModal(report?.to || undefined)}
+              className="gap-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+              title="حذف تقرير أداء يوم محدد نهائياً"
+            >
+              <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+              حذف تقرير يوم
+            </Button>
+          )}
         </div>
       </div>
 

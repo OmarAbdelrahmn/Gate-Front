@@ -74,6 +74,24 @@ import type {
   HungerWalletsQuery,
   HungerWithdrawalActionRequest,
   HungerWithdrawalStatus,
+  HungerApprovalStatus,
+  HungerClosingSource,
+  HungerCustodySettlementReport,
+  HungerEvidenceItem,
+  HungerEvidencePurpose,
+  HungerEvidenceUploadRequest,
+  HungerExceptionCreateRequest,
+  HungerExceptionDecisionRequest,
+  HungerExceptionItem,
+  HungerExceptionKind,
+  HungerExceptionStatus,
+  HungerExecuteRequestBody,
+  HungerFundingApproveRequest,
+  HungerFundingRejectRequest,
+  HungerOwnerCollectionConfirmRequest,
+  HungerRejectEventRequest,
+  HungerSealRequest,
+  HungerWalletAlert,
   PlatformAccountBusinessContextResponse,
   PlatformAccountBusinessUpdateRequest,
   PlatformAccountCredentialRevealResponse,
@@ -203,6 +221,12 @@ export const HUNGER_DISPOSITIONS: Array<{
     labelAr: "مؤجل للشهر القادم",
     labelEn: "Deferred to Next Month",
     badgeTone: "gray",
+  },
+  {
+    value: "WalletPending",
+    labelAr: "بانتظار تصفية المحفظة (WalletPending)",
+    labelEn: "Wallet Pending",
+    badgeTone: "purple",
   },
 ];
 
@@ -587,7 +611,177 @@ export const HUNGER_FINANCIAL_EVENT_KINDS: Array<{
     labelEn: "Rider Payout / Payment",
     badgeTone: "red",
   },
+  {
+    value: "OwnerCollectionReceipt",
+    labelAr: "سند تحصيل لدى المالك (بانتظار التأكيد)",
+    labelEn: "Owner Collection Receipt",
+    badgeTone: "purple",
+  },
+  {
+    value: "OwnerCollectionConfirmation",
+    labelAr: "تأكيد استلام تحصيل المالك",
+    labelEn: "Owner Collection Confirmation",
+    badgeTone: "green",
+  },
+  {
+    value: "CloseAdjustmentAdvance",
+    labelAr: "تسوية إقفال (عهدة)",
+    labelEn: "Close Adjustment (Advance)",
+    badgeTone: "orange",
+  },
+  {
+    value: "CloseAdjustmentWash",
+    labelAr: "تسوية إقفال عكسية (Wash)",
+    labelEn: "Close Adjustment (Wash)",
+    badgeTone: "blue",
+  },
+  {
+    value: "CustodyProposal",
+    labelAr: "مقترح تصفية عهدة على المندوب",
+    labelEn: "Custody Proposal",
+    badgeTone: "orange",
+  },
+  {
+    value: "FundingApproval",
+    labelAr: "اعتماد طلب تمويل عهدة",
+    labelEn: "Funding Approval",
+    badgeTone: "blue",
+  },
+  {
+    value: "Seal",
+    labelAr: "اعتماد محاسبي (Seal)",
+    labelEn: "Accountant Seal",
+    badgeTone: "green",
+  },
+  {
+    value: "SealRejection",
+    labelAr: "رفض اعتماد محاسبي",
+    labelEn: "Seal Rejection",
+    badgeTone: "red",
+  },
+  {
+    value: "WalletDelivery",
+    labelAr: "تسليم محفظة للمندوب",
+    labelEn: "Wallet Delivery",
+    badgeTone: "blue",
+  },
+  {
+    value: "WalletReturn",
+    labelAr: "استلام محفظة من المندوب",
+    labelEn: "Wallet Return",
+    badgeTone: "purple",
+  },
 ];
+
+export function getApprovalStatusMeta(status?: string | null): {
+  value: HungerApprovalStatus | string;
+  labelAr: string;
+  badgeTone: BadgeTone;
+} {
+  const norm = (status || "").trim().toLowerCase();
+  if (norm === "pendingseal") {
+    return {
+      value: "PendingSeal",
+      labelAr: "بانتظار اعتماد المحاسب (PendingSeal)",
+      badgeTone: "orange",
+    };
+  }
+  if (norm === "sealed") {
+    return {
+      value: "Sealed",
+      labelAr: "معتمد محاسبيًا (Sealed)",
+      badgeTone: "green",
+    };
+  }
+  if (norm === "rejected") {
+    return {
+      value: "Rejected",
+      labelAr: "مرفوض من المحاسب (Rejected)",
+      badgeTone: "red",
+    };
+  }
+  if (norm === "notrequired") {
+    return {
+      value: "NotRequired",
+      labelAr: "لا يتطلب ختم (NotRequired)",
+      badgeTone: "gray",
+    };
+  }
+  return {
+    value: status || "Unknown",
+    labelAr: status || "غير محدد",
+    badgeTone: "gray",
+  };
+}
+
+export function getClosingSourceMeta(source?: string | null): {
+  value: HungerClosingSource | string;
+  labelAr: string;
+  badgeTone: BadgeTone;
+} {
+  const norm = (source || "").trim().toLowerCase();
+  if (norm === "invoice") {
+    return {
+      value: "Invoice",
+      labelAr: "من الفاتورة المعتمدة (Invoice)",
+      badgeTone: "green",
+    };
+  }
+  if (norm === "manual") {
+    return {
+      value: "Manual",
+      labelAr: "إقفال شهري يدوي (Manual)",
+      badgeTone: "blue",
+    };
+  }
+  if (norm === "nopriorperiod") {
+    return {
+      value: "NoPriorPeriod",
+      labelAr: "لا توجد فترة سابقة (NoPriorPeriod)",
+      badgeTone: "gray",
+    };
+  }
+  if (norm === "invoiceabsent") {
+    return {
+      value: "InvoiceAbsent",
+      labelAr: "الفاتورة غير مسجلة بعد (InvoiceAbsent)",
+      badgeTone: "red",
+    };
+  }
+  return {
+    value: (source as HungerClosingSource) || "Unknown",
+    labelAr: source || "غير معروف (Unknown)",
+    badgeTone: "orange",
+  };
+}
+
+export function getWalletAlertMeta(alert?: string | null): {
+  value: HungerWalletAlert | string;
+  labelAr: string;
+  badgeTone: BadgeTone;
+} | null {
+  const norm = (alert || "").trim().toLowerCase();
+  if (!norm || norm === "none") return null;
+  if (norm === "custodyproposalopen") {
+    return {
+      value: "CustodyProposalOpen",
+      labelAr: "مقترح عهدة مفتوح — الحساب معلّق (CustodyProposalOpen)",
+      badgeTone: "red",
+    };
+  }
+  if (norm === "walletnotzero") {
+    return {
+      value: "WalletNotZero",
+      labelAr: "رصيد المحفظة غير صفري (WalletNotZero)",
+      badgeTone: "orange",
+    };
+  }
+  return {
+    value: alert || "Alert",
+    labelAr: alert || "تنبيه",
+    badgeTone: "orange",
+  };
+}
 
 export function getFinancialEventKindMeta(kind?: string | null) {
   const found = HUNGER_FINANCIAL_EVENT_KINDS.find(
@@ -750,11 +944,13 @@ function normalizePaged<T>(
   const obj = (raw || {}) as Record<string, unknown>;
   const items = Array.isArray(obj.items)
     ? (obj.items as T[])
-    : Array.isArray(obj.data)
-      ? (obj.data as T[])
-      : Array.isArray(obj.rows)
-        ? (obj.rows as T[])
-        : [];
+    : Array.isArray(obj.events)
+      ? (obj.events as T[])
+      : Array.isArray(obj.data)
+        ? (obj.data as T[])
+        : Array.isArray(obj.rows)
+          ? (obj.rows as T[])
+          : [];
   const totalCount =
     typeof obj.totalCount === "number"
       ? obj.totalCount
@@ -1856,6 +2052,7 @@ export async function createHungerFinanceRequest(
 
 export async function executeHungerFinanceRequest(
   requestId: string,
+  payload?: HungerExecuteRequestBody | null,
   init?: CustomRequestInit,
 ): Promise<unknown> {
   return authFetch<unknown>(
@@ -1863,8 +2060,237 @@ export async function executeHungerFinanceRequest(
     {
       ...init,
       method: "POST",
+      body: payload ? JSON.stringify(payload) : undefined,
       notifySuccess:
         init?.notifySuccess ?? "تم تنفيذ الطلب وترحيل الحركة المالية بنجاح",
+    },
+  );
+}
+
+export async function approveHungerFundingRequest(
+  requestId: string,
+  payload: HungerFundingApproveRequest,
+  init?: CustomRequestInit,
+): Promise<unknown> {
+  return authFetch<unknown>(
+    `${BASE}/finance/requests/${encodeURIComponent(requestId)}/approve`,
+    {
+      ...init,
+      method: "POST",
+      body: JSON.stringify(payload),
+      notifySuccess:
+        init?.notifySuccess ?? "تم اعتماد طلب تمويل العهدة بنجاح",
+    },
+  );
+}
+
+export async function rejectHungerFundingRequest(
+  requestId: string,
+  payload: HungerFundingRejectRequest,
+  init?: CustomRequestInit,
+): Promise<unknown> {
+  return authFetch<unknown>(
+    `${BASE}/finance/requests/${encodeURIComponent(requestId)}/reject`,
+    {
+      ...init,
+      method: "POST",
+      body: JSON.stringify(payload),
+      notifySuccess:
+        init?.notifySuccess ?? "تم رفض طلب تمويل العهدة",
+    },
+  );
+}
+
+export async function uploadHungerFinanceEvidence(
+  payload: HungerEvidenceUploadRequest,
+  init?: CustomRequestInit,
+): Promise<HungerEvidenceItem> {
+  const form = new FormData();
+  form.append("platformId", payload.platformId);
+  form.append("accountId", payload.accountId);
+  form.append("purpose", payload.purpose);
+  form.append("observedOn", payload.observedOn);
+  form.append("file", payload.file);
+
+  return authFetch<HungerEvidenceItem>(`${BASE}/finance/evidence`, {
+    ...init,
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function getHungerSealQueue(
+  params: {
+    platformId: string;
+    status?: "PendingSeal" | "Rejected" | string;
+    page?: number;
+    pageSize?: number;
+  },
+  init?: CustomRequestInit,
+): Promise<HungerPagedResponse<HungerFinanceEventItem>> {
+  const qs = new URLSearchParams();
+  qs.set("platformId", params.platformId);
+  if (params.status) {
+    qs.set("status", params.status);
+  }
+  const page = params.page ?? 1;
+  const pageSize = Math.min(Math.max(params.pageSize ?? 50, 1), 100);
+  qs.set("page", String(page));
+  qs.set("pageSize", String(pageSize));
+
+  const raw = await authFetch<unknown>(
+    `${BASE}/finance/seal-queue?${qs.toString()}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+  return normalizePaged<HungerFinanceEventItem>(raw, page, pageSize);
+}
+
+export async function sealHungerFinanceEvent(
+  eventId: string,
+  payload?: HungerSealRequest | null,
+  init?: CustomRequestInit,
+): Promise<unknown> {
+  return authFetch<unknown>(
+    `${BASE}/finance/events/${encodeURIComponent(eventId)}/seal`,
+    {
+      ...init,
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+      notifySuccess:
+        init?.notifySuccess ?? "تم اعتماد الحركة المالية محاسبيًا (Seal) بنجاح",
+    },
+  );
+}
+
+export async function rejectHungerFinanceEvent(
+  eventId: string,
+  payload: HungerRejectEventRequest,
+  init?: CustomRequestInit,
+): Promise<unknown> {
+  return authFetch<unknown>(
+    `${BASE}/finance/events/${encodeURIComponent(eventId)}/reject`,
+    {
+      ...init,
+      method: "POST",
+      body: JSON.stringify(payload),
+      notifySuccess:
+        init?.notifySuccess ?? "تم رفض الحركة المالية وإعادتها للمشرف",
+    },
+  );
+}
+
+export async function getHungerFinanceExceptions(
+  params: {
+    platformId: string;
+    status?: HungerExceptionStatus | string;
+    page?: number;
+    pageSize?: number;
+  },
+  init?: CustomRequestInit,
+): Promise<HungerPagedResponse<HungerExceptionItem>> {
+  const qs = new URLSearchParams();
+  qs.set("platformId", params.platformId);
+  if (params.status && params.status !== "all") {
+    qs.set("status", params.status);
+  }
+  const page = params.page ?? 1;
+  const pageSize = Math.min(Math.max(params.pageSize ?? 50, 1), 100);
+  qs.set("page", String(page));
+  qs.set("pageSize", String(pageSize));
+
+  const raw = await authFetch<unknown>(
+    `${BASE}/finance/exceptions?${qs.toString()}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+  return normalizePaged<HungerExceptionItem>(raw, page, pageSize);
+}
+
+export async function createHungerFinanceException(
+  payload: HungerExceptionCreateRequest,
+  init?: CustomRequestInit,
+): Promise<HungerExceptionItem> {
+  return authFetch<HungerExceptionItem>(`${BASE}/finance/exceptions`, {
+    ...init,
+    method: "POST",
+    body: JSON.stringify(payload),
+    notifySuccess:
+      init?.notifySuccess ?? "تم إرسال طلب الاستثناء المالي للاعتماد",
+  });
+}
+
+export async function approveHungerFinanceException(
+  exceptionId: string,
+  payload?: HungerExceptionDecisionRequest | null,
+  init?: CustomRequestInit,
+): Promise<HungerExceptionItem> {
+  return authFetch<HungerExceptionItem>(
+    `${BASE}/finance/exceptions/${encodeURIComponent(exceptionId)}/approve`,
+    {
+      ...init,
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+      notifySuccess:
+        init?.notifySuccess ?? "تم اعتماد الاستثناء المالي بنجاح",
+    },
+  );
+}
+
+export async function rejectHungerFinanceException(
+  exceptionId: string,
+  payload: { note: string },
+  init?: CustomRequestInit,
+): Promise<HungerExceptionItem> {
+  return authFetch<HungerExceptionItem>(
+    `${BASE}/finance/exceptions/${encodeURIComponent(exceptionId)}/reject`,
+    {
+      ...init,
+      method: "POST",
+      body: JSON.stringify(payload),
+      notifySuccess:
+        init?.notifySuccess ?? "تم رفض طلب الاستثناء المالي",
+    },
+  );
+}
+
+export async function getHungerCustodySettlement(
+  params: {
+    platformId: string;
+    supervisorEmployeeId: string;
+  },
+  init?: CustomRequestInit,
+): Promise<HungerCustodySettlementReport> {
+  const qs = new URLSearchParams();
+  qs.set("platformId", params.platformId);
+  qs.set("supervisorEmployeeId", params.supervisorEmployeeId);
+
+  return authFetch<HungerCustodySettlementReport>(
+    `${BASE}/finance/custody-settlement?${qs.toString()}`,
+    {
+      ...init,
+      method: "GET",
+    },
+  );
+}
+
+export async function confirmHungerOwnerCollection(
+  receiptId: string,
+  payload: HungerOwnerCollectionConfirmRequest,
+  init?: CustomRequestInit,
+): Promise<unknown> {
+  return authFetch<unknown>(
+    `${BASE}/finance/owner-collections/${encodeURIComponent(receiptId)}/confirm`,
+    {
+      ...init,
+      method: "POST",
+      body: JSON.stringify(payload),
+      notifySuccess:
+        init?.notifySuccess ?? "تم تأكيد استلام تحصيل المالك بنجاح",
     },
   );
 }
@@ -1948,16 +2374,27 @@ export async function getHungerFinanceEvents(
     custodyBalance:
       typeof obj.custodyBalance === "number" ? obj.custodyBalance : undefined,
     pendingBalance:
-      typeof obj.pendingBalance === "number" ? obj.pendingBalance : undefined,
+      typeof obj.pendingBalance === "number"
+        ? obj.pendingBalance
+        : typeof obj.pendingRemittances === "number"
+          ? obj.pendingRemittances
+          : undefined,
+    pendingRemittances:
+      typeof obj.pendingRemittances === "number"
+        ? obj.pendingRemittances
+        : undefined,
     pendingRemittanceBalance:
       typeof obj.pendingRemittanceBalance === "number"
         ? obj.pendingRemittanceBalance
-        : undefined,
+        : typeof obj.pendingRemittances === "number"
+          ? obj.pendingRemittances
+          : undefined,
     totalCollections:
       typeof obj.totalCollections === "number"
         ? obj.totalCollections
         : undefined,
     items: paged.items,
+    events: paged.items,
     requests,
     page: paged.page,
     pageSize: paged.pageSize,
@@ -2200,8 +2637,11 @@ export function buildHungerWalletReviewFormData(
     append("adjustmentEvidence", payload.adjustmentEvidence.trim());
   }
 
-  // walletEvidence: optional file. Omit the part when no image is selected.
-  // Do not append null, undefined, or a text reference as the walletEvidence part. It accepts a file only.
+  if (payload.exceptionApprovalId && payload.exceptionApprovalId.trim()) {
+    append("exceptionApprovalId", payload.exceptionApprovalId.trim());
+  }
+
+  // walletEvidence: file upload (required under CR-005).
   if (payload.walletEvidence instanceof File) {
     form.append("walletEvidence", payload.walletEvidence);
   }
@@ -2529,14 +2969,20 @@ export async function checkAccountWalletPeriodStatus(
 export async function createHungerRiderSwapReview(
   accountId: string,
   payload: HungerRiderSwapReviewRequest,
+  walletEvidenceFile?: File | null,
   init?: CustomRequestInit,
 ): Promise<HungerRiderSwapReviewResponse> {
+  const form = new FormData();
+  form.append("request", JSON.stringify(payload));
+  if (walletEvidenceFile instanceof File) {
+    form.append("walletEvidence", walletEvidenceFile);
+  }
   return authFetch<HungerRiderSwapReviewResponse>(
     `${BASE}/accounts/${encodeURIComponent(accountId)}/rider-swap/review`,
     {
       ...init,
       method: "POST",
-      body: JSON.stringify(payload),
+      body: form,
     },
   );
 }
@@ -2635,6 +3081,9 @@ function appendWalletsQueryParams(
   }
   if (query.receiptState && query.receiptState !== "all") {
     qs.set("receiptState", query.receiptState);
+  }
+  if (query.alertOnly) {
+    qs.set("alertOnly", "true");
   }
   appendPrefixedAccountFilters(qs, query.accountFilters);
 }

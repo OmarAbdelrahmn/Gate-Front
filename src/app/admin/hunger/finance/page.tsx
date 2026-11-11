@@ -23,12 +23,25 @@ import {
   createHungerSettlementDocument,
   reconcileHungerSettlementDocument,
   saveHungerFinanceConfiguration,
+  uploadHungerFinanceEvidence,
+  getHungerSealQueue,
+  sealHungerFinanceEvent,
+  rejectHungerFinanceEvent,
+  approveHungerFundingRequest,
+  rejectHungerFundingRequest,
+  getHungerFinanceExceptions,
+  createHungerFinanceException,
+  approveHungerFinanceException,
+  rejectHungerFinanceException,
+  getHungerCustodySettlement,
+  confirmHungerOwnerCollection,
   generateHungerIdempotencyKey,
   getRiyadhTodayIso,
   getRiyadhCurrentMonthStartIso,
   getFinancialEventKindMeta,
   getWithdrawalStatusMeta,
   getRemittanceStatusMeta,
+  getApprovalStatusMeta,
   getHungerErrorMessage,
   HUNGER_FINANCIAL_EVENT_KINDS,
   HUNGER_SETTLEMENT_DOCUMENT_KINDS,
@@ -39,6 +52,11 @@ import {
   type HungerRemittanceSourceLineItem,
   type HungerSettlementDocumentItem,
   type HungerSettlementDocumentKind,
+  type HungerDestinationChannel,
+  type HungerExceptionKind,
+  type HungerExceptionStatus,
+  type HungerExceptionItem,
+  type HungerCustodySettlementReport,
 } from "@/lib/hunger/api";
 import {
   listEmployees,
@@ -90,6 +108,9 @@ type FinanceTab =
   | "events"
   | "wallets"
   | "remittances"
+  | "seal-queue"
+  | "exceptions"
+  | "owner-collections"
   | "settlements"
   | "configuration";
 
@@ -115,6 +136,23 @@ export default function HungerFinancePage() {
     [can, deniedPermSet],
   );
 
+  // CR-005 exact permission check (hunger.finance.manage is NOT a wildcard fallback on these 5 endpoints)
+  const canExactPerm = useCallback(
+    (perm: string) => {
+      if (deniedPermSet.has(perm)) return false;
+      return can(perm);
+    },
+    [can, deniedPermSet],
+  );
+
+  const canSeal = canExactPerm("hunger.finance.seal");
+  const canFundingApprove = canExactPerm("hunger.finance.funding.approve");
+  const canExceptionRequest = canExactPerm("hunger.finance.exception.request");
+  const canExceptionApprove = canExactPerm("hunger.finance.exception.approve");
+  const canOwnerCollectionsConfirm = canExactPerm(
+    "hunger.finance.owner_collections.confirm",
+  );
+
   const canFinanceRead =
     canFinanceAction("hunger.finance.read") ||
     canAny(
@@ -122,6 +160,11 @@ export default function HungerFinancePage() {
       "hunger.finance.manage",
       "hunger.finance.configure",
       "hunger.remittances.confirm",
+      "hunger.finance.seal",
+      "hunger.finance.funding.approve",
+      "hunger.finance.exception.request",
+      "hunger.finance.exception.approve",
+      "hunger.finance.owner_collections.confirm",
     );
   const canFundingRequest = canFinanceAction("hunger.finance.funding.request");
   const canFundingExecute = canFinanceAction("hunger.finance.funding.execute");
@@ -166,10 +209,12 @@ export default function HungerFinancePage() {
   // Selected Supervisor for Events & Remittances
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>("");
 
-  // Tab 1: Financial Events & Custody Balances
+  // Tab 1: Financial Events, Custody Balances & Custody Settlement Report
   const [eventsList, setEventsList] = useState<HungerFinanceEventItem[]>([]);
   const [custodyBalance, setCustodyBalance] = useState<number>(0);
   const [pendingBalance, setPendingBalance] = useState<number>(0);
+  const [custodySettlement, setCustodySettlement] =
+    useState<HungerCustodySettlementReport | null>(null);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [colFilterEventKind, setColFilterEventKind] = useState<string[]>([]);
   const [colFilterEventAccount, setColFilterEventAccount] = useState<string[]>(
@@ -189,9 +234,13 @@ export default function HungerFinancePage() {
   const [eventRiderId, setEventRiderId] = useState("");
   const [eventCounterSubAccountId, setEventCounterSubAccountId] = useState("");
   const [eventRelatedEventId, setEventRelatedEventId] = useState("");
+  const [eventSupersedesEventId, setEventSupersedesEventId] = useState("");
   const [eventBusinessDate, setEventBusinessDate] =
     useState(getRiyadhTodayIso());
   const [eventEvidence, setEventEvidence] = useState("");
+  // Top-up before/after screenshot files (CR-005)
+  const [topupBeforeFile, setTopupBeforeFile] = useState<File | null>(null);
+  const [topupAfterFile, setTopupAfterFile] = useState<File | null>(null);
   // Withdrawal specific fields
   const [withdrawalSourceWalletBalance, setWithdrawalSourceWalletBalance] =
     useState("");
@@ -200,6 +249,11 @@ export default function HungerFinancePage() {
   >("Company");
   const [withdrawalDestinationOwnerId, setWithdrawalDestinationOwnerId] =
     useState("");
+  const [withdrawalDestinationChannel, setWithdrawalDestinationChannel] =
+    useState<HungerDestinationChannel>("Bank");
+  const [withdrawalWalletFile, setWithdrawalWalletFile] = useState<File | null>(
+    null,
+  );
   const [withdrawalTransferRef, setWithdrawalTransferRef] = useState("");
   const [withdrawalAgainstReservedRights, setWithdrawalAgainstReservedRights] =
     useState(false);
@@ -207,6 +261,28 @@ export default function HungerFinancePage() {
   const [executingRequestId, setExecutingRequestId] = useState<string | null>(
     null,
   );
+
+  // Execute Top-Up Request Modal (requires before & after screenshots)
+  const [execTopupModalTarget, setExecTopupModalTarget] =
+    useState<HungerFinanceEventItem | null>(null);
+  const [execTopupBeforeFile, setExecTopupBeforeFile] = useState<File | null>(
+    null,
+  );
+  const [execTopupAfterFile, setExecTopupAfterFile] = useState<File | null>(
+    null,
+  );
+  const [execTopupBusy, setExecTopupBusy] = useState(false);
+
+  // Funding Approve / Reject Modal (CR-005 Phase 3)
+  const [fundingDecisionModal, setFundingDecisionModal] = useState<{
+    event: HungerFinanceEventItem;
+    mode: "approve" | "reject";
+  } | null>(null);
+  const [fundingApproveAmount, setFundingApproveAmount] = useState("");
+  const [fundingApproveSubAccountId, setFundingApproveSubAccountId] =
+    useState("");
+  const [fundingDecisionNote, setFundingDecisionNote] = useState("");
+  const [fundingDecisionBusy, setFundingDecisionBusy] = useState(false);
 
   // Withdrawal Confirm Arrival / Cancel Modal
   const [withdrawalActionModal, setWithdrawalActionModal] = useState<{
@@ -266,8 +342,11 @@ export default function HungerFinancePage() {
   const [confirmDestSubAccountId, setConfirmDestSubAccountId] = useState("");
   const [confirmDestType, setConfirmDestType] = useState<
     "" | "Company" | "Supervisor"
-  >("");
+  >("Company");
   const [confirmDestOwnerId, setConfirmDestOwnerId] = useState("");
+  const [confirmDestChannel, setConfirmDestChannel] = useState<
+    "" | "Cashbox" | "Bank"
+  >("Bank");
   const [confirmBusinessDate, setConfirmBusinessDate] =
     useState(getRiyadhTodayIso());
   const [confirmEvidence, setConfirmEvidence] = useState("");
@@ -285,6 +364,59 @@ export default function HungerFinancePage() {
   const [cancelReverseReason, setCancelReverseReason] = useState("");
   const [cancelReverseBusy, setCancelReverseBusy] = useState(false);
 
+  // Seal Queue Tab & Seal/Reject Modal (CR-005 Phase 3)
+  const [sealQueueStatus, setSealQueueStatus] = useState<
+    "PendingSeal" | "Rejected"
+  >("PendingSeal");
+  const [sealQueueItems, setSealQueueItems] = useState<
+    HungerFinanceEventItem[]
+  >([]);
+  const [sealQueueLoading, setSealQueueLoading] = useState(false);
+  const [sealRejectModal, setSealRejectModal] = useState<{
+    event: HungerFinanceEventItem;
+    mode: "seal" | "reject";
+  } | null>(null);
+  const [sealNote, setSealNote] = useState("");
+  const [sealCoaOverrides, setSealCoaOverrides] = useState<
+    Array<{ key: string; code: string }>
+  >([]);
+  const [rejectEventReason, setRejectEventReason] = useState("");
+  const [sealRejectBusy, setSealRejectBusy] = useState(false);
+
+  // Exceptions Tab & Modals (CR-005 Phase 6)
+  const [exceptionsStatusFilter, setExceptionsStatusFilter] = useState<
+    "" | HungerExceptionStatus
+  >("");
+  const [exceptionsList, setExceptionsList] = useState<HungerExceptionItem[]>(
+    [],
+  );
+  const [exceptionsLoading, setExceptionsLoading] = useState(false);
+  const [createExceptionModalOpen, setCreateExceptionModalOpen] =
+    useState(false);
+  const [newExceptionKind, setNewExceptionKind] =
+    useState<HungerExceptionKind>("NonZeroHandover");
+  const [newExceptionAccountId, setNewExceptionAccountId] = useState("");
+  const [newExceptionSupervisorId, setNewExceptionSupervisorId] = useState("");
+  const [newExceptionAmount, setNewExceptionAmount] = useState("");
+  const [newExceptionReason, setNewExceptionReason] = useState("");
+  const [newExceptionBusy, setNewExceptionBusy] = useState(false);
+  const [exceptionDecisionModal, setExceptionDecisionModal] = useState<{
+    item: HungerExceptionItem;
+    mode: "approve" | "reject";
+  } | null>(null);
+  const [exceptionDecisionNote, setExceptionDecisionNote] = useState("");
+  const [exceptionDecisionBusy, setExceptionDecisionBusy] = useState(false);
+
+  // Owner Collections Confirmation Modal (CR-005 Phase 7)
+  const [ownerConfirmTarget, setOwnerConfirmTarget] =
+    useState<HungerFinanceEventItem | null>(null);
+  const [ownerConfirmDate, setOwnerConfirmDate] = useState(getRiyadhTodayIso());
+  const [ownerConfirmEvidence, setOwnerConfirmEvidence] = useState("");
+  const [ownerConfirmCapacity, setOwnerConfirmCapacity] = useState<
+    "Accountant" | "Owner"
+  >("Accountant");
+  const [ownerConfirmBusy, setOwnerConfirmBusy] = useState(false);
+
   // Tab 3: Settlement Documents (`Invoice` / `MonthClose` / `Adjustment`)
   const [settlementMonth, setSettlementMonth] = useState(
     getRiyadhCurrentMonthStartIso().slice(0, 7),
@@ -295,6 +427,10 @@ export default function HungerFinancePage() {
     HungerSettlementDocumentItem[]
   >([]);
   const [settlementsLoading, setSettlementsLoading] = useState(false);
+  const [lastInvoiceResult, setLastInvoiceResult] = useState<{
+    generatedCloses: number;
+    closeConflictAccountIds: string[];
+  } | null>(null);
 
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [docKind, setDocKind] =
@@ -308,6 +444,24 @@ export default function HungerFinancePage() {
   const [docEvidence, setDocEvidence] = useState("");
   const [docNotes, setDocNotes] = useState("");
   const [docBusinessDate, setDocBusinessDate] = useState(getRiyadhTodayIso());
+  // Invoice CR-005 fields
+  const [docChargeFrom, setDocChargeFrom] = useState("");
+  const [docChargeThrough, setDocChargeThrough] = useState("");
+  const [docObservedOn, setDocObservedOn] = useState(getRiyadhTodayIso());
+  const [docCompanyControlTotal, setDocCompanyControlTotal] = useState("");
+  const [docRiderBalanceControlTotal, setDocRiderBalanceControlTotal] =
+    useState("");
+  const [docCanonicalLevel, setDocCanonicalLevel] = useState<"" | "RiderLVL">(
+    "",
+  );
+  const [docInvoiceLines, setDocInvoiceLines] = useState<
+    Array<{
+      externalAccountId: string;
+      riderName: string;
+      netAmount: string;
+      riderBalance: string;
+    }>
+  >([]);
   // Adjustment fields
   const [docSourceDocumentType, setDocSourceDocumentType] = useState(
     "StatementAdjustment",
@@ -321,6 +475,9 @@ export default function HungerFinancePage() {
     useState<HungerSettlementDocumentItem | null>(null);
   const [reconcileSnapshotId, setReconcileSnapshotId] = useState("");
   const [reconcileEvidence, setReconcileEvidence] = useState("");
+  const [reconcileApprovalDate, setReconcileApprovalDate] =
+    useState(getRiyadhTodayIso());
+  const [reconcileSupervisorId, setReconcileSupervisorId] = useState("");
   const [reconcileBusy, setReconcileBusy] = useState(false);
 
   // Tab 4: Supervisor Accounting Configuration (`hunger.finance.configure`)
@@ -525,11 +682,8 @@ export default function HungerFinancePage() {
     (nextKind: HungerFinancialEventKind) => {
       setEventKind(nextKind);
       if (nextKind === "Funding") {
-        if (!canFundingExecute && canFundingRequest) {
-          setEventExecutionMode("Request");
-        } else if (canFundingExecute && !canFundingRequest) {
-          setEventExecutionMode("Execute");
-        }
+        // CR-005: Direct POST /events with kind=Funding is disallowed (400); always Request first
+        setEventExecutionMode("Request");
       } else if (
         nextKind === "TopUpAdvance" ||
         nextKind === "TopUpCollected"
@@ -545,6 +699,9 @@ export default function HungerFinancePage() {
 
       if (nextKind === "WithdrawalCompany") {
         setWithdrawalDestinationType("Company");
+        setWithdrawalDestinationChannel((prev) =>
+          prev === "Stc" ? "Bank" : prev,
+        );
       } else if (nextKind === "WithdrawalSupervisor") {
         setWithdrawalDestinationType("Supervisor");
         if (!withdrawalDestinationOwnerId && selectedSupervisorId) {
@@ -553,8 +710,6 @@ export default function HungerFinancePage() {
       }
     },
     [
-      canFundingExecute,
-      canFundingRequest,
       canTopupExecute,
       canTopupRequest,
       selectedSupervisorId,
@@ -630,7 +785,7 @@ export default function HungerFinancePage() {
     });
   }, [settlementDocs, colFilterDocKind]);
 
-  // Load Financial Events for Supervisor
+  // Load Financial Events & Custody Settlement Report for Supervisor
   const loadEvents = useCallback(async () => {
     await Promise.resolve();
     if (!canFinanceRead || !selectedSupervisorId) return;
@@ -646,20 +801,41 @@ export default function HungerFinancePage() {
         setEventsLoading(false);
         return;
       }
-      const res = await getHungerFinanceEvents(
-        {
-          platformId: resolvedPlatformId,
-          supervisorEmployeeId: selectedSupervisorId,
-          page: 1,
-          pageSize: 100,
-        },
-        { suppressErrorToast: true },
-      );
-      setEventsList(res.items);
-      setCustodyBalance(res.custodyBalance ?? 0);
-      setPendingBalance(
-        res.pendingBalance ?? res.pendingRemittanceBalance ?? 0,
-      );
+      const [res, settlementRes] = await Promise.allSettled([
+        getHungerFinanceEvents(
+          {
+            platformId: resolvedPlatformId,
+            supervisorEmployeeId: selectedSupervisorId,
+            page: 1,
+            pageSize: 100,
+          },
+          { suppressErrorToast: true },
+        ),
+        getHungerCustodySettlement(
+          {
+            platformId: resolvedPlatformId,
+            supervisorEmployeeId: selectedSupervisorId,
+          },
+          { suppressErrorToast: true },
+        ),
+      ]);
+      if (res.status === "fulfilled") {
+        setEventsList(res.value.items);
+        setCustodyBalance(res.value.custodyBalance ?? 0);
+        setPendingBalance(
+          res.value.pendingBalance ?? res.value.pendingRemittanceBalance ?? 0,
+        );
+      } else {
+        toast.error(
+          getHungerErrorMessage(
+            res.reason,
+            "تعذر تحميل الحركات المالية للمشرف",
+          ),
+        );
+      }
+      if (settlementRes.status === "fulfilled") {
+        setCustodySettlement(settlementRes.value);
+      }
     } catch (err) {
       toast.error(
         getHungerErrorMessage(err, "تعذر تحميل الحركات المالية للمشرف"),
@@ -668,6 +844,72 @@ export default function HungerFinancePage() {
       setEventsLoading(false);
     }
   }, [canFinanceRead, platformId, selectedSupervisorId]);
+
+  // Load Seal Queue (CR-005 Phase 3)
+  const loadSealQueue = useCallback(async () => {
+    await Promise.resolve();
+    if (!canFinanceRead) return;
+    setSealQueueLoading(true);
+    try {
+      let resolvedPlatformId = platformId;
+      if (!resolvedPlatformId) {
+        const p = await getHungerPlatform();
+        resolvedPlatformId = p?.id || "";
+        if (resolvedPlatformId) setPlatformId(resolvedPlatformId);
+      }
+      if (!resolvedPlatformId) {
+        setSealQueueLoading(false);
+        return;
+      }
+      const res = await getHungerSealQueue(
+        {
+          platformId: resolvedPlatformId,
+          status: sealQueueStatus,
+          page: 1,
+          pageSize: 100,
+        },
+        { suppressErrorToast: true },
+      );
+      setSealQueueItems(res.items);
+    } catch (err) {
+      toast.error(
+        getHungerErrorMessage(err, "تعذر تحميل طابور الاعتماد المحاسبي"),
+      );
+    } finally {
+      setSealQueueLoading(false);
+    }
+  }, [canFinanceRead, platformId, sealQueueStatus]);
+
+  // Load Exceptions (CR-005 Phase 6)
+  const loadExceptions = useCallback(async () => {
+    await Promise.resolve();
+    if (!canFinanceRead) return;
+    setExceptionsLoading(true);
+    try {
+      let resolvedPlatformId = platformId;
+      if (!resolvedPlatformId) {
+        const p = await getHungerPlatform();
+        resolvedPlatformId = p?.id || "";
+        if (resolvedPlatformId) setPlatformId(resolvedPlatformId);
+      }
+      if (!resolvedPlatformId) {
+        setExceptionsLoading(false);
+        return;
+      }
+      const items = await getHungerFinanceExceptions(
+        {
+          platformId: resolvedPlatformId,
+          status: exceptionsStatusFilter || undefined,
+        },
+        { suppressErrorToast: true },
+      );
+      setExceptionsList(items.items);
+    } catch (err) {
+      toast.error(getHungerErrorMessage(err, "تعذر تحميل سجل الاستثناءات"));
+    } finally {
+      setExceptionsLoading(false);
+    }
+  }, [canFinanceRead, platformId, exceptionsStatusFilter]);
 
   // Load Pending Collections (Batches + Sources)
   const loadPendingCollections = useCallback(async () => {
@@ -752,25 +994,89 @@ export default function HungerFinancePage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeTab === "events") {
+      if (activeTab === "events" || activeTab === "owner-collections") {
         void loadEvents();
       } else if (activeTab === "remittances") {
         void loadEvents();
         void loadPendingCollections();
+      } else if (activeTab === "seal-queue") {
+        void loadSealQueue();
+      } else if (activeTab === "exceptions") {
+        void loadExceptions();
       } else if (activeTab === "settlements") {
         void loadSettlementDocuments();
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [activeTab, loadEvents, loadPendingCollections, loadSettlementDocuments]);
+  }, [
+    activeTab,
+    loadEvents,
+    loadPendingCollections,
+    loadSealQueue,
+    loadExceptions,
+    loadSettlementDocuments,
+  ]);
 
   // Handlers: Create Financial Event or Request
-  const isFundingOrTopupKind =
-    eventKind === "Funding" ||
-    eventKind === "TopUpAdvance" ||
-    eventKind === "TopUpCollected";
+  const isTopupKind =
+    eventKind === "TopUpAdvance" || eventKind === "TopUpCollected";
+  const isFundingOrTopupKind = eventKind === "Funding" || isTopupKind;
   const isWithdrawalKind =
     eventKind === "WithdrawalCompany" || eventKind === "WithdrawalSupervisor";
+
+  const openReplaceRejectedModal = (ev: HungerFinanceEventItem) => {
+    const rejectedId = ev.id || ev.eventId || "";
+    const nextKind =
+      ev.kind === "TopUpAdvance" ||
+      ev.kind === "TopUpCollected" ||
+      ev.kind === "WithdrawalCompany" ||
+      ev.kind === "WithdrawalSupervisor"
+        ? ev.kind
+        : "TopUpAdvance";
+    handleChangeEventKind(nextKind);
+    setEventExecutionMode("Execute");
+    setEventAmount(String(ev.amount || ""));
+    setEventAccountId(ev.accountId || "");
+    setEventRiderId(ev.riderProfileId || "");
+    setEventCounterSubAccountId(ev.counterSubAccountId || "");
+    setEventRelatedEventId(ev.relatedEventId || "");
+    setEventSupersedesEventId(rejectedId);
+    setEventBusinessDate(getRiyadhTodayIso());
+    setEventEvidence(ev.evidenceReference || "");
+    setTopupBeforeFile(null);
+    setTopupAfterFile(null);
+    setWithdrawalWalletFile(null);
+    if (
+      ev.kind === "WithdrawalCompany" ||
+      ev.kind === "WithdrawalSupervisor"
+    ) {
+      setWithdrawalSourceWalletBalance(
+        ev.sourceWalletBalance !== undefined && ev.sourceWalletBalance !== null
+          ? String(ev.sourceWalletBalance)
+          : "",
+      );
+      setWithdrawalDestinationType(
+        ev.destinationType === "Supervisor"
+          ? "Supervisor"
+          : ev.destinationType === "Company"
+            ? "Company"
+            : ev.kind === "WithdrawalSupervisor"
+              ? "Supervisor"
+              : "Company",
+      );
+      setWithdrawalDestinationOwnerId(ev.destinationOwnerId || "");
+      setWithdrawalDestinationChannel(
+        ev.destinationChannel === "Stc" ||
+          ev.destinationChannel === "Cashbox" ||
+          ev.destinationChannel === "Bank"
+          ? ev.destinationChannel
+          : "Bank",
+      );
+      setWithdrawalTransferRef(ev.transferReference || "");
+      setWithdrawalAgainstReservedRights(Boolean(ev.againstReservedRights));
+    }
+    setEventModalOpen(true);
+  };
 
   const handleCreateFinancialEvent = async () => {
     if (!selectedSupervisorId) {
@@ -787,7 +1093,27 @@ export default function HungerFinancePage() {
       return;
     }
 
+    const effectiveExecMode =
+      eventKind === "Funding" ? "Request" : eventExecutionMode;
+
+    if (isTopupKind && effectiveExecMode === "Execute") {
+      if (!eventAccountId) {
+        toast.warning("يرجى اختيار حساب هنقرستيشن لتنفيذ شحن المحفظة");
+        return;
+      }
+      if (!topupBeforeFile || !topupAfterFile) {
+        toast.warning(
+          "عند تنفيذ شحن المحفظة، يجب رفع صورتي الرصيد قبل الشحن (WalletBefore) وبعد الشحن (WalletAfter)",
+        );
+        return;
+      }
+    }
+
     if (isWithdrawalKind) {
+      if (!eventAccountId) {
+        toast.warning("يرجى اختيار حساب هنقرستيشن للسحب");
+        return;
+      }
       const srcBal = parseFloat(withdrawalSourceWalletBalance);
       if (isNaN(srcBal)) {
         toast.warning("يرجى إدخال رصيد المحفظة المصدر عند السحب");
@@ -803,6 +1129,21 @@ export default function HungerFinancePage() {
       }
       if (!eventCounterSubAccountId) {
         toast.warning("يرجى اختيار حساب الخزينة المقابل للسحب");
+        return;
+      }
+      if (!withdrawalDestinationChannel) {
+        toast.warning("يرجى اختيار قناة الوجهة (Stc / Cashbox / Bank)");
+        return;
+      }
+      if (
+        withdrawalDestinationChannel === "Stc" &&
+        eventKind !== "WithdrawalSupervisor"
+      ) {
+        toast.warning("قناة Stc متاحة فقط عند السحب لحساب المشرف");
+        return;
+      }
+      if (!withdrawalWalletFile) {
+        toast.warning("يرجى إرفاق صورة المحفظة (Wallet) عند إنشاء حركة السحب");
         return;
       }
       if (!withdrawalTransferRef.trim()) {
@@ -825,6 +1166,56 @@ export default function HungerFinancePage() {
         resolvedPlatformId = p?.id || "";
       }
 
+      let evidenceBeforeId: string | null = null;
+      let evidenceAfterId: string | null = null;
+      let walletEvidenceId: string | null = null;
+
+      if (
+        isTopupKind &&
+        effectiveExecMode === "Execute" &&
+        topupBeforeFile &&
+        topupAfterFile
+      ) {
+        const [beforeUploaded, afterUploaded] = await Promise.all([
+          uploadHungerFinanceEvidence(
+            {
+              platformId: resolvedPlatformId,
+              accountId: eventAccountId,
+              purpose: "WalletBefore",
+              observedOn: eventBusinessDate,
+              file: topupBeforeFile,
+            },
+            { suppressErrorToast: true },
+          ),
+          uploadHungerFinanceEvidence(
+            {
+              platformId: resolvedPlatformId,
+              accountId: eventAccountId,
+              purpose: "WalletAfter",
+              observedOn: eventBusinessDate,
+              file: topupAfterFile,
+            },
+            { suppressErrorToast: true },
+          ),
+        ]);
+        evidenceBeforeId = beforeUploaded.evidenceFileId;
+        evidenceAfterId = afterUploaded.evidenceFileId;
+      }
+
+      if (isWithdrawalKind && withdrawalWalletFile) {
+        const walletUploaded = await uploadHungerFinanceEvidence(
+          {
+            platformId: resolvedPlatformId,
+            accountId: eventAccountId,
+            purpose: "Wallet",
+            observedOn: eventBusinessDate,
+            file: withdrawalWalletFile,
+          },
+          { suppressErrorToast: true },
+        );
+        walletEvidenceId = walletUploaded.evidenceFileId;
+      }
+
       const payload = {
         platformId: resolvedPlatformId,
         supervisorEmployeeId: selectedSupervisorId,
@@ -834,6 +1225,10 @@ export default function HungerFinancePage() {
         riderProfileId: eventRiderId || null,
         counterSubAccountId: eventCounterSubAccountId || null,
         relatedEventId: eventRelatedEventId || null,
+        supersedesEventId: eventSupersedesEventId || null,
+        evidenceBeforeId,
+        evidenceAfterId,
+        walletEvidenceId,
         businessDate: eventBusinessDate,
         idempotencyKey: generateHungerIdempotencyKey("hng-ev"),
         evidenceReference: eventEvidence.trim(),
@@ -842,6 +1237,7 @@ export default function HungerFinancePage() {
               sourceWalletBalance: parseFloat(withdrawalSourceWalletBalance),
               destinationType: withdrawalDestinationType,
               destinationOwnerId: withdrawalDestinationOwnerId,
+              destinationChannel: withdrawalDestinationChannel,
               transferReference: withdrawalTransferRef.trim(),
               transferDate: eventBusinessDate, // Must equal businessDate
               againstReservedRights: withdrawalAgainstReservedRights,
@@ -849,7 +1245,7 @@ export default function HungerFinancePage() {
           : {}),
       };
 
-      if (isFundingOrTopupKind && eventExecutionMode === "Request") {
+      if (isFundingOrTopupKind && effectiveExecMode === "Request") {
         await createHungerFinanceRequest(payload, {
           suppressErrorToast: true,
         });
@@ -862,6 +1258,10 @@ export default function HungerFinancePage() {
       setEventModalOpen(false);
       setEventAmount("");
       setEventEvidence("");
+      setEventSupersedesEventId("");
+      setTopupBeforeFile(null);
+      setTopupAfterFile(null);
+      setWithdrawalWalletFile(null);
       setWithdrawalSourceWalletBalance("");
       setWithdrawalTransferRef("");
       setWithdrawalAgainstReservedRights(false);
@@ -877,14 +1277,349 @@ export default function HungerFinancePage() {
   const handleExecuteRequest = async (ev: HungerFinanceEventItem) => {
     const reqId = ev.requestId || ev.id || ev.eventId || "";
     if (!reqId) return;
+    if (ev.kind === "TopUpAdvance" || ev.kind === "TopUpCollected") {
+      setExecTopupModalTarget(ev);
+      setExecTopupBeforeFile(null);
+      setExecTopupAfterFile(null);
+      return;
+    }
     setExecutingRequestId(reqId);
     try {
-      await executeHungerFinanceRequest(reqId, { suppressErrorToast: true });
+      await executeHungerFinanceRequest(reqId, undefined, {
+        suppressErrorToast: true,
+      });
       await loadEvents();
     } catch (err) {
       toast.error(getHungerErrorMessage(err, "تعذر تنفيذ الطلب المالي"));
     } finally {
       setExecutingRequestId(null);
+    }
+  };
+
+  const handleConfirmExecuteTopupRequest = async () => {
+    if (!execTopupModalTarget) return;
+    const reqId =
+      execTopupModalTarget.requestId ||
+      execTopupModalTarget.id ||
+      execTopupModalTarget.eventId ||
+      "";
+    const accId = execTopupModalTarget.accountId || eventAccountId || "";
+    if (!reqId) return;
+    if (!accId) {
+      toast.warning("لا يوجد حساب هنقرستيشن مرتبط بطلب الشحن لرفع الصور");
+      return;
+    }
+    if (!execTopupBeforeFile || !execTopupAfterFile) {
+      toast.warning("يرجى إرفاق صورتي الرصيد قبل الشحن وبعد الشحن");
+      return;
+    }
+    setExecTopupBusy(true);
+    try {
+      let resolvedPlatformId = platformId;
+      if (!resolvedPlatformId) {
+        const p = await getHungerPlatform();
+        resolvedPlatformId = p?.id || "";
+      }
+      const obsDate =
+        execTopupModalTarget.businessDate?.slice(0, 10) ||
+        getRiyadhTodayIso();
+      const [beforeUp, afterUp] = await Promise.all([
+        uploadHungerFinanceEvidence(
+          {
+            platformId: resolvedPlatformId,
+            accountId: accId,
+            purpose: "WalletBefore",
+            observedOn: obsDate,
+            file: execTopupBeforeFile,
+          },
+          { suppressErrorToast: true },
+        ),
+        uploadHungerFinanceEvidence(
+          {
+            platformId: resolvedPlatformId,
+            accountId: accId,
+            purpose: "WalletAfter",
+            observedOn: obsDate,
+            file: execTopupAfterFile,
+          },
+          { suppressErrorToast: true },
+        ),
+      ]);
+      await executeHungerFinanceRequest(
+        reqId,
+        {
+          evidenceBeforeId: beforeUp.evidenceFileId,
+          evidenceAfterId: afterUp.evidenceFileId,
+        },
+        { suppressErrorToast: true },
+      );
+      setExecTopupModalTarget(null);
+      setExecTopupBeforeFile(null);
+      setExecTopupAfterFile(null);
+      await loadEvents();
+    } catch (err) {
+      toast.error(getHungerErrorMessage(err, "تعذر تنفيذ طلب شحن المحفظة"));
+    } finally {
+      setExecTopupBusy(false);
+    }
+  };
+
+  // Handler: Approve or Reject Funding Request (CR-005 Phase 3)
+  const handleFundingDecision = async () => {
+    if (!fundingDecisionModal) return;
+    const reqId =
+      fundingDecisionModal.event.requestId ||
+      fundingDecisionModal.event.id ||
+      fundingDecisionModal.event.eventId ||
+      "";
+    if (!reqId) return;
+
+    if (fundingDecisionModal.mode === "approve") {
+      const amt = parseFloat(fundingApproveAmount);
+      if (isNaN(amt) || amt <= 0) {
+        toast.warning("يرجى إدخال مبلغ اعتماد صحيح أكبر من صفر");
+        return;
+      }
+      if (!fundingApproveSubAccountId) {
+        toast.warning("يرجى اختيار حساب الخزينة المصدر (sourceSubAccountId)");
+        return;
+      }
+      setFundingDecisionBusy(true);
+      try {
+        await approveHungerFundingRequest(
+          reqId,
+          {
+            amount: amt,
+            sourceSubAccountId: fundingApproveSubAccountId,
+            note: fundingDecisionNote.trim() || null,
+          },
+          { suppressErrorToast: true },
+        );
+        setFundingDecisionModal(null);
+        await loadEvents();
+      } catch (err) {
+        toast.error(getHungerErrorMessage(err, "تعذر اعتماد طلب التمويل"));
+      } finally {
+        setFundingDecisionBusy(false);
+      }
+    } else {
+      if (!fundingDecisionNote.trim()) {
+        toast.warning("يرجى إدخال سبب رفض طلب التمويل");
+        return;
+      }
+      setFundingDecisionBusy(true);
+      try {
+        await rejectHungerFundingRequest(
+          reqId,
+          { note: fundingDecisionNote.trim() },
+          { suppressErrorToast: true },
+        );
+        setFundingDecisionModal(null);
+        await loadEvents();
+      } catch (err) {
+        toast.error(getHungerErrorMessage(err, "تعذر رفض طلب التمويل"));
+      } finally {
+        setFundingDecisionBusy(false);
+      }
+    }
+  };
+
+  // Handler: Seal or Reject Financial Event (CR-005 Phase 3)
+  const handleSealOrRejectEvent = async () => {
+    if (!sealRejectModal) return;
+    const evId =
+      sealRejectModal.event.id || sealRejectModal.event.eventId || "";
+    if (!evId) return;
+
+    if (sealRejectModal.mode === "seal") {
+      setSealRejectBusy(true);
+      try {
+        const accountsMap: Record<string, string> = {};
+        for (const row of sealCoaOverrides) {
+          if (row.key.trim() && row.code.trim()) {
+            accountsMap[row.key.trim()] = row.code.trim();
+          }
+        }
+        await sealHungerFinanceEvent(
+          evId,
+          {
+            accounts:
+              Object.keys(accountsMap).length > 0 ? accountsMap : null,
+            note: sealNote.trim() || null,
+          },
+          { suppressErrorToast: true },
+        );
+        setSealRejectModal(null);
+        setSealNote("");
+        setSealCoaOverrides([]);
+        await Promise.all([loadSealQueue(), loadEvents()]);
+      } catch (err) {
+        toast.error(
+          getHungerErrorMessage(
+            err,
+            "تعذر ختم واعتماد الحركة (لا يمكن لمنشئ الحركة ختمها بنفسه)",
+          ),
+        );
+      } finally {
+        setSealRejectBusy(false);
+      }
+    } else {
+      if (!rejectEventReason.trim()) {
+        toast.warning("يرجى إدخال سبب رفض الحركة المالية");
+        return;
+      }
+      setSealRejectBusy(true);
+      try {
+        await rejectHungerFinanceEvent(
+          evId,
+          { reason: rejectEventReason.trim() },
+          { suppressErrorToast: true },
+        );
+        setSealRejectModal(null);
+        setRejectEventReason("");
+        await Promise.all([loadSealQueue(), loadEvents()]);
+      } catch (err) {
+        toast.error(getHungerErrorMessage(err, "تعذر رفض الحركة المالية"));
+      } finally {
+        setSealRejectBusy(false);
+      }
+    }
+  };
+
+  // Handler: Create Exception & Approve/Reject Exception (CR-005 Phase 6)
+  const handleCreateException = async () => {
+    const amt = parseFloat(newExceptionAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.warning("يرجى إدخال مبلغ استثناء صحيح أكبر من صفر");
+      return;
+    }
+    if (!newExceptionReason.trim()) {
+      toast.warning("يرجى إدخال سبب طلب الاستثناء");
+      return;
+    }
+    if (newExceptionKind === "NonZeroHandover" && !newExceptionAccountId) {
+      toast.warning("يرجى اختيار الحساب المرتبط باستثناء التسليم غير الصفري");
+      return;
+    }
+    if (
+      newExceptionKind === "CustodyIdentityMismatch" &&
+      !newExceptionSupervisorId
+    ) {
+      toast.warning("يرجى اختيار المشرف المرتبط باستثناء فرق متطابقة العهدة");
+      return;
+    }
+
+    setNewExceptionBusy(true);
+    try {
+      let resolvedPlatformId = platformId;
+      if (!resolvedPlatformId) {
+        const p = await getHungerPlatform();
+        resolvedPlatformId = p?.id || "";
+      }
+      await createHungerFinanceException(
+        {
+          platformId: resolvedPlatformId,
+          kind: newExceptionKind,
+          accountId:
+            newExceptionKind === "NonZeroHandover"
+              ? newExceptionAccountId
+              : null,
+          supervisorEmployeeId:
+            newExceptionKind === "CustodyIdentityMismatch"
+              ? newExceptionSupervisorId
+              : null,
+          amount: amt,
+          reason: newExceptionReason.trim(),
+          idempotencyKey: generateHungerIdempotencyKey("hng-exc"),
+        },
+        { suppressErrorToast: true },
+      );
+      setCreateExceptionModalOpen(false);
+      setNewExceptionAmount("");
+      setNewExceptionReason("");
+      await Promise.all([loadExceptions(), loadEvents()]);
+    } catch (err) {
+      toast.error(getHungerErrorMessage(err, "تعذر إرسال طلب الاستثناء"));
+    } finally {
+      setNewExceptionBusy(false);
+    }
+  };
+
+  const handleExceptionDecision = async () => {
+    if (!exceptionDecisionModal) return;
+    const exId =
+      exceptionDecisionModal.item.exceptionId ||
+      exceptionDecisionModal.item.id ||
+      "";
+    if (!exId) return;
+    if (
+      exceptionDecisionModal.mode === "reject" &&
+      !exceptionDecisionNote.trim()
+    ) {
+      toast.warning("يرجى إدخال ملاحظة / سبب رفض الاستثناء");
+      return;
+    }
+    setExceptionDecisionBusy(true);
+    try {
+      if (exceptionDecisionModal.mode === "approve") {
+        await approveHungerFinanceException(
+          exId,
+          { note: exceptionDecisionNote.trim() || null },
+          { suppressErrorToast: true },
+        );
+      } else {
+        await rejectHungerFinanceException(
+          exId,
+          { note: exceptionDecisionNote.trim() },
+          { suppressErrorToast: true },
+        );
+      }
+      setExceptionDecisionModal(null);
+      setExceptionDecisionNote("");
+      await Promise.all([loadExceptions(), loadEvents()]);
+    } catch (err) {
+      toast.error(
+        getHungerErrorMessage(
+          err,
+          "تعذر تنفيذ القرار على الاستثناء (لا يمكن لطالب الاستثناء اعتماده بنفسه)",
+        ),
+      );
+    } finally {
+      setExceptionDecisionBusy(false);
+    }
+  };
+
+  // Handler: Confirm Owner Collection Receipt (CR-005 Phase 7)
+  const handleConfirmOwnerCollection = async () => {
+    if (!ownerConfirmTarget) return;
+    const receiptId =
+      ownerConfirmTarget.id || ownerConfirmTarget.eventId || "";
+    if (!receiptId) return;
+    if (!ownerConfirmEvidence.trim()) {
+      toast.warning("يرجى إدخال مرجع إثبات تأكيد استلام تحصيل المالك");
+      return;
+    }
+    setOwnerConfirmBusy(true);
+    try {
+      await confirmHungerOwnerCollection(
+        receiptId,
+        {
+          idempotencyKey: generateHungerIdempotencyKey("hng-own-cnf"),
+          businessDate: ownerConfirmDate,
+          evidenceReference: ownerConfirmEvidence.trim(),
+          capacity: ownerConfirmCapacity,
+        },
+        { suppressErrorToast: true },
+      );
+      setOwnerConfirmTarget(null);
+      setOwnerConfirmEvidence("");
+      await loadEvents();
+    } catch (err) {
+      toast.error(
+        getHungerErrorMessage(err, "تعذر تأكيد استلام سند تحصيل المالك"),
+      );
+    } finally {
+      setOwnerConfirmBusy(false);
     }
   };
 
@@ -941,18 +1676,21 @@ export default function HungerFinancePage() {
     }
   };
 
-  // Remittable events (Collection / WithdrawalSupervisor / pendingSources)
+  // Remittable events (Collection / WithdrawalSupervisor / legacy TopUpCollected only)
   const remittableEvents = useMemo(() => {
     if (pendingSources.length > 0) {
       return pendingSources;
     }
     return eventsList.filter((ev) => {
       const k = (ev.kind || "").toLowerCase();
-      return (
-        k === "collection" ||
-        k === "withdrawalsupervisor" ||
-        k === "topupcollected"
-      );
+      if (k === "collection" || k === "withdrawalsupervisor") {
+        return true;
+      }
+      if (k === "topupcollected") {
+        // CR-005: New TopUpCollected rows go to OwnerVault (not remittable). Only legacy rows with empty destinationChannel and status Posted are remittable.
+        return !ev.destinationChannel && (!ev.status || ev.status === "Posted");
+      }
+      return false;
     });
   }, [pendingSources, eventsList]);
 
@@ -1096,8 +1834,9 @@ export default function HungerFinancePage() {
     }
     setConfirmPartialAmounts(initialPartials);
     setConfirmDestSubAccountId("");
-    setConfirmDestType("");
-    setConfirmDestOwnerId("");
+    setConfirmDestType("Company");
+    setConfirmDestOwnerId(sponsors[0]?.id || "");
+    setConfirmDestChannel("Bank");
     setConfirmBusinessDate(getRiyadhTodayIso());
     setConfirmEvidence(rem.evidenceReference || "");
     setConfirmRemitModalOpen(true);
@@ -1107,6 +1846,26 @@ export default function HungerFinancePage() {
     if (!targetRemittance) return;
     if (!confirmEvidence.trim()) {
       toast.warning("يرجى إدخال مرجع تأكيد الاستلام المحاسبي");
+      return;
+    }
+    if (confirmDestType !== "Company") {
+      toast.warning(
+        "يجب تحديد نوع الوجهة المستلمة: الشركة / الكفيل (Company)",
+      );
+      return;
+    }
+    if (!confirmDestOwnerId) {
+      toast.warning("يرجى اختيار الكفيل / المنشأة المستلمة (destinationOwnerId)");
+      return;
+    }
+    if (!confirmDestSubAccountId) {
+      toast.warning(
+        "يرجى اختيار حساب الخزينة المستلم الفعلي (destinationSubAccountId)",
+      );
+      return;
+    }
+    if (!confirmDestChannel) {
+      toast.warning("يرجى اختيار قناة الاستلام (Cashbox أو Bank)");
       return;
     }
 
@@ -1139,9 +1898,10 @@ export default function HungerFinancePage() {
       const updated = await confirmHungerRemittance(
         remId,
         {
-          destinationSubAccountId: confirmDestSubAccountId || null,
-          destinationType: confirmDestType || null,
-          destinationOwnerId: confirmDestOwnerId || null,
+          destinationSubAccountId: confirmDestSubAccountId,
+          destinationType: "Company",
+          destinationOwnerId: confirmDestOwnerId,
+          destinationChannel: confirmDestChannel,
           sources: sourcesPayload,
           selectedSourceIds: selectedIdsPayload,
           idempotencyKey: generateHungerIdempotencyKey("hng-rem-cnf"),
@@ -1240,6 +2000,21 @@ export default function HungerFinancePage() {
         return;
       }
     }
+    if (docKind === "Invoice" && docInvoiceLines.length > 0) {
+      for (const line of docInvoiceLines) {
+        if (!line.externalAccountId.trim()) {
+          toast.warning("يرجى إدخال معرف الحساب الخارجي لكل سطر في الفاتورة");
+          return;
+        }
+        const rb = parseFloat(line.riderBalance || "0");
+        if (isNaN(rb) || rb < 0) {
+          toast.warning(
+            "قيمة رصيد المندوب (riderBalance) في سطور الفاتورة يجب أن تكون موجبة أو صفر (بدون إشارة سالبة)",
+          );
+          return;
+        }
+      }
+    }
     setDocBusy(true);
     try {
       let resolvedPlatformId = platformId;
@@ -1247,7 +2022,7 @@ export default function HungerFinancePage() {
         const p = await getHungerPlatform();
         resolvedPlatformId = p?.id || "";
       }
-      await createHungerSettlementDocument(
+      const created = await createHungerSettlementDocument(
         {
           platformId: resolvedPlatformId,
           accountId: docAccountId || null,
@@ -1258,6 +2033,38 @@ export default function HungerFinancePage() {
           evidenceReference: docEvidence.trim(),
           notes: docNotes.trim() || null,
           businessDate: docBusinessDate,
+          idempotencyKey: generateHungerIdempotencyKey("hng-stl-doc"),
+          ...(docKind === "Invoice"
+            ? {
+                chargeFrom: docChargeFrom || null,
+                chargeThrough: docChargeThrough || null,
+                observedOn: docObservedOn || docBusinessDate,
+                companyControlTotal: docCompanyControlTotal
+                  ? parseFloat(docCompanyControlTotal)
+                  : amt,
+                riderBalanceControlTotal: docRiderBalanceControlTotal
+                  ? parseFloat(docRiderBalanceControlTotal)
+                  : null,
+                canonicalLevel: docCanonicalLevel || null,
+                lines:
+                  docInvoiceLines.length > 0
+                    ? docInvoiceLines.map((l, idx) => ({
+                        sourceKey:
+                          l.externalAccountId.trim() || `line-${idx + 1}`,
+                        level: docCanonicalLevel || "RiderLVL",
+                        accountId: l.externalAccountId.trim(),
+                        riderProfileId: l.riderName.trim() || null,
+                        signedNetAmount: parseFloat(l.netAmount || "0") || 0,
+                        taxAmount: 0,
+                        evidenceReference: docEvidence.trim(),
+                        riderBalance:
+                          l.riderBalance !== ""
+                            ? Math.abs(parseFloat(l.riderBalance) || 0)
+                            : null,
+                      }))
+                    : null,
+              }
+            : {}),
           ...(docKind === "Adjustment"
             ? {
                 sourceDocumentType: docSourceDocumentType.trim(),
@@ -1268,12 +2075,23 @@ export default function HungerFinancePage() {
         },
         { suppressErrorToast: true },
       );
+      if (
+        created?.generatedCloses !== undefined ||
+        (created?.closeConflictAccountIds &&
+          created.closeConflictAccountIds.length > 0)
+      ) {
+        setLastInvoiceResult({
+          generatedCloses: created.generatedCloses ?? 0,
+          closeConflictAccountIds: created.closeConflictAccountIds ?? [],
+        });
+      }
       setDocModalOpen(false);
       setDocReference("");
       setDocAmount("");
       setDocEvidence("");
       setDocNotes("");
       setDocSourceReference("");
+      setDocInvoiceLines([]);
       await loadSettlementDocuments();
     } catch (err) {
       const status = (err as { status?: number })?.status;
@@ -1297,6 +2115,14 @@ export default function HungerFinancePage() {
       toast.warning("يرجى اختيار مستند الإقفال الشهري (MonthClose) للمطابقة");
       return;
     }
+    if (!reconcileApprovalDate) {
+      toast.warning("يرجى تحديد تاريخ اعتماد المطابقة (approvalDate)");
+      return;
+    }
+    if (!reconcileSupervisorId) {
+      toast.warning("يرجى اختيار المشرف المسؤول (supervisorEmployeeId)");
+      return;
+    }
     if (!reconcileEvidence.trim()) {
       toast.warning("يرجى إدخال مرجع إثبات المطابقة");
       return;
@@ -1307,6 +2133,8 @@ export default function HungerFinancePage() {
         docId,
         {
           closingSnapshotId: reconcileSnapshotId,
+          approvalDate: reconcileApprovalDate,
+          supervisorEmployeeId: reconcileSupervisorId,
           evidenceReference: reconcileEvidence.trim(),
         },
         { suppressErrorToast: true },
@@ -1464,6 +2292,45 @@ export default function HungerFinancePage() {
 
           <button
             type="button"
+            onClick={() => setActiveTab("seal-queue")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+              activeTab === "seal-queue"
+                ? "bg-amber-500 text-white shadow-xs"
+                : "text-[var(--muted)] hover:bg-[var(--subtle-hover)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span>طابور الختم المحاسبي</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("exceptions")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+              activeTab === "exceptions"
+                ? "bg-amber-500 text-white shadow-xs"
+                : "text-[var(--muted)] hover:bg-[var(--subtle-hover)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span>الاستثناءات المالية</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("owner-collections")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+              activeTab === "owner-collections"
+                ? "bg-amber-500 text-white shadow-xs"
+                : "text-[var(--muted)] hover:bg-[var(--subtle-hover)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>تحصيلات المالك</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab("settlements")}
             className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
               activeTab === "settlements"
@@ -1559,6 +2426,138 @@ export default function HungerFinancePage() {
             </div>
           </div>
 
+          {/* CR-005 Phase 6: Custody Settlement Identity Report */}
+          {custodySettlement && (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-[var(--foreground)]">
+                    متطابقة تسوية عهدة المشرف (Custody Settlement Identity)
+                  </h4>
+                  <Badge tone={custodySettlement.balanced ? "green" : "red"}>
+                    {custodySettlement.balanced
+                      ? "متطابقة ومتوازنة"
+                      : "يوجد فرق في المتطابقة"}
+                  </Badge>
+                  {custodySettlement.exceptionApproved && (
+                    <Badge tone="blue">استثناء فرق العهدة معتمد</Badge>
+                  )}
+                </div>
+                {!custodySettlement.balanced &&
+                  !custodySettlement.exceptionApproved &&
+                  canExceptionRequest && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setNewExceptionKind("CustodyIdentityMismatch");
+                        setNewExceptionSupervisorId(selectedSupervisorId);
+                        setNewExceptionAmount(
+                          String(
+                            Math.abs(custodySettlement.difference || 0).toFixed(
+                              2,
+                            ),
+                          ),
+                        );
+                        setNewExceptionReason("");
+                        setCreateExceptionModalOpen(true);
+                      }}
+                    >
+                      <AlertTriangle className="ml-1 h-3.5 w-3.5 text-amber-600" />
+                      طلب استثناء لفرق العهدة
+                    </Button>
+                  )}
+              </div>
+
+              {!custodySettlement.balanced && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50/80 p-3 text-xs font-semibold text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                  <span>
+                    تنبيه: الرصيد المتوقع للعهدة (
+                    <strong dir="ltr">
+                      {Number(custodySettlement.expectedBalance || 0).toFixed(2)}{" "}
+                      SAR
+                    </strong>
+                    ) لا يطابق الرصيد المرحل الفعلي (
+                    <strong dir="ltr">
+                      {Number(custodySettlement.postingBalance || 0).toFixed(2)}{" "}
+                      SAR
+                    </strong>
+                    ) بفارق قدره{" "}
+                    <strong dir="ltr">
+                      {Number(custodySettlement.difference || 0).toFixed(2)} SAR
+                    </strong>
+                    .
+                  </span>
+                </div>
+              )}
+
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4 lg:grid-cols-7">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5">
+                  <div className="text-[11px] text-[var(--muted)]">
+                    التمويل المستلم
+                  </div>
+                  <div className="mt-1 font-bold" dir="ltr">
+                    {Number(custodySettlement.fundingDelivered || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5">
+                  <div className="text-[11px] text-[var(--muted)]">
+                    شحن من العهدة
+                  </div>
+                  <div className="mt-1 font-bold" dir="ltr">
+                    {Number(custodySettlement.topUpAdvance || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5">
+                  <div className="text-[11px] text-[var(--muted)]">
+                    شحن من التحصيل
+                  </div>
+                  <div className="mt-1 font-bold" dir="ltr">
+                    {Number(custodySettlement.topUpCollected || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5">
+                  <div className="text-[11px] text-[var(--muted)]">
+                    شحن ملغى / مسترد
+                  </div>
+                  <div className="mt-1 font-bold" dir="ltr">
+                    {Number(custodySettlement.cancelledTopUps || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5">
+                  <div className="text-[11px] text-[var(--muted)]">
+                    الرصيد المتوقع
+                  </div>
+                  <div className="mt-1 font-bold text-emerald-600" dir="ltr">
+                    {Number(custodySettlement.expectedBalance || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5">
+                  <div className="text-[11px] text-[var(--muted)]">
+                    الرصيد المرحل
+                  </div>
+                  <div className="mt-1 font-bold text-blue-600" dir="ltr">
+                    {Number(custodySettlement.postingBalance || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--subtle-bg)] p-2.5">
+                  <div className="text-[11px] text-[var(--muted)]">الفرق</div>
+                  <div
+                    className={`mt-1 font-extrabold ${
+                      custodySettlement.balanced
+                        ? "text-emerald-600"
+                        : "text-rose-600"
+                    }`}
+                    dir="ltr"
+                  >
+                    {Number(custodySettlement.difference || 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
             <div>
@@ -1566,8 +2565,8 @@ export default function HungerFinancePage() {
                 سجل الحركات والطلبات المالية للمحافظ والعهدة
               </h3>
               <p className="text-xs text-[var(--muted)]">
-                يشمل طلبات وتنفيذ التمويل وشحن المحافظ، التحصيل من المناديب،
-                حركات السحب (مع تأكيد الوصول أو الإلغاء)، وصرف المستحقات.
+                يشمل طلبات واعتماد وتنفيذ التمويل وشحن المحافظ، التحصيل من
+                المناديب، حركات السحب، الختم المحاسبي، واستبدال المرفوض.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1594,6 +2593,10 @@ export default function HungerFinancePage() {
                       allowedFinancialEventKinds[0]?.value ||
                       "Collection";
                     handleChangeEventKind(initialKind);
+                    setEventSupersedesEventId("");
+                    setTopupBeforeFile(null);
+                    setTopupAfterFile(null);
+                    setWithdrawalWalletFile(null);
                     setEventModalOpen(true);
                   }}
                 >
@@ -1639,11 +2642,11 @@ export default function HungerFinancePage() {
                       </div>
                     </th>
                     <th className="px-4 py-3 whitespace-nowrap">
-                      حساب الخزينة / الوجهة
+                      حساب الخزينة / القناة
                     </th>
                     <th className="px-4 py-3 whitespace-nowrap">مرجع الإثبات</th>
                     <th className="px-4 py-3 whitespace-nowrap">
-                      حالة الحركة / السحب / التوريد
+                      حالة الحركة / الاعتماد المحاسبي
                     </th>
                     <th className="px-4 py-3 whitespace-nowrap">الإجراءات</th>
                   </tr>
@@ -1673,6 +2676,9 @@ export default function HungerFinancePage() {
                       const isWithdrawal =
                         ev.kind === "WithdrawalCompany" ||
                         ev.kind === "WithdrawalSupervisor";
+                      const isTopup =
+                        ev.kind === "TopUpAdvance" ||
+                        ev.kind === "TopUpCollected";
                       const rawStatus =
                         ev.withdrawalStatus || ev.status || "";
                       const isPendingArrival =
@@ -1680,16 +2686,35 @@ export default function HungerFinancePage() {
                         (rawStatus === "PendingArrival" ||
                           rawStatus === "Pending" ||
                           !rawStatus);
-                      const isRequested =
-                        rawStatus === "Requested" ||
-                        Boolean(ev.requestId && rawStatus !== "Executed");
-                      const canExecRequest =
-                        ev.kind === "Funding"
-                          ? canFundingExecute
-                          : ev.kind === "TopUpAdvance" ||
-                              ev.kind === "TopUpCollected"
-                            ? canTopupExecute
-                            : false;
+                      const isFundingPendingApprove =
+                        ev.kind === "Funding" &&
+                        rawStatus === "Requested" &&
+                        ev.approvalStatus !== "Sealed" &&
+                        ev.approvalStatus !== "Rejected";
+                      const isFundingApprovedForDeliver =
+                        ev.kind === "Funding" &&
+                        (rawStatus === "Approved" ||
+                          (rawStatus === "Requested" &&
+                            ev.approvalStatus === "Sealed"));
+                      const isTopupRequested =
+                        isTopup &&
+                        (rawStatus === "Requested" ||
+                          Boolean(
+                            ev.requestId &&
+                              rawStatus !== "Executed" &&
+                              rawStatus !== "Posted" &&
+                              rawStatus !== "Rejected",
+                          ));
+                      const isRejectedEvent =
+                        ev.approvalStatus === "Rejected" ||
+                        rawStatus === "Rejected";
+                      const canReplaceRejected =
+                        isRejectedEvent &&
+                        ((isTopup && (canTopupExecute || canTopupRequest)) ||
+                          (isWithdrawal && canWithdrawalRequest));
+                      const approvalMeta = getApprovalStatusMeta(
+                        ev.approvalStatus,
+                      );
                       const rowId =
                         ev.requestId || ev.id || ev.eventId || String(idx);
 
@@ -1709,6 +2734,12 @@ export default function HungerFinancePage() {
                               <span className="mr-1 inline-block rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-800 dark:bg-purple-950/40 dark:text-purple-300">
                                 مقابل حقوق محفوظة
                               </span>
+                            )}
+                            {ev.supersedesEventId && (
+                              <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+                                بديل عن حركة مرفوضة:{" "}
+                                {ev.supersedesEventId.slice(0, 8)}...
+                              </div>
                             )}
                           </td>
                           <td
@@ -1732,6 +2763,11 @@ export default function HungerFinancePage() {
                           </td>
                           <td className="px-4 py-3 text-[var(--muted)]">
                             <div>{ev.counterSubAccountName || "—"}</div>
+                            {ev.destinationChannel && (
+                              <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                                القناة: {ev.destinationChannel}
+                              </div>
+                            )}
                             {ev.transferReference && (
                               <div className="text-[10px] text-slate-400">
                                 تحويل: {ev.transferReference}
@@ -1742,56 +2778,132 @@ export default function HungerFinancePage() {
                             {ev.evidenceReference || "—"}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-1">
-                              {isWithdrawal && (
-                                <Badge
-                                  tone={
-                                    getWithdrawalStatusMeta(
-                                      rawStatus || "PendingArrival",
-                                    ).badgeTone
-                                  }
-                                >
-                                  {
-                                    getWithdrawalStatusMeta(
-                                      rawStatus || "PendingArrival",
-                                    ).labelAr
-                                  }
-                                </Badge>
-                              )}
-                              {isRequested && (
-                                <Badge tone="orange">
-                                  طلب بانتظار التنفيذ (Requested)
-                                </Badge>
-                              )}
-                              {rawStatus === "Executed" && (
-                                <Badge tone="green">منفذ</Badge>
-                              )}
-                              {ev.remittanceStatus && (
-                                <Badge
-                                  tone={
-                                    getRemittanceStatusMeta(
-                                      ev.remittanceStatus,
-                                    ).badgeTone
-                                  }
-                                >
-                                  {
-                                    getRemittanceStatusMeta(
-                                      ev.remittanceStatus,
-                                    ).labelAr
-                                  }
-                                </Badge>
-                              )}
-                              {!isWithdrawal &&
-                                !isRequested &&
-                                rawStatus !== "Executed" &&
-                                !ev.remittanceStatus && (
-                                  <span className="text-[var(--muted)]">—</span>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex flex-wrap items-center gap-1">
+                                {isWithdrawal && (
+                                  <Badge
+                                    tone={
+                                      getWithdrawalStatusMeta(
+                                        rawStatus || "PendingArrival",
+                                      ).badgeTone
+                                    }
+                                  >
+                                    {
+                                      getWithdrawalStatusMeta(
+                                        rawStatus || "PendingArrival",
+                                      ).labelAr
+                                    }
+                                  </Badge>
                                 )}
+                                {rawStatus === "Requested" && (
+                                  <Badge tone="orange">
+                                    طلب (Requested)
+                                  </Badge>
+                                )}
+                                {rawStatus === "Approved" && (
+                                  <Badge tone="blue">
+                                    تمويل معتمد (Approved)
+                                  </Badge>
+                                )}
+                                {(rawStatus === "Executed" ||
+                                  rawStatus === "Posted") && (
+                                  <Badge tone="green">منفذ ({rawStatus})</Badge>
+                                )}
+                                {rawStatus === "PendingReceipt" && (
+                                  <Badge tone="orange">
+                                    بانتظار تأكيد استلام المالك
+                                  </Badge>
+                                )}
+                                {ev.approvalStatus && (
+                                  <Badge tone={approvalMeta.badgeTone}>
+                                    {approvalMeta.labelAr}
+                                  </Badge>
+                                )}
+                                {ev.remittanceStatus && (
+                                  <Badge
+                                    tone={
+                                      getRemittanceStatusMeta(
+                                        ev.remittanceStatus,
+                                      ).badgeTone
+                                    }
+                                  >
+                                    {
+                                      getRemittanceStatusMeta(
+                                        ev.remittanceStatus,
+                                      ).labelAr
+                                    }
+                                  </Badge>
+                                )}
+                              </div>
+                              {ev.rejectionReason && (
+                                <div className="text-[10px] font-semibold text-rose-600">
+                                  سبب الرفض: {ev.rejectionReason}
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              {isRequested && canExecRequest && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {/* CR-005 Funding Approve / Reject */}
+                              {isFundingPendingApprove && canFundingApprove && (
+                                <>
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setFundingDecisionModal({
+                                        event: ev,
+                                        mode: "approve",
+                                      });
+                                      setFundingApproveAmount(
+                                        String(ev.amount || ""),
+                                      );
+                                      setFundingApproveSubAccountId(
+                                        ev.counterSubAccountId || "",
+                                      );
+                                      setFundingDecisionNote("");
+                                    }}
+                                  >
+                                    <CheckCircle2 className="ml-1 h-3 w-3" />
+                                    اعتماد التمويل
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setFundingDecisionModal({
+                                        event: ev,
+                                        mode: "reject",
+                                      });
+                                      setFundingDecisionNote("");
+                                    }}
+                                  >
+                                    <XCircle className="ml-1 h-3 w-3 text-rose-600" />
+                                    رفض
+                                  </Button>
+                                </>
+                              )}
+
+                              {/* CR-005 Funding Deliver (Execute after approval) */}
+                              {isFundingApprovedForDeliver &&
+                                canFundingExecute && (
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={executingRequestId === rowId}
+                                    onClick={() =>
+                                      void handleExecuteRequest(ev)
+                                    }
+                                  >
+                                    <Play className="ml-1 h-3 w-3" />
+                                    {executingRequestId === rowId
+                                      ? "جارٍ التسليم..."
+                                      : "تسليم التمويل"}
+                                  </Button>
+                                )}
+
+                              {/* TopUp Request Execute (requires before & after images) */}
+                              {isTopupRequested && canTopupExecute && (
                                 <Button
                                   variant="primary"
                                   size="sm"
@@ -1799,11 +2911,79 @@ export default function HungerFinancePage() {
                                   onClick={() => void handleExecuteRequest(ev)}
                                 >
                                   <Play className="ml-1 h-3 w-3" />
-                                  {executingRequestId === rowId
-                                    ? "جارٍ التنفيذ..."
-                                    : "تنفيذ"}
+                                  تنفيذ الشحن
                                 </Button>
                               )}
+
+                              {/* Seal / Reject PendingSeal Event */}
+                              {ev.approvalStatus === "PendingSeal" &&
+                                ev.kind !== "Funding" &&
+                                canSeal && (
+                                  <>
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSealRejectModal({
+                                          event: ev,
+                                          mode: "seal",
+                                        });
+                                        setSealNote("");
+                                        setSealCoaOverrides([]);
+                                      }}
+                                    >
+                                      <ShieldCheck className="ml-1 h-3 w-3" />
+                                      ختم
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSealRejectModal({
+                                          event: ev,
+                                          mode: "reject",
+                                        });
+                                        setRejectEventReason("");
+                                      }}
+                                    >
+                                      <XCircle className="ml-1 h-3 w-3 text-rose-600" />
+                                      رفض
+                                    </Button>
+                                  </>
+                                )}
+
+                              {/* Replace Rejected Top-Up or Withdrawal */}
+                              {canReplaceRejected && (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => openReplaceRejectedModal(ev)}
+                                >
+                                  <RotateCcw className="ml-1 h-3 w-3 text-amber-600" />
+                                  استبدال المرفوض
+                                </Button>
+                              )}
+
+                              {/* Quick open Top-Up from Withdrawal row */}
+                              {isWithdrawal &&
+                                (canTopupExecute || canTopupRequest) && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => {
+                                      handleChangeEventKind("TopUpAdvance");
+                                      setEventAccountId(ev.accountId || "");
+                                      setEventRiderId(ev.riderProfileId || "");
+                                      setEventSupersedesEventId("");
+                                      setTopupBeforeFile(null);
+                                      setTopupAfterFile(null);
+                                      setEventModalOpen(true);
+                                    }}
+                                  >
+                                    <Plus className="ml-1 h-3 w-3" />
+                                    شحن المحفظة
+                                  </Button>
+                                )}
 
                               {isPendingArrival &&
                                 canWithdrawalConfirmArrival && (
@@ -2309,10 +3489,594 @@ export default function HungerFinancePage() {
       )}
 
       {/* =====================================================================
+          TAB: Seal Queue (`seal-queue` — CR-005 Phase 3)
+         ===================================================================== */}
+      {activeTab === "seal-queue" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--foreground)]">
+                طابور الختم المحاسبي للحركات المالية (Seal Queue)
+              </h3>
+              <p className="text-xs text-[var(--muted)]">
+                مراجعة الحركات بانتظار الختم المحاسبي (PendingSeal) أو المرفوضة
+                (Rejected). لا يمكن لمنشئ الحركة ختمها بنفسه (فصل الصلاحيات).
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={sealQueueStatus}
+                onChange={(e) =>
+                  setSealQueueStatus(
+                    e.target.value as "PendingSeal" | "Rejected",
+                  )
+                }
+                className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold"
+              >
+                <option value="PendingSeal">
+                  بانتظار الختم المحاسبي (PendingSeal)
+                </option>
+                <option value="Rejected">مرفوضة محاسبيًا (Rejected)</option>
+              </select>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void loadSealQueue()}
+                disabled={sealQueueLoading}
+              >
+                <RefreshCw
+                  className={`ml-1.5 h-3.5 w-3.5 ${sealQueueLoading ? "animate-spin" : ""}`}
+                />
+                تحديث
+              </Button>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100/95 dark:bg-slate-800/95 text-[11px] font-black text-slate-900 dark:text-slate-100 border-b-2 border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="px-4 py-3">التاريخ</th>
+                    <th className="px-4 py-3">نوع الحركة</th>
+                    <th className="px-4 py-3">المبلغ</th>
+                    <th className="px-4 py-3">الحساب / المندوب</th>
+                    <th className="px-4 py-3">القناة / الوجهة</th>
+                    <th className="px-4 py-3">مرجع الإثبات</th>
+                    <th className="px-4 py-3">حالة الختم</th>
+                    <th className="px-4 py-3">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {sealQueueLoading ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="py-12 text-center text-[var(--muted)]"
+                      >
+                        جارٍ تحميل طابور الختم المحاسبي...
+                      </td>
+                    </tr>
+                  ) : sealQueueItems.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="py-12 text-center text-[var(--muted)]"
+                      >
+                        لا توجد حركات في طابور الختم لهذه الحالة.
+                      </td>
+                    </tr>
+                  ) : (
+                    sealQueueItems.map((ev, idx) => {
+                      const meta = getFinancialEventKindMeta(ev.kind);
+                      const approvalMeta = getApprovalStatusMeta(
+                        ev.approvalStatus || sealQueueStatus,
+                      );
+                      const isTopupOrWithdrawal =
+                        ev.kind === "TopUpAdvance" ||
+                        ev.kind === "TopUpCollected" ||
+                        ev.kind === "WithdrawalCompany" ||
+                        ev.kind === "WithdrawalSupervisor";
+                      return (
+                        <tr
+                          key={ev.id || ev.eventId || idx}
+                          className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                        >
+                          <td className="px-4 py-3 font-medium">
+                            {ev.businessDate?.slice(0, 10) || "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge tone={meta.badgeTone}>{meta.labelAr}</Badge>
+                            {ev.supersedesEventId && (
+                              <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+                                يستبدل: {ev.supersedesEventId.slice(0, 8)}...
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-extrabold" dir="ltr">
+                            {Number(ev.amount || 0).toFixed(2)} SAR
+                          </td>
+                          <td className="px-4 py-3">
+                            {ev.externalAccountId ||
+                              ev.accountName ||
+                              ev.riderNameAr ||
+                              "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            {ev.destinationChannel ||
+                              ev.counterSubAccountName ||
+                              "—"}
+                          </td>
+                          <td className="px-4 py-3 text-[var(--muted)]">
+                            {ev.evidenceReference || "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge tone={approvalMeta.badgeTone}>
+                              {approvalMeta.labelAr}
+                            </Badge>
+                            {ev.rejectionReason && (
+                              <div className="mt-0.5 text-[10px] font-semibold text-rose-600">
+                                السبب: {ev.rejectionReason}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              {sealQueueStatus === "PendingSeal" &&
+                                ev.kind !== "Funding" &&
+                                canSeal && (
+                                  <>
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSealRejectModal({
+                                          event: ev,
+                                          mode: "seal",
+                                        });
+                                        setSealNote("");
+                                        setSealCoaOverrides([]);
+                                      }}
+                                    >
+                                      <ShieldCheck className="ml-1 h-3 w-3" />
+                                      اعتماد وختم
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSealRejectModal({
+                                          event: ev,
+                                          mode: "reject",
+                                        });
+                                        setRejectEventReason("");
+                                      }}
+                                    >
+                                      <XCircle className="ml-1 h-3 w-3 text-rose-600" />
+                                      رفض
+                                    </Button>
+                                  </>
+                                )}
+                              {sealQueueStatus === "Rejected" &&
+                                isTopupOrWithdrawal && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => openReplaceRejectedModal(ev)}
+                                  >
+                                    <RotateCcw className="ml-1 h-3 w-3 text-amber-600" />
+                                    استبدال المرفوض
+                                  </Button>
+                                )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          TAB: Exceptions (`exceptions` — CR-005 Phase 6)
+         ===================================================================== */}
+      {activeTab === "exceptions" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--foreground)]">
+                سجل الاستثناءات المالية (NonZeroHandover / CustodyIdentityMismatch)
+              </h3>
+              <p className="text-xs text-[var(--muted)]">
+                إدارة طلبات الاستثناء لتسليم المحفظة برصيد غير صفري أو فروقات
+                متطابقة عهدة المشرف. لا يمكن لطالب الاستثناء اعتماده بنفسه.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={exceptionsStatusFilter}
+                onChange={(e) =>
+                  setExceptionsStatusFilter(
+                    e.target.value as "" | HungerExceptionStatus,
+                  )
+                }
+                className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold"
+              >
+                <option value="">جميع الحالات</option>
+                <option value="Pending">بانتظار القرار (Pending)</option>
+                <option value="Approved">معتمد (Approved)</option>
+                <option value="Rejected">مرفوض (Rejected)</option>
+              </select>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void loadExceptions()}
+                disabled={exceptionsLoading}
+              >
+                <RefreshCw
+                  className={`ml-1.5 h-3.5 w-3.5 ${exceptionsLoading ? "animate-spin" : ""}`}
+                />
+                تحديث
+              </Button>
+              {canExceptionRequest && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setNewExceptionKind("NonZeroHandover");
+                    setNewExceptionAccountId("");
+                    setNewExceptionSupervisorId(selectedSupervisorId);
+                    setNewExceptionAmount("");
+                    setNewExceptionReason("");
+                    setCreateExceptionModalOpen(true);
+                  }}
+                >
+                  <Plus className="ml-1.5 h-3.5 w-3.5" />
+                  طلب استثناء جديد
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100/95 dark:bg-slate-800/95 text-[11px] font-black text-slate-900 dark:text-slate-100 border-b-2 border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="px-4 py-3">تاريخ الطلب</th>
+                    <th className="px-4 py-3">نوع الاستثناء</th>
+                    <th className="px-4 py-3">الحساب / المشرف</th>
+                    <th className="px-4 py-3">المبلغ</th>
+                    <th className="px-4 py-3">السبب</th>
+                    <th className="px-4 py-3">الحالة</th>
+                    <th className="px-4 py-3">ملاحظة القرار</th>
+                    <th className="px-4 py-3">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {exceptionsLoading ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="py-12 text-center text-[var(--muted)]"
+                      >
+                        جارٍ تحميل سجل الاستثناءات...
+                      </td>
+                    </tr>
+                  ) : exceptionsList.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="py-12 text-center text-[var(--muted)]"
+                      >
+                        لا توجد استثناءات مسجلة حاليًا.
+                      </td>
+                    </tr>
+                  ) : (
+                    exceptionsList.map((ex) => {
+                      const accLabel = ex.accountId
+                        ? accounts.find(
+                            (a) => (a.accountId || a.id) === ex.accountId,
+                          )?.externalAccountId || ex.accountId.slice(0, 8)
+                        : null;
+                      const supLabel = ex.supervisorEmployeeId
+                        ? employees.find(
+                            (e) => e.id === ex.supervisorEmployeeId,
+                          )?.fullNameAr || ex.supervisorEmployeeId.slice(0, 8)
+                        : null;
+                      const isSelfRequested =
+                        Boolean(user?.id) && ex.requestedByUserId === user?.id;
+
+                      return (
+                        <tr
+                          key={ex.exceptionId || ex.id}
+                          className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                        >
+                          <td className="px-4 py-3">
+                            {ex.requestedAtUtc?.slice(0, 10) ||
+                              ex.decidedAtUtc?.slice(0, 10) ||
+                              "—"}
+                          </td>
+                          <td className="px-4 py-3 font-bold">
+                            {ex.kind === "NonZeroHandover"
+                              ? "تسليم محفظة برصيد غير صفري (NonZeroHandover)"
+                              : "فرق متطابقة عهدة المشرف (CustodyIdentityMismatch)"}
+                          </td>
+                          <td className="px-4 py-3">
+                            {accLabel
+                              ? `حساب: ${accLabel}`
+                              : supLabel
+                                ? `مشرف: ${supLabel}`
+                                : "—"}
+                          </td>
+                          <td className="px-4 py-3 font-extrabold" dir="ltr">
+                            {Number(ex.amount || 0).toFixed(2)} SAR
+                          </td>
+                          <td className="px-4 py-3 text-[var(--muted)]">
+                            {ex.reason}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge
+                              tone={
+                                ex.status === "Approved"
+                                  ? "green"
+                                  : ex.status === "Rejected"
+                                    ? "red"
+                                    : "orange"
+                              }
+                            >
+                              {ex.status === "Approved"
+                                ? "معتمد"
+                                : ex.status === "Rejected"
+                                  ? "مرفوض"
+                                  : "بانتظار الاعتماد"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-[var(--muted)]">
+                            {ex.decisionNote || ex.note || "—"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {ex.status === "Pending" && canExceptionApprove && (
+                              <div className="flex items-center gap-1.5">
+                                {isSelfRequested ? (
+                                  <span className="text-[11px] text-[var(--muted)]">
+                                    بانتظار معتمد آخر
+                                  </span>
+                                ) : (
+                                  <>
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      onClick={() => {
+                                        setExceptionDecisionModal({
+                                          item: ex,
+                                          mode: "approve",
+                                        });
+                                        setExceptionDecisionNote("");
+                                      }}
+                                    >
+                                      <CheckCircle2 className="ml-1 h-3 w-3" />
+                                      اعتماد
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => {
+                                        setExceptionDecisionModal({
+                                          item: ex,
+                                          mode: "reject",
+                                        });
+                                        setExceptionDecisionNote("");
+                                      }}
+                                    >
+                                      <XCircle className="ml-1 h-3 w-3 text-rose-600" />
+                                      رفض
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          TAB: Owner Collections (`owner-collections` — CR-005 Phase 7)
+         ===================================================================== */}
+      {activeTab === "owner-collections" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--foreground)]">
+                سندات تحصيل خزنة المالك (Owner Collection Receipts — OwnerVault)
+              </h3>
+              <p className="text-xs text-[var(--muted)]">
+                حركات الشحن من تحصيل المندوب (TopUpCollected) تنشئ تلقائيًا سند
+                تحصيل في خزنة المالك بانتظار تأكيد المحاسب أو المالك.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="min-w-[240px]">
+                <SearchableSelect
+                  options={supervisorOptions}
+                  value={selectedSupervisorId}
+                  onChange={setSelectedSupervisorId}
+                  placeholder="اختر المشرف..."
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void loadEvents()}
+                disabled={eventsLoading}
+              >
+                <RefreshCw
+                  className={`ml-1.5 h-3.5 w-3.5 ${eventsLoading ? "animate-spin" : ""}`}
+                />
+                تحديث
+              </Button>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100/95 dark:bg-slate-800/95 text-[11px] font-black text-slate-900 dark:text-slate-100 border-b-2 border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="px-4 py-3">التاريخ</th>
+                    <th className="px-4 py-3">نوع السند</th>
+                    <th className="px-4 py-3">المبلغ</th>
+                    <th className="px-4 py-3">الحساب / المندوب</th>
+                    <th className="px-4 py-3">مرجع الإثبات</th>
+                    <th className="px-4 py-3">الحالة</th>
+                    <th className="px-4 py-3">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {(() => {
+                    const ownerRows = eventsList.filter(
+                      (ev) =>
+                        ev.kind === "OwnerCollectionReceipt" ||
+                        ev.kind === "OwnerCollectionConfirmation" ||
+                        (ev.kind === "TopUpCollected" &&
+                          ev.destinationChannel === "OwnerVault"),
+                    );
+                    if (eventsLoading) {
+                      return (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="py-12 text-center text-[var(--muted)]"
+                          >
+                            جارٍ تحميل سندات تحصيل المالك...
+                          </td>
+                        </tr>
+                      );
+                    }
+                    if (ownerRows.length === 0) {
+                      return (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="py-12 text-center text-[var(--muted)]"
+                          >
+                            لا توجد سندات تحصيل مالك مسجلة لهذا المشرف.
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return ownerRows.map((ev, idx) => {
+                      const meta = getFinancialEventKindMeta(ev.kind);
+                      const isPendingReceipt =
+                        ev.kind === "OwnerCollectionReceipt" &&
+                        ev.status !== "Confirmed" &&
+                        ev.status !== "Posted";
+                      return (
+                        <tr
+                          key={ev.id || ev.eventId || idx}
+                          className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                        >
+                          <td className="px-4 py-3 font-medium">
+                            {ev.businessDate?.slice(0, 10) || "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge tone={meta.badgeTone}>{meta.labelAr}</Badge>
+                          </td>
+                          <td className="px-4 py-3 font-extrabold" dir="ltr">
+                            {Number(ev.amount || 0).toFixed(2)} SAR
+                          </td>
+                          <td className="px-4 py-3">
+                            {ev.externalAccountId ||
+                              ev.accountName ||
+                              ev.riderNameAr ||
+                              "—"}
+                          </td>
+                          <td className="px-4 py-3 text-[var(--muted)]">
+                            {ev.evidenceReference || "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge
+                              tone={
+                                ev.status === "PendingReceipt"
+                                  ? "orange"
+                                  : "green"
+                              }
+                            >
+                              {ev.status === "PendingReceipt"
+                                ? "بانتظار تأكيد الاستلام (PendingReceipt)"
+                                : ev.status || "مؤكد"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {isPendingReceipt && canOwnerCollectionsConfirm && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                  setOwnerConfirmTarget(ev);
+                                  setOwnerConfirmDate(getRiyadhTodayIso());
+                                  setOwnerConfirmEvidence(
+                                    ev.evidenceReference || "",
+                                  );
+                                  setOwnerConfirmCapacity("Accountant");
+                                }}
+                              >
+                                <CheckCircle2 className="ml-1 h-3 w-3" />
+                                تأكيد استلام تحصيل المالك
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
           TAB 3: Settlement Documents (`Invoice` / `MonthClose` / `Adjustment`)
          ===================================================================== */}
       {activeTab === "settlements" && (
         <div className="space-y-4">
+          {lastInvoiceResult && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50/80 p-3.5 text-xs text-blue-950 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+              <div>
+                <strong>نتيجة معالجة الفاتورة:</strong> تم توليد{" "}
+                <strong>{lastInvoiceResult.generatedCloses}</strong> إقفال شهري
+                تلقائي للحسابات.
+                {lastInvoiceResult.closeConflictAccountIds.length > 0 && (
+                  <span className="mr-2 font-bold text-rose-600">
+                    تعارض إقفال في الحسابات:{" "}
+                    {lastInvoiceResult.closeConflictAccountIds.join("، ")}
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setLastInvoiceResult(null)}
+              >
+                إخفاء
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
             <div className="flex flex-wrap items-end gap-3">
               <div>
@@ -2481,6 +4245,8 @@ export default function HungerFinancePage() {
                                 setReconcileSnapshotId(
                                   doc.closingSnapshotId || "",
                                 );
+                                setReconcileApprovalDate(getRiyadhTodayIso());
+                                setReconcileSupervisorId(selectedSupervisorId);
                                 setReconcileEvidence(
                                   doc.evidenceReference || "",
                                 );
@@ -2636,6 +4402,25 @@ export default function HungerFinancePage() {
         title="تسجيل حركة أو طلب مالي جديد (محفظة / عهدة / تحصيل / سحب)"
       >
         <div className="space-y-4">
+          {eventSupersedesEventId && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-xs font-bold text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <span>
+                استبدال حركة مرفوضة سابقة (supersedesEventId:{" "}
+                <span className="font-mono">
+                  {eventSupersedesEventId.slice(0, 8)}...
+                </span>
+                )
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setEventSupersedesEventId("")}
+              >
+                إلغاء الاستبدال
+              </Button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
@@ -2674,35 +4459,83 @@ export default function HungerFinancePage() {
               <label className="mb-2 block text-xs font-bold text-[var(--foreground)]">
                 طريقة المعالجة (الطلب مقابل التنفيذ المباشر)
               </label>
-              <div className="flex flex-wrap gap-3 text-xs">
-                {((eventKind === "Funding" && canFundingRequest) ||
-                  (eventKind !== "Funding" && canTopupRequest)) && (
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="eventExecMode"
-                      checked={eventExecutionMode === "Request"}
-                      onChange={() => setEventExecutionMode("Request")}
-                      className="text-amber-500"
-                    />
-                    <span>
-                      طلب فقط (Requested — يحفظ بدون قيد محاسبي لحين التنفيذ)
-                    </span>
+              {eventKind === "Funding" ? (
+                <div className="text-xs text-amber-800 dark:text-amber-200">
+                  حركات تمويل عهدة المشرف (Funding) تبدأ دائمًا كطلب تمويل
+                  (Request) ثم تُعتمد من المحاسب قبل التسليم الفعلي.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {canTopupRequest && (
+                    <label className="inline-flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="eventExecMode"
+                        checked={eventExecutionMode === "Request"}
+                        onChange={() => setEventExecutionMode("Request")}
+                        className="text-amber-500"
+                      />
+                      <span>
+                        طلب فقط (Requested — يحفظ بدون قيد محاسبي لحين التنفيذ)
+                      </span>
+                    </label>
+                  )}
+                  {canTopupExecute && (
+                    <label className="inline-flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="eventExecMode"
+                        checked={eventExecutionMode === "Execute"}
+                        onChange={() => setEventExecutionMode("Execute")}
+                        className="text-amber-500"
+                      />
+                      <span>تنفيذ مباشر (Execute — يتطلب صورتي قبل وبعد)</span>
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* CR-005 Top-Up Before & After Evidence Upload */}
+          {isTopupKind && eventExecutionMode === "Execute" && (
+            <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 dark:border-blue-900/50 dark:bg-blue-950/20">
+              <div className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                إثباتات شحن المحفظة الإلزامية (Before & After Screenshots)
+              </div>
+              {eventKind === "TopUpCollected" && (
+                <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                  ملاحظة: الشحن من التحصيل (TopUpCollected) يُنشئ تلقائيًا سند
+                  تحصيل في خزنة المالك (OwnerVault) بانتظار تأكيد الاستلام.
+                </p>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                    صورة المحفظة قبل الشحن (WalletBefore) *
                   </label>
-                )}
-                {((eventKind === "Funding" && canFundingExecute) ||
-                  (eventKind !== "Funding" && canTopupExecute)) && (
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="eventExecMode"
-                      checked={eventExecutionMode === "Execute"}
-                      onChange={() => setEventExecutionMode("Execute")}
-                      className="text-amber-500"
-                    />
-                    <span>تنفيذ مباشر (Execute — ترحيل محاسبي فوري)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setTopupBeforeFile(e.target.files?.[0] || null)
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                    صورة المحفظة بعد الشحن (WalletAfter) *
                   </label>
-                )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setTopupAfterFile(e.target.files?.[0] || null)
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -2710,12 +4543,24 @@ export default function HungerFinancePage() {
           {/* Section 4: Withdrawal-specific required fields */}
           {isWithdrawalKind && (
             <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/20">
-              <div className="text-xs font-bold text-amber-900 dark:text-amber-200">
-                بيانات السحب الإلزامية (حالة السحب تبدأ بـ «انتظار الوصول»)
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                  بيانات السحب الإلزامية (حالة السحب تبدأ بـ «انتظار الوصول»)
+                </div>
+                {(canTopupExecute || canTopupRequest) && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleChangeEventKind("TopUpAdvance")}
+                  >
+                    <Plus className="ml-1 h-3 w-3" />
+                    التبديل إلى شحن المحفظة لنفس الحساب
+                  </Button>
+                )}
               </div>
               <p className="text-[11px] text-amber-800 dark:text-amber-300">
                 لا يتم ترحيل المبلغ إلى حساب الوجهة إلا بعد تأكيد وصول السحب
-                فعليًا.
+                فعليًا واعتماد الختم المحاسبي.
               </p>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2744,12 +4589,55 @@ export default function HungerFinancePage() {
                       setWithdrawalDestinationOwnerId(
                         nextType === "Supervisor" ? selectedSupervisorId : "",
                       );
+                      if (
+                        nextType === "Company" &&
+                        withdrawalDestinationChannel === "Stc"
+                      ) {
+                        setWithdrawalDestinationChannel("Bank");
+                      }
                     }}
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium"
                   >
                     <option value="Company">حساب الشركة / الكفيل (Company)</option>
                     <option value="Supervisor">حساب المشرف (Supervisor)</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                    قناة الوجهة المستلمة (destinationChannel) *
+                  </label>
+                  <select
+                    value={withdrawalDestinationChannel}
+                    onChange={(e) =>
+                      setWithdrawalDestinationChannel(
+                        e.target.value as HungerDestinationChannel,
+                      )
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium"
+                  >
+                    <option value="Bank">حساب بنكي (Bank)</option>
+                    <option value="Cashbox">الخزينة النقدية (Cashbox)</option>
+                    {eventKind === "WithdrawalSupervisor" && (
+                      <option value="Stc">محفظة STC Pay للمشرف (Stc)</option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                    صورة المحفظة عند السحب (Wallet Evidence) *
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setWithdrawalWalletFile(e.target.files?.[0] || null)
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs"
+                  />
                 </div>
               </div>
 
@@ -2809,7 +4697,11 @@ export default function HungerFinancePage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
-                حساب هنقرستيشن (اختياري)
+                حساب هنقرستيشن{" "}
+                {(isTopupKind && eventExecutionMode === "Execute") ||
+                isWithdrawalKind
+                  ? "*"
+                  : "(اختياري)"}
               </label>
               <SearchableSelect
                 options={[
@@ -2902,7 +4794,8 @@ export default function HungerFinancePage() {
             >
               {eventBusy
                 ? "جارٍ الحفظ..."
-                : isFundingOrTopupKind && eventExecutionMode === "Request"
+                : eventKind === "Funding" ||
+                    (isFundingOrTopupKind && eventExecutionMode === "Request")
                   ? "حفظ الطلب المالي (Requested)"
                   : "حفظ وتنفيذ الحركة المالية"}
             </Button>
@@ -3152,13 +5045,10 @@ export default function HungerFinancePage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
-                حساب الخزينة المستلم الفعلي (اختياري)
+                حساب الخزينة المستلم الفعلي (destinationSubAccountId) *
               </label>
               <SearchableSelect
-                options={[
-                  { value: "", label: "الحساب الافتراضي للخزينة" },
-                  ...subAccountOptions,
-                ]}
+                options={subAccountOptions}
                 value={confirmDestSubAccountId}
                 onChange={setConfirmDestSubAccountId}
                 placeholder="اختر حساب الخزينة أو البنك المستلم..."
@@ -3167,7 +5057,27 @@ export default function HungerFinancePage() {
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
-                نوع الوجهة المستلمة (اختياري)
+                قناة الاستلام الفعلية (destinationChannel) *
+              </label>
+              <select
+                value={confirmDestChannel}
+                onChange={(e) =>
+                  setConfirmDestChannel(
+                    e.target.value as "" | "Cashbox" | "Bank",
+                  )
+                }
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium"
+              >
+                <option value="Bank">حساب بنكي (Bank)</option>
+                <option value="Cashbox">الخزينة النقدية (Cashbox)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                نوع الوجهة المستلمة (destinationType) *
               </label>
               <select
                 value={confirmDestType}
@@ -3178,31 +5088,22 @@ export default function HungerFinancePage() {
                 }
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium"
               >
-                <option value="">افتراضي (حساب الشركة)</option>
                 <option value="Company">الشركة / الكفيل (Company)</option>
-                <option value="Supervisor">المشرف (Supervisor)</option>
               </select>
             </div>
-          </div>
 
-          {confirmDestType && (
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
-                {confirmDestType === "Company"
-                  ? "الكفيل المستلم (destinationOwnerId)"
-                  : "المشرف المستلم (destinationOwnerId)"}
+                الكفيل / المنشأة المستلمة (destinationOwnerId) *
               </label>
               <SearchableSelect
-                options={
-                  confirmDestType === "Company"
-                    ? sponsorOptions
-                    : supervisorOptions
-                }
+                options={sponsorOptions}
                 value={confirmDestOwnerId}
                 onChange={setConfirmDestOwnerId}
+                placeholder="اختر الكفيل / الشركة..."
               />
             </div>
-          )}
+          </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <DateInput
@@ -3333,6 +5234,181 @@ export default function HungerFinancePage() {
             </div>
           </div>
 
+          {/* CR-005 Invoice canonical RiderLVL & riderBalance lines */}
+          {docKind === "Invoice" && (
+            <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 dark:border-blue-900/50 dark:bg-blue-950/20">
+              <div className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                بيانات الفاتورة وأرصدة إقفال المناديب (RiderLVL Invoice)
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <DateInput
+                  label="بداية الفترة (chargeFrom)"
+                  value={docChargeFrom}
+                  onChange={setDocChargeFrom}
+                />
+                <DateInput
+                  label="نهاية الفترة (chargeThrough)"
+                  value={docChargeThrough}
+                  onChange={setDocChargeThrough}
+                />
+                <DateInput
+                  label="تاريخ الرصد (observedOn)"
+                  value={docObservedOn}
+                  onChange={setDocObservedOn}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Input
+                  label="إجمالي التحكم للشركة (companyControlTotal)"
+                  type="number"
+                  step="0.01"
+                  value={docCompanyControlTotal}
+                  onChange={(e) => setDocCompanyControlTotal(e.target.value)}
+                  placeholder="اختياري"
+                />
+                <Input
+                  label="إجمالي أرصدة المناديب (riderBalanceControlTotal)"
+                  type="number"
+                  step="0.01"
+                  value={docRiderBalanceControlTotal}
+                  onChange={(e) =>
+                    setDocRiderBalanceControlTotal(e.target.value)
+                  }
+                  placeholder="اختياري"
+                />
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                    المستوى المعتمد (canonicalLevel)
+                  </label>
+                  <select
+                    value={docCanonicalLevel}
+                    onChange={(e) =>
+                      setDocCanonicalLevel(e.target.value as "" | "RiderLVL")
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium"
+                  >
+                    <option value="">عادي (بدون توليد إقفالات تلقائية)</option>
+                    <option value="RiderLVL">
+                      RiderLVL (توليد إقفالات أرصدة المناديب تلقائيًا)
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[var(--foreground)]">
+                    سطور الفاتورة ({docInvoiceLines.length})
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setDocInvoiceLines((prev) => [
+                        ...prev,
+                        {
+                          externalAccountId: "",
+                          riderName: "",
+                          netAmount: "0",
+                          riderBalance: "0",
+                        },
+                      ])
+                    }
+                  >
+                    <Plus className="ml-1 h-3 w-3" />
+                    إضافة سطر حساب
+                  </Button>
+                </div>
+
+                {docInvoiceLines.length > 0 && (
+                  <div className="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-2">
+                    {docInvoiceLines.map((line, lIdx) => (
+                      <div
+                        key={lIdx}
+                        className="grid grid-cols-1 gap-2 sm:grid-cols-5"
+                      >
+                        <input
+                          type="text"
+                          placeholder="معرف الحساب الخارجي *"
+                          value={line.externalAccountId}
+                          onChange={(e) =>
+                            setDocInvoiceLines((prev) =>
+                              prev.map((r, i) =>
+                                i === lIdx
+                                  ? { ...r, externalAccountId: e.target.value }
+                                  : r,
+                              ),
+                            )
+                          }
+                          className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
+                        />
+                        <input
+                          type="text"
+                          placeholder="اسم المندوب"
+                          value={line.riderName}
+                          onChange={(e) =>
+                            setDocInvoiceLines((prev) =>
+                              prev.map((r, i) =>
+                                i === lIdx
+                                  ? { ...r, riderName: e.target.value }
+                                  : r,
+                              ),
+                            )
+                          }
+                          className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="الصافي (netAmount)"
+                          value={line.netAmount}
+                          onChange={(e) =>
+                            setDocInvoiceLines((prev) =>
+                              prev.map((r, i) =>
+                                i === lIdx
+                                  ? { ...r, netAmount: e.target.value }
+                                  : r,
+                              ),
+                            )
+                          }
+                          className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="رصيد المندوب >= 0"
+                          value={line.riderBalance}
+                          onChange={(e) =>
+                            setDocInvoiceLines((prev) =>
+                              prev.map((r, i) =>
+                                i === lIdx
+                                  ? { ...r, riderBalance: e.target.value }
+                                  : r,
+                              ),
+                            )
+                          }
+                          className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            setDocInvoiceLines((prev) =>
+                              prev.filter((_, i) => i !== lIdx),
+                            )
+                          }
+                        >
+                          حذف
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Section 7: Adjustment required fields */}
           {docKind === "Adjustment" && (
             <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/20">
@@ -3447,6 +5523,12 @@ export default function HungerFinancePage() {
         title={`مطابقة مستند تسوية — ${reconcileTargetDoc?.documentReference || ""}`}
       >
         <div className="space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            عند مطابقة التعديل مع مستند الإقفال، إذا كان تاريخ الاعتماد بعد
+            إقفال الفترة يُنشئ النظام تلقائيًا حركة سلفة تعديل إقفال
+            (CloseAdjustmentAdvance) أو حركة تسوية متوازنة (CloseAdjustmentWash).
+          </div>
+
           <div>
             <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
               مستند الإقفال الشهري (closingSnapshotId) *
@@ -3457,6 +5539,26 @@ export default function HungerFinancePage() {
               onChange={setReconcileSnapshotId}
               placeholder="اختر مستند الإقفال الشهري (MonthClose)..."
             />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <DateInput
+              label="تاريخ اعتماد التعديل (approvalDate) *"
+              value={reconcileApprovalDate}
+              onChange={setReconcileApprovalDate}
+            />
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                المشرف المسؤول (supervisorEmployeeId) *
+              </label>
+              <SearchableSelect
+                options={supervisorOptions}
+                value={reconcileSupervisorId}
+                onChange={setReconcileSupervisorId}
+                placeholder="اختر المشرف..."
+              />
+            </div>
           </div>
 
           <Input
@@ -3480,6 +5582,497 @@ export default function HungerFinancePage() {
               disabled={reconcileBusy}
             >
               {reconcileBusy ? "جارٍ المطابقة..." : "تأكيد المطابقة"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* =====================================================================
+          MODAL 4A: Execute Top-Up Request (Upload Before & After Screenshots)
+         ===================================================================== */}
+      <Modal
+        isOpen={Boolean(execTopupModalTarget)}
+        onClose={() => setExecTopupModalTarget(null)}
+        title="تنفيذ طلب شحن المحفظة — رفع صورتي الرصيد قبل وبعد الشحن"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 text-xs">
+            <div>
+              المبلغ المطلوب شحنه:{" "}
+              <strong dir="ltr">
+                {Number(execTopupModalTarget?.amount || 0).toFixed(2)} SAR
+              </strong>
+            </div>
+            <div className="mt-1 text-[var(--muted)]">
+              الحساب:{" "}
+              {execTopupModalTarget?.externalAccountId ||
+                execTopupModalTarget?.accountName ||
+                "—"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                صورة الرصيد قبل الشحن (WalletBefore) *
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) =>
+                  setExecTopupBeforeFile(e.target.files?.[0] || null)
+                }
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                صورة الرصيد بعد الشحن (WalletAfter) *
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) =>
+                  setExecTopupAfterFile(e.target.files?.[0] || null)
+                }
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setExecTopupModalTarget(null)}
+              disabled={execTopupBusy}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleConfirmExecuteTopupRequest()}
+              disabled={execTopupBusy}
+            >
+              {execTopupBusy
+                ? "جارٍ الرفع والتنفيذ..."
+                : "رفع الإثباتات وتنفيذ الشحن"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* =====================================================================
+          MODAL 4B: Approve or Reject Funding Request (CR-005 Phase 3)
+         ===================================================================== */}
+      <Modal
+        isOpen={Boolean(fundingDecisionModal)}
+        onClose={() => setFundingDecisionModal(null)}
+        title={
+          fundingDecisionModal?.mode === "approve"
+            ? "اعتماد طلب تمويل عهدة المشرف (Funding Approval)"
+            : "رفض طلب تمويل عهدة المشرف"
+        }
+      >
+        <div className="space-y-4">
+          {fundingDecisionModal?.mode === "approve" ? (
+            <>
+              <Input
+                label="المبلغ المعتمد للصرف (SAR) *"
+                type="number"
+                step="0.01"
+                value={fundingApproveAmount}
+                onChange={(e) => setFundingApproveAmount(e.target.value)}
+              />
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                  حساب الخزينة المصدر (sourceSubAccountId) *
+                </label>
+                <SearchableSelect
+                  options={subAccountOptions}
+                  value={fundingApproveSubAccountId}
+                  onChange={setFundingApproveSubAccountId}
+                  placeholder="اختر حساب الخزينة المصدر..."
+                />
+              </div>
+              <Input
+                label="ملاحظة الاعتماد (اختياري)"
+                value={fundingDecisionNote}
+                onChange={(e) => setFundingDecisionNote(e.target.value)}
+                placeholder="ملاحظة المحاسب عند الاعتماد..."
+              />
+            </>
+          ) : (
+            <Input
+              label="سبب رفض طلب التمويل *"
+              value={fundingDecisionNote}
+              onChange={(e) => setFundingDecisionNote(e.target.value)}
+              placeholder="اكتب سبب الرفض..."
+            />
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setFundingDecisionModal(null)}
+              disabled={fundingDecisionBusy}
+            >
+              تراجع
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleFundingDecision()}
+              disabled={fundingDecisionBusy}
+            >
+              {fundingDecisionBusy
+                ? "جارٍ الحفظ..."
+                : fundingDecisionModal?.mode === "approve"
+                  ? "تأكيد اعتماد التمويل"
+                  : "تأكيد رفض التمويل"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* =====================================================================
+          MODAL 4C: Seal or Reject Financial Event (CR-005 Phase 3)
+         ===================================================================== */}
+      <Modal
+        isOpen={Boolean(sealRejectModal)}
+        onClose={() => setSealRejectModal(null)}
+        title={
+          sealRejectModal?.mode === "seal"
+            ? "الختم والاعتماد المحاسبي للحركة المالية (Seal Event)"
+            : "رفض الحركة المالية (Reject Event)"
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 text-xs">
+            <div>
+              نوع الحركة:{" "}
+              <strong>
+                {sealRejectModal
+                  ? getFinancialEventKindMeta(sealRejectModal.event.kind)
+                      .labelAr
+                  : ""}
+              </strong>{" "}
+              — المبلغ:{" "}
+              <strong dir="ltr">
+                {Number(sealRejectModal?.event.amount || 0).toFixed(2)} SAR
+              </strong>
+            </div>
+            <div className="mt-1 text-[var(--muted)]">
+              المرجع: {sealRejectModal?.event.evidenceReference || "—"}
+            </div>
+          </div>
+
+          {sealRejectModal?.mode === "seal" ? (
+            <>
+              <Input
+                label="ملاحظة الختم المحاسبي (اختياري)"
+                value={sealNote}
+                onChange={(e) => setSealNote(e.target.value)}
+                placeholder="ملاحظة المراجعة المحاسبية..."
+              />
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[var(--foreground)]">
+                    تخصيص رموز شجرة الحسابات (CoA Overrides — اختياري)
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setSealCoaOverrides((prev) => [
+                        ...prev,
+                        { key: "", code: "" },
+                      ])
+                    }
+                  >
+                    <Plus className="ml-1 h-3 w-3" />
+                    إضافة حساب
+                  </Button>
+                </div>
+                {sealCoaOverrides.map((row, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="المفتاح (مثل debit أو credit)"
+                      value={row.key}
+                      onChange={(e) =>
+                        setSealCoaOverrides((prev) =>
+                          prev.map((r, i) =>
+                            i === idx ? { ...r, key: e.target.value } : r,
+                          ),
+                        )
+                      }
+                      className="w-1/2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="رمز الحساب (مثال: 111002)"
+                      value={row.code}
+                      onChange={(e) =>
+                        setSealCoaOverrides((prev) =>
+                          prev.map((r, i) =>
+                            i === idx ? { ...r, code: e.target.value } : r,
+                          ),
+                        )
+                      }
+                      className="w-1/2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <Input
+              label="سبب الرفض المحاسبي (reason) *"
+              value={rejectEventReason}
+              onChange={(e) => setRejectEventReason(e.target.value)}
+              placeholder="اكتب سبب رفض الحركة المالية..."
+            />
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setSealRejectModal(null)}
+              disabled={sealRejectBusy}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleSealOrRejectEvent()}
+              disabled={sealRejectBusy}
+            >
+              {sealRejectBusy
+                ? "جارٍ الحفظ..."
+                : sealRejectModal?.mode === "seal"
+                  ? "اعتماد وختم الحركة"
+                  : "تأكيد رفض الحركة"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* =====================================================================
+          MODAL 4D: Create Exception Request & Approve/Reject Exception
+         ===================================================================== */}
+      <Modal
+        isOpen={createExceptionModalOpen}
+        onClose={() => setCreateExceptionModalOpen(false)}
+        title="طلب استثناء مالي جديد (CR-005 Exception Request)"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+              نوع الاستثناء *
+            </label>
+            <select
+              value={newExceptionKind}
+              onChange={(e) =>
+                setNewExceptionKind(e.target.value as HungerExceptionKind)
+              }
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium"
+            >
+              <option value="NonZeroHandover">
+                تسليم محفظة برصيد غير صفري (NonZeroHandover)
+              </option>
+              <option value="CustodyIdentityMismatch">
+                فرق متطابقة عهدة المشرف (CustodyIdentityMismatch)
+              </option>
+            </select>
+          </div>
+
+          {newExceptionKind === "NonZeroHandover" ? (
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                حساب هنقرستيشن *
+              </label>
+              <SearchableSelect
+                options={accountOptions}
+                value={newExceptionAccountId}
+                onChange={setNewExceptionAccountId}
+                placeholder="اختر الحساب..."
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                المشرف المسؤول *
+              </label>
+              <SearchableSelect
+                options={supervisorOptions}
+                value={newExceptionSupervisorId}
+                onChange={setNewExceptionSupervisorId}
+                placeholder="اختر المشرف..."
+              />
+            </div>
+          )}
+
+          <Input
+            label="مبلغ الفرق / الرصيد (SAR) *"
+            type="number"
+            step="0.01"
+            value={newExceptionAmount}
+            onChange={(e) => setNewExceptionAmount(e.target.value)}
+            placeholder="0.00"
+          />
+
+          <Input
+            label="مبرر / سبب طلب الاستثناء *"
+            value={newExceptionReason}
+            onChange={(e) => setNewExceptionReason(e.target.value)}
+            placeholder="اشرح سبب طلب الاستثناء..."
+          />
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setCreateExceptionModalOpen(false)}
+              disabled={newExceptionBusy}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleCreateException()}
+              disabled={newExceptionBusy}
+            >
+              {newExceptionBusy ? "جارٍ الإرسال..." : "إرسال طلب الاستثناء"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(exceptionDecisionModal)}
+        onClose={() => setExceptionDecisionModal(null)}
+        title={
+          exceptionDecisionModal?.mode === "approve"
+            ? "اعتماد طلب الاستثناء المالي"
+            : "رفض طلب الاستثناء المالي"
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 text-xs">
+            <div>
+              المبلغ:{" "}
+              <strong dir="ltr">
+                {Number(exceptionDecisionModal?.item.amount || 0).toFixed(2)}{" "}
+                SAR
+              </strong>
+            </div>
+            <div className="mt-1 text-[var(--muted)]">
+              السبب: {exceptionDecisionModal?.item.reason || "—"}
+            </div>
+          </div>
+
+          <Input
+            label={
+              exceptionDecisionModal?.mode === "approve"
+                ? "ملاحظة الاعتماد (اختياري)"
+                : "سبب رفض الاستثناء *"
+            }
+            value={exceptionDecisionNote}
+            onChange={(e) => setExceptionDecisionNote(e.target.value)}
+            placeholder="اكتب ملاحظة القرار..."
+          />
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setExceptionDecisionModal(null)}
+              disabled={exceptionDecisionBusy}
+            >
+              تراجع
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleExceptionDecision()}
+              disabled={exceptionDecisionBusy}
+            >
+              {exceptionDecisionBusy
+                ? "جارٍ الحفظ..."
+                : exceptionDecisionModal?.mode === "approve"
+                  ? "تأكيد اعتماد الاستثناء"
+                  : "تأكيد رفض الاستثناء"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* =====================================================================
+          MODAL 4E: Confirm Owner Collection Receipt (CR-005 Phase 7)
+         ===================================================================== */}
+      <Modal
+        isOpen={Boolean(ownerConfirmTarget)}
+        onClose={() => setOwnerConfirmTarget(null)}
+        title="تأكيد استلام سند تحصيل المالك (OwnerVault)"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] p-3 text-xs">
+            <div>
+              المبلغ:{" "}
+              <strong dir="ltr">
+                {Number(ownerConfirmTarget?.amount || 0).toFixed(2)} SAR
+              </strong>
+            </div>
+            <div className="mt-1 text-[var(--muted)]">
+              المرجع: {ownerConfirmTarget?.evidenceReference || "—"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <DateInput
+              label="التاريخ المالي للتأكيد *"
+              value={ownerConfirmDate}
+              onChange={setOwnerConfirmDate}
+            />
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-[var(--foreground)]">
+                صفة المؤكِّد (capacity) *
+              </label>
+              <select
+                value={ownerConfirmCapacity}
+                onChange={(e) =>
+                  setOwnerConfirmCapacity(
+                    e.target.value as "Accountant" | "Owner",
+                  )
+                }
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium"
+              >
+                <option value="Accountant">محاسب (Accountant)</option>
+                <option value="Owner">مالك (Owner)</option>
+              </select>
+            </div>
+          </div>
+
+          <Input
+            label="مرجع إثبات تأكيد الاستلام *"
+            value={ownerConfirmEvidence}
+            onChange={(e) => setOwnerConfirmEvidence(e.target.value)}
+            placeholder="رقم السند أو إيصال خزنة المالك"
+          />
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setOwnerConfirmTarget(null)}
+              disabled={ownerConfirmBusy}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleConfirmOwnerCollection()}
+              disabled={ownerConfirmBusy}
+            >
+              {ownerConfirmBusy ? "جارٍ التأكيد..." : "تأكيد استلام المبلغ"}
             </Button>
           </div>
         </div>

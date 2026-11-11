@@ -43,6 +43,7 @@ import {
   ArrowUpDown,
   Filter,
   Layers,
+  Trash2,
 } from "lucide-react";
 
 // Helpers for Asia/Riyadh dates (UTC+3)
@@ -110,7 +111,15 @@ export interface AccountPerformanceItem {
   daily: JahezRiderPerformanceDaily[];
 }
 
-export function JahezRiderPerformanceReportView() {
+export interface JahezRiderPerformanceReportViewProps {
+  canDelete?: boolean;
+  onOpenDeleteModal?: (dateStr?: string) => void;
+}
+
+export function JahezRiderPerformanceReportView({
+  canDelete = false,
+  onOpenDeleteModal,
+}: JahezRiderPerformanceReportViewProps = {}) {
   const { can, user } = useAuth();
 
   const isAdmin =
@@ -834,6 +843,18 @@ export function JahezRiderPerformanceReportView() {
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
             تصدير إكسل ({viewMode === "riders" ? "المناديب" : "الحسابات"})
           </Button>
+
+          {canDelete && onOpenDeleteModal && (
+            <Button
+              variant="secondary"
+              onClick={() => onOpenDeleteModal(endDate || todayRiyadh)}
+              className="gap-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+              title="حذف طلبات يوم محدد لتصحيح جلسات التسليم"
+            >
+              <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+              حذف طلبات يوم
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1279,6 +1300,19 @@ export function JahezRiderPerformanceReportView() {
                     <div className="text-[10px] text-[var(--muted)] font-normal whitespace-nowrap">
                       {col.dayNameAr}
                     </div>
+                    {canDelete && onOpenDeleteModal && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenDeleteModal(col.dateStr);
+                        }}
+                        className="mt-0.5 inline-flex items-center justify-center rounded p-0.5 text-[var(--muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors opacity-70 hover:opacity-100"
+                        title={`حذف طلبات يوم ${col.dateStr}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                   </th>
                 ))}
               </tr>

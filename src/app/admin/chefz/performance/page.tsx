@@ -69,9 +69,21 @@ import {
 type PerformanceTab = "riderReport" | "managementReport" | "dailyRecords" | "settings";
 
 export default function ChefzPerformancePage() {
-  const { can, locale } = useAuth();
+  const { can, canAny, authorization, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
+
+  const isDeleteExplicitlyDenied = Boolean(
+    authorization?.deniedPermissionKeys?.includes("chefz.performance.delete") ||
+      authorization?.directDenies?.includes("chefz.performance.delete"),
+  );
+  const canDeletePerformance =
+    !isDeleteExplicitlyDenied &&
+    canAny(
+      "chefz.performance.delete",
+      "chefz.performance.import",
+      "chefz.read",
+    );
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<PerformanceTab>("riderReport");
@@ -1047,8 +1059,39 @@ export default function ChefzPerformancePage() {
           </p>
         </div>
 
-        {/* Global actions: Report Settings button accessible directly from the page header */}
+        {/* Global actions: Report Settings & Delete Day accessible directly from the page header */}
         <div className="flex flex-wrap items-center gap-2">
+          {canDeletePerformance && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteDate(filterTo || todayStr);
+                setIsDeleteOpen(true);
+              }}
+              className="gap-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+              title="حذف تقرير أداء يوم محدد نهائياً"
+            >
+              <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+              حذف تقرير يوم
+            </Button>
+          )}
+
+          {can("chefz.performance.import") && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsUploadOpen(true);
+                setSelectedFile(null);
+                setUploadResult(null);
+                setUploadError(null);
+              }}
+              className="gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/50"
+            >
+              <Upload className="h-4 w-4" />
+              رفع تقرير الأداء
+            </Button>
+          )}
+
           <Button
             variant="secondary"
             onClick={() => setIsSettingsModalOpen(true)}
@@ -1128,7 +1171,15 @@ export default function ChefzPerformancePage() {
 
       {/* Tab 1 Content: Rider / Account Performance Report */}
       {activeTab === "riderReport" && (
-        <ChefzRiderReportView accounts={baseAccounts} riders={riders} />
+        <ChefzRiderReportView
+          accounts={baseAccounts}
+          riders={riders}
+          canDelete={canDeletePerformance}
+          onOpenDeleteModal={(dateStr) => {
+            setDeleteDate(dateStr || filterTo || todayStr);
+            setIsDeleteOpen(true);
+          }}
+        />
       )}
 
       {/* Tab 2 Content: Management Report */}
@@ -1188,7 +1239,7 @@ export default function ChefzPerformancePage() {
                 <span>تصدير إكسل</span>
               </Button>
 
-              {can("chefz.performance.delete") && (
+              {canDeletePerformance && (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -1661,7 +1712,7 @@ export default function ChefzPerformancePage() {
                           <div className="text-[10px] text-[var(--muted)] font-normal whitespace-nowrap">
                             {d.dayFormatted}
                           </div>
-                          {can("chefz.performance.delete") && (
+                          {canDeletePerformance && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2299,7 +2350,7 @@ export default function ChefzPerformancePage() {
                       <th className="px-4 py-3.5 text-center">الطلبات المرفوضة</th>
                       <th className="px-4 py-3.5 text-center">الطلبات الفائتة</th>
                       <th className="px-4 py-3.5 text-center">نسبة القبول</th>
-                      {can("chefz.performance.delete") && (
+                      {canDeletePerformance && (
                         <th className="px-4 py-3.5 text-center">إجراءات</th>
                       )}
                     </tr>
@@ -2308,7 +2359,7 @@ export default function ChefzPerformancePage() {
                     {dailyLoading ? (
                       <tr>
                         <td
-                          colSpan={can("chefz.performance.delete") ? 12 : 11}
+                          colSpan={canDeletePerformance ? 12 : 11}
                           className="py-12 text-center text-sm text-[var(--muted)]"
                         >
                           <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-[var(--brand)]" />
@@ -2318,7 +2369,7 @@ export default function ChefzPerformancePage() {
                     ) : filteredPerformanceRecords.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={can("chefz.performance.delete") ? 12 : 11}
+                          colSpan={canDeletePerformance ? 12 : 11}
                           className="py-12 text-center text-sm text-[var(--muted)]"
                         >
                           لا توجد بيانات أداء مستوردة في نطاق التواريخ المحدد.
@@ -2416,7 +2467,7 @@ export default function ChefzPerformancePage() {
                                 {p.acceptanceRate}%
                               </span>
                             </td>
-                            {can("chefz.performance.delete") && (
+                            {canDeletePerformance && (
                               <td className="px-4 py-3 text-center">
                                 <button
                                   type="button"

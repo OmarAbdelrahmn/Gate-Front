@@ -1,13 +1,14 @@
 // src/app/admin/hunger/components/RiderSwapModal.tsx
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { DateInput } from "@/components/ui/DateInput";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { toast } from "@/components/ui/Toast";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   AssignmentContextSection,
   type AssignmentContextSectionRef,
@@ -15,16 +16,27 @@ import {
 import {
   createHungerRiderSwapReview,
   confirmHungerRiderSwap,
+  createHungerFinanceException,
+  getHungerFinanceExceptions,
+  generateHungerIdempotencyKey,
   getRiyadhTodayIso,
   getHungerErrorMessage,
   isWalletReviewExpiredOrSuperseded,
   HUNGER_COMPENSATION_MODELS,
   type HungerAccountItem,
   type HungerCompensationModel,
+  type HungerExceptionItem,
   type HungerRiderSwapReviewResponse,
 } from "@/lib/hunger/api";
 import { WalletReviewResultCard } from "./WalletReviewResultCard";
-import { AlertTriangle, ArrowLeftRight, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  FileImage,
+  Info,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
 
 interface SelectOption {
   value: string;
@@ -53,24 +65,45 @@ export function RiderSwapModal({
   canFieldCompensation,
   onSuccess,
 }: RiderSwapModalProps) {
+  const { can } = useAuth();
+  const canRequestException = can("hunger.finance.exception.request");
+
   const [supervisorId, setSupervisorId] = useState(defaultSupervisorId);
   const [businessDate, setBusinessDate] = useState(getRiyadhTodayIso());
-  const [mobileBalance, setMobileBalance] = useState(
+
+  const initialBal =
     account?.lastWalletBalance !== undefined &&
-      account?.lastWalletBalance !== null
-      ? String(account.lastWalletBalance)
-      : "0.00",
+    account?.lastWalletBalance !== null
+      ? Number(account.lastWalletBalance)
+      : 0;
+  const [balanceSign, setBalanceSign] = useState<"+" | "-" | "0">(
+    initialBal > 0 ? "+" : initialBal < 0 ? "-" : "0",
   );
-  const [closingBalance, setClosingBalance] = useState(
-    account?.lastClosingBalance !== undefined &&
-      account?.lastClosingBalance !== null
-      ? String(account.lastClosingBalance)
-      : "",
+  const [balanceMagnitude, setBalanceMagnitude] = useState(
+    initialBal !== 0 ? Math.abs(initialBal).toFixed(2) : "0.00",
   );
-  const [provenAdjustments, setProvenAdjustments] = useState("0.00");
-  const [walletEvidence, setWalletEvidence] = useState("");
-  const [closingEvidence, setClosingEvidence] = useState("");
-  const [adjustmentEvidence, setAdjustmentEvidence] = useState("");
+
+  const [walletEvidenceFile, setWalletEvidenceFile] = useState<File | null>(
+    null,
+  );
+  const [walletEvidencePreview, setWalletEvidencePreview] = useState<
+    string | null
+  >(null);
+  const [walletEvidenceError, setWalletEvidenceError] = useState<string | null>(
+    null,
+  );
+
+  // Exception state for handover carry-over
+  const [approvedExceptions, setApprovedExceptions] = useState<
+    HungerExceptionItem[]
+  >([]);
+  const [handoverExceptionApprovalId, setHandoverExceptionApprovalId] =
+    useState("");
+  const [exceptionReason, setExceptionReason] = useState(
+    "تبديل مندوب مع رصيد مرحّل غير صفري",
+  );
+  const [requestingException, setRequestingException] = useState(false);
+  const [loadingExceptions, setLoadingExceptions] = useState(false);
 
   // Old rider return fields
   const [returnReason, setReturnReason] = useState("تبديل المندوب");
@@ -91,6 +124,120 @@ export function RiderSwapModal({
   const [busy, setBusy] = useState(false);
 
   const assignmentContextRef = useRef<AssignmentContextSectionRef | null>(null);
+
+  const signedMobileBalance = useMemo(() => {
+    if (balanceSign === "0") return 0;
+    const mag = Math.abs(
+      parseFloat(String(balanceMagnitude).replace(/,/g, "")) || 0,
+    );
+    if (mag === 0) return 0;
+    return balanceSign === "-" ? -mag : mag;
+  }, [balanceSign, balanceMagnitude]);
+
+  const loadApprovedExceptions = async () => {
+    if (!account?.platformId) return;
+    const accId = account.accountId || account.id || "";
+    setLoadingExceptions(true);
+    try {
+      const res = await getHungerFinanceExceptions(
+        {
+          platformId: account.platformId,
+          status: "Approved",
+          page: 1,
+          pageSize: 50,
+        },
+        { suppressErrorToast: true },
+      );
+      const matching = (res.items || []).filter(
+        (ex) =>
+          ex.kind === "NonZeroHandover" &&
+          (!ex.accountId || ex.accountId === accId),
+      );
+      setApprovedExceptions(matching);
+      if (matching.length > 0 && !handoverExceptionApprovalId) {
+        setHandoverExceptionApprovalId(matching[0].exceptionId);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingExceptions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && account?.platformId) {
+      void loadApprovedExceptions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, account?.accountId, account?.platformId]);
+
+  const handleWalletFileChange = (file: File | null) => {
+    if (walletEvidencePreview) {
+      URL.revokeObjectURL(walletEvidencePreview);
+    }
+    setWalletEvidenceError(null);
+    if (!file) {
+      setWalletEvidenceFile(null);
+      setWalletEvidencePreview(null);
+      return;
+    }
+    const allowed = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/bmp",
+    ];
+    if (!allowed.includes(file.type)) {
+      setWalletEvidenceError(
+        "صيغة الملف غير مدعومة. يرجى اختيار صورة (JPEG, PNG, WebP, GIF, BMP).",
+      );
+      setWalletEvidenceFile(null);
+      setWalletEvidencePreview(null);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setWalletEvidenceError(
+        "حجم الصورة يتجاوز الحد الأقصى المسموح به (5 ميجابايت).",
+      );
+      setWalletEvidenceFile(null);
+      setWalletEvidencePreview(null);
+      return;
+    }
+    setWalletEvidenceFile(file);
+    setWalletEvidencePreview(URL.createObjectURL(file));
+  };
+
+  const handleRequestHandoverException = async () => {
+    if (!account?.platformId) {
+      toast.warning("تعذر تحديد معرف المنصة لطلب الاستثناء");
+      return;
+    }
+    const accId = account.accountId || account.id || "";
+    const reqAmount =
+      swapReview?.handover.attributedBalance ?? signedMobileBalance;
+    if (!exceptionReason.trim()) {
+      toast.warning("يرجى كتابة سبب طلب الاستثناء");
+      return;
+    }
+    setRequestingException(true);
+    try {
+      await createHungerFinanceException({
+        platformId: account.platformId,
+        kind: "NonZeroHandover",
+        accountId: accId,
+        supervisorEmployeeId: supervisorId || undefined,
+        amount: reqAmount,
+        reason: exceptionReason.trim(),
+        idempotencyKey: generateHungerIdempotencyKey("exc-swap"),
+      });
+      await loadApprovedExceptions();
+    } catch (err) {
+      toast.error(getHungerErrorMessage(err, "تعذر إرسال طلب الاستثناء"));
+    } finally {
+      setRequestingException(false);
+    }
+  };
 
   const oldRiderId =
     account?.actualRider?.riderProfileId ||
@@ -138,8 +285,10 @@ export function RiderSwapModal({
       toast.warning("يجب أن يكون المندوب الجديد مختلفًا عن المندوب الحالي");
       return;
     }
-    if (!walletEvidence.trim()) {
-      toast.warning("يرجى إدخال مرجع إثبات رصيد المحفظة الحالي");
+    if (!walletEvidenceFile) {
+      toast.warning(
+        "يرجى إرفاق صورة إثبات رصيد المحفظة (إلزامي في مراجعة التبديل)",
+      );
       return;
     }
     if (!returnReason.trim() || !handoverReason.trim()) {
@@ -163,11 +312,6 @@ export function RiderSwapModal({
       previousDayUsages = assignmentContextRef.current.getPreviousDayUsages();
     }
 
-    const parsedClosing =
-      closingBalance.trim() === ""
-        ? null
-        : parseFloat(closingBalance.replace(/,/g, "")) || 0;
-
     setBusy(true);
     setStaleErrorBanner(null);
     try {
@@ -179,13 +323,8 @@ export function RiderSwapModal({
             riderProfileId: oldRiderId,
             supervisorEmployeeId: supervisorId,
             businessDate,
-            mobileBalance: String(mobileBalance).trim(),
-            closingBalance: parsedClosing,
-            provenAdjustments:
-              parseFloat(String(provenAdjustments).replace(/,/g, "")) || 0,
-            walletEvidence: walletEvidence.trim(),
-            closingEvidence: closingEvidence.trim() || null,
-            adjustmentEvidence: adjustmentEvidence.trim() || null,
+            mobileBalance: signedMobileBalance,
+            provenAdjustments: 0,
             return: {
               effectiveTo: businessDate,
               status: "Ended",
@@ -211,7 +350,10 @@ export function RiderSwapModal({
             paymentModel: account.paymentModel || "Commission",
             previousDayUsages,
           },
+          handoverExceptionApprovalId:
+            handoverExceptionApprovalId.trim() || null,
         },
+        walletEvidenceFile,
         { suppressErrorToast: true },
       );
       setSwapReview(res);
@@ -274,8 +416,7 @@ export function RiderSwapModal({
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-800 dark:text-indigo-300">
             <Info className="h-3.5 w-3.5 shrink-0" />
             <span>
-              ملاحظة هامة: لا يمكن تأكيد أي طرف من أطراف تبديل المندوب بشكل
-              منفرد عبر تأكيد المراجعة العادية المنفردة.
+              ملاحظة هامة: يُحتسب رصيد الإقفال السابق والتسويات المثبتة تلقائيًا من النظام (الفاتورة / الإقفال الشهري).
             </span>
           </div>
         </div>
@@ -307,47 +448,104 @@ export function RiderSwapModal({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Input
-            label="رصيد الجوال الحالي (+ / - / 0) *"
-            value={mobileBalance}
-            onChange={(e) => setMobileBalance(e.target.value)}
-            placeholder="مثال: 100.00 أو -50.00"
-          />
-          <Input
-            label="رصيد الإقفال السابق (اختياري)"
-            type="number"
-            step="0.01"
-            value={closingBalance}
-            onChange={(e) => setClosingBalance(e.target.value)}
-            placeholder="اتركه فارغًا إن لم يُسجل"
-          />
-          <Input
-            label="التسويات المثبتة"
-            type="number"
-            step="0.01"
-            value={provenAdjustments}
-            onChange={(e) => setProvenAdjustments(e.target.value)}
-          />
-        </div>
+        {/* Mobile Balance with 3 exclusive sign controls (+ / - / 0) + Wallet Evidence File */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+            <label className="block text-xs font-bold text-[var(--foreground)]">
+              رصيد الجوال الحالي (اختر الإشارة ثم المقدار) *
+            </label>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setBalanceSign("+")}
+                className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
+                  balanceSign === "+"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
+                }`}
+              >
+                + موجب
+              </button>
+              <button
+                type="button"
+                onClick={() => setBalanceSign("-")}
+                className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
+                  balanceSign === "-"
+                    ? "border-rose-600 bg-rose-600 text-white"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
+                }`}
+              >
+                − سالب
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBalanceSign("0");
+                  setBalanceMagnitude("0.00");
+                }}
+                className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
+                  balanceSign === "0"
+                    ? "border-blue-600 bg-blue-600 text-white"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
+                }`}
+              >
+                0 صفر
+              </button>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                disabled={balanceSign === "0"}
+                value={balanceSign === "0" ? "0.00" : balanceMagnitude}
+                onChange={(e) => setBalanceMagnitude(e.target.value)}
+                placeholder="المقدار"
+              />
+              <span
+                className="shrink-0 rounded-lg bg-[var(--surface)] px-2.5 py-2 font-mono text-xs font-extrabold text-[var(--foreground)]"
+                dir="ltr"
+              >
+                {signedMobileBalance >= 0
+                  ? `+${signedMobileBalance.toFixed(2)}`
+                  : signedMobileBalance.toFixed(2)}{" "}
+                SAR
+              </span>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Input
-            label="مرجع إثبات المحفظة *"
-            value={walletEvidence}
-            onChange={(e) => setWalletEvidence(e.target.value)}
-            placeholder="رقم السند / صورة الشاشة"
-          />
-          <Input
-            label="مرجع إثبات الإقفال (اختياري)"
-            value={closingEvidence}
-            onChange={(e) => setClosingEvidence(e.target.value)}
-          />
-          <Input
-            label="مرجع إثبات التسويات (اختياري)"
-            value={adjustmentEvidence}
-            onChange={(e) => setAdjustmentEvidence(e.target.value)}
-          />
+          <div className="space-y-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-[var(--foreground)]">
+              <FileImage className="h-4 w-4 text-blue-600" />
+              <span>صورة إثبات رصيد المحفظة (إلزامي) *</span>
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+              onChange={(e) =>
+                handleWalletFileChange(e.target.files?.[0] ?? null)
+              }
+              className="block w-full text-xs text-[var(--muted)] file:mr-2 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-950/60 dark:file:text-blue-300"
+            />
+            {walletEvidenceError && (
+              <p className="text-[11px] font-bold text-rose-600">
+                {walletEvidenceError}
+              </p>
+            )}
+            {walletEvidencePreview && (
+              <div className="flex items-center gap-2 pt-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={walletEvidencePreview}
+                  alt="معاينة إثبات المحفظة"
+                  className="h-10 w-10 rounded border object-cover"
+                />
+                <span className="truncate text-[11px] text-emerald-700 dark:text-emerald-300">
+                  {walletEvidenceFile?.name}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Return & Handover Inputs Side-by-Side */}
@@ -428,6 +626,73 @@ export function RiderSwapModal({
             )}
           </div>
         </div>
+
+        {/* NonZeroHandover Exception selection / request section */}
+        {(swapReview?.handover.requiresException ||
+          approvedExceptions.length > 0 ||
+          signedMobileBalance < 0) && (
+          <div className="space-y-2.5 rounded-xl border border-amber-300 bg-amber-50/70 p-3.5 text-xs dark:border-amber-800 dark:bg-amber-950/30">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-bold text-amber-950 dark:text-amber-100">
+                <ShieldAlert className="h-4 w-4 text-amber-600" />
+                <span>
+                  استثناء تسليم برصيد مرحّل غير صفري (handoverExceptionApprovalId)
+                </span>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => void loadApprovedExceptions()}
+                disabled={loadingExceptions}
+              >
+                <RefreshCw className="ml-1 h-3.5 w-3.5" />
+                تحديث الاستثناءات المعتمدة
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold">
+                  اختر استثناءً معتمدًا (Approved) لهذا الحساب:
+                </label>
+                <select
+                  value={handoverExceptionApprovalId}
+                  onChange={(e) =>
+                    setHandoverExceptionApprovalId(e.target.value)
+                  }
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs"
+                >
+                  <option value="">-- بدون استثناء --</option>
+                  {approvedExceptions.map((ex) => (
+                    <option key={ex.exceptionId} value={ex.exceptionId}>
+                      {ex.exceptionId.slice(0, 8)} — المبلغ: {ex.amount} SAR —{" "}
+                      {ex.reason}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {canRequestException && (
+                <div className="space-y-1.5">
+                  <Input
+                    label="طلب استثناء جديد (السبب)"
+                    value={exceptionReason}
+                    onChange={(e) => setExceptionReason(e.target.value)}
+                    placeholder="سبب التسليم برصيد غير صفري..."
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleRequestHandoverException()}
+                    disabled={requestingException}
+                  >
+                    {requestingException
+                      ? "جارٍ إرسال الطلب..."
+                      : "طلب استثناء NonZeroHandover"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {newRiderProfileId && (
           <AssignmentContextSection

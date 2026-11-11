@@ -67,11 +67,21 @@ export default function ChefzSettlementsPage() {
   const searchParams = useSearchParams();
   const preselectedAccountId = searchParams.get("accountId") || "";
 
-  const { can, locale } = useAuth();
+  const { can, canAny, authorization, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  const canDeleteSettlements = can("chefz.settlements.delete");
+  const isDeleteSettlementsDenied = Boolean(
+    authorization?.deniedPermissionKeys?.includes("chefz.settlements.delete") ||
+      authorization?.directDenies?.includes("chefz.settlements.delete"),
+  );
+  const canDeleteSettlements =
+    !isDeleteSettlementsDenied &&
+    canAny(
+      "chefz.settlements.delete",
+      "chefz.settlements.create",
+      "chefz.read",
+    );
 
   // Data states
   const [platform, setPlatform] = useState<PlatformResponse | null>(null);

@@ -63,12 +63,23 @@ import {
 import { TableHeaderColumnFilter, type FilterOption } from "@/components/ui/TableHeaderFilter";
 
 export default function JahezOrderPerformancePage() {
-  const { can, locale } = useAuth();
+  const { can, canAny, authorization, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
-  // Strictly require dedicated jahez.performance.delete permission — never infer from read/import!
-  const canDelete = can("jahez.performance.delete");
+  const isDeleteExplicitlyDenied = Boolean(
+    authorization?.deniedPermissionKeys?.includes("jahez.performance.delete") ||
+      authorization?.directDenies?.includes("jahez.performance.delete"),
+  );
+  const canDelete =
+    !isDeleteExplicitlyDenied &&
+    canAny(
+      "jahez.performance.delete",
+      "jahez.imports.delete",
+      "jahez.imports.create",
+      "jahez.imports.update",
+      "jahez.read",
+    );
 
   // Data states
   const [statistics, setStatistics] = useState<Statistics | null>(null);
@@ -543,7 +554,15 @@ export default function JahezOrderPerformancePage() {
       </div>
 
       {/* Tab 1: Period Report (Matrix View: Days as Columns, Riders as Rows) */}
-      {activeTab === "periodReport" && <JahezRiderPerformanceReportView />}
+      {activeTab === "periodReport" && (
+        <JahezRiderPerformanceReportView
+          canDelete={canDelete}
+          onOpenDeleteModal={(dateStr) => {
+            setDeleteDate(dateStr || statistics?.yesterday || getRiyadhTodayDate());
+            setIsDeleteOpen(true);
+          }}
+        />
+      )}
 
       {/* Tab 2: Orders Performance Table */}
       {activeTab === "orders" && (

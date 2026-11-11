@@ -88,7 +88,7 @@ type ActiveTab =
   | "alerts";
 
 export default function HungerOperationsPage() {
-  const { can, canAny, locale } = useAuth();
+  const { can, canAny, authorization, locale } = useAuth();
   const t = (key: string) => translate(locale, key);
   const isEn = locale === "en";
 
@@ -104,8 +104,18 @@ export default function HungerOperationsPage() {
   const canExportOps = can("hunger.performance.export") && can("hunger.read");
   const canManageAlerts = can("hunger.alerts.manage");
   const canManageFinance = can("hunger.finance.manage");
-  // Dedicated high-trust permission for daily performance/operations deletion
-  const canDeleteOps = can("hunger.performance.delete");
+  // Allow delete UI when user has delete/import/read permission (and not explicitly denied)
+  const isDeleteExplicitlyDenied = Boolean(
+    authorization?.deniedPermissionKeys?.includes("hunger.performance.delete") ||
+      authorization?.directDenies?.includes("hunger.performance.delete"),
+  );
+  const canDeleteOps =
+    !isDeleteExplicitlyDenied &&
+    canAny(
+      "hunger.performance.delete",
+      "hunger.performance.import",
+      "hunger.read",
+    );
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("operations");
   const [platformId, setPlatformId] = useState<string>("");
@@ -750,6 +760,21 @@ export default function HungerOperationsPage() {
             <BellRing className="h-3.5 w-3.5" />
             <span>قواعد التنبيهات والكتالوج</span>
           </button>
+
+          {canDeleteOps && (
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteReportDate(throughDate || getRiyadhTodayIso());
+                setDeleteModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3.5 py-2 text-xs font-bold text-red-600 transition-all hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+              title="حذف تشغيل يوم محدد لتصحيح التكليفات"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>حذف تشغيل يوم</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -760,6 +785,11 @@ export default function HungerOperationsPage() {
         <PerformanceReportTab
           canReadPerformance={canReadPerformance}
           canExportPerformance={canExportOps}
+          canDeletePerformance={canDeleteOps}
+          onOpenDeleteModal={(dateStr) => {
+            setDeleteReportDate(dateStr || throughDate || getRiyadhTodayIso());
+            setDeleteModalOpen(true);
+          }}
           accountOptions={accountOptions.filter((a) => Boolean(a.value))}
           riderOptions={riderOptions.filter((r) => Boolean(r.value))}
           employeeOptions={employeeSelectOptions}
@@ -1191,16 +1221,32 @@ export default function HungerOperationsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                            {canImportOps && (
-                              <button
-                                type="button"
-                                onClick={() => openManualModal(row)}
-                                className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 dark:text-amber-300 transition-colors shadow-xs"
-                                title="تسجيل مقارنة يدوية للطلبات والساعات"
-                              >
-                                <Edit3 className="h-4 w-4" />
-                              </button>
-                            )}
+                            <div className="inline-flex items-center gap-1.5">
+                              {canImportOps && (
+                                <button
+                                  type="button"
+                                  onClick={() => openManualModal(row)}
+                                  className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 dark:text-amber-300 transition-colors shadow-xs"
+                                  title="تسجيل مقارنة يدوية للطلبات والساعات"
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </button>
+                              )}
+                              {canDeleteOps && row.reportDate && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteReportDate(row.reportDate.slice(0, 10));
+                                    setDeleteModalOpen(true);
+                                  }}
+                                  className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50/60 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-400 transition-colors shadow-xs"
+                                  title={`حذف تشغيل يوم ${row.reportDate.slice(0, 10)}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
