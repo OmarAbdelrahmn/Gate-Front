@@ -166,7 +166,10 @@ export function RiderSwapModal({
 
   useEffect(() => {
     if (isOpen && account?.platformId) {
-      void loadApprovedExceptions();
+      const timer = setTimeout(() => {
+        void loadApprovedExceptions();
+      }, 0);
+      return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, account?.accountId, account?.platformId]);

@@ -27,7 +27,8 @@ import {
   HUNGER_ALERT_PERIODS,
   type HungerAccountItem,
   type HungerAccountsFilterParams,
-  type HungerOperationsReportItem,
+  type HungerOperationItem,
+  type HungerOperationReport,
   type HungerOperationsImportPreviewResponse,
   type HungerMonthlySummaryResponse,
   type HungerAlertRuleItem,
@@ -136,7 +137,8 @@ export default function HungerOperationsPage() {
     useState("");
   const [opsAccountFilters, setOpsAccountFilters] =
     useState<HungerAccountsFilterParams>({});
-  const [opsRows, setOpsRows] = useState<HungerOperationsReportItem[]>([]);
+  const [opsReport, setOpsReport] = useState<HungerOperationReport | null>(null);
+  const [opsRows, setOpsRows] = useState<HungerOperationItem[]>([]);
   const [opsLoading, setOpsLoading] = useState(false);
   const [colFilterAccount, setColFilterAccount] = useState<string[]>([]);
   const [colFilterRider, setColFilterRider] = useState<string[]>([]);
@@ -158,8 +160,7 @@ export default function HungerOperationsPage() {
 
   // Manual Comparison Modal
   const [manualModalOpen, setManualModalOpen] = useState(false);
-  const [manualRow, setManualRow] =
-    useState<HungerOperationsReportItem | null>(null);
+  const [manualRow, setManualRow] = useState<HungerOperationItem | null>(null);
   const [manualOrders, setManualOrders] = useState("");
   const [manualHours, setManualHours] = useState("");
   const [manualReason, setManualReason] = useState("");
@@ -294,6 +295,7 @@ export default function HungerOperationsPage() {
         page: 1,
         pageSize: 100,
       });
+      setOpsReport(res);
       setOpsRows(res.items);
     } catch (err) {
       toast.error(
@@ -354,29 +356,101 @@ export default function HungerOperationsPage() {
     return () => clearTimeout(timer);
   }, [activeTab, loadOperations, loadSummary, loadAlertRules]);
 
+  // Lookup maps for enriching operations rows
+  const accountLookup = useMemo(() => {
+    const map = new Map<string, HungerAccountItem>();
+    for (const a of accounts) {
+      if (a.accountId) map.set(a.accountId.toLowerCase(), a);
+      if (a.id) map.set(a.id.toLowerCase(), a);
+      if (a.externalAccountId) map.set(a.externalAccountId.toLowerCase(), a);
+    }
+    return map;
+  }, [accounts]);
+
+  const riderLookup = useMemo(() => {
+    const map = new Map<string, Rider>();
+    for (const r of riders) {
+      if (r.id) map.set(r.id.toLowerCase(), r);
+    }
+    return map;
+  }, [riders]);
+
+  const getRowAccountInfo = useCallback(
+    (r: HungerOperationItem) => {
+      const acc =
+        accountLookup.get(r.accountId?.toLowerCase()) ||
+        accountLookup.get(r.externalAccountId?.toLowerCase());
+      return {
+        number:
+          r.externalAccountId ||
+          acc?.externalAccountId ||
+          acc?.accountCode ||
+          r.accountId,
+        name: acc?.accountName || r.accountName || null,
+        owner: acc?.ownerNameAr || r.ownerNameAr || null,
+        city: acc?.operatingCityNameAr || r.operatingCityNameAr || null,
+      };
+    },
+    [accountLookup],
+  );
+
+  const getRowRiderName = useCallback(
+    (r: HungerOperationItem) => {
+      if (r.allocations && r.allocations.length > 0) {
+        const names = r.allocations
+          .map(
+            (al) =>
+              riderLookup.get(al.riderProfileId?.toLowerCase())?.fullNameAr,
+          )
+          .filter(Boolean);
+        if (names.length > 0) {
+          return Array.from(new Set(names)).join("، ");
+        }
+      }
+      const acc =
+        accountLookup.get(r.accountId?.toLowerCase()) ||
+        accountLookup.get(r.externalAccountId?.toLowerCase());
+      return (
+        r.assignedRiderNameAr ||
+        r.assignedRiderNameEn ||
+        acc?.assignedRiderNameAr ||
+        acc?.assignedRiderNameEn ||
+        null
+      );
+    },
+    [riderLookup, accountLookup],
+  );
+
   const accountColOptions = useMemo<FilterOption[]>(() => {
-    const map = new Map<string, { label: string; sublabel?: string; count: number }>();
+    const map = new Map<
+      string,
+      { label: string; sublabel?: string; count: number }
+    >();
     for (const r of opsRows) {
-      const key = r.externalAccountId || r.accountName || r.accountId || "";
+      const accInfo = getRowAccountInfo(r);
+      const key = accInfo.number || r.externalAccountId || r.accountId || "";
       if (!key) continue;
       const ex = map.get(key);
       if (ex) ex.count++;
       else {
         map.set(key, {
-          label: r.externalAccountId || r.accountName || "حساب",
-          sublabel: r.ownerNameAr ? `المالك: ${r.ownerNameAr}` : undefined,
+          label: accInfo.number,
+          sublabel: accInfo.owner ? `المالك: ${accInfo.owner}` : undefined,
           count: 1,
         });
       }
     }
-    return Array.from(map.entries()).map(([value, item]) => ({ value, ...item }));
-  }, [opsRows]);
+    return Array.from(map.entries()).map(([value, item]) => ({
+      value,
+      ...item,
+    }));
+  }, [opsRows, getRowAccountInfo]);
 
   const riderColOptions = useMemo<FilterOption[]>(() => {
     const map = new Map<string, number>();
     let unassigned = 0;
     for (const r of opsRows) {
-      const name = r.assignedRiderNameAr || r.assignedRiderNameEn;
+      const name = getRowRiderName(r);
       if (!name) {
         unassigned++;
         continue;
@@ -391,7 +465,7 @@ export default function HungerOperationsPage() {
       opts.push({ value: name, label: name, count: cnt });
     }
     return opts;
-  }, [opsRows]);
+  }, [opsRows, getRowRiderName]);
 
   const manualColOptions = useMemo<FilterOption[]>(() => {
     let manualCount = 0;
@@ -404,24 +478,34 @@ export default function HungerOperationsPage() {
       }
     }
     return [
-      { value: "HAS_MANUAL", label: "يوجد مقارنة يدوية مسجلة", count: manualCount },
-      { value: "MATCH_SOURCE", label: "مطابق للمصدر", count: sourceMatchCount },
+      {
+        value: "HAS_MANUAL",
+        label: "يوجد مقارنة يدوية مسجلة",
+        count: manualCount,
+      },
+      {
+        value: "MATCH_SOURCE",
+        label: "مطابق للمصدر",
+        count: sourceMatchCount,
+      },
     ];
   }, [opsRows]);
 
   const alertColOptions = useMemo<FilterOption[]>(() => {
     let critical = 0;
     let followUp = 0;
+    let missing = 0;
     let regular = 0;
     for (const r of opsRows) {
-      const hrs = Number(r.hours || 0);
-      if (
-        r.alerts?.some((a) => (a.severity || "").toLowerCase() === "critical") ||
-        hrs < 8
-      ) {
+      if (r.alerts?.includes("HoursCritical")) {
         critical++;
-      } else if (hrs < 10 || (r.alerts && r.alerts.length > 0)) {
+      } else if (r.alerts?.includes("HoursFollowUp")) {
         followUp++;
+      } else if (
+        r.alerts?.includes("MissingHoursCoverage") ||
+        r.actualWorkingHours === null
+      ) {
+        missing++;
       } else {
         regular++;
       }
@@ -429,6 +513,11 @@ export default function HungerOperationsPage() {
     return [
       { value: "CRITICAL", label: "ساعات حرجة (<8)", count: critical },
       { value: "FOLLOWUP", label: "متابعة (<10)", count: followUp },
+      {
+        value: "MISSING",
+        label: "ساعات غير مسجلة (Missing)",
+        count: missing,
+      },
       { value: "REGULAR", label: "منتظم", count: regular },
     ];
   }, [opsRows]);
@@ -436,11 +525,12 @@ export default function HungerOperationsPage() {
   const filteredOpsRows = useMemo(() => {
     return opsRows.filter((r) => {
       if (colFilterAccount.length > 0) {
-        const key = r.externalAccountId || r.accountName || r.accountId || "";
+        const accInfo = getRowAccountInfo(r);
+        const key = accInfo.number || r.externalAccountId || r.accountId || "";
         if (!colFilterAccount.includes(key)) return false;
       }
       if (colFilterRider.length > 0) {
-        const name = r.assignedRiderNameAr || r.assignedRiderNameEn || "";
+        const name = getRowRiderName(r);
         const match = colFilterRider.some((v) =>
           v === "UNASSIGNED" ? !name : v === name,
         );
@@ -454,16 +544,21 @@ export default function HungerOperationsPage() {
         if (!match) return false;
       }
       if (colFilterAlert.length > 0) {
-        const hrs = Number(r.hours || 0);
-        const isCrit =
-          r.alerts?.some(
-            (a) => (a.severity || "").toLowerCase() === "critical",
-          ) || hrs < 8;
-        const isFollow = !isCrit && (hrs < 10 || Boolean(r.alerts?.length));
-        const isReg = !isCrit && !isFollow;
+        const isCrit = Boolean(r.alerts?.includes("HoursCritical"));
+        const isFollow = Boolean(r.alerts?.includes("HoursFollowUp"));
+        const isMissing = Boolean(
+          r.alerts?.includes("MissingHoursCoverage") ||
+            r.actualWorkingHours === null,
+        );
+        const isReg =
+          !isCrit &&
+          !isFollow &&
+          !isMissing &&
+          (!r.alerts || r.alerts.length === 0);
         const match = colFilterAlert.some((v) => {
           if (v === "CRITICAL") return isCrit;
           if (v === "FOLLOWUP") return isFollow;
+          if (v === "MISSING") return isMissing;
           if (v === "REGULAR") return isReg;
           return false;
         });
@@ -471,38 +566,20 @@ export default function HungerOperationsPage() {
       }
       return true;
     });
-  }, [opsRows, colFilterAccount, colFilterRider, colFilterManual, colFilterAlert]);
+  }, [
+    opsRows,
+    colFilterAccount,
+    colFilterRider,
+    colFilterManual,
+    colFilterAlert,
+    getRowAccountInfo,
+    getRowRiderName,
+  ]);
 
-  // Operations Totals
-  const opsStats = useMemo(() => {
-    let totalOrders = 0;
-    let totalHours = 0;
-    let criticalCount = 0;
-    let manualOverrides = 0;
-
-    for (const r of filteredOpsRows) {
-      totalOrders += Number(r.orders || 0);
-      totalHours += Number(r.hours || 0);
-      if (r.manualOrders !== null && r.manualOrders !== undefined) {
-        manualOverrides++;
-      }
-      if (
-        r.alerts?.some(
-          (a) => (a.severity || "").toLowerCase() === "critical",
-        ) ||
-        Number(r.hours || 0) < 8
-      ) {
-        criticalCount++;
-      }
-    }
-    return {
-      rowsCount: filteredOpsRows.length,
-      totalOrders,
-      totalHours: Number(totalHours.toFixed(1)),
-      criticalCount,
-      manualOverrides,
-    };
-  }, [filteredOpsRows]);
+  // Current page count for critical hours (< 8 h)
+  const criticalHoursCount = useMemo(() => {
+    return opsRows.filter((r) => r.alerts?.includes("HoursCritical")).length;
+  }, [opsRows]);
 
   // Handlers: Operations Import
   const handlePreviewOperationsImport = async () => {
@@ -557,17 +634,21 @@ export default function HungerOperationsPage() {
   };
 
   // Handlers: Manual Comparison
-  const openManualModal = (row: HungerOperationsReportItem) => {
+  const openManualModal = (row: HungerOperationItem) => {
     setManualRow(row);
     setManualOrders(
       row.manualOrders !== undefined && row.manualOrders !== null
         ? String(row.manualOrders)
-        : String(row.orders ?? 0),
+        : String(row.completedOrders ?? row.orders ?? 0),
     );
     setManualHours(
       row.manualHours !== undefined && row.manualHours !== null
         ? String(row.manualHours)
-        : String(row.hours ?? 0),
+        : row.actualWorkingHours !== null && row.actualWorkingHours !== undefined
+          ? String(row.actualWorkingHours)
+          : row.hours !== null && row.hours !== undefined
+            ? String(row.hours)
+            : "",
     );
     setManualReason(row.manualComparisonReason || "");
     setManualModalOpen(true);
@@ -820,7 +901,7 @@ export default function HungerOperationsPage() {
                 عدد سجلات التشغيل
               </span>
               <p className="mt-1.5 text-2xl font-bold text-[var(--foreground)]">
-                {opsStats.rowsCount}
+                {opsReport?.totalRecords ?? opsRows.length}
               </p>
             </div>
             <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/50 p-4 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20">
@@ -828,7 +909,7 @@ export default function HungerOperationsPage() {
                 إجمالي الطلبات المنفذة
               </span>
               <p className="mt-1.5 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-                {opsStats.totalOrders}
+                {opsReport?.completedOrders ?? 0}
               </p>
             </div>
             <div className="rounded-2xl border border-blue-200/70 bg-blue-50/50 p-4 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
@@ -836,7 +917,7 @@ export default function HungerOperationsPage() {
                 إجمالي ساعات العمل
               </span>
               <p className="mt-1.5 text-2xl font-bold text-blue-700 dark:text-blue-300">
-                {opsStats.totalHours} س
+                {Number((opsReport?.workingHours ?? 0).toFixed(1))} س
               </p>
             </div>
             <div className="rounded-2xl border border-rose-200/70 bg-rose-50/50 p-4 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/20">
@@ -844,7 +925,7 @@ export default function HungerOperationsPage() {
                 تنبيهات الساعات الحرجة (&lt; 8 س)
               </span>
               <p className="mt-1.5 text-2xl font-bold text-rose-700 dark:text-rose-300">
-                {opsStats.criticalCount}
+                {criticalHoursCount}
               </p>
             </div>
           </div>
@@ -1084,9 +1165,20 @@ export default function HungerOperationsPage() {
                       const hasManual =
                         row.manualOrders !== undefined &&
                         row.manualOrders !== null;
+                      const accInfo = getRowAccountInfo(row);
+                      const riderName = getRowRiderName(row);
+                      const isCriticalHours =
+                        row.alerts?.includes("HoursCritical");
+                      const isFollowUpHours =
+                        row.alerts?.includes("HoursFollowUp");
+                      const isMissingHours =
+                        row.actualWorkingHours === null ||
+                        row.actualWorkingHours === undefined ||
+                        row.alerts?.includes("MissingHoursCoverage");
+
                       return (
                         <tr
-                          key={row.sourceId || row.id || idx}
+                          key={row.id || row.sourceId || idx}
                           className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                         >
                           <td className="px-4 py-3.5 font-medium">
@@ -1097,7 +1189,9 @@ export default function HungerOperationsPage() {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeleteReportDate(row.reportDate.slice(0, 10));
+                                    setDeleteReportDate(
+                                      row.reportDate.slice(0, 10),
+                                    );
                                     setDeleteModalOpen(true);
                                   }}
                                   className="text-[var(--muted)] hover:text-red-600 transition-colors opacity-60 hover:opacity-100"
@@ -1110,30 +1204,32 @@ export default function HungerOperationsPage() {
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="font-bold text-[var(--foreground)]">
-                              {row.externalAccountId ||
-                                row.accountName ||
-                                "حساب هنقرستيشن"}
+                              {accInfo.number}
                             </div>
-                            {row.ownerNameAr && (
+                            {accInfo.owner && (
                               <div className="text-[11px] text-[var(--muted)]">
-                                المالك: {row.ownerNameAr}
+                                المالك: {accInfo.owner}
                               </div>
                             )}
                           </td>
                           <td className="px-4 py-3.5">
-                            <div className="font-semibold text-blue-700 dark:text-blue-400">
-                              {row.assignedRiderNameAr ||
-                                row.assignedRiderNameEn ||
-                                "غير معين"}
+                            <div
+                              className={`font-semibold ${
+                                riderName
+                                  ? "text-blue-700 dark:text-blue-400"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {riderName || "غير معين"}
                             </div>
-                            {row.operatingCityNameAr && (
+                            {accInfo.city && (
                               <div className="text-[11px] text-slate-400">
-                                {row.operatingCityNameAr}
+                                {accInfo.city}
                               </div>
                             )}
                           </td>
                           <td className="px-4 py-3.5 font-bold">
-                            {row.orders ?? 0}
+                            {row.completedOrders ?? row.orders ?? 0}
                           </td>
                           <td className="px-4 py-3.5 text-[11px]">
                             <div>
@@ -1150,20 +1246,28 @@ export default function HungerOperationsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3.5">
-                            <span
-                              className={`font-bold ${
-                                Number(row.hours || 0) < 8
-                                  ? "text-rose-600"
-                                  : Number(row.hours || 0) < 10
-                                    ? "text-amber-600"
-                                    : "text-emerald-600"
-                              }`}
-                            >
-                              {row.hours ?? 0} س
-                            </span>
-                            {row.hoursUnit && (
+                            {isMissingHours ? (
+                              <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                ساعات غير مسجلة (Missing)
+                              </span>
+                            ) : (
+                              <span
+                                className={`font-bold ${
+                                  isCriticalHours
+                                    ? "text-rose-600"
+                                    : isFollowUpHours
+                                      ? "text-amber-600"
+                                      : "text-emerald-600"
+                                }`}
+                              >
+                                {row.actualWorkingHours ?? row.hours ?? 0} س
+                              </span>
+                            )}
+                            {row.hoursUnit && !isMissingHours && (
                               <div className="text-[10px] text-[var(--muted)]">
-                                ({row.hoursUnit === "Minutes" ? "محولة من دقائق" : "ساعات"})
+                                ({row.hoursUnit === "Minutes"
+                                  ? "محولة من دقائق"
+                                  : "ساعات"})
                               </div>
                             )}
                           </td>
@@ -1183,6 +1287,12 @@ export default function HungerOperationsPage() {
                                   طلبات: {row.manualOrders} | ساعات:{" "}
                                   {row.manualHours ?? "—"}
                                 </span>
+                                {row.ordersDifference !== null &&
+                                  row.ordersDifference !== undefined && (
+                                    <span className="mr-1 text-[10px] text-amber-600 dark:text-amber-400">
+                                      (فرق: {row.ordersDifference})
+                                    </span>
+                                  )}
                                 {row.manualComparisonReason && (
                                   <p className="text-[var(--muted)]">
                                     {row.manualComparisonReason}
@@ -1197,25 +1307,41 @@ export default function HungerOperationsPage() {
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="flex flex-wrap gap-1">
-                              {row.alerts && row.alerts.length > 0 ? (
-                                row.alerts.map((al, i) => (
-                                  <Badge
-                                    key={i}
-                                    tone={
-                                      (al.severity || "").toLowerCase() ===
-                                      "critical"
-                                        ? "red"
-                                        : "orange"
-                                    }
-                                  >
-                                    {al.message || al.code}
-                                  </Badge>
-                                ))
-                              ) : Number(row.hours || 0) < 8 ? (
+                              {isCriticalHours && (
                                 <Badge tone="red">ساعات حرجة (&lt;8)</Badge>
-                              ) : Number(row.hours || 0) < 10 ? (
+                              )}
+                              {isFollowUpHours && (
                                 <Badge tone="orange">متابعة (&lt;10)</Badge>
-                              ) : (
+                              )}
+                              {row.alerts?.includes(
+                                "MissingHoursCoverage",
+                              ) && (
+                                <Badge tone="orange">ساعات غير مغطاة</Badge>
+                              )}
+                              {row.alerts?.includes("NoShowPositive") && (
+                                <Badge tone="red">
+                                  غياب شفتات{" "}
+                                  {row.noShowCount
+                                    ? `(${row.noShowCount})`
+                                    : ""}
+                                </Badge>
+                              )}
+                              {row.alerts
+                                ?.filter(
+                                  (a) =>
+                                    ![
+                                      "HoursCritical",
+                                      "HoursFollowUp",
+                                      "MissingHoursCoverage",
+                                      "NoShowPositive",
+                                    ].includes(a),
+                                )
+                                .map((al, i) => (
+                                  <Badge key={i} tone="purple">
+                                    {al}
+                                  </Badge>
+                                ))}
+                              {(!row.alerts || row.alerts.length === 0) && (
                                 <Badge tone="green">منتظم</Badge>
                               )}
                             </div>
@@ -1237,7 +1363,9 @@ export default function HungerOperationsPage() {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeleteReportDate(row.reportDate.slice(0, 10));
+                                    setDeleteReportDate(
+                                      row.reportDate.slice(0, 10),
+                                    );
                                     setDeleteModalOpen(true);
                                   }}
                                   className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50/60 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-400 transition-colors shadow-xs"

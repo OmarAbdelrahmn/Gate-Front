@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { AccountsFilterPanel } from "./AccountsFilterPanel";
 import {
   getHungerWallets,
+  getAllHungerWallets,
   exportHungerWallets,
   getHungerAccountWalletHistory,
   getApprovalStatusMeta,
@@ -30,6 +31,8 @@ import {
   Info,
   RefreshCw,
   ExternalLink,
+  CheckCircle2,
+  Search,
 } from "lucide-react";
 
 interface SelectOption {
@@ -73,8 +76,10 @@ export function WalletsTab({
   const [accountFilters, setAccountFilters] =
     useState<HungerAccountsFilterParams>({});
 
+  const [onePageMode, setOnePageMode] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [tableSearch, setTableSearch] = useState("");
   const [items, setItems] = useState<HungerWalletListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -123,19 +128,34 @@ export function WalletsTab({
     ],
   );
 
+  const displayedItems = useMemo(() => {
+    if (!tableSearch.trim()) return items;
+    const q = tableSearch.trim().toLowerCase();
+    return items.filter((w) => {
+      const text = `${w.externalAccountId || ""} ${w.accountCode || ""} ${w.accountName || ""} ${w.ownerNameAr || ""} ${w.assignedRiderNameAr || ""} ${w.assignedRiderProfileId || ""} ${w.accountId || ""}`.toLowerCase();
+      return text.includes(q);
+    });
+  }, [items, tableSearch]);
+
   const loadWallets = useCallback(async () => {
     if (!canReadFinance) return;
     setLoading(true);
     try {
-      const res = await getHungerWallets(currentQuery);
-      setItems(res.items);
-      setTotalCount(res.totalCount);
+      if (onePageMode) {
+        const res = await getAllHungerWallets(currentQuery);
+        setItems(res.items);
+        setTotalCount(res.totalCount);
+      } else {
+        const res = await getHungerWallets(currentQuery);
+        setItems(res.items);
+        setTotalCount(res.totalCount);
+      }
     } catch (err) {
       toast.error(getHungerErrorMessage(err, "تعذر جلب أرصدة المحافظ"));
     } finally {
       setLoading(false);
     }
-  }, [canReadFinance, currentQuery]);
+  }, [canReadFinance, currentQuery, onePageMode]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -362,14 +382,33 @@ export function WalletsTab({
 
       {/* Wallets Table */}
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
           <div>
             <h3 className="text-sm font-bold text-[var(--foreground)]">
               ملخص محافظ الحسابات والأرصدة الملاحظة
             </h3>
             <p className="text-xs text-[var(--muted-foreground)]">
-              إجمالي الحسابات: {totalCount} حساب
+              إجمالي الحسابات: {items.length} {tableSearch.trim() ? `(المطابق للبحث: ${displayedItems.length})` : ""}
             </p>
+          </div>
+          <div className="relative min-w-[240px]">
+            <Search className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="بحث برقم الحساب أو المندوب أو الهوية..."
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1.5 pr-8 pl-6 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-amber-500 focus:outline-none"
+            />
+            {tableSearch && (
+              <button
+                type="button"
+                onClick={() => setTableSearch("")}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -414,7 +453,7 @@ export function WalletsTab({
                     جاري تحميل المحافظ...
                   </td>
                 </tr>
-              ) : items.length === 0 ? (
+              ) : displayedItems.length === 0 ? (
                 <tr>
                   <td
                     colSpan={9}
@@ -424,7 +463,7 @@ export function WalletsTab({
                   </td>
                 </tr>
               ) : (
-                items.map((row) => {
+                displayedItems.map((row) => {
                   const observed = row.observedOn || row.observedAtUtc;
                   const ev = row.evidence || row.walletEvidence;
                   const alertMeta = getWalletAlertMeta(row.alert);
@@ -510,50 +549,96 @@ export function WalletsTab({
           </table>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] p-4 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--muted-foreground)]">
-              إجمالي الحسابات: <strong>{totalCount}</strong>
-            </span>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(
-                  Math.min(Math.max(Number(e.target.value) || 50, 1), 100),
-                );
-                setPage(1);
-              }}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
-            >
-              {[10, 25, 50, 100].map((sz) => (
-                <option key={sz} value={sz}>
-                  {sz} / صفحة
-                </option>
-              ))}
-            </select>
+        {onePageMode ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--subtle-bg)] px-4 py-3 text-xs">
+            <div className="flex items-center gap-2 text-[var(--muted)]">
+              <span className="inline-flex items-center gap-1.5 font-medium text-[var(--foreground)]">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                يتم عرض جميع محافظ الحسابات في صفحة واحدة
+              </span>
+              <span>—</span>
+              <span>
+                إجمالي الحسابات:{" "}
+                <strong className="text-[var(--foreground)]">
+                  {items.length}
+                </strong>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setOnePageMode(false)}
+                className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                عرض مقسم (صفحات)
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                العودة للأعلى ↑
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              السابق
-            </Button>
-            <span>
-              صفحة {page} من {totalPages}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              التالي
-            </Button>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] p-4 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-[var(--muted-foreground)]">
+                إجمالي الحسابات: <strong>{totalCount}</strong>
+              </span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(
+                    Math.min(Math.max(Number(e.target.value) || 50, 1), 100),
+                  );
+                  setPage(1);
+                }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
+              >
+                {[10, 25, 50, 100].map((sz) => (
+                  <option key={sz} value={sz}>
+                    {sz} / صفحة
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setOnePageMode(true)}
+                className="text-xs text-amber-600 hover:text-amber-700"
+              >
+                عرض الكل في صفحة واحدة
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                السابق
+              </Button>
+              <span>
+                صفحة {page} من {totalPages}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                التالي
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Wallet History Modal (Events + Observations) */}

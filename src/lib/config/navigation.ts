@@ -563,6 +563,19 @@ export const navigation: NavItem[] = [
           "hunger.remittances.confirm",
         ],
       },
+      {
+        label: "استثناءات التسليم (NonZeroHandover)",
+        labelKey: "nav.hungerHandovers",
+        href: "/admin/hunger/handovers",
+        icon: ArrowLeftRight,
+        permissionsAny: [
+          "hunger.read",
+          "hunger.finance.manage",
+          "hunger.finance.read",
+          "hunger.finance.exception.request",
+          "hunger.finance.exception.approve",
+        ],
+      },
     ],
   },
   {

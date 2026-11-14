@@ -688,37 +688,75 @@ export interface HungerOperationsImportConfirmResponse {
   message?: string | null;
 }
 
-export interface HungerOperationsReportItem {
-  id?: string;
-  sourceId: string;
-  accountId: string;
-  externalAccountId?: string | null;
+export interface HungerOperationAllocation {
+  assignmentId: string;
+  riderProfileId: string;
+  sequence: number;
+  values: Record<string, number>;
+  contributionId: string | null;
+  coveredAssignmentIds: string[];
+}
+
+export interface HungerOperationAlertDetail {
+  code: string;
+  actual: number;
+  threshold: number;
+  severity: string;
+  ruleId: string | null;
+}
+
+export interface HungerOperationItem {
+  id: string;
+  accountId: string;          // Internal account UUID
+  externalAccountId: string;  // HungerStation number shown in the table
+  reportDate: string;         // YYYY-MM-DD
+  completedOrders: number;
+  actualWorkingHours: number | null;
+  acceptedOrders: number | null;
+  stackedOrders: number | null;
+  rejectedOrders: number | null;
+  cancelledOrders: number | null;
+  noShowCount: number | null;
+  captainClassification: string | null;
+  manualOrders: number | null;
+  manualHours: number | null;
+  ordersDifference: number | null;
+  allocationStatus: string;
+  allocations: HungerOperationAllocation[];
+  alerts: string[];
+  alertDetails: HungerOperationAlertDetail[];
+  rowVersion: string;
+
+  // Frontend optional enrichments
   accountName?: string | null;
   ownerNameAr?: string | null;
   assignedRiderProfileId?: string | null;
   assignedRiderNameAr?: string | null;
   assignedRiderNameEn?: string | null;
   operatingCityNameAr?: string | null;
-  sponsorNameAr?: string | null;
-  reportDate: string;
-  orders: number;
-  acceptedOrders?: number | null;
-  stackedOrders?: number | null;
-  rejectedOrders?: number | null;
-  cancelledOrders?: number | null;
-  hours: number;
-  hoursUnit?: HungerHoursUnit | string | null;
-  captainClassification?: string | null;
-  manualOrders?: number | null;
-  manualHours?: number | null;
   manualComparisonReason?: string | null;
-  noShowCount?: number | null;
-  alerts?: Array<{
-    code: HungerAlertRuleCode | string;
-    severity: HungerAlertSeverity | string;
-    message?: string | null;
-  }>;
-  rowVersion?: string | null;
+
+  // Aliases for compatibility
+  sourceId?: string;
+  orders?: number;
+  hours?: number | null;
+  hoursUnit?: HungerHoursUnit | string | null;
+}
+
+export type HungerOperationsReportItem = HungerOperationItem;
+
+export interface HungerOperationReport {
+  items: HungerOperationItem[];
+  totalRecords: number;
+  completedOrders: number;
+  workingHours: number;
+  rejectedOrders: number | null;
+  cancelledOrders: number | null;
+  noShowCount: number | null;
+  acceptedOrders: number | null;
+  stackedOrders: number | null;
+  page: number;
+  pageSize: number;
 }
 
 export interface HungerManualComparisonRequest {

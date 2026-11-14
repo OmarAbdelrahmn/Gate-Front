@@ -33,7 +33,8 @@ import type {
   HungerOperationsImportConfirmResponse,
   HungerOperationsImportPreviewResponse,
   HungerDeletePerformanceResponse,
-  HungerOperationsReportItem,
+  HungerOperationItem,
+  HungerOperationReport,
   HungerPagedResponse,
   HungerPendingCollectionsResponse,
   HungerPerformanceQuery,
@@ -78,12 +79,10 @@ import type {
   HungerClosingSource,
   HungerCustodySettlementReport,
   HungerEvidenceItem,
-  HungerEvidencePurpose,
   HungerEvidenceUploadRequest,
   HungerExceptionCreateRequest,
   HungerExceptionDecisionRequest,
   HungerExceptionItem,
-  HungerExceptionKind,
   HungerExceptionStatus,
   HungerExecuteRequestBody,
   HungerFundingApproveRequest,
@@ -944,19 +943,29 @@ function normalizePaged<T>(
   const obj = (raw || {}) as Record<string, unknown>;
   const items = Array.isArray(obj.items)
     ? (obj.items as T[])
-    : Array.isArray(obj.events)
-      ? (obj.events as T[])
-      : Array.isArray(obj.data)
-        ? (obj.data as T[])
-        : Array.isArray(obj.rows)
-          ? (obj.rows as T[])
-          : [];
+    : Array.isArray(obj.accounts)
+      ? (obj.accounts as T[])
+      : Array.isArray(obj.events)
+        ? (obj.events as T[])
+        : Array.isArray(obj.data)
+          ? (obj.data as T[])
+          : Array.isArray(obj.rows)
+            ? (obj.rows as T[])
+            : [];
   const totalCount =
     typeof obj.totalCount === "number"
       ? obj.totalCount
-      : typeof obj.total === "number"
-        ? obj.total
-        : items.length;
+      : typeof obj.totalRecords === "number"
+        ? obj.totalRecords
+        : typeof obj.total === "number"
+          ? obj.total
+          : typeof obj.count === "number"
+            ? obj.count
+            : typeof obj.totalAccounts === "number"
+              ? obj.totalAccounts
+              : typeof obj.totalItems === "number"
+                ? obj.totalItems
+                : items.length;
   return {
     items,
     page: typeof obj.page === "number" ? obj.page : fallbackPage,
@@ -1356,57 +1365,114 @@ export async function getAllHungerAccounts(
     },
     init,
   );
-  let all = [...first.items];
-  const totalPages = Math.ceil(first.totalCount / (first.pageSize || 100));
-  if (totalPages <= 1) {
-    return all;
+  const items = first?.items || [];
+  if (items.length === 0) {
+    return [];
   }
 
-  // Fetch remaining pages in parallel batches of up to 6 requests
-  const maxPages = Math.min(totalPages, 100);
-  const remainingPages: number[] = [];
-  for (let p = 2; p <= maxPages; p++) {
-    remainingPages.push(p);
+  const all = [...items];
+  const seenIds = new Set<string>();
+  for (const item of items) {
+    const key =
+      item.accountId ||
+      item.id ||
+      item.externalAccountId ||
+      item.accountCode ||
+      `${seenIds.size}`;
+    seenIds.add(key);
   }
 
-  const batchSize = 6;
-  for (let i = 0; i < remainingPages.length; i += batchSize) {
-    const batch = remainingPages.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map((p) =>
-        getHungerAccounts(
+  // The actual batch size returned by the server on page 1 (might be capped at 50, 25, or 100)
+  const actualBatchSize = Math.max(items.length, 1);
+  const serverTotalCount =
+    typeof first.totalCount === "number" && first.totalCount > 0
+      ? first.totalCount
+      : null;
+
+  // Case 1: Server returned totalCount and it is strictly greater than items already fetched
+  if (serverTotalCount !== null && serverTotalCount > items.length) {
+    const totalPages = Math.min(
+      Math.ceil(serverTotalCount / actualBatchSize),
+      100,
+    );
+    const pageNumbers: number[] = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pageNumbers.push(p);
+    }
+    const chunkSize = 4;
+    for (let i = 0; i < pageNumbers.length; i += chunkSize) {
+      const chunk = pageNumbers.slice(i, i + chunkSize);
+      const results = await Promise.allSettled(
+        chunk.map((p) =>
+          getHungerAccounts(
+            {
+              ...baseParams,
+              page: p,
+              pageSize: 100,
+            },
+            init,
+          ),
+        ),
+      );
+      for (const res of results) {
+        if (res.status === "fulfilled" && Array.isArray(res.value?.items)) {
+          for (const item of res.value.items) {
+            const key =
+              item.accountId ||
+              item.id ||
+              item.externalAccountId ||
+              item.accountCode ||
+              `${seenIds.size}`;
+            if (!seenIds.has(key)) {
+              seenIds.add(key);
+              all.push(item);
+            }
+          }
+        }
+      }
+    }
+  } else if (items.length >= 50) {
+    // Case 2: Server did not return totalCount (or totalCount == items.length because it omitted total),
+    // but page 1 had a full batch (>= 50 items). We must keep fetching subsequent pages sequentially until exhausted!
+    let p = 2;
+    const maxP = 50;
+    while (p <= maxP) {
+      try {
+        const next = await getHungerAccounts(
           {
             ...baseParams,
             page: p,
             pageSize: 100,
           },
           init,
-        ),
-      ),
-    );
-    for (const res of results) {
-      if (res.status === "fulfilled" && Array.isArray(res.value?.items)) {
-        all = all.concat(res.value.items);
+        );
+        const nextItems = next?.items || [];
+        if (nextItems.length === 0) break;
+        let addedCount = 0;
+        for (const item of nextItems) {
+          const key =
+            item.accountId ||
+            item.id ||
+            item.externalAccountId ||
+            item.accountCode ||
+            `${seenIds.size}`;
+          if (!seenIds.has(key)) {
+            seenIds.add(key);
+            all.push(item);
+            addedCount++;
+          }
+        }
+        if (addedCount === 0 || nextItems.length < actualBatchSize) {
+          break;
+        }
+        p++;
+      } catch {
+        break;
       }
     }
   }
 
-  // Deduplicate by unique account identifier
-  const seenIds = new Set<string>();
-  const deduplicated: HungerAccountItem[] = [];
-  for (const item of all) {
-    const key =
-      item.accountId ||
-      item.id ||
-      item.externalAccountId ||
-      `${deduplicated.length}`;
-    if (!seenIds.has(key)) {
-      seenIds.add(key);
-      deduplicated.push(item);
-    }
-  }
-
-  return deduplicated;
+  return all;
 }
 
 export async function downloadHungerAccountsTemplate(): Promise<void> {
@@ -1742,7 +1808,7 @@ export async function getHungerOperationsReport(
     pageSize?: number;
   },
   init?: CustomRequestInit,
-): Promise<HungerPagedResponse<HungerOperationsReportItem>> {
+): Promise<HungerOperationReport> {
   const qs = new URLSearchParams();
   qs.set("from", params.from);
   qs.set("through", params.through);
@@ -1756,14 +1822,58 @@ export async function getHungerOperationsReport(
   qs.set("page", String(page));
   qs.set("pageSize", String(pageSize));
 
-  const raw = await authFetch<unknown>(
+  const raw = await authFetch<HungerOperationReport>(
     `${BASE}/reports/operations?${qs.toString()}`,
     {
       ...init,
       method: "GET",
     },
   );
-  return normalizePaged<HungerOperationsReportItem>(raw, page, pageSize);
+
+  const obj = (raw || {}) as Partial<HungerOperationReport> &
+    Record<string, unknown>;
+  const rawItems = Array.isArray(obj.items)
+    ? (obj.items as HungerOperationItem[])
+    : Array.isArray(raw)
+      ? (raw as HungerOperationItem[])
+      : [];
+
+  const items: HungerOperationItem[] = rawItems.map((item) => ({
+    ...item,
+    sourceId: item.sourceId || item.id,
+    orders:
+      typeof item.completedOrders === "number"
+        ? item.completedOrders
+        : item.orders ?? 0,
+    hours:
+      item.actualWorkingHours !== undefined
+        ? item.actualWorkingHours
+        : item.hours ?? null,
+  }));
+
+  return {
+    items,
+    totalRecords:
+      typeof obj.totalRecords === "number"
+        ? obj.totalRecords
+        : items.length,
+    completedOrders:
+      typeof obj.completedOrders === "number" ? obj.completedOrders : 0,
+    workingHours:
+      typeof obj.workingHours === "number" ? obj.workingHours : 0,
+    rejectedOrders:
+      typeof obj.rejectedOrders === "number" ? obj.rejectedOrders : null,
+    cancelledOrders:
+      typeof obj.cancelledOrders === "number" ? obj.cancelledOrders : null,
+    noShowCount:
+      typeof obj.noShowCount === "number" ? obj.noShowCount : null,
+    acceptedOrders:
+      typeof obj.acceptedOrders === "number" ? obj.acceptedOrders : null,
+    stackedOrders:
+      typeof obj.stackedOrders === "number" ? obj.stackedOrders : null,
+    page: typeof obj.page === "number" ? obj.page : page,
+    pageSize: typeof obj.pageSize === "number" ? obj.pageSize : pageSize,
+  };
 }
 
 export async function exportHungerOperationsReport(params: {
@@ -1793,8 +1903,8 @@ export async function updateHungerManualOperationsComparison(
   sourceId: string,
   payload: HungerManualComparisonRequest,
   init?: CustomRequestInit,
-): Promise<HungerOperationsReportItem> {
-  return authFetch<HungerOperationsReportItem>(
+): Promise<void> {
+  await authFetch<void>(
     `${BASE}/operations/${encodeURIComponent(sourceId)}/manual`,
     {
       ...init,
@@ -2194,7 +2304,9 @@ export async function getHungerFinanceExceptions(
   const qs = new URLSearchParams();
   qs.set("platformId", params.platformId);
   if (params.status && params.status !== "all") {
-    qs.set("status", params.status);
+    const backendStatus =
+      params.status === "Pending" ? "Requested" : params.status;
+    qs.set("status", backendStatus);
   }
   const page = params.page ?? 1;
   const pageSize = Math.min(Math.max(params.pageSize ?? 50, 1), 100);
@@ -2209,6 +2321,32 @@ export async function getHungerFinanceExceptions(
     },
   );
   return normalizePaged<HungerExceptionItem>(raw, page, pageSize);
+}
+
+export async function getAllHungerFinanceExceptions(
+  params: {
+    platformId: string;
+    status?: HungerExceptionStatus | string;
+  },
+  init?: CustomRequestInit,
+): Promise<HungerExceptionItem[]> {
+  const first = await getHungerFinanceExceptions(
+    { ...params, page: 1, pageSize: 100 },
+    init,
+  );
+  const total = first.totalCount || first.items.length;
+  const totalPages = Math.ceil(total / (first.pageSize || 100));
+  if (totalPages <= 1) return first.items;
+
+  const results: HungerExceptionItem[] = [...first.items];
+  for (let p = 2; p <= totalPages; p++) {
+    const next = await getHungerFinanceExceptions(
+      { ...params, page: p, pageSize: 100 },
+      init,
+    );
+    results.push(...next.items);
+  }
+  return results;
 }
 
 export async function createHungerFinanceException(
@@ -3104,6 +3242,123 @@ export async function getHungerWallets(
     method: "GET",
   });
   return normalizePaged<HungerWalletListItem>(raw, page, pageSize);
+}
+
+export async function getAllHungerWallets(
+  query: HungerWalletsQuery = {},
+  init?: CustomRequestInit,
+): Promise<{ items: HungerWalletListItem[]; totalCount: number }> {
+  const baseQuery: HungerWalletsQuery = { ...query };
+  delete baseQuery.page;
+  delete baseQuery.pageSize;
+
+  const first = await getHungerWallets(
+    {
+      ...baseQuery,
+      page: 1,
+      pageSize: 100,
+    },
+    init,
+  );
+  const items = first?.items || [];
+  if (items.length === 0) {
+    return { items: [], totalCount: 0 };
+  }
+
+  const all = [...items];
+  const seenIds = new Set<string>();
+  for (const item of items) {
+    const key =
+      item.accountId ||
+      item.accountCode ||
+      item.externalAccountId ||
+      `${seenIds.size}`;
+    seenIds.add(key);
+  }
+
+  const actualBatchSize = Math.max(items.length, 1);
+  const serverTotalCount =
+    typeof first.totalCount === "number" && first.totalCount > 0
+      ? first.totalCount
+      : null;
+
+  if (serverTotalCount !== null && serverTotalCount > items.length) {
+    const totalPages = Math.min(
+      Math.ceil(serverTotalCount / actualBatchSize),
+      100,
+    );
+    const pageNumbers: number[] = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pageNumbers.push(p);
+    }
+    const chunkSize = 4;
+    for (let i = 0; i < pageNumbers.length; i += chunkSize) {
+      const chunk = pageNumbers.slice(i, i + chunkSize);
+      const results = await Promise.allSettled(
+        chunk.map((p) =>
+          getHungerWallets(
+            {
+              ...baseQuery,
+              page: p,
+              pageSize: 100,
+            },
+            init,
+          ),
+        ),
+      );
+      for (const res of results) {
+        if (res.status === "fulfilled" && Array.isArray(res.value?.items)) {
+          for (const item of res.value.items) {
+            const key =
+              item.accountId ||
+              item.accountCode ||
+              item.externalAccountId ||
+              `${seenIds.size}`;
+            if (!seenIds.has(key)) {
+              seenIds.add(key);
+              all.push(item);
+            }
+          }
+        }
+      }
+    }
+  } else if (items.length >= 50) {
+    let p = 2;
+    const maxP = 50;
+    while (p <= maxP) {
+      try {
+        const next = await getHungerWallets(
+          {
+            ...baseQuery,
+            page: p,
+            pageSize: 100,
+          },
+          init,
+        );
+        const nextItems = next?.items || [];
+        if (nextItems.length === 0) break;
+        let addedCount = 0;
+        for (const item of nextItems) {
+          const key =
+            item.accountId ||
+            item.accountCode ||
+            item.externalAccountId ||
+            `${seenIds.size}`;
+          if (!seenIds.has(key)) {
+            seenIds.add(key);
+            all.push(item);
+            addedCount++;
+          }
+        }
+        if (addedCount === 0 || nextItems.length < actualBatchSize) break;
+        p++;
+      } catch {
+        break;
+      }
+    }
+  }
+
+  return { items: all, totalCount: all.length };
 }
 
 export async function exportHungerWallets(

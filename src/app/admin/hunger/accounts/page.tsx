@@ -245,6 +245,12 @@ export default function HungerAccountsPage() {
   );
   const [colFilterVehicleSim, setColFilterVehicleSim] = useState<string[]>([]);
 
+  // Table Header Quick Inline Filters
+  const [headerFilterAccount, setHeaderFilterAccount] = useState("");
+  const [headerFilterOwner, setHeaderFilterOwner] = useState("");
+  const [headerFilterRider, setHeaderFilterRider] = useState("");
+  const [headerFilterCityVehicle, setHeaderFilterCityVehicle] = useState("");
+
   // Lookups (human-readable names — never raw IDs)
   const [cities, setCities] = useState<OperatingCity[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -909,6 +915,31 @@ export default function HungerAccountsPage() {
         if (!match) return false;
       }
 
+      // Table Header Quick Inline Text Filters
+      if (headerFilterAccount.trim()) {
+        const qAcc = headerFilterAccount.trim().toLowerCase();
+        const accLabel = `${acc.externalAccountId || ""} ${acc.accountName || ""} ${acc.accountCode || ""}`.toLowerCase();
+        if (!accLabel.includes(qAcc)) return false;
+      }
+
+      if (headerFilterOwner.trim()) {
+        const qOwn = headerFilterOwner.trim().toLowerCase();
+        const ownText = `${acc.ownerNameAr || ""} ${acc.ownerNameEn || ""} ${acc.ownerNationalId || ""} ${acc.ownerPhoneNumber || ""}`.toLowerCase();
+        if (!ownText.includes(qOwn)) return false;
+      }
+
+      if (headerFilterRider.trim()) {
+        const qRider = headerFilterRider.trim().toLowerCase();
+        const riderText = `${acc.actualRider?.nameAr || ""} ${acc.actualRider?.nameEn || ""} ${acc.actualRider?.iqamaNo || ""} ${acc.actualRider?.phoneNumber || ""} ${acc.assignedRiderNameAr || ""} ${acc.assignedNationalId || ""}`.toLowerCase();
+        if (!riderText.includes(qRider)) return false;
+      }
+
+      if (headerFilterCityVehicle.trim()) {
+        const qCv = headerFilterCityVehicle.trim().toLowerCase();
+        const cvText = `${acc.operatingCityNameAr || ""} ${acc.commercialRegistrationName || ""} ${acc.sponsorNameAr || ""} ${acc.registeredVehiclePlate || ""} ${acc.actualVehiclePlate || ""} ${acc.accountPhoneNumber || ""} ${acc.simPhoneNumber || ""}`.toLowerCase();
+        if (!cvText.includes(qCv)) return false;
+      }
+
       if (!q) return true;
       const haystack = [
         acc.externalAccountId,
@@ -964,6 +995,10 @@ export default function HungerAccountsPage() {
     filterDisposition,
     filterAssignment,
     filterCity,
+    headerFilterAccount,
+    headerFilterOwner,
+    headerFilterRider,
+    headerFilterCityVehicle,
     colFilterAccount,
     colFilterOwner,
     colFilterRider,
@@ -2063,6 +2098,10 @@ export default function HungerAccountsPage() {
           setFilterAssignment("all");
           setFilterCity("all");
           setSearch("");
+          setHeaderFilterAccount("");
+          setHeaderFilterOwner("");
+          setHeaderFilterRider("");
+          setHeaderFilterCityVehicle("");
           setColFilterAccount([]);
           setColFilterOwner([]);
           setColFilterRider([]);
@@ -2075,117 +2114,132 @@ export default function HungerAccountsPage() {
         cityOptions={cityOptions}
       />
 
-      {/* Filters Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <div className="flex flex-1 flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[260px] flex-1 sm:max-w-md">
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث شامل: الحساب، المالك، المندوب، الهوية، الجوال، اللوحة، الحالة..."
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] py-2 pr-9 pl-8 text-xs text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:bg-[var(--surface)] focus:outline-none"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--foreground)] text-sm font-bold"
-                title="مسح البحث"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          <select
-            value={filterDisposition}
-            onChange={(e) => setFilterDisposition(e.target.value)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] px-3 py-2 text-xs font-medium text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
-          >
-            <option value="all">جميع الحالات التشغيلية</option>
-            {HUNGER_DISPOSITIONS.map((d) => (
-              <option key={d.value} value={d.value}>
-                {isEn ? d.labelEn : d.labelAr}
-              </option>
-            ))}
-            <option value="blocked_or_stopped">إيقاف إداري ومحظور معاً</option>
-            <option value="Unknown">غير مصنف (Unknown)</option>
-          </select>
-
-          <select
-            value={filterAssignment}
-            onChange={(e) =>
-              setFilterAssignment(
-                e.target.value as "all" | "assigned" | "unassigned",
-              )
-            }
-            className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] px-3 py-2 text-xs font-medium text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
-          >
-            <option value="all">حالة التكليف: الكل</option>
-            <option value="assigned">مكلف لمندوب فعليًا</option>
-            <option value="unassigned">شاغر (غير مكلف)</option>
-          </select>
-
-          {cities.length > 0 && (
-            <select
-              value={filterCity}
-              onChange={(e) => setFilterCity(e.target.value)}
-              className="rounded-xl border border-[var(--border)] bg-[var(--subtle-bg)] px-3 py-2 text-xs font-medium text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
-            >
-              <option value="all">جميع المدن</option>
-              {cities.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {isEn ? c.globalCityEn || c.globalCityAr : c.globalCityAr}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {(search ||
-            filterDisposition !== "all" ||
-            filterAssignment !== "all" ||
-            filterCity !== "all" ||
-            colFilterAccount.length > 0 ||
-            colFilterOwner.length > 0 ||
-            colFilterRider.length > 0 ||
-            colFilterDisposition.length > 0 ||
-            colFilterCitySponsor.length > 0 ||
-            colFilterVehicleSim.length > 0) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setFilterDisposition("all");
-                setFilterAssignment("all");
-                setFilterCity("all");
-                setColFilterAccount([]);
-                setColFilterOwner([]);
-                setColFilterRider([]);
-                setColFilterDisposition([]);
-                setColFilterCitySponsor([]);
-                setColFilterVehicleSim([]);
-              }}
-              className="text-xs text-[var(--muted)] hover:text-amber-600"
-            >
-              إعادة تعيين الفلاتر
-            </Button>
-          )}
-        </div>
-
-        <div className="text-xs font-semibold text-[var(--muted)]">
-          النتائج المعروضة:{" "}
-          <span className="font-bold text-[var(--foreground)]">
-            {filteredAccounts.length}
-          </span>{" "}
-          من أصل {accounts.length} حساب
-        </div>
-      </div>
-
-      {/* Accounts Table */}
+      {/* Accounts Table Container with Integrated Header Filters */}
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+        {/* Table Card Header Toolbar */}
+        <div className="border-b border-[var(--border)] bg-[var(--subtle-bg)]/40 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-2.5">
+              <div className="relative min-w-[260px] flex-1 sm:max-w-md">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="بحث شامل: الحساب، المالك، المندوب، الهوية، الجوال، اللوحة، الحالة..."
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2 pr-9 pl-8 text-xs text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:outline-none"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--foreground)] text-sm font-bold"
+                    title="مسح البحث"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <select
+                value={filterDisposition}
+                onChange={(e) => setFilterDisposition(e.target.value)}
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
+              >
+                <option value="all">جميع الحالات التشغيلية</option>
+                {HUNGER_DISPOSITIONS.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {isEn ? d.labelEn : d.labelAr}
+                  </option>
+                ))}
+                <option value="blocked_or_stopped">إيقاف إداري ومحظور معاً</option>
+                <option value="Unknown">غير مصنف (Unknown)</option>
+              </select>
+
+              <select
+                value={filterAssignment}
+                onChange={(e) =>
+                  setFilterAssignment(
+                    e.target.value as "all" | "assigned" | "unassigned",
+                  )
+                }
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
+              >
+                <option value="all">حالة التكليف: الكل</option>
+                <option value="assigned">مكلف لمندوب فعليًا</option>
+                <option value="unassigned">شاغر (غير مكلف)</option>
+              </select>
+
+              {cities.length > 0 && (
+                <select
+                  value={filterCity}
+                  onChange={(e) => setFilterCity(e.target.value)}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
+                >
+                  <option value="all">جميع المدن</option>
+                  {cities.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {isEn ? c.globalCityEn || c.globalCityAr : c.globalCityAr}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {(search ||
+                filterDisposition !== "all" ||
+                filterAssignment !== "all" ||
+                filterCity !== "all" ||
+                headerFilterAccount ||
+                headerFilterOwner ||
+                headerFilterRider ||
+                headerFilterCityVehicle ||
+                colFilterAccount.length > 0 ||
+                colFilterOwner.length > 0 ||
+                colFilterRider.length > 0 ||
+                colFilterDisposition.length > 0 ||
+                colFilterCitySponsor.length > 0 ||
+                colFilterVehicleSim.length > 0) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setFilterDisposition("all");
+                    setFilterAssignment("all");
+                    setFilterCity("all");
+                    setHeaderFilterAccount("");
+                    setHeaderFilterOwner("");
+                    setHeaderFilterRider("");
+                    setHeaderFilterCityVehicle("");
+                    setColFilterAccount([]);
+                    setColFilterOwner([]);
+                    setColFilterRider([]);
+                    setColFilterDisposition([]);
+                    setColFilterCitySponsor([]);
+                    setColFilterVehicleSim([]);
+                  }}
+                  className="text-xs text-[var(--muted)] hover:text-amber-600"
+                >
+                  إعادة تعيين الفلاتر
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">
+              <span>
+                النتائج المعروضة:{" "}
+                <span className="font-bold text-[var(--foreground)]">
+                  {filteredAccounts.length}
+                </span>{" "}
+                من أصل {accounts.length} حساب
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <CheckCircle2 className="h-3 w-3" /> صفحة واحدة
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
             <thead className="border-b-2 border-slate-200 bg-slate-100/95 text-[11px] font-black text-slate-900 dark:border-slate-700 dark:bg-slate-800/95 dark:text-slate-100">
@@ -2271,6 +2325,138 @@ export default function HungerAccountsPage() {
                 </th>
                 <th className="px-4 py-3.5 text-right whitespace-nowrap">
                   الإجراءات
+                </th>
+              </tr>
+
+              {/* Table Header Inline Filters */}
+              <tr className="border-t border-b border-[var(--border)] bg-slate-50/75 dark:bg-slate-900/60">
+                <th className="px-3 py-2 font-normal">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={headerFilterAccount}
+                      onChange={(e) => setHeaderFilterAccount(e.target.value)}
+                      placeholder="فلترة برقم الحساب أو الاسم..."
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 pr-7 pl-6 text-[11px] font-normal text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:outline-none"
+                    />
+                    {headerFilterAccount && (
+                      <button
+                        type="button"
+                        onClick={() => setHeaderFilterAccount("")}
+                        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--foreground)] text-xs font-bold"
+                        title="إلغاء التصفية"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </th>
+                <th className="px-3 py-2 font-normal">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={headerFilterOwner}
+                      onChange={(e) => setHeaderFilterOwner(e.target.value)}
+                      placeholder="فلترة بالمالك أو الهوية..."
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 pr-7 pl-6 text-[11px] font-normal text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:outline-none"
+                    />
+                    {headerFilterOwner && (
+                      <button
+                        type="button"
+                        onClick={() => setHeaderFilterOwner("")}
+                        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--foreground)] text-xs font-bold"
+                        title="إلغاء التصفية"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </th>
+                <th className="px-3 py-2 font-normal">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={headerFilterRider}
+                      onChange={(e) => setHeaderFilterRider(e.target.value)}
+                      placeholder="فلترة بالمندوب..."
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 pr-7 pl-6 text-[11px] font-normal text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:outline-none"
+                    />
+                    {headerFilterRider && (
+                      <button
+                        type="button"
+                        onClick={() => setHeaderFilterRider("")}
+                        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--foreground)] text-xs font-bold"
+                        title="إلغاء التصفية"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </th>
+                <th className="px-3 py-2 font-normal">
+                  <select
+                    value={filterDisposition}
+                    onChange={(e) => setFilterDisposition(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11px] font-normal text-[var(--foreground)] focus:border-amber-500 focus:outline-none"
+                  >
+                    <option value="all">كل الحالات</option>
+                    {HUNGER_DISPOSITIONS.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {isEn ? d.labelEn : d.labelAr}
+                      </option>
+                    ))}
+                    <option value="blocked_or_stopped">إيقاف / حظر</option>
+                    <option value="Unknown">غير مصنف</option>
+                  </select>
+                </th>
+                <th className="px-3 py-2 font-normal">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={headerFilterCityVehicle}
+                      onChange={(e) =>
+                        setHeaderFilterCityVehicle(e.target.value)
+                      }
+                      placeholder="المدينة / اللوحة / الشريحة..."
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 pr-7 pl-6 text-[11px] font-normal text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-amber-500 focus:outline-none"
+                    />
+                    {headerFilterCityVehicle && (
+                      <button
+                        type="button"
+                        onClick={() => setHeaderFilterCityVehicle("")}
+                        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--foreground)] text-xs font-bold"
+                        title="إلغاء التصفية"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </th>
+                <th className="px-3 py-2 text-center font-normal">
+                  {(headerFilterAccount ||
+                    headerFilterOwner ||
+                    headerFilterRider ||
+                    headerFilterCityVehicle ||
+                    filterDisposition !== "all") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHeaderFilterAccount("");
+                        setHeaderFilterOwner("");
+                        setHeaderFilterRider("");
+                        setHeaderFilterCityVehicle("");
+                        setFilterDisposition("all");
+                      }}
+                      className="rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400"
+                      title="مسح فلاتر رأس الجدول"
+                    >
+                      مسح
+                    </button>
+                  )}
                 </th>
               </tr>
             </thead>
@@ -2691,7 +2877,7 @@ export default function HungerAccountsPage() {
           <div className="flex items-center gap-2 text-[var(--muted)]">
             <span className="inline-flex items-center gap-1.5 font-medium text-[var(--foreground)]">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              عرض كافة الحسابات في صفحة واحدة
+              يتم عرض جميع حسابات هنقرستيشن بالكامل في صفحة واحدة
             </span>
             <span>—</span>
             <span>
@@ -2707,6 +2893,11 @@ export default function HungerAccountsPage() {
                 {filteredAccounts.length}
               </strong>
             </span>
+            {filteredAccounts.length !== accounts.length && (
+              <span className="text-[var(--muted)] text-[11px]">
+                (تمت التصفية من إجمالي {accounts.length} حساب)
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -2714,6 +2905,10 @@ export default function HungerAccountsPage() {
               filterDisposition !== "all" ||
               filterAssignment !== "all" ||
               filterCity !== "all" ||
+              headerFilterAccount ||
+              headerFilterOwner ||
+              headerFilterRider ||
+              headerFilterCityVehicle ||
               colFilterAccount.length > 0 ||
               colFilterOwner.length > 0 ||
               colFilterRider.length > 0 ||
@@ -2728,6 +2923,10 @@ export default function HungerAccountsPage() {
                   setFilterDisposition("all");
                   setFilterAssignment("all");
                   setFilterCity("all");
+                  setHeaderFilterAccount("");
+                  setHeaderFilterOwner("");
+                  setHeaderFilterRider("");
+                  setHeaderFilterCityVehicle("");
                   setColFilterAccount([]);
                   setColFilterOwner([]);
                   setColFilterRider([]);
