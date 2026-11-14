@@ -402,8 +402,39 @@ export const archiveInsurancePolicy = (id: string, reason: string, rowVersion: s
     body: JSON.stringify({ reason, rowVersion }),
   });
 
-export type SourceTypeEnum = 0 | 1 | 2 | 3 | 4 | "EmployeeDocument" | "DriverLicense" | "RiderCard" | "HealthCard" | "MedicalInsurance" | string | number;
-export type DueStatusEnum = 0 | 1 | 2 | 3 | 4 | "Valid" | "Upcoming" | "DueToday" | "Expired" | "Missing" | string | number;
+export type EmployeeExpiryComplianceSourceType =
+  | 1 // EmployeeDocument
+  | 2 // DriverLicense
+  | 3 // RiderCard
+  | 4 // HealthCard
+  | 5; // MedicalInsurance
+
+export type EmployeeExpiryComplianceDueStatus =
+  | 1 // Valid
+  | 2 // Upcoming
+  | 3 // DueToday
+  | 4 // Expired
+  | 5; // Missing
+
+export type SourceTypeEnum =
+  | EmployeeExpiryComplianceSourceType
+  | "EmployeeDocument"
+  | "DriverLicense"
+  | "RiderCard"
+  | "HealthCard"
+  | "MedicalInsurance"
+  | string
+  | number;
+
+export type DueStatusEnum =
+  | EmployeeExpiryComplianceDueStatus
+  | "Valid"
+  | "Upcoming"
+  | "DueToday"
+  | "Expired"
+  | "Missing"
+  | string
+  | number;
 
 export type ExpiryComplianceItem = {
   employeeId: string;
@@ -430,11 +461,18 @@ export type ExpiryComplianceItem = {
 export function isDocumentNotUploaded(item: {
   sourceStatus?: string | null;
   employeeDocumentId?: string | null;
+  sourceType?: number | string | null;
+  dueStatus?: number | string | null;
 }): boolean {
-  return (
-    String(item?.sourceStatus ?? "").trim().toLowerCase() === "missing" &&
-    (item?.employeeDocumentId === null || item?.employeeDocumentId === undefined)
-  );
+  const statusStr = String(item?.sourceStatus ?? "").trim().toLowerCase();
+  const dueStatusNum = Number(item?.dueStatus);
+  const dueStatusStr = String(item?.dueStatus ?? "").trim().toLowerCase();
+  const isMissing =
+    statusStr === "missing" ||
+    dueStatusNum === 5 ||
+    dueStatusStr === "missing";
+
+  return isMissing && (item?.employeeDocumentId === null || item?.employeeDocumentId === undefined);
 }
 
 export type ExpiryComplianceSummary = {
@@ -447,7 +485,18 @@ export type ExpiryComplianceSummary = {
 
 export type ExpiryComplianceResponse = {
   items: ExpiryComplianceItem[];
+  statusCounts: ExpiryComplianceSummary;
+  summary?: ExpiryComplianceSummary; // backward-compatibility alias
+  totalCount: number;
+  checkDate: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type EmployeeExpiryCompliancePageResponse = {
+  items: ExpiryComplianceItem[];
   summary: ExpiryComplianceSummary;
+  statusCounts?: ExpiryComplianceSummary;
   page: number;
   pageSize: number;
   totalCount: number;
@@ -469,28 +518,67 @@ export type ExpiryComplianceParams = {
   pageSize?: number;
 };
 
-export function getComplianceExpiries(params: ExpiryComplianceParams = {}) {
+export async function getComplianceExpiries(params: ExpiryComplianceParams = {}) {
   const query = new URLSearchParams();
   if (params.checkDate) query.set("checkDate", params.checkDate);
   if (params.employeeId) query.set("employeeId", params.employeeId);
   if (params.riderProfileId) query.set("riderProfileId", params.riderProfileId);
   if (params.sourceType && params.sourceType !== "all") query.set("sourceType", params.sourceType);
-  if (params.categoryCode && params.categoryCode !== "all") query.set("categoryCode", params.categoryCode);
-  if (params.documentTypeId && params.documentTypeId !== "all") query.set("documentTypeId", params.documentTypeId);
   if (params.dueStatus && params.dueStatus !== "all") query.set("dueStatus", params.dueStatus);
   if (params.employeeStatus && params.employeeStatus !== "all") query.set("employeeStatus", params.employeeStatus);
   if (params.operatingCityId && params.operatingCityId !== "all") query.set("operatingCityId", params.operatingCityId);
   if (params.sponsorId && params.sponsorId !== "all") query.set("sponsorId", params.sponsorId);
-  if (params.page) query.set("page", String(params.page));
-  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+  // Do not send legacy page/pageSize on dashboard endpoint
 
   const str = query.toString();
-  return authFetch<ExpiryComplianceResponse>(`/api/compliance/expiries${str ? `?${str}` : ""}`);
+  const res = await authFetch<ExpiryComplianceResponse>(`/api/compliance/expiries${str ? `?${str}` : ""}`);
+
+  const counts: ExpiryComplianceSummary = res?.statusCounts || res?.summary || {
+    valid: 0,
+    upcoming: 0,
+    dueToday: 0,
+    expired: 0,
+    missing: 0,
+  };
+
+  const items = Array.isArray(res?.items) ? res.items : [];
+
+  return {
+    ...res,
+    items,
+    statusCounts: counts,
+    summary: counts,
+    totalCount: typeof res?.totalCount === "number" ? res.totalCount : items.length,
+    checkDate: res?.checkDate || params.checkDate || "",
+  };
 }
 
-export function getEmployeeComplianceExpiries(employeeId: string, checkDate?: string) {
+export async function getEmployeeComplianceExpiries(employeeId: string, checkDate?: string) {
   const str = checkDate ? `?checkDate=${encodeURIComponent(checkDate)}` : "";
-  return authFetch<ExpiryComplianceResponse>(`/api/employees/${encodeURIComponent(employeeId)}/compliance-expiries${str}`);
+  const res = await authFetch<EmployeeExpiryCompliancePageResponse>(
+    `/api/employees/${encodeURIComponent(employeeId)}/compliance-expiries${str}`
+  );
+
+  const counts: ExpiryComplianceSummary = res?.summary || res?.statusCounts || {
+    valid: 0,
+    upcoming: 0,
+    dueToday: 0,
+    expired: 0,
+    missing: 0,
+  };
+
+  const items = Array.isArray(res?.items) ? res.items : [];
+
+  return {
+    ...res,
+    items,
+    summary: counts,
+    statusCounts: counts,
+    page: res?.page || 1,
+    pageSize: res?.pageSize || 200,
+    totalCount: typeof res?.totalCount === "number" ? res.totalCount : items.length,
+    checkDate: res?.checkDate || checkDate || "",
+  };
 }
 
 

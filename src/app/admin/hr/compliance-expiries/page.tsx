@@ -112,28 +112,55 @@ function formatCategoryName(
 }
 
 function getSourceTypeMeta(sourceType: unknown) {
-  const val = String(sourceType ?? "").toLowerCase();
-  if (val === "0" || val === "employeedocument") {
-    return { ar: "وثيقة موظف", en: "Employee Document", badge: "bg-blue-50 text-blue-700 border-blue-200" };
+  const num = Number(sourceType);
+  const val = String(sourceType ?? "").trim().toLowerCase();
+
+  if (num === 1 || val === "employeedocument") {
+    return {
+      ar: "وثيقة موظف",
+      en: "Employee Document",
+      badge: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
+    };
   }
-  if (val === "1" || val === "driverlicense") {
-    return { ar: "رخصة قيادة", en: "Driver License", badge: "bg-indigo-50 text-indigo-700 border-indigo-200" };
+  if (num === 2 || val === "driverlicense") {
+    return {
+      ar: "رخصة قيادة",
+      en: "Driver License",
+      badge: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800",
+    };
   }
-  if (val === "2" || val === "ridercard") {
-    return { ar: "بطاقة مندوب", en: "Rider Card", badge: "bg-purple-50 text-purple-700 border-purple-200" };
+  if (num === 3 || val === "ridercard") {
+    return {
+      ar: "بطاقة تشغيل / مندوب",
+      en: "Rider Card",
+      badge: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+    };
   }
-  if (val === "3" || val === "healthcard") {
-    return { ar: "شهادة صحية", en: "Health Card", badge: "bg-teal-50 text-teal-700 border-teal-200" };
+  if (num === 4 || val === "healthcard") {
+    return {
+      ar: "شهادة صحية",
+      en: "Health Card",
+      badge: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800",
+    };
   }
-  if (val === "4" || val === "medicalinsurance") {
-    return { ar: "تأمين طبي", en: "Medical Insurance", badge: "bg-cyan-50 text-cyan-700 border-cyan-200" };
+  if (num === 5 || val === "medicalinsurance") {
+    return {
+      ar: "تأمين طبي",
+      en: "Medical Insurance",
+      badge: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800",
+    };
   }
-  return { ar: "وثيقة", en: "Document", badge: "bg-slate-100 text-slate-700 border-slate-200" };
+  return {
+    ar: "وثيقة",
+    en: "Document",
+    badge: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+  };
 }
 
 function getDueStatusMeta(dueStatus: unknown, daysRemaining: number | null, isDocNotUploaded: boolean = false) {
   if (isDocNotUploaded) {
     return {
+      numericCode: 5,
       rawStatus: "Missing" as const,
       ar: "الوثيقة غير مرفوعة",
       en: "Document not uploaded",
@@ -142,39 +169,80 @@ function getDueStatusMeta(dueStatus: unknown, daysRemaining: number | null, isDo
     };
   }
 
-  let code: 0 | 1 | 2 | 3 | 4;
+  const num = Number(dueStatus);
+  const val = String(dueStatus ?? "").trim().toLowerCase();
+  let code: 1 | 2 | 3 | 4 | 5;
 
-  if (daysRemaining === null) {
-    code = 4; // Missing
+  if (num === 1 || val === "valid") {
+    code = 1;
+  } else if (num === 2 || val === "upcoming") {
+    code = 2;
+  } else if (num === 3 || val === "duetoday") {
+    code = 3;
+  } else if (num === 4 || val === "expired") {
+    code = 4;
+  } else if (num === 5 || val === "missing") {
+    code = 5;
+  } else if (daysRemaining === null) {
+    code = 5; // Missing
   } else if (daysRemaining < 0) {
-    code = 3; // Expired
+    code = 4; // Expired
   } else if (daysRemaining === 0) {
-    code = 2; // Due Today
+    code = 3; // Due Today
   } else if (daysRemaining >= 1 && daysRemaining <= 30) {
-    code = 1; // Upcoming
+    code = 2; // Upcoming
   } else if (daysRemaining > 30) {
-    code = 0; // Valid
+    code = 1; // Valid
   } else {
-    const val = String(dueStatus ?? "").toLowerCase();
-    if (val === "0" || val === "valid") code = 0;
-    else if (val === "1" || val === "upcoming") code = 1;
-    else if (val === "2" || val === "duetoday") code = 2;
-    else if (val === "3" || val === "expired") code = 3;
-    else if (val === "4" || val === "missing") code = 4;
-    else code = 0;
+    code = 1;
   }
 
   switch (code) {
-    case 0:
-      return { rawStatus: "Valid" as const, ar: "ساري", en: "Valid", color: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: CheckCircle2 };
     case 1:
-      return { rawStatus: "Upcoming" as const, ar: "قريب الانتهاء", en: "Upcoming", color: "bg-amber-100 text-amber-800 border-amber-300", icon: Clock };
+      return {
+        numericCode: 1,
+        rawStatus: "Valid" as const,
+        ar: "ساري",
+        en: "Valid",
+        color: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+        icon: CheckCircle2,
+      };
     case 2:
-      return { rawStatus: "DueToday" as const, ar: "ينتهي اليوم", en: "Due Today", color: "bg-orange-100 text-orange-800 border-orange-300", icon: AlertTriangle };
+      return {
+        numericCode: 2,
+        rawStatus: "Upcoming" as const,
+        ar: "قرب الانتهاء",
+        en: "Upcoming",
+        color: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+        icon: Clock,
+      };
     case 3:
-      return { rawStatus: "Expired" as const, ar: "منتهي", en: "Expired", color: "bg-red-100 text-red-800 border-red-300", icon: AlertCircle };
+      return {
+        numericCode: 3,
+        rawStatus: "DueToday" as const,
+        ar: "ينتهي اليوم",
+        en: "Due Today",
+        color: "bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800",
+        icon: AlertTriangle,
+      };
     case 4:
-      return { rawStatus: "Missing" as const, ar: "غير مضاف", en: "Missing", color: "bg-slate-100 text-slate-700 border-slate-300", icon: FileQuestion };
+      return {
+        numericCode: 4,
+        rawStatus: "Expired" as const,
+        ar: "منتهي",
+        en: "Expired",
+        color: "bg-red-100 text-red-800 border-red-300 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800",
+        icon: AlertCircle,
+      };
+    case 5:
+      return {
+        numericCode: 5,
+        rawStatus: "Missing" as const,
+        ar: "غير مصنف",
+        en: "Missing",
+        color: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
+        icon: FileQuestion,
+      };
   }
 }
 
@@ -424,10 +492,22 @@ export default function ExpiryCompliancePage() {
 
   const documentTypeOptions = useMemo(() => {
     const opts: { value: string; label: string; sublabel?: string }[] = [
-      { value: "all", label: locale === "en" ? "All Document Types" : "جميع أنواع الوثائق" },
+      { value: "all", label: locale === "en" ? "All Sources & Document Types" : "جميع المصادر وأنواع الوثائق" },
+      { value: "EmployeeDocument", label: locale === "en" ? "Employee Documents" : "وثائق الموظفين" },
+      { value: "DriverLicense", label: locale === "en" ? "Driver Licenses" : "رخص القيادة" },
+      { value: "RiderCard", label: locale === "en" ? "Rider / Operating Cards" : "بطاقات التشغيل / المناديب" },
+      { value: "HealthCard", label: locale === "en" ? "Health Cards" : "الشهادات الصحية" },
+      { value: "MedicalInsurance", label: locale === "en" ? "Medical Insurance" : "التأمين الطبي" },
     ];
 
-    const seenValues = new Set<string>();
+    const seenValues = new Set<string>([
+      "all",
+      "employeedocument",
+      "driverlicense",
+      "ridercard",
+      "healthcard",
+      "medicalinsurance",
+    ]);
 
     // 1. Add all document types from backend catalog (/api/hr-catalogs/document-types)
     for (const dt of documentTypes) {
@@ -445,10 +525,8 @@ export default function ExpiryCompliancePage() {
     }
 
     // 2. Also dynamically include any categories present in current compliance data items
-    // (e.g. Driver License, Medical Insurance, etc., so they are available dynamically if returned by backend)
     if (data?.items) {
       for (const item of data.items) {
-        if (isGeneralDocument(item)) continue;
         const catCode = (item.categoryCode || "").trim();
         const catNameAr = (item.categoryNameAr || "").trim();
         const catNameEn = (item.categoryNameEn || "").trim();
@@ -485,51 +563,33 @@ export default function ExpiryCompliancePage() {
     setLoading(true);
     setError("");
     try {
+      const canonicalSourceTypes = [
+        "EmployeeDocument",
+        "DriverLicense",
+        "RiderCard",
+        "HealthCard",
+        "MedicalInsurance",
+      ];
+      const apiSourceType = canonicalSourceTypes.includes(sourceType)
+        ? sourceType
+        : undefined;
+
       const res = await getComplianceExpiries({
         checkDate,
-        page: 1,
-        pageSize: 1000,
+        sourceType: apiSourceType,
+        employeeStatus: employeeStatus !== "all" ? employeeStatus : undefined,
+        operatingCityId: operatingCityId !== "all" ? operatingCityId : undefined,
+        sponsorId: sponsorId !== "all" ? sponsorId : undefined,
       });
 
-      let allItems = res.items || [];
-      const total = res.totalCount ?? allItems.length;
-
-      // If backend reports more items than returned in page 1, fetch remaining pages in parallel
-      if (total > allItems.length) {
-        const totalPages = Math.ceil(total / 1000);
-        const pagePromises: Promise<ExpiryComplianceResponse | null>[] = [];
-        for (let p = 2; p <= totalPages; p++) {
-          pagePromises.push(
-            getComplianceExpiries({
-              checkDate,
-              page: p,
-              pageSize: 1000,
-            }).catch((err) => {
-              console.warn(`Failed to load compliance expiries page ${p}:`, err);
-              return null;
-            })
-          );
-        }
-        const remaining = await Promise.all(pagePromises);
-        for (const r of remaining) {
-          if (r?.items) {
-            allItems = allItems.concat(r.items);
-          }
-        }
-      }
-
-      setData({
-        ...res,
-        items: allItems,
-        totalCount: allItems.length,
-      });
+      setData(res);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : locale === "en"
             ? "Failed to load compliance expiries data."
-            : "تعذر تحميل بيانات امتثال الصلاحيات.",
+            : "تعذر تحميل بيانات امتثال الصلاحيات."
       );
     } finally {
       setLoading(false);
@@ -539,53 +599,60 @@ export default function ExpiryCompliancePage() {
   useEffect(() => {
     if (!isRestored) return;
     void loadData();
-  }, [isRestored, checkDate]);
+  }, [isRestored, checkDate, sourceType, employeeStatus, operatingCityId, sponsorId]);
 
-  // Base items: all non-general documents filtered by metadata filters (doc type, employee status, city, sponsor, search)
+  // Base items: all items filtered by client-side filters (custom doc type, search)
   // excluding dueStatus, so that the KPI summary cards can show counts for Valid, Upcoming, DueToday, Expired, Missing
   const baseItems = useMemo(() => {
     if (!data?.items) return [];
-    let list = data.items.filter((x) => !isGeneralDocument(x));
+    let list = data.items;
 
-    // Filter by selected document type / category
+    // Filter by selected document type / category if it wasn't filtered by the backend
     if (sourceType && sourceType !== "all") {
-      const target = sourceType.trim().toLowerCase();
-      const matchedDocType = documentTypes.find(
-        (dt) =>
-          (dt.code && dt.code.toLowerCase() === target) ||
-          (dt.id && dt.id.toLowerCase() === target) ||
-          (dt.nameAr && dt.nameAr.toLowerCase() === target) ||
-          (dt.nameEn && dt.nameEn.toLowerCase() === target)
-      );
+      const canonicalSourceTypes = [
+        "EmployeeDocument",
+        "DriverLicense",
+        "RiderCard",
+        "HealthCard",
+        "MedicalInsurance",
+      ];
+      if (!canonicalSourceTypes.includes(sourceType)) {
+        const target = sourceType.trim().toLowerCase();
+        const matchedDocType = documentTypes.find(
+          (dt) =>
+            (dt.code && dt.code.toLowerCase() === target) ||
+            (dt.id && dt.id.toLowerCase() === target) ||
+            (dt.nameAr && dt.nameAr.toLowerCase() === target) ||
+            (dt.nameEn && dt.nameEn.toLowerCase() === target)
+        );
 
-      list = list.filter((x) => {
-        const itemCode = (x.categoryCode || "").trim().toLowerCase();
-        const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
-        const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
-        const itemSourceTypeStr = String(x.sourceType ?? "").trim().toLowerCase();
-        const isDocNotUploaded = isDocumentNotUploaded(x);
+        list = list.filter((x) => {
+          const itemCode = (x.categoryCode || "").trim().toLowerCase();
+          const itemNameAr = (x.categoryNameAr || "").trim().toLowerCase();
+          const itemNameEn = (x.categoryNameEn || "").trim().toLowerCase();
+          const isDocNotUploaded = isDocumentNotUploaded(x);
 
-        if (itemCode === target || itemNameAr === target || itemNameEn === target) return true;
-        if (itemSourceTypeStr === target) return true;
+          if (itemCode === target || itemNameAr === target || itemNameEn === target) return true;
 
-        // When sourceStatus === "Missing" and employeeDocumentId === null, sourceId is the document-type ID
-        if (isDocNotUploaded && x.sourceId) {
-          const sid = x.sourceId.toLowerCase();
-          if (sid === target) return true;
-          if (matchedDocType && matchedDocType.id.toLowerCase() === sid) return true;
-        }
+          // When sourceStatus === "Missing" and employeeDocumentId === null, sourceId is the document-type ID
+          if (isDocNotUploaded && x.sourceId) {
+            const sid = x.sourceId.toLowerCase();
+            if (sid === target) return true;
+            if (matchedDocType && matchedDocType.id.toLowerCase() === sid) return true;
+          }
 
-        if (matchedDocType) {
-          if (matchedDocType.code && itemCode === matchedDocType.code.toLowerCase()) return true;
-          if (matchedDocType.nameAr && itemNameAr === matchedDocType.nameAr.toLowerCase()) return true;
-          if (matchedDocType.nameEn && itemNameEn === matchedDocType.nameEn.toLowerCase()) return true;
-        }
+          if (matchedDocType) {
+            if (matchedDocType.code && itemCode === matchedDocType.code.toLowerCase()) return true;
+            if (matchedDocType.nameAr && itemNameAr === matchedDocType.nameAr.toLowerCase()) return true;
+            if (matchedDocType.nameEn && itemNameEn === matchedDocType.nameEn.toLowerCase()) return true;
+          }
 
-        return false;
-      });
+          return false;
+        });
+      }
     }
 
-    // Filter by employee status
+    // Filter by employee status (fallback client-side verification)
     if (employeeStatus && employeeStatus !== "all") {
       const target = employeeStatus.trim().toLowerCase();
       list = list.filter((x) => {
@@ -597,7 +664,7 @@ export default function ExpiryCompliancePage() {
       });
     }
 
-    // Filter by operating city
+    // Filter by operating city (fallback client-side verification)
     if (operatingCityId && operatingCityId !== "all") {
       list = list.filter((x) => {
         const emp = employeeMap.get(x.employeeId);
@@ -605,7 +672,7 @@ export default function ExpiryCompliancePage() {
       });
     }
 
-    // Filter by sponsor
+    // Filter by sponsor (fallback client-side verification)
     if (sponsorId && sponsorId !== "all") {
       list = list.filter((x) => {
         const emp = employeeMap.get(x.employeeId);
@@ -653,6 +720,10 @@ export default function ExpiryCompliancePage() {
 
   // Compute KPI summary based on baseItems (all filters except dueStatus)
   const summary: ExpiryComplianceSummary = useMemo(() => {
+    // If no client-side search or sub-doctype filter, use server statusCounts directly
+    if (!search.trim() && data?.statusCounts) {
+      return data.statusCounts;
+    }
     const s = { valid: 0, upcoming: 0, dueToday: 0, expired: 0, missing: 0 };
     for (const item of baseItems) {
       const meta = getDueStatusMeta(item.dueStatus, item.daysRemaining, isDocumentNotUploaded(item));
@@ -663,7 +734,7 @@ export default function ExpiryCompliancePage() {
       else if (meta.rawStatus === "Missing") s.missing++;
     }
     return s;
-  }, [baseItems]);
+  }, [baseItems, data?.statusCounts, search]);
 
   // Filtered items: baseItems further filtered by dueStatus (KPI card filter)
   const filteredItems = useMemo(() => {
@@ -910,7 +981,7 @@ export default function ExpiryCompliancePage() {
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-700">
-              {locale === "en" ? "Upcoming" : "قريب الانتهاء"}
+              {locale === "en" ? "Upcoming" : "قرب الانتهاء"}
             </span>
             <Clock size={18} className="text-amber-600" />
           </div>
@@ -979,13 +1050,13 @@ export default function ExpiryCompliancePage() {
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-700">
-              {locale === "en" ? "Missing" : "غير مضاف"}
+              {locale === "en" ? "Missing" : "غير مصنف"}
             </span>
             <FileQuestion size={18} className="text-slate-600" />
           </div>
           <p className="mt-2 text-3xl font-black text-slate-900">{summary.missing}</p>
           <p className="mt-1 text-[11px] text-[var(--muted)]">
-            {locale === "en" ? "Missing required date" : "وثيقة بلا تاريخ انتهاء محدد"}
+            {locale === "en" ? "Missing required expiry" : "وثيقة بلا تاريخ انتهاء أو غير مرفوعة"}
           </p>
         </button>
       </div>
@@ -1036,10 +1107,10 @@ export default function ExpiryCompliancePage() {
                 options={[
                   { value: "all", label: locale === "en" ? "All Statuses" : "جميع الحالات" },
                   { value: "Valid", label: locale === "en" ? "Valid (>30 days)" : "ساري (>30 يوماً)" },
-                  { value: "Upcoming", label: locale === "en" ? "Upcoming (1-30 days)" : "قريب الانتهاء (1-30 يوماً)" },
+                  { value: "Upcoming", label: locale === "en" ? "Upcoming (1-30 days)" : "قرب الانتهاء (1-30 يوماً)" },
                   { value: "DueToday", label: locale === "en" ? "Due Today" : "ينتهي اليوم" },
                   { value: "Expired", label: locale === "en" ? "Expired" : "منتهي" },
-                  { value: "Missing", label: locale === "en" ? "Missing Date" : "غير مضاف" },
+                  { value: "Missing", label: locale === "en" ? "Missing" : "غير مصنف" },
                 ]}
                 placeholder={locale === "en" ? "All Statuses" : "جميع الحالات"}
               />
@@ -1191,7 +1262,7 @@ export default function ExpiryCompliancePage() {
 
                   return (
                     <tr
-                      key={`${item.employeeId}-${item.sourceId}-${item.categoryCode}`}
+                      key={`${item.employeeId}-${item.sourceType}-${item.sourceId}`}
                       className={`hover:bg-slate-50/60 ${isDocNotUploaded ? "bg-rose-50/20" : ""}`}
                     >
                       {/* Employee Name */}
