@@ -21,12 +21,10 @@ import {
   getHungerErrorMessage,
   type HungerAccountItem,
   type HungerExceptionItem,
-  type HungerExceptionStatus,
 } from "@/lib/hunger/api";
 import { listEmployees } from "@/lib/workforce/api";
 import type { Employee } from "@/lib/workforce/types";
 import {
-  AlertTriangle,
   ArrowLeftRight,
   CheckCircle2,
   Clock,
@@ -866,7 +864,7 @@ export default function HungerHandoversPage() {
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         title="طلب استثناء تسليم محفظة برصيد غير صفري (NonZeroHandover)"
-        size="lg"
+        maxWidth="max-w-2xl"
       >
         <div className="space-y-4 text-xs">
           <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
@@ -1018,7 +1016,7 @@ export default function HungerHandoversPage() {
             ? "اعتماد استثناء التسليم (NonZeroHandover)"
             : "رفض استثناء التسليم"
         }
-        size="md"
+        maxWidth="max-w-lg"
       >
         <div className="space-y-4 text-xs">
           {decisionTarget && (
@@ -1096,7 +1094,7 @@ export default function HungerHandoversPage() {
         isOpen={detailModalOpen}
         onClose={() => setDetailModalOpen(false)}
         title="تفاصيل استثناء تسليم المحفظة (NonZeroHandover)"
-        size="lg"
+        maxWidth="max-w-2xl"
       >
         {detailItem && (
           <div className="space-y-4 text-xs">
