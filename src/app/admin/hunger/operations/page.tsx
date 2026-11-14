@@ -8,7 +8,7 @@ import { translate } from "@/lib/i18n";
 import {
   getHungerPlatform,
   getAllHungerAccounts,
-  getHungerOperationsReport,
+  getAllHungerOperationsReport,
   exportHungerOperationsReport,
   downloadHungerOperationsTemplate,
   previewHungerOperationsImport,
@@ -280,20 +280,18 @@ export default function HungerOperationsPage() {
     [sponsors],
   );
 
-  // Fetch Operations Report
+  // Fetch Operations Report (loads all records across all pages)
   const loadOperations = useCallback(async () => {
     await Promise.resolve();
     if (!canRead) return;
     setOpsLoading(true);
     try {
-      const res = await getHungerOperationsReport({
+      const res = await getAllHungerOperationsReport({
         from: fromDate,
         through: throughDate,
         accountId: selectedAccountId || undefined,
         riderId: selectedRiderId || undefined,
         captainClassification: captainClassificationFilter.trim() || undefined,
-        page: 1,
-        pageSize: 100,
       });
       setOpsReport(res);
       setOpsRows(res.items);
@@ -1067,6 +1065,14 @@ export default function HungerOperationsPage() {
 
           {/* Operations Table */}
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+            <div className="flex flex-wrap items-center justify-between border-b border-[var(--border)] px-4 py-2.5 bg-slate-50/70 dark:bg-slate-900/60 text-xs">
+              <span className="font-bold text-[var(--foreground)]">
+                سجلات التشغيل اليومي
+              </span>
+              <span className="text-[var(--muted)]">
+                يتم عرض جميع السجلات بالكامل في صفحة واحدة ({filteredOpsRows.length} من أصل {opsRows.length} سجل)
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs">
                 <thead className="border-b-2 border-slate-200 bg-slate-100/95 text-[11px] font-black text-slate-900 dark:border-slate-700 dark:bg-slate-800/95 dark:text-slate-100">

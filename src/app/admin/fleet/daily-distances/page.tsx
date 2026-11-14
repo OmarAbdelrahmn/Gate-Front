@@ -47,12 +47,17 @@ import {
   getAppliedSourceInfo,
   getDailyDistanceErrorMessage,
   getGpsRowErrorMessage,
+  GpsImportConflictError,
   type VehicleDailyDistanceItem,
   type VehicleDailyDistancesResponse,
   type VehicleDailyReportDay,
   type SaveManualOdometerRequest,
   type GpsImportResponse,
   type GpsImportLogItem,
+  type GpsImportErrorItem,
+  type GpsDistanceImportOdometerDetails,
+  type GpsDistanceImportOdometerConflict,
+  type GpsImportConflictErrorResponse,
 } from "@/lib/fleet/daily-distances-api";
 import {
   TableHeaderColumnFilter,
@@ -216,6 +221,7 @@ export default function VehicleDailyDistancesPage() {
   const [gpsFile, setGpsFile] = useState<File | null>(null);
   const [expectedDate, setExpectedDate] = useState<string>(workDate);
   const [importResult, setImportResult] = useState<GpsImportResponse | null>(null);
+  const [importConflict, setImportConflict] = useState<GpsImportConflictErrorResponse | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
   // GPS Import Logs Modal State
@@ -732,6 +738,7 @@ export default function VehicleDailyDistancesPage() {
     setGpsFile(null);
     setExpectedDate(workDate);
     setImportResult(null);
+    setImportConflict(null);
     setIsGpsImportOpen(true);
   };
 
@@ -745,10 +752,12 @@ export default function VehicleDailyDistancesPage() {
 
     setIsUploading(true);
     setImportResult(null);
+    setImportConflict(null);
 
     try {
       const res = await importGpsFile(gpsFile, expectedDate);
       setImportResult(res);
+      setImportConflict(null);
       toast.success(
         "تم معالجة التقرير",
         `تم مطابقة ${res.matchedRows} مركبة بنجاح (${res.unmatchedRows} غير مطابقة، ${res.invalidRows} غير صالحة).`
@@ -757,33 +766,93 @@ export default function VehicleDailyDistancesPage() {
         setWorkDate(expectedDate);
       }
       fetchDailyDistances();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("GPS import error:", err);
-      const errInfo = getDailyDistanceErrorMessage(err?.errorCode, err?.message);
-      toast.error(errInfo.title, errInfo.description);
+      if (err instanceof GpsImportConflictError) {
+        setImportConflict({
+          workDate: err.workDate,
+          errors: err.errors,
+          errorCode: err.code,
+          message: err.message,
+        });
+        toast.error(
+          "تعذر رفع تقرير GPS",
+          err.hasOdometerConflicts
+            ? `تم إيقاف رفع الملف لوجود تعارض في قراءات العداد (${err.errors.length} خطأ/تعارض). يرجى مراجعة التفاصيل أدناه وتصحيح القراءات اليدوية.`
+            : `تم إيقاف رفع الملف لوجود أخطاء في صفوف الملف (${err.errors.length} خطأ).`
+        );
+      } else {
+        const anyErr = err as {
+          errorCode?: string;
+          code?: string;
+          message?: string;
+          details?: { errors?: GpsImportErrorItem[]; workDate?: string };
+        };
+        if (Array.isArray(anyErr?.details?.errors) && anyErr.details.errors.length > 0) {
+          setImportConflict({
+            workDate: anyErr.details.workDate || expectedDate || workDate,
+            errors: anyErr.details.errors,
+            errorCode: anyErr.code || anyErr.errorCode,
+            message: anyErr.message,
+          });
+          toast.error("تعذر رفع تقرير GPS", "تم إيقاف رفع الملف لوجود تعارضات في قراءات العداد.");
+        } else {
+          const errInfo = getDailyDistanceErrorMessage(anyErr?.errorCode || anyErr?.code, anyErr?.message);
+          toast.error(errInfo.title, errInfo.description);
+        }
+      }
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Download GPS import problems / unaccepted rows as Excel (.xlsx)
+  // Download GPS import problems / unaccepted rows / odometer conflicts as Excel (.xlsx)
   const handleDownloadErrorsExcel = async () => {
-    if (!importResult) return;
+    const activeErrors: GpsImportErrorItem[] = importConflict?.errors || importResult?.errors || [];
+    const activeWorkDate = importConflict?.workDate || expectedDate || workDate;
+    if (!importConflict && !importResult) return;
 
     try {
       const XLSX = await import("xlsx");
 
       const errorRows =
-        importResult.errors && importResult.errors.length > 0
-          ? importResult.errors.map((err, idx) => {
+        activeErrors.length > 0
+          ? activeErrors.map((err, idx) => {
+              const conflictsStr = err.details?.conflicts?.length
+                ? err.details.conflicts
+                    .map(
+                      (c) =>
+                        `تاريخ ${c.workDate}: مسجلة=${c.manualOdometerReading} / الأدنى=${c.minimumOdometerReading}`
+                    )
+                    .join(" | ")
+                : "—";
+
+              const enConflictsStr = err.details?.conflicts?.length
+                ? err.details.conflicts
+                    .map(
+                      (c) =>
+                        `Date ${c.workDate}: Saved=${c.manualOdometerReading} / Min=${c.minimumOdometerReading}`
+                    )
+                    .join(" | ")
+                : "—";
+
+              const errReason =
+                getGpsRowErrorMessage(err.code || err.errorCode || "") ||
+                err.message ||
+                err.code ||
+                err.errorCode;
+
               if (locale === "en") {
                 return {
                   "#": idx + 1,
                   "Row Number": err.rowNumber != null ? err.rowNumber : "—",
                   "Plate Number": err.plateNumber || "—",
-                  "Error Code": err.errorCode || "UNACCEPTED",
-                  "Rejection Reason / Description": getGpsRowErrorMessage(err.errorCode) || err.message || err.errorCode,
-                  "Work Date": expectedDate || workDate,
+                  "Asset Number": err.details?.assetNumber || "—",
+                  "Error Code": err.code || err.errorCode || "UNACCEPTED",
+                  "Rejection Reason / Description": errReason,
+                  "GPS Distance (km)": err.details?.gpsDistanceKm != null ? err.details.gpsDistanceKm : "—",
+                  "Odometer Conflicts (Date: Saved / Min Required)": enConflictsStr,
+                  "Work Date": activeWorkDate,
                   "Imported File": gpsFile?.name || "GPS Report",
                 };
               }
@@ -792,9 +861,12 @@ export default function VehicleDailyDistancesPage() {
                 "م": idx + 1,
                 "رقم الصف في الملف": err.rowNumber != null ? err.rowNumber : "—",
                 "رقم اللوحة": err.plateNumber || "—",
-                "رمز المشكلة": err.errorCode || "غير مقبول",
-                "سبب عدم القبول / وصف المشكلة": getGpsRowErrorMessage(err.errorCode) || err.message || err.errorCode,
-                "تاريخ العمل": expectedDate || workDate,
+                "رقم الأصل": err.details?.assetNumber || "—",
+                "رمز المشكلة": err.code || err.errorCode || "غير مقبول",
+                "سبب عدم القبول / وصف المشكلة": errReason,
+                "مسافة GPS (كم)": err.details?.gpsDistanceKm != null ? err.details.gpsDistanceKm : "—",
+                "تواريخ وقراءات التعارض (التاريخ: المسجلة / الأدنى المطلوب)": conflictsStr,
+                "تاريخ العمل": activeWorkDate,
                 "اسم الملف المستورد": gpsFile?.name || "تقرير GPS",
               };
             })
@@ -803,9 +875,12 @@ export default function VehicleDailyDistancesPage() {
                 "م": 1,
                 "رقم الصف في الملف": "—",
                 "رقم اللوحة": "—",
+                "رقم الأصل": "—",
                 "رمز المشكلة": "UNMATCHED_RECORDS",
-                "سبب عدم القبول / وصف المشكلة": `يوجد ${importResult.unmatchedRows} صف غير مطابق و ${importResult.invalidRows} صف غير صالح في الملف.`,
-                "تاريخ العمل": expectedDate || workDate,
+                "سبب عدم القبول / وصف المشكلة": `يوجد ${importResult?.unmatchedRows ?? 0} صف غير مطابق و ${importResult?.invalidRows ?? 0} صف غير صالح في الملف.`,
+                "مسافة GPS (كم)": "—",
+                "تواريخ وقراءات التعارض": "—",
+                "تاريخ العمل": activeWorkDate,
                 "اسم الملف المستورد": gpsFile?.name || "تقرير GPS",
               },
             ];
@@ -817,21 +892,29 @@ export default function VehicleDailyDistancesPage() {
         { wch: 6 },  // #
         { wch: 18 }, // Row number
         { wch: 20 }, // Plate
-        { wch: 25 }, // Error Code
+        { wch: 18 }, // Asset Number
+        { wch: 30 }, // Error Code
         { wch: 45 }, // Reason
+        { wch: 18 }, // GPS Distance
+        { wch: 55 }, // Conflicts
         { wch: 16 }, // Work Date
         { wch: 28 }, // File name
       ];
 
-      // Format Plate Number column as text
-      const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:G1");
+      // Format Plate Number column and Asset Number column as text
+      const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:J1");
       const plateColIndex = 2; // Column C
+      const assetColIndex = 3; // Column D
       for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: plateColIndex });
-        const cell = worksheet[cellAddress];
-        if (cell) {
-          cell.t = "s";
-          cell.z = "@";
+        const plateCell = worksheet[XLSX.utils.encode_cell({ r: R, c: plateColIndex })];
+        if (plateCell) {
+          plateCell.t = "s";
+          plateCell.z = "@";
+        }
+        const assetCell = worksheet[XLSX.utils.encode_cell({ r: R, c: assetColIndex })];
+        if (assetCell) {
+          assetCell.t = "s";
+          assetCell.z = "@";
         }
       }
 
@@ -842,12 +925,12 @@ export default function VehicleDailyDistancesPage() {
         locale === "en" ? "GPS Import Problems" : "مشاكل استيراد GPS"
       );
 
-      const fileName = `gps-import-problems-${expectedDate || workDate}.xlsx`;
+      const fileName = `gps-import-problems-${activeWorkDate}.xlsx`;
       XLSX.writeFile(workbook, fileName);
 
       toast.success(
         "تم تصدير ملف المشاكل",
-        "تم تنزيل تقرير المشاكل والصفوف غير المقبولة بنجاح بصيغة Excel"
+        "تم تنزيل تقرير المشاكل والصفوف غير المقبولة والتعارضات بنجاح بصيغة Excel"
       );
     } catch (exportErr) {
       console.error("Error exporting GPS problems Excel:", exportErr);
@@ -2442,6 +2525,7 @@ export default function VehicleDailyDistancesPage() {
         isOpen={isGpsImportOpen}
         onClose={() => setIsGpsImportOpen(false)}
         title="رفع تقرير المسافات من نظام GPS"
+        maxWidth="max-w-3xl"
       >
         <form onSubmit={handleGpsImportSubmit} className="space-y-4 pt-2 text-xs">
           <Card className="p-3 bg-blue-50 dark:bg-blue-950/40 border-blue-200 text-xs text-slate-800 dark:text-slate-200 space-y-1.5">
@@ -2554,15 +2638,173 @@ export default function VehicleDailyDistancesPage() {
                       <span>تنزيل كملف Excel</span>
                     </button>
                   </div>
-                  {importResult.errors.map((err, i) => (
-                    <div key={i} className="text-red-800 dark:text-red-200 border-b border-red-200/50 pb-1 last:border-none">
-                      {err.rowNumber && <span className="font-mono font-bold">[صف {err.rowNumber}] </span>}
-                      {err.plateNumber && <span className="font-bold">لوحة: {err.plateNumber} — </span>}
-                      <span>{getGpsRowErrorMessage(err.errorCode) || err.message || err.errorCode}</span>
-                    </div>
-                  ))}
+                  {importResult.errors.map((err, i) => {
+                    const conflicts = err.details?.conflicts || [];
+                    return (
+                      <div key={i} className="text-red-800 dark:text-red-200 border-b border-red-200/50 pb-1.5 last:border-none space-y-1">
+                        <div className="flex flex-wrap items-center justify-between gap-1">
+                          <div>
+                            {err.rowNumber != null && <span className="font-mono font-bold">[صف {err.rowNumber}] </span>}
+                            {err.plateNumber && <span className="font-bold">لوحة: {err.plateNumber} </span>}
+                            {err.details?.assetNumber && <span className="text-[var(--muted)]">(أصل: {err.details.assetNumber}) </span>}
+                            <span>— {getGpsRowErrorMessage(err.code || err.errorCode || "") || err.message || err.code || err.errorCode}</span>
+                          </div>
+                          {err.details?.gpsDistanceKm != null && (
+                            <span className="font-mono text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded text-[10px]">
+                              مسافة GPS: {err.details.gpsDistanceKm} كم
+                            </span>
+                          )}
+                        </div>
+
+                        {conflicts.length > 0 && (
+                          <div className="pt-1 space-y-0.5 text-[10px]">
+                            {conflicts.map((c, cIdx) => (
+                              <div key={cIdx} className="text-rose-900 dark:text-rose-300 font-mono bg-rose-100/60 dark:bg-rose-900/40 px-2 py-0.5 rounded">
+                                📅 {c.workDate}: مسجلة={c.manualOdometerReading} كم / الحد الأدنى المحسوب={c.minimumOdometerReading} كم
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Odometer Conflict & Validation Errors Box (HTTP 400 Blocked) */}
+          {importConflict && (
+            <div className="space-y-3 pt-2">
+              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-300 dark:border-rose-900 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-black text-rose-900 dark:text-rose-200">
+                        تم إيقاف رفع الملف بسبب تعارض في قراءات العداد (Odometer Conflicts)
+                      </h4>
+                      <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                        لم يتم حفظ أي سجلات لمنع تلف تسلسل قراءات العداد. يرجى تصحيح القراءات اليدوية المتعارضة في التواريخ اللاحقة ثم إعادة رفع الملف.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleDownloadErrorsExcel}
+                    className="gap-1.5 text-xs font-bold bg-white dark:bg-slate-900 border-rose-300 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950 shadow-xs shrink-0"
+                  >
+                    <FileDown className="h-4 w-4 text-rose-600" />
+                    <span>تحميل تقرير التعارضات (Excel)</span>
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 text-[11px] pt-1.5 border-t border-rose-200/60 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 font-semibold">
+                  <span>تاريخ تشغيل الملف: <strong className="font-mono">{importConflict.workDate}</strong></span>
+                  <span>•</span>
+                  <span>إجمالي الصفوف المتأثرة والأخطاء: <strong className="font-mono">{importConflict.errors.length}</strong></span>
+                  {importConflict.errors.some((e) => e.details?.conflicts?.length) && (
+                    <>
+                      <span>•</span>
+                      <span>صفوف تعارض العداد: <strong className="font-mono">{importConflict.errors.filter((e) => e.details?.conflicts?.length).length}</strong></span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Detailed Conflict Rows List (sorted by spreadsheet rowNumber) */}
+              <div className="border border-rose-200 dark:border-rose-900/60 rounded-xl bg-white dark:bg-slate-900/70 p-3 max-h-72 overflow-y-auto space-y-2.5 text-xs">
+                <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border)] text-[11px] font-bold text-[var(--foreground)]">
+                  <span>تفاصيل الصفوف المرفوضة والمتعارضة (مرتبة حسب رقم الصف بالملف):</span>
+                  <button
+                    type="button"
+                    onClick={handleDownloadErrorsExcel}
+                    className="text-xs font-bold text-[#1167c9] dark:text-blue-400 hover:underline flex items-center gap-1"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    <span>تصدير لـ Excel</span>
+                  </button>
+                </div>
+
+                {importConflict.errors.map((err, i) => {
+                  const conflicts = err.details?.conflicts || [];
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-2.5 space-y-1.5 text-[11px]"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 font-bold">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {err.rowNumber != null && (
+                            <span className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-800 dark:text-slate-200">
+                              صف #{err.rowNumber}
+                            </span>
+                          )}
+                          {err.plateNumber && (
+                            <span className="text-slate-900 dark:text-slate-100">
+                              لوحة: <span className="font-mono font-black">{err.plateNumber}</span>
+                            </span>
+                          )}
+                          {err.details?.assetNumber && (
+                            <span className="text-[var(--muted)]">
+                              (أصل: {err.details.assetNumber})
+                            </span>
+                          )}
+                        </div>
+                        {err.details?.gpsDistanceKm != null && (
+                          <span className="font-mono text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded text-[10px]">
+                            مسافة GPS بالملف: {err.details.gpsDistanceKm.toLocaleString()} كم
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-rose-700 dark:text-rose-400 font-medium">
+                        {err.message || getGpsRowErrorMessage(err.code || err.errorCode || "")}
+                      </p>
+
+                      {conflicts.length > 0 && (
+                        <div className="mt-1 pt-1.5 border-t border-rose-200/50 dark:border-rose-900/40 space-y-1">
+                          <span className="text-[10px] font-bold text-rose-900 dark:text-rose-300 block">
+                            تواريخ وقراءات العداد اليدوية المتعارضة:
+                          </span>
+                          <div className="grid grid-cols-1 gap-1">
+                            {conflicts.map((c, cIdx) => {
+                              const diff = Number((c.minimumOdometerReading - c.manualOdometerReading).toFixed(2));
+                              return (
+                                <div
+                                  key={cIdx}
+                                  className="flex flex-wrap items-center justify-between gap-2 p-1.5 rounded bg-rose-50/80 dark:bg-rose-950/60 border border-rose-200/60 dark:border-rose-900/50 text-[10.5px]"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                                      📅 {c.workDate}
+                                    </span>
+                                    <span>—</span>
+                                    <span>
+                                      المسجلة يدوياً: <strong className="font-mono">{c.manualOdometerReading.toLocaleString()} كم</strong>
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-rose-800 dark:text-rose-300 font-bold">
+                                      الحد الأدنى المحسوب: <strong className="font-mono">{c.minimumOdometerReading.toLocaleString()} كم</strong>
+                                    </span>
+                                    {diff > 0 && (
+                                      <span className="text-[9.5px] bg-rose-200 dark:bg-rose-900/80 px-1 py-0.2 rounded font-mono text-rose-900 dark:text-rose-100 font-semibold">
+                                        (عجز: +{diff.toLocaleString()} كم)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

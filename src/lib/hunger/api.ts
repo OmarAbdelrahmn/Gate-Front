@@ -1876,6 +1876,129 @@ export async function getHungerOperationsReport(
   };
 }
 
+export async function getAllHungerOperationsReport(
+  params: {
+    from: string;
+    through: string;
+    accountId?: string;
+    riderId?: string;
+    captainClassification?: string;
+  },
+  init?: CustomRequestInit,
+): Promise<HungerOperationReport> {
+  const first = await getHungerOperationsReport(
+    {
+      ...params,
+      page: 1,
+      pageSize: 100,
+    },
+    init,
+  );
+
+  const items = first?.items || [];
+  if (items.length === 0) {
+    return first;
+  }
+
+  const all = [...items];
+  const seenIds = new Set<string>();
+  for (const item of items) {
+    const key =
+      item.id ||
+      item.sourceId ||
+      `${item.accountId}-${item.reportDate}`;
+    seenIds.add(key);
+  }
+
+  const actualBatchSize = Math.max(items.length, 1);
+  const serverTotalCount =
+    typeof first.totalRecords === "number" && first.totalRecords > 0
+      ? first.totalRecords
+      : null;
+
+  if (serverTotalCount !== null && serverTotalCount > items.length) {
+    const totalPages = Math.min(
+      Math.ceil(serverTotalCount / actualBatchSize),
+      100,
+    );
+    const pageNumbers: number[] = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pageNumbers.push(p);
+    }
+    const chunkSize = 4;
+    for (let i = 0; i < pageNumbers.length; i += chunkSize) {
+      const chunk = pageNumbers.slice(i, i + chunkSize);
+      const results = await Promise.allSettled(
+        chunk.map((p) =>
+          getHungerOperationsReport(
+            {
+              ...params,
+              page: p,
+              pageSize: 100,
+            },
+            init,
+          ),
+        ),
+      );
+      for (const res of results) {
+        if (res.status === "fulfilled" && Array.isArray(res.value?.items)) {
+          for (const item of res.value.items) {
+            const key =
+              item.id ||
+              item.sourceId ||
+              `${item.accountId}-${item.reportDate}`;
+            if (!seenIds.has(key)) {
+              seenIds.add(key);
+              all.push(item);
+            }
+          }
+        }
+      }
+    }
+  } else if (items.length >= 50) {
+    let p = 2;
+    const maxP = 100;
+    while (p <= maxP) {
+      try {
+        const next = await getHungerOperationsReport(
+          {
+            ...params,
+            page: p,
+            pageSize: 100,
+          },
+          init,
+        );
+        const nextItems = next?.items || [];
+        if (nextItems.length === 0) break;
+        let addedCount = 0;
+        for (const item of nextItems) {
+          const key =
+            item.id ||
+            item.sourceId ||
+            `${item.accountId}-${item.reportDate}`;
+          if (!seenIds.has(key)) {
+            seenIds.add(key);
+            all.push(item);
+            addedCount++;
+          }
+        }
+        if (addedCount === 0 || nextItems.length < actualBatchSize) break;
+        p++;
+      } catch {
+        break;
+      }
+    }
+  }
+
+  return {
+    ...first,
+    items: all,
+    totalRecords: Math.max(first.totalRecords, all.length),
+    page: 1,
+    pageSize: all.length,
+  };
+}
+
 export async function exportHungerOperationsReport(params: {
   from: string;
   through: string;

@@ -55,19 +55,89 @@ export type SaveManualOdometerRequest = {
   rowVersion?: string | null;
 };
 
+export type GpsDistanceImportOdometerConflict = {
+  workDate: string;
+  manualOdometerReading: number;
+  minimumOdometerReading: number;
+};
+
+export type GpsDistanceImportOdometerDetails = {
+  vehicleId: string;
+  assetNumber: string;
+  gpsDistanceKm: number;
+  gpsDistance?: number;
+  conflicts: GpsDistanceImportOdometerConflict[];
+};
+
 export type GpsImportErrorItem = {
   rowNumber?: number;
-  plateNumber?: string;
-  errorCode: string;
+  plateNumber?: string | null;
+  code?: string;
+  errorCode?: string;
   message: string;
+  details?: GpsDistanceImportOdometerDetails | null;
 };
 
 export type GpsImportResponse = {
+  importId?: string;
+  workDate?: string;
+  originalFileName?: string;
+  sha256Checksum?: string;
+  totalVehicleRows?: number;
+  gpsRows?: number;
+  noGpsRows?: number;
   matchedRows: number;
+  createdRows?: number;
+  updatedRows?: number;
   unmatchedRows: number;
   invalidRows: number;
   errors: GpsImportErrorItem[];
+  importedAtUtc?: string;
 };
+
+export type GpsImportConflictErrorResponse = {
+  workDate: string;
+  errors: GpsImportErrorItem[];
+  errorCode?: string;
+  message?: string;
+  detail?: string;
+  title?: string;
+  status?: number;
+};
+
+export class GpsImportConflictError extends Error {
+  status: number;
+  workDate: string;
+  errors: GpsImportErrorItem[];
+  hasOdometerConflicts: boolean;
+  code?: string;
+  rawDetails?: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    params: {
+      status?: number;
+      workDate: string;
+      errors: GpsImportErrorItem[];
+      code?: string;
+      rawDetails?: Record<string, unknown>;
+    }
+  ) {
+    super(message);
+    this.name = "GpsImportConflictError";
+    this.status = params.status || 400;
+    this.workDate = params.workDate;
+    this.errors = params.errors;
+    this.code = params.code;
+    this.rawDetails = params.rawDetails;
+    this.hasOdometerConflicts = params.errors.some(
+      (err) =>
+        (err.details?.conflicts && err.details.conflicts.length > 0) ||
+        (err.code && err.code.includes("odometer")) ||
+        (err.errorCode && err.errorCode.includes("odometer"))
+    );
+  }
+}
 
 export type GpsImportLogItem = {
   id: string;
@@ -248,10 +318,94 @@ export async function importGpsFile(
     formData.append("expectedWorkDate", expectedWorkDate);
   }
 
-  return await authFetch<GpsImportResponse>(`/api/vehicle-daily-distances/gps-import`, {
-    method: "POST",
-    body: formData,
-  });
+  try {
+    return await authFetch<GpsImportResponse>(`/api/vehicle-daily-distances/gps-import`, {
+      method: "POST",
+      body: formData,
+      suppressErrorToast: true,
+    });
+  } catch (err: unknown) {
+    const apiErr = err as {
+      status?: number;
+      code?: string;
+      message?: string;
+      details?: {
+        workDate?: string;
+        errors?: Record<string, unknown>[];
+        [key: string]: unknown;
+      };
+    };
+
+    const details = apiErr?.details;
+    const rawErrors = Array.isArray(details?.errors)
+      ? details.errors
+      : Array.isArray((apiErr as unknown as { errors?: Record<string, unknown>[] }).errors)
+        ? (apiErr as unknown as { errors: Record<string, unknown>[] }).errors
+        : [];
+
+    if (rawErrors.length > 0 || apiErr?.status === 400) {
+      const normalizedErrors: GpsImportErrorItem[] = rawErrors.map((raw) => {
+        const item = raw as Record<string, unknown>;
+        const detailsObj = (item.details || item.Details) as Record<string, unknown> | undefined;
+        let detailsTyped: GpsDistanceImportOdometerDetails | undefined = undefined;
+
+        if (detailsObj) {
+          const rawConflicts = (detailsObj.conflicts || detailsObj.Conflicts) as Record<string, unknown>[] | undefined;
+          const conflicts: GpsDistanceImportOdometerConflict[] = Array.isArray(rawConflicts)
+            ? rawConflicts.map((c) => ({
+                workDate: String(c.workDate || c.WorkDate || ""),
+                manualOdometerReading: Number(c.manualOdometerReading ?? c.ManualOdometerReading ?? 0),
+                minimumOdometerReading: Number(c.minimumOdometerReading ?? c.MinimumOdometerReading ?? 0),
+              }))
+            : [];
+
+          const distanceVal = Number(
+            detailsObj.gpsDistanceKm ?? detailsObj.GpsDistanceKm ?? detailsObj.gpsDistance ?? detailsObj.GpsDistance ?? 0
+          );
+
+          detailsTyped = {
+            vehicleId: String(detailsObj.vehicleId || detailsObj.VehicleId || ""),
+            assetNumber: String(detailsObj.assetNumber || detailsObj.AssetNumber || ""),
+            gpsDistanceKm: distanceVal,
+            gpsDistance: distanceVal,
+            conflicts,
+          };
+        }
+
+        const codeVal = String(item.code || item.Code || item.errorCode || item.ErrorCode || "fleet.daily_distance.invalid_manual_odometer");
+        const msgVal = String(item.message || item.Message || "تعارض في قراءة العداد");
+
+        return {
+          rowNumber: typeof item.rowNumber === "number" ? item.rowNumber : typeof item.RowNumber === "number" ? item.RowNumber : undefined,
+          plateNumber: (item.plateNumber || item.PlateNumber) ? String(item.plateNumber || item.PlateNumber) : null,
+          code: codeVal,
+          errorCode: codeVal,
+          message: msgVal,
+          details: detailsTyped,
+        };
+      });
+
+      // Sort ascending by spreadsheet rowNumber
+      normalizedErrors.sort((a, b) => (a.rowNumber ?? 0) - (b.rowNumber ?? 0));
+
+      const conflictWorkDate = details?.workDate
+        ? String(details.workDate)
+        : expectedWorkDate || new Date().toISOString().slice(0, 10);
+
+      throw new GpsImportConflictError(
+        apiErr?.message || "تعذر رفع تقرير GPS لوجود تعارض في قراءات العداد أو أخطاء في صفوف الملف",
+        {
+          status: apiErr?.status || 400,
+          workDate: conflictWorkDate,
+          errors: normalizedErrors,
+          code: apiErr?.code,
+          rawDetails: typeof details === "object" && details !== null ? (details as Record<string, unknown>) : undefined,
+        }
+      );
+    }
+
+    throw err;
+  }
 }
 
 /**
@@ -517,6 +671,13 @@ export function getGpsRowErrorMessage(errorCode: string): string {
       return "رقم اللوحة مكرر داخل نفس التقرير المرفوع.";
     case "invalid_distance":
       return "قيمة المسافة غير قابلة للقراءة أو بصيغة رقمية غير صالحة.";
+    case "fleet.daily_distance.invalid_manual_odometer":
+    case "invalid_manual_odometer":
+    case "odometer_conflict":
+      return "تعارض في قراءة العداد: إضافة مسافة GPS تتطلب قراءة عداد أعلى من القراءة اليدوية المسجلة في تواريخ لاحقة.";
+    case "fleet.daily_distance.manual_baseline_required":
+    case "manual_baseline_required":
+      return "قراءة الأساس مطلوبة لبدء الاحتساب.";
     default:
       return errorCode;
   }
